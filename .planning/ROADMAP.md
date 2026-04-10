@@ -10,7 +10,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 2: Memory Layer** — Obsidian integration, context retrieval, session summaries, cross-session memory (completed 2026-04-10)
 - [ ] **Phase 3: Interfaces** — Discord bot, Apple Messages bridge, X-Sentinel-Key auth
 - [x] **Phase 4: AI Provider** — Multi-provider support, retry logic, fallback, model registry (completed 2026-04-10)
-- [ ] **Phase 5: AI Security** — Prompt injection hardening, OWASP LLM Top 10 audit, sensitive data leakage review
+- [x] **Phase 5: AI Security** — Prompt injection hardening, OWASP LLM Top 10 audit, sensitive data leakage review (completed 2026-04-10)
 - [ ] **Phase 6: Knowledge Migration Tool** — Import from Notion/Roam/Logseq, classify, review, restructure to Sentinel vault conventions
 - [ ] **Phase 7: Pathfinder 2e Module** — NPC management, session notes, dialogue generation
 - [ ] **Phase 8: Music Lesson Module** — Practice logging, history queries, Obsidian vault structure
