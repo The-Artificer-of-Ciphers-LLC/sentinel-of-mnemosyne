@@ -196,3 +196,21 @@ Plans:
 
 Plans:
 - [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.3: README.md Updates & Licensing Review (BACKLOG)
+
+**Goal:** Keep README.md current as the project grows, and confirm the chosen license is appropriate given the tech stack (pi-mono, discord.py, alpaca-py, etc.) and intended use (personal + potential open-source contributor community).
+
+**Ideas to explore:**
+- Milestone-by-milestone README update cadence — what to add after each phase ships
+- License audit: check pi-mono, discord.py, alpaca-py, and other dependencies for license compatibility with the chosen project license
+- MIT vs. Apache 2.0 vs. AGPL considerations — especially if live trading code is included (AGPL would require derivative works to be open-source)
+- Contributor section: when to add CONTRIBUTING.md, CODE_OF_CONDUCT.md (ties into Phase 11)
+- Badge row: build status, Python version, Docker, license — when does this add value?
+- NOTICE file requirements if using Apache 2.0 licensed dependencies
+
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
