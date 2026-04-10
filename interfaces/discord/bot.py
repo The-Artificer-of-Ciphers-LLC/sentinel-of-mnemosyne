@@ -68,8 +68,10 @@ async def sentask(interaction: discord.Interaction, message: str) -> None:
     """
     # Guard: channel allowlist (if configured)
     if ALLOWED_CHANNEL_IDS and interaction.channel_id not in ALLOWED_CHANNEL_IDS:
+        allowed_mentions = " or ".join(f"<#{cid}>" for cid in ALLOWED_CHANNEL_IDS)
         await interaction.response.send_message(
-            "I'm not configured to respond in this channel.", ephemeral=True
+            f"I only respond in {allowed_mentions}. Head there and try again.",
+            ephemeral=True,
         )
         return
 
