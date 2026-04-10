@@ -51,12 +51,17 @@ async def test_auth_accepts_valid_key():
     app.state.context_window = 8192
     app.state.settings = settings
 
-    # Pi harness mock — returns 503-equivalent (connect error) so downstream is 503, not 401
+    # Pi harness mock — connect error so route falls through to ai_provider
     def pi_handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("not running in test")
 
     pi_http = httpx.AsyncClient(transport=httpx.MockTransport(pi_handler), base_url="http://pi-harness")
     app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
+
+    # AI provider mock — returns a response so route completes successfully
+    mock_ai = AsyncMock()
+    mock_ai.complete = AsyncMock(return_value="Auth test response")
+    app.state.ai_provider = mock_ai
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(

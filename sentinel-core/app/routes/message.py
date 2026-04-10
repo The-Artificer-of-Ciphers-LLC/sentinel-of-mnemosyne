@@ -8,16 +8,17 @@ Flow:
   4. Truncate injected context to 25% of context_window budget (prevents systematic 422s)
   5. Token guard on full messages array
   6. Forward to Pi harness via send_messages()
-  7. Write session summary to Obsidian via BackgroundTasks (best-effort, D-2/MEM-06)
+  7. Call AI provider via ProviderRouter (primary with fallback per PROV-05)
+  8. Write session summary to Obsidian via BackgroundTasks (best-effort, D-2/MEM-06)
 """
 import logging
 from datetime import datetime, timezone
 
-import httpx
 import tiktoken
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from app.models import MessageEnvelope, ResponseEnvelope
+from app.services.provider_router import ProviderUnavailableError
 from app.services.token_guard import TokenLimitError, check_token_limit
 
 logger = logging.getLogger(__name__)
@@ -43,12 +44,12 @@ async def post_message(
     background_tasks: BackgroundTasks,
 ) -> ResponseEnvelope:
     """
-    Receive a user message, inject Obsidian memory context, call Pi, write session summary.
+    Receive a user message, inject Obsidian memory context, call AI provider, write session summary.
 
     Error responses:
       422 — message + context exceeds context window after truncation
-      503 — Pi harness or LM Studio unavailable
-      502 — Pi harness error
+      503 — AI provider (primary and fallback) unavailable
+      502 — unexpected AI provider error
     """
     obsidian = request.app.state.obsidian_client
     context_window: int = request.app.state.context_window
@@ -92,21 +93,32 @@ async def post_message(
 
     try:
         content = await pi_adapter.send_messages(messages)
-    except (httpx.ConnectError, httpx.RemoteProtocolError):
-        raise HTTPException(status_code=503, detail="AI backend not ready")
-    except httpx.HTTPStatusError as exc:
-        if exc.response.status_code in (503, 504):
-            raise HTTPException(status_code=503, detail="AI backend not ready")
-        raise HTTPException(status_code=502, detail="Pi harness error")
+    except Exception:
+        # Pi harness unavailable — fall through to direct AI provider call below
+        content = None
 
-    # 7. Best-effort session summary write (MEM-03, MEM-06: always write)
+    # 7. Call AI provider via ProviderRouter (primary with fallback per PROV-05)
+    if content is None:
+        ai_provider = request.app.state.ai_provider
+
+        try:
+            content = await ai_provider.complete(messages)
+        except ProviderUnavailableError as exc:
+            logger.error(f"All AI providers unavailable: {exc}")
+            raise HTTPException(status_code=503, detail=str(exc))
+        except Exception as exc:
+            logger.error(f"Unexpected AI provider error: {type(exc).__name__}: {exc}")
+            raise HTTPException(status_code=502, detail=f"AI provider error: {type(exc).__name__}")
+
+    # 8. Best-effort session summary write (MEM-03, MEM-06: always write)
+    model_label = f"{settings.ai_provider}/{settings.model_name}"
     background_tasks.add_task(
         _write_session_summary,
         obsidian,
         envelope.user_id,
         envelope.content,
         content,
-        settings.model_name,
+        model_label,
     )
 
     return ResponseEnvelope(content=content, model=settings.model_name)
