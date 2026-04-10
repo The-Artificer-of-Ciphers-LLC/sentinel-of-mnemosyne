@@ -27,3 +27,19 @@ class PiAdapterClient:
         )
         resp.raise_for_status()
         return resp.json()["content"]
+
+    async def send_messages(self, messages: list[dict]) -> str:
+        """
+        Send a messages array to Pi harness POST /prompt.
+        Bridge serializes the array to a string before calling Pi RPC.
+        Returns the AI response content string.
+        Raises httpx.ConnectError if Pi harness is unreachable.
+        Raises httpx.HTTPStatusError for error responses from Pi harness.
+        """
+        resp = await self._client.post(
+            f"{self._harness_url}/prompt",
+            json={"messages": messages},
+            timeout=190.0,  # Pi has 180s timeout; 10s margin
+        )
+        resp.raise_for_status()
+        return resp.json()["content"]
