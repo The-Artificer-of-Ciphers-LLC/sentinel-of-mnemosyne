@@ -16,7 +16,6 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.clients.lmstudio import LMStudioClient, get_context_window
 from app.clients.obsidian import ObsidianClient
 from app.clients.pi_adapter import PiAdapterClient
 from app.config import settings
@@ -37,7 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.settings = settings
 
     # Fetch context window from LM Studio at startup; fall back to 4096 if unavailable
-    context_window = await get_context_window(
+    context_window = await get_context_window_from_lmstudio(
         http_client, settings.lmstudio_base_url, settings.model_name
     )
     if context_window == 4096:
@@ -49,9 +48,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info(f"Context window: {context_window} tokens (fetched from LM Studio)")
     app.state.context_window = context_window
 
-    # Client instances
-    app.state.lm_client = LMStudioClient(
-        http_client, settings.lmstudio_base_url, settings.model_name
+    # Client instances — LiteLLMProvider replaces LMStudioClient (Phase 4)
+    app.state.lm_client = LiteLLMProvider(
+        model_string=f"openai/{settings.model_name}",
+        api_base=settings.lmstudio_base_url,
+        api_key="lmstudio",
     )
     app.state.pi_adapter = PiAdapterClient(http_client, settings.pi_harness_url)
 
