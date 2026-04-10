@@ -1,0 +1,23 @@
+# sentinel-core/compose.yml
+# Paths are resolved relative to this file's directory.
+services:
+  sentinel-core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    environment:
+      - PI_HARNESS_URL=http://pi-harness:3000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      pi-harness:
+        condition: service_started
+    restart: unless-stopped
