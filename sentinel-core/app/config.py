@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     sentinel_api_key: str  # Required — no default. Startup fails fast if missing.
     model_name: str = "local-model"
     log_level: str = "INFO"
+    obsidian_api_url: str = "http://host.docker.internal:27123"  # HTTP mode (port 27123, not 27124)
+    obsidian_api_key: str = ""  # blank = no Authorization header sent
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

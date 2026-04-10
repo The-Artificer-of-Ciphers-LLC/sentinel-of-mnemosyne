@@ -3,7 +3,7 @@ Sentinel Core — FastAPI application entry point.
 
 Architecture:
   POST /message → token guard → Pi harness (Fastify bridge) → Pi subprocess → LM Studio
-  GET  /health  → always 200
+  GET  /health  → always 200, reports obsidian status as non-blocking field
 
 Lifespan creates shared resources (httpx client, context window cache) at startup.
 Uses lifespan context manager (not deprecated @app.on_event — see Pitfall 5).
@@ -13,10 +13,11 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.clients.lmstudio import LMStudioClient, get_context_window
+from app.clients.obsidian import ObsidianClient
 from app.clients.pi_adapter import PiAdapterClient
 from app.config import settings
 from app.routes.message import router as message_router
@@ -36,7 +37,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.settings = settings
 
     # Fetch context window from LM Studio at startup; fall back to 4096 if unavailable
-    context_window = await get_context_window(http_client, settings.lmstudio_base_url, settings.model_name)
+    context_window = await get_context_window(
+        http_client, settings.lmstudio_base_url, settings.model_name
+    )
     if context_window == 4096:
         logger.warning(
             "LM Studio unavailable at startup — using conservative 4096-token context window. "
@@ -47,8 +50,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.context_window = context_window
 
     # Client instances
-    app.state.lm_client = LMStudioClient(http_client, settings.lmstudio_base_url, settings.model_name)
+    app.state.lm_client = LMStudioClient(
+        http_client, settings.lmstudio_base_url, settings.model_name
+    )
     app.state.pi_adapter = PiAdapterClient(http_client, settings.pi_harness_url)
+
+    # Obsidian client — degrades gracefully if Obsidian is not running
+    obsidian_client = ObsidianClient(
+        http_client,
+        settings.obsidian_api_url,
+        settings.obsidian_api_key,
+    )
+    app.state.obsidian_client = obsidian_client
+
+    obsidian_ok = await obsidian_client.check_health()
+    if not obsidian_ok:
+        logger.warning(
+            "Obsidian REST API unavailable at startup — memory features degraded. "
+            "Ensure Obsidian is running with Local REST API plugin enabled (HTTP mode port 27123)."
+        )
 
     logger.info("Sentinel Core ready.")
     yield
@@ -69,6 +89,14 @@ app.include_router(message_router)
 
 
 @app.get("/health")
-async def health() -> JSONResponse:
-    """Health check — always returns 200. Does not check downstream dependencies."""
-    return JSONResponse({"status": "ok"})
+async def health(request: Request) -> JSONResponse:
+    """Health check — always 200. Reports obsidian status as non-blocking field."""
+    obsidian_ok = False
+    try:
+        obsidian_ok = await request.app.state.obsidian_client.check_health()
+    except Exception:
+        pass
+    return JSONResponse({
+        "status": "ok",
+        "obsidian": "ok" if obsidian_ok else "degraded",
+    })

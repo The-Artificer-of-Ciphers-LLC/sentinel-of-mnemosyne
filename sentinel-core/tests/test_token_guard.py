@@ -38,3 +38,14 @@ def test_check_token_limit_passes_for_normal():
     """check_token_limit() does not raise for a short message."""
     messages = [{"role": "user", "content": "hello"}]
     check_token_limit(messages, context_window=8192)  # must not raise
+
+
+def test_multi_message_token_guard():
+    """count_tokens() sums tokens across all messages in a 3-message array."""
+    messages = [
+        {"role": "user", "content": "Here is context about me:\nI am a developer."},
+        {"role": "assistant", "content": "Understood."},
+        {"role": "user", "content": "What should I build?"},
+    ]
+    single = [{"role": "user", "content": "What should I build?"}]
+    assert count_tokens(messages) > count_tokens(single)

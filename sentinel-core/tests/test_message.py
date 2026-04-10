@@ -1,4 +1,4 @@
-"""Tests for POST /message endpoint (CORE-03)."""
+"""Tests for POST /message endpoint (CORE-03) and MessageEnvelope validation."""
 import os
 import pytest
 import httpx
@@ -95,3 +95,20 @@ async def test_post_message_422_when_message_too_long():
     assert resp.status_code == 422
     detail = resp.json().get("detail", "")
     assert "too long" in detail.lower() or "tokens" in detail.lower()
+
+
+def test_user_id_rejects_path_traversal():
+    """MessageEnvelope.user_id must reject path traversal characters."""
+    from pydantic import ValidationError
+    from app.models import MessageEnvelope
+
+    with pytest.raises(ValidationError):
+        MessageEnvelope(content="hi", user_id="../../etc/passwd")
+
+
+def test_user_id_accepts_valid_chars():
+    """MessageEnvelope.user_id accepts alphanumeric, hyphens, and underscores."""
+    from app.models import MessageEnvelope
+
+    env = MessageEnvelope(content="hi", user_id="trekkie_01-a")
+    assert env.user_id == "trekkie_01-a"

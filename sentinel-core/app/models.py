@@ -5,7 +5,11 @@ from pydantic import BaseModel, Field
 class MessageEnvelope(BaseModel):
     """Incoming message from any interface."""
     content: str = Field(..., min_length=1, max_length=32_000)
-    user_id: str = Field(default="default", max_length=64)
+    user_id: str = Field(
+        default="default",
+        max_length=64,
+        pattern=r"^[a-zA-Z0-9_-]+$",
+    )
 
 
 class ResponseEnvelope(BaseModel):
