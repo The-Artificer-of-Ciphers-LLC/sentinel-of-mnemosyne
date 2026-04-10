@@ -82,18 +82,17 @@ async def sentask(interaction: discord.Interaction, message: str) -> None:
     #    CORRECT: channel.create_thread() — not followup.send().create_thread()
     #    interaction.followup.send() returns WebhookMessage which has NO create_thread()
     thread_name = message[:50] if message else "Sentinel response"
+    thread = None
     try:
         thread = await interaction.channel.create_thread(
             name=thread_name,
             type=discord.ChannelType.public_thread,
             auto_archive_duration=60,
         )
+    except discord.Forbidden as exc:
+        logger.error(f"Missing permission to create thread (403): {exc}")
     except discord.HTTPException as exc:
-        logger.error(f"Failed to create thread: {exc}")
-        await interaction.followup.send(
-            "Failed to create response thread. Please try again.", ephemeral=True
-        )
-        return
+        logger.error(f"Failed to create thread (HTTP {exc.status}, code {exc.code}): {exc}")
 
     # 3. Call Sentinel Core (IFACE-02, IFACE-06)
     user_id = str(interaction.user.id)  # Discord snowflake as string (D-01)
@@ -123,13 +122,15 @@ async def sentask(interaction: discord.Interaction, message: str) -> None:
         ai_response = "The Sentinel Core is unreachable. Please check the service."
         logger.error(f"Core unreachable: {exc}")
 
-    # 4. Send AI response into the thread
-    await thread.send(ai_response)
-
-    # 5. Acknowledge the interaction with thread mention (ephemeral — only visible to invoker)
-    await interaction.followup.send(
-        f"Response ready in {thread.mention}", ephemeral=True
-    )
+    # 4. Send AI response — into thread if created, fallback to channel
+    if thread:
+        await thread.send(ai_response)
+        await interaction.followup.send(
+            f"Response ready in {thread.mention}", ephemeral=True
+        )
+    else:
+        # Thread creation failed — respond directly in channel so the user isn't left hanging
+        await interaction.followup.send(ai_response)
 
 
 def main() -> None:
