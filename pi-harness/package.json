@@ -1,0 +1,21 @@
+{
+  "name": "pi-harness",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "scripts": {
+    "start": "node --experimental-strip-types src/bridge.ts",
+    "build": "tsc",
+    "start:built": "node dist/bridge.js"
+  },
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "0.66.1",
+    "fastify": "5.8.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "@types/node": "^22.0.0"
+  }
+}
