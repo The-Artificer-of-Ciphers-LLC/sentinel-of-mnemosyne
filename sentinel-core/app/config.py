@@ -15,6 +15,22 @@ class Settings(BaseSettings):
     obsidian_api_url: str = "http://host.docker.internal:27123"  # HTTP mode (port 27123, not 27124)
     obsidian_api_key: str = ""  # blank = no Authorization header sent
 
+    # AI provider selection (PROV-01, PROV-02)
+    ai_provider: str = "lmstudio"  # lmstudio | claude | ollama | llamacpp
+    ai_fallback_provider: str = "none"  # claude | none
+
+    # Claude / Anthropic (PROV-02)
+    anthropic_api_key: str = ""  # blank = Claude provider disabled
+    claude_model: str = "claude-haiku-4-5"  # runtime configurable
+
+    # Ollama (stub — Linux workstation LAN)
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen2.5:14b"
+
+    # llama.cpp (stub — OpenAI-compatible server)
+    llamacpp_base_url: str = "http://localhost:8080"
+    llamacpp_model: str = "local-model"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

@@ -1,0 +1,59 @@
+{
+  "models": [
+    {
+      "id": "qwen2.5:14b",
+      "provider": "ollama",
+      "context_window": 32768,
+      "capabilities": {
+        "chat": true,
+        "function_calling": false,
+        "vision": false
+      },
+      "notes": "Qwen 2.5 14B Q4_K_M — ~10-11GB VRAM, Nvidia A2000 workstation"
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "provider": "claude",
+      "context_window": 200000,
+      "capabilities": {
+        "chat": true,
+        "function_calling": true,
+        "vision": true
+      },
+      "notes": "Claude Haiku 4.5 — fast and cheap, default cloud provider"
+    },
+    {
+      "id": "claude-sonnet-4-5",
+      "provider": "claude",
+      "context_window": 200000,
+      "capabilities": {
+        "chat": true,
+        "function_calling": true,
+        "vision": true
+      },
+      "notes": "Claude Sonnet 4.5 — stronger reasoning, higher cost"
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "provider": "claude",
+      "context_window": 200000,
+      "capabilities": {
+        "chat": true,
+        "function_calling": true,
+        "vision": true
+      },
+      "notes": "Claude Sonnet 4.6 — strongest reasoning in haiku/sonnet tier"
+    },
+    {
+      "id": "local-model",
+      "provider": "lmstudio",
+      "context_window": 8192,
+      "capabilities": {
+        "chat": true,
+        "function_calling": false,
+        "vision": false
+      },
+      "notes": "LM Studio default model — actual context window fetched at startup"
+    }
+  ]
+}
