@@ -35,6 +35,9 @@ Icon
 .Spotlight-V8
 .Trashes
 
+# Claude Code — project-specific instructions, not committed
+CLAUDE.md
+
 # Editor
 .idea/
 .vscode/
