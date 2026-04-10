@@ -4,9 +4,17 @@ Sentinel Discord Bot — Phase 3 Interface.
 Command: /sentask <message>
   1. Defer within 3s (IFACE-03 — shows "Bot is thinking...")
   2. Create public thread named from first 50 chars of message (IFACE-04)
-  3. Call Core POST /message with X-Sentinel-Key (IFACE-06)
+  3. Parse subcommand prefix (:cmd) or call Core POST /message with X-Sentinel-Key (IFACE-06)
   4. Send AI response into thread
   5. Acknowledge interaction with thread mention (ephemeral)
+
+Subcommands (prefix message with :):
+  :help       — list available subcommands
+  :capture    — capture text to Obsidian inbox
+  :next       — what to work on next based on goals
+  :health     — vault health check
+  :goals      — show current active goals
+  :reminders  — show current time-bound reminders
 
 Thread replies:
   Any non-bot message in a Sentinel thread triggers another Core call,
@@ -43,6 +51,28 @@ if DISCORD_ALLOWED_CHANNELS_RAW.strip():
 # Uses the parent channel ID set for allowlist checks on thread replies.
 SENTINEL_THREAD_IDS: set[int] = set()
 
+# Subcommand help text
+SUBCOMMAND_HELP = """\
+**Sentinel subcommands** — prefix your message with `:` to invoke:
+
+`:help` — show this list
+`:capture <text>` — capture a thought to your Obsidian inbox
+`:next` — what to work on next based on current goals
+`:health` — vault health check (orphan notes, stale goals, neglected gear)
+`:goals` — show current active goals
+`:reminders` — show current time-bound reminders
+
+Regular messages (no `:` prefix) go straight to the AI.
+"""
+
+# Map subcommand names to the prompt sent to Core
+_SUBCOMMAND_PROMPTS: dict[str, str] = {
+    "next": "What should I work on next based on my current goals?",
+    "health": "Run a health check on my vault and report orphan notes, stale goals, neglected gear.",
+    "goals": "Show me my current active goals.",
+    "reminders": "What are my current time-bound reminders?",
+}
+
 
 async def call_core(user_id: str, message: str) -> str:
     """
@@ -74,6 +104,27 @@ async def call_core(user_id: str, message: str) -> str:
     except httpx.RequestError as exc:
         logger.error(f"Core unreachable: {exc}")
         return "The Sentinel Core is unreachable. Please check the service."
+
+
+async def handle_sentask_subcommand(subcmd: str, args: str, user_id: str) -> str:
+    """
+    Route `:subcommand` prefixed messages to the correct handler.
+    Returns a response string in all cases — never raises.
+    """
+    if subcmd == "help":
+        return SUBCOMMAND_HELP
+
+    if subcmd == "capture":
+        if not args.strip():
+            return "Usage: `:capture <text>` — provide something to capture."
+        prompt = f"Capture this to my inbox: {args.strip()}"
+        return await call_core(user_id, prompt)
+
+    fixed_prompt = _SUBCOMMAND_PROMPTS.get(subcmd)
+    if fixed_prompt:
+        return await call_core(user_id, fixed_prompt)
+
+    return f"Unknown command `:{subcmd}`. Try `:help` for available commands."
 
 
 class SentinelBot(discord.Client):
@@ -123,13 +174,15 @@ bot = SentinelBot()
 
 
 @bot.tree.command(name="sentask", description="Ask the Sentinel a question or give it a task")
-@app_commands.describe(message="Your message to the Sentinel")
+@app_commands.describe(message="Your message to the Sentinel (prefix with : for subcommands)")
 async def sentask(interaction: discord.Interaction, message: str) -> None:
     """
     /sentask <message> — Primary Sentinel interaction command.
 
     Creates a new thread per invocation. Multi-turn: replies inside the thread
     continue the conversation context — Obsidian memory is read on every exchange.
+
+    Subcommands: prefix message with : (e.g. :help, :capture <text>, :next, :health, :goals, :reminders)
     """
     # Guard: channel allowlist (if configured)
     if ALLOWED_CHANNEL_IDS and interaction.channel_id not in ALLOWED_CHANNEL_IDS:
@@ -159,9 +212,15 @@ async def sentask(interaction: discord.Interaction, message: str) -> None:
     except discord.HTTPException as exc:
         logger.error(f"Failed to create thread (HTTP {exc.status}, code {exc.code}): {exc}")
 
-    # 3. Call Sentinel Core — reads Obsidian context for this user automatically
+    # 3. Parse subcommand prefix or call Core directly
     user_id = str(interaction.user.id)
-    ai_response = await call_core(user_id, message)
+    if message.startswith(":"):
+        parts = message[1:].split(" ", 1)
+        subcmd = parts[0].lower()
+        args = parts[1] if len(parts) > 1 else ""
+        ai_response = await handle_sentask_subcommand(subcmd, args, user_id)
+    else:
+        ai_response = await call_core(user_id, message)
 
     # 4. Send AI response — into thread if created, fallback to channel
     if thread:
