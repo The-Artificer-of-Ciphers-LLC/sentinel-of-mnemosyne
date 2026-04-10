@@ -1,0 +1,10 @@
+# interfaces/discord/compose.yml
+# Paths are resolved relative to this file's directory.
+services:
+  discord:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    restart: unless-stopped
