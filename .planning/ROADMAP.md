@@ -173,3 +173,21 @@ Plans:
 
 Plans:
 - [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.2: Messaging Business Registration & Receive-Without-Texting Options (BACKLOG)
+
+**Goal:** Explore alternatives to the personal Apple Messages bridge — investigate registering as a business to send/receive SMS/iMessage programmatically, or other receive mechanisms that don't require texting a known personal number first.
+
+**Ideas to explore:**
+- Apple Business Register / Apple Messages for Business — enables rich iMessage conversations with customers without a personal phone number
+- Twilio / Bandwidth / Vonage — programmatic SMS send/receive via a dedicated number; no personal iMessage dependency
+- Google Voice number as a receive endpoint polled via API
+- Short code registration for SMS (higher throughput, regulatory cost)
+- WhatsApp Business API — if the user is open to non-iMessage options
+- Trade-offs: cost, setup complexity, Apple-ecosystem lock-in vs. cross-platform reach
+
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
