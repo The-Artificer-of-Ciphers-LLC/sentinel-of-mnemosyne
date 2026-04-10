@@ -21,18 +21,24 @@ The design goal is maximum flexibility with a stable, narrow core API. You add a
 ```
 [ Interface Container ]     (Discord, Apple Messages, Slack, ...)
          |
-         | Standard Message Envelope
+         | HTTP POST /message  (X-Sentinel-Key header)
          v
 [ Sentinel Core ]           (Python/FastAPI — router & context manager)
-         |                           |
-         | RPC                       | REST API
-         v                           v
-[ Pi Harness ]              [ Obsidian Local REST API ]
-[ (coding-agent) ]          [ Mnemosyne vault ]
+    |          |                        |
+    | HTTP      | HTTP                   | REST API
+    v          v                        v
+[ Pi Harness ] [ AI Provider Layer ] [ Obsidian Local REST API ]
+[ (coding- ]   [ (ProviderRouter)  ] [ Mnemosyne vault          ]
+[  agent)  ]   [ LM Studio/Claude/ ]
+               [ Ollama/llama.cpp  ]
          |
          v
-[ LM Studio on Mac Mini ]   (or any OpenAI-compatible endpoint)
+[ LM Studio on Mac Mini ]   (primary — or any OpenAI-compatible endpoint)
+[ Claude API ]              (optional fallback)
+[ Ollama / llama.cpp ]      (stub — future)
 ```
+
+**Request flow:** Sentinel Core tries Pi harness first. If Pi is unreachable, it falls back to calling the AI provider layer directly via `ProviderRouter`. The Pi path is preferred because it supports tool use and skill dispatch; the direct path is the reliability backstop.
 
 All components are Docker containers. LM Studio runs natively on a Mac Mini. The Obsidian vault is a local folder on your Mac — plain markdown files you always own.
 
@@ -57,7 +63,7 @@ All components are Docker containers. LM Studio runs natively on a Mac Mini. The
 - **Docker Desktop** (Mac) or Docker + Docker Compose on Linux
 - **LM Studio** running on a Mac Mini (or any machine on your local network) with a model loaded and the local server started
 - **Obsidian** with the [Local REST API community plugin](https://github.com/coddingtonbear/obsidian-local-rest-api) installed and enabled
-- **Node.js 24+** (used inside the Pi harness container — the Dockerfile handles this, but good to know)
+- **Node.js 22 LTS** (used inside the Pi harness container — the Dockerfile handles this, but good to know)
 - A Discord bot token if using the Discord interface
 
 ---
@@ -155,10 +161,16 @@ All configuration is done through `.env`. See `.env.example` for the full list w
 | Variable | Purpose |
 |---|---|
 | `LMSTUDIO_BASE_URL` | LM Studio server URL (e.g., `http://192.168.1.x:1234/v1`) |
-| `PI_MODEL` | Model name as shown in LM Studio |
+| `MODEL_NAME` | Model identifier for direct LiteLLM calls (e.g., `llama-3.2-8b-instruct`) |
+| `PI_MODEL` | Model name passed to the Pi harness settings |
+| `AI_PROVIDER` | Active AI backend: `lmstudio` (default), `claude`, `ollama`, `llamacpp` |
+| `AI_FALLBACK_PROVIDER` | Fallback on connectivity failure: `claude` or `none` (default) |
+| `ANTHROPIC_API_KEY` | Anthropic API key — required when `AI_PROVIDER=claude` or `AI_FALLBACK_PROVIDER=claude` |
+| `CLAUDE_MODEL` | Claude model ID (default: `claude-haiku-4-5`) |
 | `OBSIDIAN_API_URL` | URL for the Obsidian Local REST API plugin |
 | `OBSIDIAN_API_KEY` | API key from the Obsidian plugin settings |
 | `SENTINEL_API_KEY` | Shared secret between Core and interface containers |
+| `LOG_LEVEL` | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 
 ---
 

@@ -15,28 +15,41 @@ The Sentinel of Mnemosyne is a self-hosted, containerized AI assistant platform.
 │   (Discord, Messages, curl — one container each)│
 └────────────────────┬────────────────────────────┘
                      │  HTTP POST /message
-                     │  Standard Message Envelope
+                     │  X-Sentinel-Key header
                      ▼
 ┌─────────────────────────────────────────────────┐
 │           SENTINEL CORE CONTAINER               │
-│   FastAPI router · context retrieval            │
-│   response handling · Obsidian writes           │
-└──────────┬──────────────────────┬───────────────┘
-           │  RPC / HTTP          │  REST API
-           ▼                      ▼
-┌──────────────────┐   ┌─────────────────────────┐
-│  PI HARNESS      │   │  OBSIDIAN LOCAL REST API │
-│  CONTAINER       │   │  (plugin on host Mac)    │
-│  (coding-agent)  │   │                         │
-│  → LM Studio     │   │  Vault on host disk      │
-└──────────────────┘   └─────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────────┐
-│  LM STUDIO (Mac Mini — not containerized)        │
-│  OpenAI-compatible API · http://[mac-mini]:1234  │
-└──────────────────────────────────────────────────┘
+│   FastAPI router · APIKeyMiddleware             │
+│   ModelRegistry · ProviderRouter               │
+│   context retrieval · Obsidian writes           │
+└──────────┬──────────────┬──────────┬────────────┘
+           │  HTTP         │  HTTP    │  REST API
+           ▼               ▼          ▼
+┌──────────────┐  ┌──────────────────┐  ┌────────────────────────┐
+│  PI HARNESS  │  │  AI PROVIDER     │  │  OBSIDIAN LOCAL        │
+│  CONTAINER   │  │  LAYER           │  │  REST API              │
+│  (primary)   │  │  (fallback)      │  │  (plugin on host Mac)  │
+│  coding-agent│  │  ProviderRouter  │  │  Vault on host disk    │
+└──────────────┘  │  LiteLLMProvider │  └────────────────────────┘
+       │          │  OllamaProvider  │
+       ▼          │  LlamaCppProvider│
+┌──────────────┐  └──────────────────┘
+│  LM STUDIO   │           │
+│  (Mac Mini)  │           │ primary → LM Studio (LiteLLM)
+│  :1234/v1    │           │ fallback → Claude API
+└──────────────┘           │           Ollama (stub)
+                           │           llama.cpp (stub)
+                           ▼
+                  ┌──────────────────┐
+                  │  AI BACKENDS     │
+                  │  LM Studio       │
+                  │  Anthropic Claude│
+                  │  Ollama (future) │
+                  │  llama.cpp (fut.)│
+                  └──────────────────┘
 ```
+
+**Request path:** Pi harness is tried first (supports tool use and skill dispatch). If Pi is unreachable, `ProviderRouter` calls the configured AI provider directly. Both paths share the same Obsidian memory context injection and session write.
 
 **The brain:** Pi harness + LM Studio — executes AI reasoning, tool use, skill dispatch.
 **The heart:** Obsidian vault (Mnemosyne) — persists all knowledge as human-readable markdown.
@@ -172,6 +185,25 @@ docker compose -f docker-compose.yml \
 
 ---
 
+### ADR-006: LiteLLM as Multi-Provider AI Abstraction
+
+**Status:** Accepted
+**Decision:** Use [LiteLLM](https://github.com/BerriAI/litellm) as the unified interface for all direct AI provider calls in Sentinel Core.
+
+**Context:** Phase 4 added a direct AI provider path as a fallback when Pi harness is unreachable. We need to call LM Studio, Claude, Ollama, and llama.cpp without writing four separate HTTP clients.
+
+**What LiteLLM gives us:**
+- Single `acompletion()` call works across all OpenAI-compatible and native providers
+- Consistent error types (`RateLimitError`, `ServiceUnavailableError`, `AuthenticationError`, etc.) regardless of backend
+- Built-in timeout and retry support
+
+**Consequences:**
+- `litellm` is a large dependency — acceptable for a server-side container
+- Supply chain risk: pin `>=1.83.0` (versions 1.82.7–1.82.8 were malicious, March 2026)
+- Provider-specific quirks (model string format, api_base shape) are encapsulated in `LiteLLMProvider` constructor — callers use the same `complete(messages)` interface
+
+---
+
 ## 3. Container Specifications
 
 ### 3.1 Sentinel Core Container
@@ -191,12 +223,36 @@ docker compose -f docker-compose.yml \
 
 **Environment variables:**
 ```
-OBSIDIAN_API_URL=https://localhost:27124   # Local REST API plugin default port
+# Obsidian
+OBSIDIAN_API_URL=http://host.docker.internal:27123  # HTTP mode (port 27123)
 OBSIDIAN_API_KEY=<from obsidian plugin settings>
-PI_RPC_HOST=pi-harness                    # Docker service name
-PI_RPC_PORT=8765                          # Pi RPC port
+
+# Pi harness
+PI_HARNESS_URL=http://pi-harness:3000               # Docker service name + Fastify port
+
+# Security
 SENTINEL_API_KEY=<shared secret for interface auth>
 LOG_LEVEL=INFO
+
+# AI provider (Phase 4+)
+AI_PROVIDER=lmstudio          # lmstudio | claude | ollama | llamacpp
+AI_FALLBACK_PROVIDER=none     # claude | none
+
+# LM Studio (primary default)
+LMSTUDIO_BASE_URL=http://host.docker.internal:1234/v1
+MODEL_NAME=llama-3.2-8b-instruct
+
+# Claude / Anthropic (optional fallback)
+ANTHROPIC_API_KEY=
+CLAUDE_MODEL=claude-haiku-4-5
+
+# Ollama (stub — future)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:14b
+
+# llama.cpp (stub — future)
+LLAMACPP_BASE_URL=http://localhost:8080
+LLAMACPP_MODEL=local-model
 ```
 
 **Exposed port:** `8000` (internal Docker network)
@@ -205,9 +261,9 @@ LOG_LEVEL=INFO
 
 ### 3.2 Pi Harness Container
 
-**Language:** Node.js 24 (minimum — do not go lower)
+**Language:** Node.js 22 LTS (minimum — do not go lower; `pi-mono` requires >=20.6.0)
 **Package:** `@mariozechner/pi-coding-agent` (pinned version)
-**Base image:** `node:24-slim`
+**Base image:** `node:22-slim`
 
 **Responsibilities:**
 - Accept prompts via RPC (stdin/stdout JSONL)
@@ -257,6 +313,67 @@ SENTINEL_API_KEY=<shared secret>
 ```
 
 **Plus interface-specific variables** (Discord bot token, etc.)
+
+---
+
+### 3.4 AI Provider Layer (Phase 4)
+
+The AI Provider Layer lives entirely inside the Sentinel Core container. It is used as the **fallback path** when the Pi harness is unreachable, and can be promoted to primary by setting `AI_PROVIDER` accordingly.
+
+#### AIProvider Protocol (`app/clients/base.py`)
+
+All providers implement a single async method:
+```python
+async def complete(messages: list[dict]) -> str
+```
+`messages` is an OpenAI-format chat array (`[{"role": "user", "content": "..."}]`).
+
+#### LiteLLMProvider (`app/clients/litellm_provider.py`)
+
+Wraps `litellm.acompletion()`. Supports LM Studio, Claude, Ollama, and llama.cpp through LiteLLM's unified interface.
+
+| Backend | `model_string` | Notes |
+|---------|---------------|-------|
+| LM Studio | `openai/<model_name>` | `api_base` = LM Studio `/v1` URL |
+| Claude | `claude-haiku-4-5` (etc.) | `api_key` = `ANTHROPIC_API_KEY` |
+| Ollama | `ollama/<model_name>` | `api_base` = `http://<host>:11434` |
+| llama.cpp | `openai/<model_name>` | `api_base` = llama.cpp `/v1` URL |
+
+Retry policy: 3 attempts, exponential backoff 1s→2s→4s on `RateLimitError`, `ServiceUnavailableError`, `ConnectError`, `TimeoutException`. Fatal errors (401, 422, 404) propagate immediately. Hard 30s per-call timeout enforces PROV-03.
+
+> **Supply chain note:** `litellm>=1.83.0` required — versions 1.82.7–1.82.8 were malicious (March 2026).
+
+#### OllamaProvider / LlamaCppProvider (stubs)
+
+Both classes are present in the codebase but `complete()` raises `NotImplementedError`. Do not set `AI_PROVIDER=ollama` or `AI_PROVIDER=llamacpp` until fully implemented.
+
+#### ProviderRouter (`app/services/provider_router.py`)
+
+Routes `complete()` calls to primary, with optional fallback:
+
+```
+ProviderRouter.complete(messages)
+  → primary.complete(messages)          ← always tried first
+    on ConnectError / TimeoutException:
+      → fallback.complete(messages)     ← only if fallback configured
+        both fail → ProviderUnavailableError → HTTP 503
+    on any other exception:
+      → propagates immediately (no fallback attempt)
+```
+
+HTTP 4xx errors (auth, rate limit, bad request) are **not** fallback triggers — they indicate a configuration problem, not a connectivity failure.
+
+#### ModelRegistry (`app/services/model_registry.py`)
+
+Built at startup. Provides `dict[model_id, ModelInfo]` containing context window sizes used to enforce the token guard.
+
+1. Loads `models-seed.json` (always — offline baseline)
+2. Fetches live context window from active provider API (non-fatal on failure):
+   - LM Studio: `GET /api/v0/models/{model_name}` → `max_context_length`
+   - Claude: Anthropic SDK `models.list()` → `max_input_tokens`
+   - Ollama / llama.cpp: seed only (stubs)
+3. Live data takes precedence over seed for overlapping model IDs
+4. Stored in `app.state.model_registry`; active model's `context_window` stored in `app.state.context_window`
 
 ---
 
@@ -323,14 +440,19 @@ The Sentinel Core exposes a minimal HTTP API. Interfaces call `/message`. Everyt
 **Authentication:** All non-health endpoints require `X-Sentinel-Key: <SENTINEL_API_KEY>` header. This is a shared secret between the Core and its interfaces. Not intended as robust security — just enough to prevent accidental open access on a local network.
 
 **`POST /message` flow:**
-1. Validate envelope structure and API key
-2. Look up user context in Obsidian: search `/core/users/{user_id}.md` and recent sessions
-3. Build Pi prompt: system prompt + user context + relevant vault excerpts + user message
-4. Send to Pi harness via RPC, await response
-5. Parse Pi response
-6. Write session note to Obsidian: `/core/sessions/{date}/{user_id}-{timestamp}.md`
-7. Update user context file with anything new learned
-8. Return response envelope to caller
+1. Validate envelope structure and API key (`APIKeyMiddleware`)
+2. Retrieve user context from Obsidian: `/core/users/{user_id}.md` (graceful skip on failure)
+3. Retrieve last 3 hot-tier session summaries from Obsidian (graceful skip on failure)
+4. Build messages array: context injected as user/assistant pair + actual user message
+5. Truncate injected context to 25% of model's context window budget (prevents systematic 422s)
+6. Token guard — reject with HTTP 422 if total messages exceed context window
+7. Forward to Pi harness via `POST /prompt` with messages array (preferred path — supports tool use)
+8. If Pi is unreachable, call `ProviderRouter.complete(messages)` directly:
+   - Tries primary provider (configured via `AI_PROVIDER`)
+   - On `ConnectError`/`TimeoutException` only: tries fallback provider (configured via `AI_FALLBACK_PROVIDER`)
+   - Both fail → HTTP 503; non-connectivity errors (auth, rate limit) propagate immediately
+9. Write session note to Obsidian as background task: `/core/sessions/{YYYY-MM-DD}/{user_id}-{HH-MM-SS}.md`
+10. Return response envelope to caller
 
 ---
 
@@ -541,17 +663,30 @@ services:
 ### 8.3 Environment File `.env`
 
 ```bash
-# AI Provider
+# Pi harness
 LMSTUDIO_BASE_URL=http://192.168.1.x:1234/v1
 LMSTUDIO_API_KEY=
-PI_MODEL=llama-3.2-70b-instruct
+PI_MODEL=llama-3.2-8b-instruct
+PI_HARNESS_URL=http://pi-harness:3000
+
+# Sentinel Core — AI provider (direct path / fallback)
+AI_PROVIDER=lmstudio          # lmstudio | claude | ollama | llamacpp
+AI_FALLBACK_PROVIDER=none     # claude | none
+MODEL_NAME=llama-3.2-8b-instruct
+
+# Claude (required if AI_PROVIDER=claude or AI_FALLBACK_PROVIDER=claude)
+ANTHROPIC_API_KEY=
+CLAUDE_MODEL=claude-haiku-4-5
 
 # Obsidian
-OBSIDIAN_API_URL=http://host.docker.internal:27124
+OBSIDIAN_API_URL=http://host.docker.internal:27123
 OBSIDIAN_API_KEY=your-obsidian-api-key-here
 
 # Security
 SENTINEL_API_KEY=change-this-to-a-random-string
+
+# Logging
+LOG_LEVEL=INFO
 
 # Discord (only needed if using discord interface)
 DISCORD_BOT_TOKEN=
@@ -593,16 +728,30 @@ sentinel-of-mnemosyne/
 ├── sentinel-core/                  ← Python/FastAPI core container
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── main.py                     ← FastAPI app, /message endpoint
-│   ├── pi_client.py                ← RPC client for pi harness
-│   ├── obsidian_client.py          ← Obsidian REST API client
-│   └── models.py                   ← Message envelope Pydantic models
+│   ├── models-seed.json            ← fallback model context-window data
+│   └── app/
+│       ├── main.py                 ← FastAPI app, lifespan, APIKeyMiddleware
+│       ├── config.py               ← pydantic-settings Settings class
+│       ├── models.py               ← MessageEnvelope / ResponseEnvelope
+│       ├── clients/
+│       │   ├── base.py             ← AIProvider Protocol
+│       │   ├── litellm_provider.py ← LiteLLM wrapper (LM Studio, Claude)
+│       │   ├── ollama_provider.py  ← Ollama stub (future)
+│       │   ├── llamacpp_provider.py← llama.cpp stub (future)
+│       │   ├── pi_adapter.py       ← HTTP client for Pi harness bridge
+│       │   └── obsidian.py         ← Obsidian Local REST API client
+│       ├── routes/
+│       │   └── message.py          ← POST /message handler
+│       └── services/
+│           ├── provider_router.py  ← ProviderRouter + ProviderUnavailableError
+│           ├── model_registry.py   ← ModelRegistry (live fetch + seed fallback)
+│           └── token_guard.py      ← context-window token limit enforcement
 │
-├── pi-harness/                     ← Node.js pi container
+├── pi-harness/                     ← Node.js 22 LTS pi container
 │   ├── Dockerfile
 │   ├── package.json                ← pins @mariozechner/pi-coding-agent version
 │   ├── settings.json               ← pi configuration
-│   └── entrypoint.sh               ← starts pi in RPC mode
+│   └── entrypoint.sh               ← starts pi in Fastify bridge mode
 │
 ├── interfaces/
 │   └── discord/
@@ -616,7 +765,7 @@ sentinel-of-mnemosyne/
 │
 ├── skills/                         ← pi skill files shared across modules
 │   └── core/
-│       └── summarize-session.md    ← example: skill to summarize a session
+│       └── summarize-session.md
 │
 └── docs/
     ├── PRD-Sentinel-of-Mnemosyne.md
