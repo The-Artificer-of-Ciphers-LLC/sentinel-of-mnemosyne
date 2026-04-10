@@ -130,6 +130,78 @@ class ObsidianClient:
         )
         resp.raise_for_status()
 
+    async def get_self_context(self) -> str | None:
+        """
+        Read the single-user lifebook context from self/ vault files.
+        Concatenates self/identity.md + self/goals.md + self/relationships.md.
+        Returns None if all three fail (graceful degrade — callers skip injection).
+        """
+        paths = ["self/identity.md", "self/goals.md", "self/relationships.md"]
+        parts: list[str] = []
+        for path in paths:
+            try:
+                resp = await self._client.get(
+                    f"{self._base_url}/vault/{path}",
+                    headers=self._headers,
+                    timeout=5.0,
+                )
+                if resp.status_code == 200:
+                    parts.append(resp.text)
+                elif resp.status_code != 404:
+                    logger.warning(f"ObsidianClient.get_self_context: unexpected {resp.status_code} for {path}")
+            except Exception:
+                logger.warning(f"ObsidianClient.get_self_context failed for {path} — skipping")
+        return "\n\n".join(parts) if parts else None
+
+    async def get_reminders(self) -> str | None:
+        """
+        Read ops/reminders.md — time-bound commitments to surface in context.
+        Returns None if 404 or unavailable (graceful degrade).
+        """
+        try:
+            resp = await self._client.get(
+                f"{self._base_url}/vault/ops/reminders.md",
+                headers=self._headers,
+                timeout=5.0,
+            )
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return resp.text
+        except Exception:
+            logger.warning("ObsidianClient.get_reminders failed — skipping reminders injection")
+            return None
+
+    async def write_inbox_note(self, title: str, content: str) -> None:
+        """
+        Write a capture note to inbox/{timestamp}-{slug}.md.
+        Frontmatter matches vault template: description, type, status, created.
+        Raises on HTTP failure — callers should wrap in try/except.
+        """
+        now = datetime.now(timezone.utc)
+        timestamp = now.strftime("%Y%m%d%H%M%S")
+        slug = "-".join(title.lower().split())[:50]
+        path = f"inbox/{timestamp}-{slug}.md"
+        date_str = now.strftime("%Y-%m-%d")
+        note = f"""---
+description: {title}
+type: insight
+status: active
+created: {date_str}
+---
+
+# {title}
+
+{content}
+"""
+        resp = await self._client.put(
+            f"{self._base_url}/vault/{path}",
+            headers={**self._headers, "Content-Type": "text/markdown"},
+            content=note.encode("utf-8"),
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+
     async def search_vault(self, query: str) -> list[dict]:
         """
         POST /search/simple/?query={query} — keyword search abstraction.
