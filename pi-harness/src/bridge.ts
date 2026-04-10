@@ -13,15 +13,38 @@ import { spawnPi, sendPrompt, getPiHealth } from './pi-adapter';
 
 const app = Fastify({ logger: true });
 
+interface MessageItem {
+  role: string;
+  content: string;
+}
+
 interface PromptBody {
-  message: string;
+  message?: string;
+  messages?: MessageItem[];
+}
+
+/**
+ * Serialize a messages array into a flat string for Pi RPC.
+ * Pi v0.66 sendPrompt() only accepts message: string — no messages array.
+ * Format: [ROLE]: content pairs separated by double newline.
+ * Roles are uppercased: user→USER, assistant→ASSISTANT.
+ */
+function serializeMessages(messages: MessageItem[]): string {
+  return messages
+    .map((m) => `[${m.role.toUpperCase()}]: ${m.content}`)
+    .join('\n\n');
 }
 
 app.post<{ Body: PromptBody }>('/prompt', async (request, reply) => {
-  const { message } = request.body;
+  const body = request.body;
 
-  if (!message || typeof message !== 'string') {
-    return reply.code(400).send({ error: 'message field required (string)' });
+  let messageStr: string;
+  if (body.messages && Array.isArray(body.messages) && body.messages.length > 0) {
+    messageStr = serializeMessages(body.messages);
+  } else if (body.message && typeof body.message === 'string') {
+    messageStr = body.message;
+  } else {
+    return reply.code(400).send({ error: 'message (string) or messages (array) field required' });
   }
 
   const health = getPiHealth();
@@ -30,7 +53,7 @@ app.post<{ Body: PromptBody }>('/prompt', async (request, reply) => {
   }
 
   try {
-    const content = await sendPrompt(message);
+    const content = await sendPrompt(messageStr);
     return reply.send({ content });
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : 'Unknown error';
