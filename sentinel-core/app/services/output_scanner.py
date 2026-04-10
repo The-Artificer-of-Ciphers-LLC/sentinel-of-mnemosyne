@@ -26,7 +26,7 @@ _SECRET_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("aws_access_key", re.compile(r"AKIA[0-9A-Z]{16}")),
     ("sentinel_key_name", re.compile(r"SENTINEL_API_KEY\s*[=:]\s*\S+")),
     ("obsidian_key_name", re.compile(r"OBSIDIAN_API_KEY\s*[=:]\s*\S+")),
-    ("fs_path", re.compile(r"/(?:etc|home|var/run|proc|sys)/\S+")),
+    ("fs_path", re.compile(r"/etc/(?:passwd|shadow|sudoers|ssh/|ssl/private/)\S*")),
 ]
 
 _CLASSIFIER_SYSTEM = """You are a security classifier. You will be shown a text excerpt that

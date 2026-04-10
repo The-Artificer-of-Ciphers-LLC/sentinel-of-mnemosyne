@@ -1,5 +1,4 @@
 """Tests for OutputScanner service (SEC-02)."""
-import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -77,8 +76,14 @@ async def test_sentinel_key_name_fires(scanner, mock_anthropic):
 # --- fail-open tests ---
 
 
-async def test_timeout_fails_open(mock_anthropic):
-    mock_anthropic.messages.create = AsyncMock(side_effect=asyncio.TimeoutError())
+async def test_timeout_fails_open(mock_anthropic, monkeypatch):
+    """asyncio.wait_for raises TimeoutError — scanner must fail open, not crash."""
+    import asyncio as _asyncio
+
+    async def _timeout(*args, **kwargs):
+        raise _asyncio.TimeoutError()
+
+    monkeypatch.setattr(_asyncio, "wait_for", _timeout)
     scanner = OutputScanner(mock_anthropic)
     is_safe, reason = await scanner.scan("sk-ant-abc123def456ghi789jkl012mno345")
     assert is_safe is True

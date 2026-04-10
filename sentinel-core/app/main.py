@@ -19,6 +19,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response
 
+from anthropic import AsyncAnthropic
 from app.clients.litellm_provider import LiteLLMProvider
 from app.clients.llamacpp_provider import LlamaCppProvider
 from app.clients.obsidian import ObsidianClient
@@ -26,7 +27,9 @@ from app.clients.ollama_provider import OllamaProvider
 from app.clients.pi_adapter import PiAdapterClient
 from app.config import settings
 from app.routes.message import router as message_router
+from app.services.injection_filter import InjectionFilter
 from app.services.model_registry import build_model_registry
+from app.services.output_scanner import OutputScanner
 from app.services.provider_router import ProviderRouter
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
