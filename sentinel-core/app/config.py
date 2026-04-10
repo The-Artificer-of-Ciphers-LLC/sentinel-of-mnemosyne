@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     obsidian_api_url: str = "http://host.docker.internal:27123"  # HTTP mode (port 27123, not 27124)
     obsidian_api_key: str = ""  # blank = no Authorization header sent
+    lmstudio_num_ctx: int = 8192  # override LM Studio's loaded context window
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

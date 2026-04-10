@@ -66,7 +66,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Client instances
     app.state.lm_client = LMStudioClient(
-        http_client, settings.lmstudio_base_url, settings.model_name
+        http_client, settings.lmstudio_base_url, settings.model_name,
+        num_ctx=settings.lmstudio_num_ctx,
     )
     app.state.pi_adapter = PiAdapterClient(http_client, settings.pi_harness_url)
 
