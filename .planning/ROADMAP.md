@@ -65,9 +65,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Wave 1: APIKeyMiddleware in sentinel-core, test_auth.py (4 tests), update 31 existing tests with X-Sentinel-Key header
-- [ ] 03-02-PLAN.md — Wave 2: Discord bot container — bot.py, Dockerfile, compose.yml, /sentask slash command with defer+thread+Core call
-- [ ] 03-03-PLAN.md — Wave 2: Apple Messages bridge — bridge.py (SQLite ROWID polling), launch.sh, README.md (Full Disk Access docs)
+- [x] 03-01-PLAN.md — Wave 1: APIKeyMiddleware in sentinel-core, test_auth.py (4 tests), update 31 existing tests with X-Sentinel-Key header
+- [x] 03-02-PLAN.md — Wave 2: Discord bot container — bot.py, Dockerfile, compose.yml, /sentask slash command with defer+thread+Core call
+- [x] 03-03-PLAN.md — Wave 2: Apple Messages bridge — bridge.py (SQLite ROWID polling), launch.sh, README.md (Full Disk Access docs)
 
 ### Phase 4: AI Provider
 **Goal**: Provider configuration via env vars. Multiple providers switchable. Retry logic and fallback.
@@ -190,6 +190,43 @@ Plans:
 - Short code registration for SMS (higher throughput, regulatory cost)
 - WhatsApp Business API — if the user is open to non-iMessage options
 - Trade-offs: cost, setup complexity, Apple-ecosystem lock-in vs. cross-platform reach
+
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.3: README.md Updates & Licensing Review (BACKLOG)
+
+**Goal:** Keep README.md current as the project grows, and confirm the chosen license is appropriate given the tech stack (pi-mono, discord.py, alpaca-py, etc.) and intended use (personal + potential open-source contributor community).
+
+**Ideas to explore:**
+- Milestone-by-milestone README update cadence — what to add after each phase ships
+- License audit: check pi-mono, discord.py, alpaca-py, and other dependencies for license compatibility with the chosen project license
+- MIT vs. Apache 2.0 vs. AGPL considerations — especially if live trading code is included (AGPL would require derivative works to be open-source)
+- Contributor section: when to add CONTRIBUTING.md, CODE_OF_CONDUCT.md (ties into Phase 11)
+- Badge row: build status, Python version, Docker, license — when does this add value?
+- NOTICE file requirements if using Apache 2.0 licensed dependencies
+
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.4: Knowledge Migration Tool — Import from Existing 2nd Brain Systems (BACKLOG)
+
+**Goal:** Build a migration pipeline that ingests data from existing personal knowledge systems (Notion, Roam Research, Obsidian with different structure, Logseq, etc.), classifies and categorizes the content, presents it for user review, and then restructures it to match the Sentinel's Obsidian vault conventions.
+
+**Ideas to explore:**
+- Source systems to support: Notion (JSON export), Roam Research (JSON/EDN export), Logseq (Markdown), legacy Obsidian vaults with different folder structure, nanoclaw or similar 2nd brain tools
+- Import pipeline: parse source format → extract entities (notes, tags, links, dates) → classify into Sentinel vault categories (users/, pathfinder/, music/, finance/, etc.)
+- Review UX: present classified content in batches via Discord or a simple web UI — user approves, reclassifies, or discards each item before it's written to Obsidian
+- Restructuring: apply vault conventions (frontmatter format, folder structure, linking patterns) to all approved content
+- Deduplication: detect near-duplicate notes from source vs. existing vault content before importing
+- Incremental import: support re-running the tool as the user migrates content in chunks
+- Rollback: dry-run mode that shows what would be written without committing to vault
 
 **Requirements:** TBD
 **Plans:** 0 plans
