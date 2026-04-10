@@ -6,6 +6,49 @@ The design principle: **you should be able to add a module without touching anyt
 
 ---
 
+## Development Setup
+
+### Prerequisites
+
+- Python 3.12
+- Node.js 22 LTS
+- Docker Compose v2 (`docker compose`, not `docker-compose`)
+
+### Clone and setup
+
+```bash
+git clone https://github.com/The-Artificer-of-Ciphers-LLC/sentinel-of-mnemosyne.git
+cd sentinel-of-mnemosyne
+cp .env.example .env
+# Fill in your values in .env
+```
+
+### Running tests
+
+```bash
+cd sentinel-core && pytest
+```
+
+### Running the stack locally
+
+```bash
+docker compose up
+```
+
+---
+
+## Bug Reports & Non-Module Contributions
+
+**Bug reports:** Use the GitHub issue template (Bug Report). Include your OS, Docker version, and the LM Studio model you have loaded. The more detail the better.
+
+**Doc improvements:** Open a PR directly — no issue needed for small fixes like typos or clarifications.
+
+**Core changes:** Open an issue first to discuss the change before building it. Core changes affect all modules and interfaces, so it helps to align on approach before writing code.
+
+**Security vulnerabilities:** Do not open a public issue. See [SECURITY.md](SECURITY.md) for responsible disclosure instructions.
+
+---
+
 ## How the Sentinel Works (Quick Recap)
 
 When a user sends a message:
@@ -236,3 +279,11 @@ Module PRs should include at least one example conversation showing the module i
 ## Questions
 
 Open an issue on GitHub. Tag it `module-help` or `interface-help` depending on what you're building.
+
+---
+
+## Branch Protection & Merge Process
+
+- PRs require 1 approving review before merge
+- The main branch is protected — direct pushes are reserved for maintainers during v0.x development
+- Squash-merge preferred to keep history clean
