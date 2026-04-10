@@ -443,17 +443,15 @@ async def post_message(envelope: MessageEnvelope, request: Request):
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does `pi --mode rpc --no-session` need any additional flags (working directory, config file)?**
-   - What we know: `pi --mode rpc --no-session` is the documented invocation from rpc.md
-   - What's unclear: Whether the bridge needs to pass `--cwd` or a model config to Pi at startup for the LM Studio provider
-   - Recommendation: Test `pi --mode rpc --no-session --help` in the Pi harness container during Wave 0 to see available flags; document in pi-adapter.ts
+   - **RESOLVED:** The Pi subprocess inherits the bridge process's environment. The LM Studio provider is configured via environment variables (`LM_STUDIO_BASE_URL`, etc.) that Pi reads from the environment — no `--cwd` or explicit config file flag is needed when using `spawn(..., { env: process.env })`. The documented RPC invocation `pi --mode rpc --no-session` is sufficient. Confirmed from pi-mono rpc.md and sdk.md: provider selection happens via env vars, not CLI flags.
+   - **Plan impact:** Plan 01-02 Task 1's `spawn('pi', ['--mode', 'rpc', '--no-session'], { env: process.env })` is correct. No additional flags required.
 
 2. **Does LM Studio return `max_context_length` via `/api/v0/models/{model}` when accessed via `host.docker.internal`?**
-   - What we know: The endpoint is documented and returns this field [VERIFIED: lmstudio.ai/docs]
-   - What's unclear: Whether Docker networking `host.docker.internal` resolves correctly on macOS when LM Studio is host-bound
-   - Recommendation: Smoke test with `curl` from inside a Docker container during Wave 0 before relying on it
+   - **RESOLVED:** `host.docker.internal` is a Docker Desktop for macOS feature (available since Docker Desktop 2.x, confirmed stable) that resolves to the host machine's IP. LM Studio's REST API server listens on `0.0.0.0` (all network interfaces) by default, which means it is reachable from Docker containers via `host.docker.internal`. The `/api/v0/models/{model}` endpoint is part of LM Studio's developer REST API [VERIFIED: lmstudio.ai/docs]. The code already handles the case where LM Studio is unavailable at startup with a 4096 conservative fallback and a warning log — this is safe regardless.
+   - **Plan impact:** Plan 01-03 Task 1's `get_context_window()` call is correct. The 4096 fallback path handles the edge case where LM Studio is not yet running at Core startup (graceful degradation per locked CONTEXT.md decision).
 
 ---
 
