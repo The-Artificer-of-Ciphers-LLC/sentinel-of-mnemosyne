@@ -8,6 +8,10 @@ Command: /sentask <message>
   4. Send AI response into thread
   5. Acknowledge interaction with thread mention (ephemeral)
 
+Thread replies:
+  Any non-bot message in a Sentinel thread triggers another Core call,
+  using the same user_id so Obsidian context carries across the conversation.
+
 User identity: str(interaction.user.id) — Discord snowflake as string.
 Thread per invocation: each /sentask creates a fresh thread (never reuses).
 """
@@ -35,12 +39,49 @@ if DISCORD_ALLOWED_CHANNELS_RAW.strip():
         if cid.strip().isdigit()
     }
 
+# Track thread IDs created by this bot instance so on_message knows which to respond to.
+# Uses the parent channel ID set for allowlist checks on thread replies.
+SENTINEL_THREAD_IDS: set[int] = set()
+
+
+async def call_core(user_id: str, message: str) -> str:
+    """
+    POST to Sentinel Core /message. Returns the AI response string.
+    All error cases return a user-facing string rather than raising.
+    Reads Obsidian context for user_id automatically via Core's memory layer.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=200.0) as client:
+            resp = await client.post(
+                f"{SENTINEL_CORE_URL}/message",
+                json={"content": message, "user_id": user_id},
+                headers={"X-Sentinel-Key": SENTINEL_API_KEY},
+            )
+            resp.raise_for_status()
+            return resp.json()["content"]
+    except httpx.TimeoutException:
+        logger.warning(f"Core timeout for user {user_id}")
+        return "The Sentinel took too long to respond. Please try again."
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 422:
+            return "Your message is too long for the current context window."
+        elif exc.response.status_code == 401:
+            logger.error("Core returned 401 — SENTINEL_API_KEY mismatch")
+            return "Authentication error — check SENTINEL_API_KEY configuration."
+        else:
+            logger.error(f"Core HTTP error {exc.response.status_code} for user {user_id}")
+            return f"The Sentinel encountered an error (HTTP {exc.response.status_code})."
+    except httpx.RequestError as exc:
+        logger.error(f"Core unreachable: {exc}")
+        return "The Sentinel Core is unreachable. Please check the service."
+
 
 class SentinelBot(discord.Client):
     """Discord client with app_commands tree for slash command support."""
 
     def __init__(self) -> None:
         intents = discord.Intents.default()
+        intents.message_content = True  # required to read thread reply content
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
 
@@ -51,6 +92,31 @@ class SentinelBot(discord.Client):
 
     async def on_ready(self) -> None:
         logger.info(f"Sentinel bot ready: {self.user} (id={self.user.id})")
+
+    async def on_message(self, message: discord.Message) -> None:
+        """
+        Respond to replies inside Sentinel-created threads.
+        Ignores: bot messages, non-thread channels, threads not created by this bot.
+        """
+        # Never respond to ourselves
+        if message.author.bot:
+            return
+
+        # Only act on messages inside public threads
+        if not isinstance(message.channel, discord.Thread):
+            return
+
+        # Only respond in threads we created
+        if message.channel.id not in SENTINEL_THREAD_IDS:
+            return
+
+        user_id = str(message.author.id)
+        logger.info(f"Thread reply from {user_id} in thread {message.channel.id}: {message.content[:60]}")
+
+        async with message.channel.typing():
+            ai_response = await call_core(user_id, message.content)
+
+        await message.channel.send(ai_response)
 
 
 bot = SentinelBot()
@@ -63,8 +129,7 @@ async def sentask(interaction: discord.Interaction, message: str) -> None:
     /sentask <message> — Primary Sentinel interaction command.
 
     Creates a new thread per invocation. Multi-turn: replies inside the thread
-    continue the conversation context (same thread_id → same Obsidian session path
-    in future phases).
+    continue the conversation context — Obsidian memory is read on every exchange.
     """
     # Guard: channel allowlist (if configured)
     if ALLOWED_CHANNEL_IDS and interaction.channel_id not in ALLOWED_CHANNEL_IDS:
@@ -79,8 +144,6 @@ async def sentask(interaction: discord.Interaction, message: str) -> None:
     await interaction.response.defer(thinking=True)
 
     # 2. Create public thread from the channel (IFACE-04)
-    #    CORRECT: channel.create_thread() — not followup.send().create_thread()
-    #    interaction.followup.send() returns WebhookMessage which has NO create_thread()
     thread_name = message[:50] if message else "Sentinel response"
     thread = None
     try:
@@ -89,38 +152,16 @@ async def sentask(interaction: discord.Interaction, message: str) -> None:
             type=discord.ChannelType.public_thread,
             auto_archive_duration=60,
         )
+        SENTINEL_THREAD_IDS.add(thread.id)
+        logger.info(f"Created thread {thread.id} '{thread_name}' for user {interaction.user.id}")
     except discord.Forbidden as exc:
         logger.error(f"Missing permission to create thread (403): {exc}")
     except discord.HTTPException as exc:
         logger.error(f"Failed to create thread (HTTP {exc.status}, code {exc.code}): {exc}")
 
-    # 3. Call Sentinel Core (IFACE-02, IFACE-06)
-    user_id = str(interaction.user.id)  # Discord snowflake as string (D-01)
-    ai_response: str
-    try:
-        async with httpx.AsyncClient(timeout=200.0) as client:
-            resp = await client.post(
-                f"{SENTINEL_CORE_URL}/message",
-                json={"content": message, "user_id": user_id},
-                headers={"X-Sentinel-Key": SENTINEL_API_KEY},
-            )
-            resp.raise_for_status()
-            ai_response = resp.json()["content"]
-    except httpx.TimeoutException:
-        ai_response = "The Sentinel took too long to respond. Please try again."
-        logger.warning(f"Core timeout for user {user_id}")
-    except httpx.HTTPStatusError as exc:
-        if exc.response.status_code == 422:
-            ai_response = "Your message is too long for the current context window."
-        elif exc.response.status_code == 401:
-            ai_response = "Authentication error — check SENTINEL_API_KEY configuration."
-            logger.error("Core returned 401 — SENTINEL_API_KEY mismatch")
-        else:
-            ai_response = f"The Sentinel encountered an error (HTTP {exc.response.status_code})."
-            logger.error(f"Core HTTP error {exc.response.status_code} for user {user_id}")
-    except httpx.RequestError as exc:
-        ai_response = "The Sentinel Core is unreachable. Please check the service."
-        logger.error(f"Core unreachable: {exc}")
+    # 3. Call Sentinel Core — reads Obsidian context for this user automatically
+    user_id = str(interaction.user.id)
+    ai_response = await call_core(user_id, message)
 
     # 4. Send AI response — into thread if created, fallback to channel
     if thread:
@@ -129,7 +170,6 @@ async def sentask(interaction: discord.Interaction, message: str) -> None:
             f"Response ready in {thread.mention}", ephemeral=True
         )
     else:
-        # Thread creation failed — respond directly in channel so the user isn't left hanging
         await interaction.followup.send(ai_response)
 
 
