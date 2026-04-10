@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Wave 1 complete (01-01, 01-02 done); ready for Wave 2
-last_updated: "2026-04-10T16:00:00.000Z"
-last_activity: 2026-04-10 -- Wave 1 complete, starting Wave 2 (01-03)
+status: verifying
+stopped_at: Completed 02-memory-layer 02-02-PLAN.md — UAT passed, Phase 2 complete
+last_updated: "2026-04-10T18:36:02.357Z"
+last_activity: 2026-04-10
 progress:
-  total_phases: 11
-  completed_phases: 0
-  total_plans: 3
-  completed_plans: 2
-  percent: 0
+  total_phases: 12
+  completed_phases: 2
+  total_plans: 5
+  completed_plans: 5
+  percent: 100
 ---
 
 # Project State
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-04-10)
 
 Phase: 01 (Core Loop) — EXECUTING
 Plan: 3 of 3 (01-03, Wave 2)
-Status: Executing Wave 2 — Sentinel Core FastAPI
-Last activity: 2026-04-10 -- Wave 1 complete (01-01 scaffold, 01-02 Pi harness done)
+Status: Phase complete — ready for verification
+Last activity: 2026-04-10
 
 Progress: [██░░░░░░░░] 18%
 
@@ -52,6 +52,7 @@ Progress: [██░░░░░░░░] 18%
 - Trend: on track
 
 *Updated after each plan completion*
+| Phase 02-memory-layer P02 | -244 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,8 @@ Recent decisions affecting current work:
 - [Phase 01]: depends_on uses condition: service_started (not service_healthy)
 - [Phase 01]: LMSTUDIO_BASE_URL uses host.docker.internal per single Mac Mini topology
 - [Phase 01]: Pi harness uses Fastify bridge + pi-adapter.ts, node:22-alpine, pinned @mariozechner/pi-coding-agent@0.66.1
+- [Phase 02-memory-layer]: 25% context budget enforced before token guard — prevents large Obsidian profiles from causing systematic 422s
+- [Phase 02-memory-layer]: BackgroundTasks (not asyncio.create_task) for session write — FastAPI-idiomatic, response sent before write begins
 
 ### Pending Todos
 
@@ -76,6 +79,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-10
-Stopped at: Wave 1 complete (01-01 scaffold + 01-02 Pi harness)
+Last session: 2026-04-10T18:36:02.355Z
+Stopped at: Completed 02-memory-layer 02-02-PLAN.md — UAT passed, Phase 2 complete
 Resume file: None

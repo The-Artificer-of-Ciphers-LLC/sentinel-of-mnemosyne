@@ -17,13 +17,13 @@
 
 ### Memory Layer
 
-- [ ] **MEM-01**: Obsidian Local REST API plugin accessible from Core container; health check detects when Obsidian is not running and degrades gracefully
-- [ ] **MEM-02**: Core retrieves user context file (`/core/users/{user_id}.md`) before building Pi prompt
-- [ ] **MEM-03**: Core writes session summary to vault (`/core/sessions/{date}/{user_id}-{timestamp}.md`) after each interaction
-- [ ] **MEM-04**: System demonstrates cross-session memory — a second conversation references a specific detail from a prior session
-- [ ] **MEM-05**: Tiered retrieval architecture in place — hot tier (last N interactions always loaded), warm tier (vault search on demand), cold tier (archived, not in context)
-- [ ] **MEM-06**: Write-selectivity policy defined — not every message exchange writes a session note; threshold documented
-- [ ] **MEM-07**: Token budget ceiling enforced for context injection (user context + vault search results combined)
+- [x] **MEM-01**: Obsidian Local REST API plugin accessible from Core container; health check detects when Obsidian is not running and degrades gracefully
+- [x] **MEM-02**: Core retrieves user context file (`/core/users/{user_id}.md`) before building Pi prompt
+- [x] **MEM-03**: Core writes session summary to vault (`/core/sessions/{date}/{user_id}-{timestamp}.md`) after each interaction
+- [x] **MEM-04**: System demonstrates cross-session memory — a second conversation references a specific detail from a prior session
+- [x] **MEM-05**: Tiered retrieval architecture in place — hot tier (last N interactions always loaded), warm tier (vault search on demand), cold tier (archived, not in context)
+- [x] **MEM-06**: Write-selectivity policy defined — not every message exchange writes a session note; threshold documented
+- [x] **MEM-07**: Token budget ceiling enforced for context injection (user context + vault search results combined)
 - [ ] **MEM-08**: Obsidian search interface abstracted behind a class — implementation can switch from keyword to vector search without caller changes
 
 ### Interfaces
@@ -150,13 +150,13 @@
 | CORE-05 | Phase 1 | Pending |
 | CORE-06 | Phase 1 | Pending |
 | CORE-07 | Phase 1 | Pending |
-| MEM-01 | Phase 2 | Pending |
-| MEM-02 | Phase 2 | Pending |
-| MEM-03 | Phase 2 | Pending |
-| MEM-04 | Phase 2 | Pending |
-| MEM-05 | Phase 2 | Pending |
-| MEM-06 | Phase 2 | Pending |
-| MEM-07 | Phase 2 | Pending |
+| MEM-01 | Phase 2 | Complete |
+| MEM-02 | Phase 2 | Complete |
+| MEM-03 | Phase 2 | Complete |
+| MEM-04 | Phase 2 | Complete |
+| MEM-05 | Phase 2 | Complete |
+| MEM-06 | Phase 2 | Complete |
+| MEM-07 | Phase 2 | Complete |
 | MEM-08 | Phase 2 | Pending |
 | IFACE-01 | Phase 3 | Pending |
 | IFACE-02 | Phase 3 | Pending |

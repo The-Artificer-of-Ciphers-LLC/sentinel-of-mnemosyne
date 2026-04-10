@@ -7,7 +7,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 ## Phases
 
 - [x] **Phase 1: Core Loop** — Pi harness + Sentinel Core FastAPI, end-to-end AI response
-- [ ] **Phase 2: Memory Layer** — Obsidian integration, context retrieval, session summaries, cross-session memory
+- [x] **Phase 2: Memory Layer** — Obsidian integration, context retrieval, session summaries, cross-session memory (completed 2026-04-10)
 - [ ] **Phase 3: Interfaces** — Discord bot, Apple Messages bridge, X-Sentinel-Key auth
 - [ ] **Phase 4: AI Provider** — Multi-provider support, retry logic, fallback, model registry
 - [ ] **Phase 5: Pathfinder 2e Module** — NPC management, session notes, dialogue generation
@@ -51,7 +51,7 @@ Plans:
 
 Plans:
 - [x] 02-01-PLAN.md — Wave 1: ObsidianClient, config/models/main.py wiring, bridge.ts messages array, test scaffolding
-- [ ] 02-02-PLAN.md — Wave 2: POST /message Phase 2 flow — context injection, BackgroundTasks write, token budget
+- [x] 02-02-PLAN.md — Wave 2: POST /message Phase 2 flow — context injection, BackgroundTasks write, token budget
 
 ### Phase 3: Interfaces
 **Goal**: The Sentinel is reachable from Discord and Apple Messages. All Core endpoints require authentication.
@@ -169,7 +169,7 @@ Plans:
 - Canary deployment pattern for pi-harness container
 
 **Requirements:** TBD
-**Plans:** 0 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] TBD (promote with /gsd-review-backlog when ready)

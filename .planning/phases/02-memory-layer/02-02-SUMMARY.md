@@ -17,7 +17,6 @@ provides:
   - "MEM-02 through MEM-07 unit test coverage via MockTransport (no live Obsidian/Pi needed)"
 affects:
   - any plan that exercises POST /message
-  - 02-03 (human verify checkpoint — cross-session memory demo)
   - phase 03+ (any plan that reads session history from vault)
 
 # Tech tracking
@@ -71,7 +70,7 @@ completed: 2026-04-10
 - **Duration:** ~25 min
 - **Started:** 2026-04-10T18:40:00Z
 - **Completed:** 2026-04-10T19:05:00Z
-- **Tasks:** 1 automated (+ 1 human-verify checkpoint pending)
+- **Tasks:** 2 (1 automated + 1 human-verify checkpoint — PASSED)
 - **Files modified:** 3
 
 ## Accomplishments
@@ -128,16 +127,14 @@ Each task was committed atomically:
 
 None beyond the auto-fixed deviations above.
 
-## Human Verify Checkpoint (Task 2 — PENDING)
+## Human Verify Checkpoint (Task 2 — PASSED)
 
-The plan includes a `checkpoint:human-verify` (Task 2) requiring:
-1. Obsidian running with Local REST API plugin in HTTP mode (port 27123)
-2. LM Studio with a model loaded
-3. Docker Compose stack running
-4. Two curl calls: first to confirm context injection from `core/users/trekkie.md`, second to confirm cross-session memory (MEM-04)
-5. Confirm session note appears in `core/sessions/{date}/` in the vault
-
-This checkpoint is returned to the orchestrator — human verification is required before marking Phase 2 complete.
+All 5 UAT checks passed on 2026-04-10:
+1. Health returns `obsidian: "ok"` — PASS
+2. Context injection — model response reflected "prefers concise answers" from user profile — PASS
+3. Session note written to vault (PUT 204, confirmed in logs) — PASS
+4. Hot tier loaded prior sessions on second call (GET 200 on session files) — PASS
+5. Path traversal `../../etc/passwd` rejected with 422 — PASS
 
 ## Known Stubs
 
