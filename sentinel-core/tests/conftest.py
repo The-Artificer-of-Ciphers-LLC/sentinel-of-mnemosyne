@@ -1,5 +1,9 @@
 """Shared test fixtures for Sentinel Core tests."""
+import os
 import pytest
+
+# Set env vars before any app import so pydantic-settings picks them up
+os.environ.setdefault("SENTINEL_API_KEY", "test-key-for-pytest")
 
 
 @pytest.fixture

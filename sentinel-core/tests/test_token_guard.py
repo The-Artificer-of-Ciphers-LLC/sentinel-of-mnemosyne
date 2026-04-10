@@ -1,23 +1,40 @@
-"""
-Tests for token guard service (CORE-05).
-Stubs — implementations filled in Plan 03 (Wave 2).
-"""
+"""Tests for token guard service (CORE-05)."""
 import pytest
+from app.services.token_guard import count_tokens, check_token_limit, TokenLimitError
 
 
-@pytest.mark.skip(reason="Implementation pending — Plan 03 Wave 2")
 def test_rejects_oversized():
-    """count_tokens() returns value > context window for a 10,000-word message."""
-    pass
+    """count_tokens() returns value > 8192 for a very long message."""
+    long_content = "word " * 10_000
+    messages = [{"role": "user", "content": long_content}]
+    assert count_tokens(messages) > 8192
 
 
-@pytest.mark.skip(reason="Implementation pending — Plan 03 Wave 2")
 def test_permits_normal():
-    """count_tokens() returns value within 8192-token window for a short message."""
-    pass
+    """count_tokens() returns value well within 8192 for a short message."""
+    messages = [{"role": "user", "content": "hello"}]
+    assert count_tokens(messages) < 100
 
 
-@pytest.mark.skip(reason="Implementation pending — Plan 03 Wave 2")
 def test_token_count_includes_message_overhead():
-    """count_tokens() adds 3 tokens per message for role/separator overhead plus 3 priming tokens."""
-    pass
+    """count_tokens() adds 3 tokens per message overhead + 3 priming tokens."""
+    # Empty message values: 3 overhead per message + 3 priming = 6 minimum
+    messages = [{"role": "", "content": ""}]
+    count = count_tokens(messages)
+    assert count >= 6  # 3 per-message + 3 priming
+
+
+def test_check_token_limit_raises_on_exceeded():
+    """check_token_limit() raises TokenLimitError when over context window."""
+    long_content = "word " * 10_000
+    messages = [{"role": "user", "content": long_content}]
+    with pytest.raises(TokenLimitError) as exc_info:
+        check_token_limit(messages, context_window=8192)
+    assert exc_info.value.limit == 8192
+    assert exc_info.value.count > 8192
+
+
+def test_check_token_limit_passes_for_normal():
+    """check_token_limit() does not raise for a short message."""
+    messages = [{"role": "user", "content": "hello"}]
+    check_token_limit(messages, context_window=8192)  # must not raise
