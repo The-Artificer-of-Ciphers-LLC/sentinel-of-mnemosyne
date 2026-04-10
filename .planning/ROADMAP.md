@@ -148,3 +148,24 @@ Plans:
   2. MODULE-SPEC.md complete — new module authors have a clear contract
   3. GitHub repo has labeled issues, PR template, accurate README
 **Plans**: TBD
+
+## Backlog
+
+### Phase 999.1: Pi-mono Upgrade Strategy & Regression Testing (BACKLOG)
+
+**Goal:** Design a safe process for adopting new pi-mono releases — including regression test suite for the pi-harness adapter, red/green migration approach to validate the new version before cutover, and rollback strategy if the upgrade breaks the RPC protocol.
+
+**Context:** pi-mono is under active development and releases breaking changes every 2-4 days (noted in STATE.md). The adapter pattern in Phase 1 isolates pi-mono contact to `pi-adapter.ts`, but there's currently no automated way to detect when an upgrade breaks the RPC contract.
+
+**Ideas to explore:**
+- Regression test harness for pi-adapter.ts (mock pi subprocess, verify JSONL protocol)
+- Red/green migration: run old and new versions in parallel, compare outputs
+- Semantic versioning contract: what constitutes a breaking change in pi-mono?
+- Automated upgrade CI: pin → test → promote workflow
+- Canary deployment pattern for pi-harness container
+
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
