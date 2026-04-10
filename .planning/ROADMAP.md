@@ -214,3 +214,22 @@ Plans:
 
 Plans:
 - [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.4: Knowledge Migration Tool — Import from Existing 2nd Brain Systems (BACKLOG)
+
+**Goal:** Build a migration pipeline that ingests data from existing personal knowledge systems (Notion, Roam Research, Obsidian with different structure, Logseq, etc.), classifies and categorizes the content, presents it for user review, and then restructures it to match the Sentinel's Obsidian vault conventions.
+
+**Ideas to explore:**
+- Source systems to support: Notion (JSON export), Roam Research (JSON/EDN export), Logseq (Markdown), legacy Obsidian vaults with different folder structure, nanoclaw or similar 2nd brain tools
+- Import pipeline: parse source format → extract entities (notes, tags, links, dates) → classify into Sentinel vault categories (users/, pathfinder/, music/, finance/, etc.)
+- Review UX: present classified content in batches via Discord or a simple web UI — user approves, reclassifies, or discards each item before it's written to Obsidian
+- Restructuring: apply vault conventions (frontmatter format, folder structure, linking patterns) to all approved content
+- Deduplication: detect near-duplicate notes from source vs. existing vault content before importing
+- Incremental import: support re-running the tool as the user migrates content in chunks
+- Rollback: dry-run mode that shows what would be written without committing to vault
+
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
