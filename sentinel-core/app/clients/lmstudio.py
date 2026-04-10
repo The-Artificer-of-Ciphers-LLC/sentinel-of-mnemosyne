@@ -52,7 +52,7 @@ class LMStudioClient:
         resp = await self._client.post(
             f"{self._base_url}/chat/completions",
             json=payload,
-            timeout=30.0,
+            timeout=180.0,
         )
         resp.raise_for_status()
         data = resp.json()

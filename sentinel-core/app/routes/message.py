@@ -86,18 +86,29 @@ async def post_message(
     except TokenLimitError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    # 6. Forward to Pi harness via messages array
-    pi_adapter = request.app.state.pi_adapter
+    # 6. Call LM Studio directly (conversational use — Pi harness reserved for Coder Interface)
+    lm_client = request.app.state.lm_client
     settings = request.app.state.settings
 
+    # Prepend Sentinel persona system prompt
+    full_messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are the Sentinel of Mnemosyne — a personal AI assistant. "
+                "You are helpful, direct, and remember context from prior sessions. "
+                "Answer conversationally. Do not use markdown unless the user asks for it."
+            ),
+        },
+        *messages,
+    ]
+
     try:
-        content = await pi_adapter.send_messages(messages)
+        content = await lm_client.complete(full_messages)
     except (httpx.ConnectError, httpx.RemoteProtocolError):
         raise HTTPException(status_code=503, detail="AI backend not ready")
     except httpx.HTTPStatusError as exc:
-        if exc.response.status_code in (503, 504):
-            raise HTTPException(status_code=503, detail="AI backend not ready")
-        raise HTTPException(status_code=502, detail="Pi harness error")
+        raise HTTPException(status_code=502, detail=f"LM Studio error: {exc.response.status_code}")
 
     # 7. Best-effort session summary write (MEM-03, MEM-06: always write)
     background_tasks.add_task(
