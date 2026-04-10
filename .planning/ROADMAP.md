@@ -17,6 +17,10 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [ ] **Phase 9: Autonomous Stock Trader (Paper)** — Alpaca paper trading, rules enforcement, 30-day run
 - [ ] **Phase 10: Live Trading** — Live keys, human approval flow, weekly performance summary
 - [ ] **Phase 11: Community & Polish** — Contributor docs, MODULE-SPEC.md, GitHub structure
+- [ ] **Phase 12: Knowledge Migration Tool** — Import from Notion/Roam/Logseq, classify, review, restructure to Sentinel vault conventions
+- [ ] **Phase 13: Messaging Alternatives** — Business registration, Twilio/Vonage, Apple Messages for Business, receive-without-texting options
+- [ ] **Phase 14: README & Licensing** — Keep README current as phases ship, audit dependency licenses, MIT vs Apache 2.0 vs AGPL
+- [ ] **Phase 15: Pi-mono Upgrade Strategy** — Regression test harness for pi-adapter.ts, red/green migration, rollback strategy
 
 ## Phase Details
 
@@ -158,78 +162,58 @@ Plans:
   3. GitHub repo has labeled issues, PR template, accurate README
 **Plans**: TBD
 
-## Backlog
-
-### Phase 999.1: Pi-mono Upgrade Strategy & Regression Testing (BACKLOG)
-
-**Goal:** Design a safe process for adopting new pi-mono releases — including regression test suite for the pi-harness adapter, red/green migration approach to validate the new version before cutover, and rollback strategy if the upgrade breaks the RPC protocol.
-
-**Context:** pi-mono is under active development and releases breaking changes every 2-4 days (noted in STATE.md). The adapter pattern in Phase 1 isolates pi-mono contact to `pi-adapter.ts`, but there's currently no automated way to detect when an upgrade breaks the RPC contract.
-
-**Ideas to explore:**
-- Regression test harness for pi-adapter.ts (mock pi subprocess, verify JSONL protocol)
-- Red/green migration: run old and new versions in parallel, compare outputs
-- Semantic versioning contract: what constitutes a breaking change in pi-mono?
-- Automated upgrade CI: pin → test → promote workflow
-- Canary deployment pattern for pi-harness container
-
+### Phase 12: Knowledge Migration Tool
+**Goal:** Build a migration pipeline that ingests data from existing personal knowledge systems (Notion, Roam Research, Logseq, legacy Obsidian vaults, nanoclaw, etc.), classifies and categorizes content, presents it for user review, then restructures it to match Sentinel vault conventions.
+**Depends on:** Phase 2
 **Requirements:** TBD
-**Plans:** 2/2 plans complete
+**Success Criteria** (what must be TRUE):
+  1. Source data from at least one system (Notion JSON export or Logseq markdown) parsed without data loss
+  2. Classified content presented for user review in batches via Discord before any vault write
+  3. Approved items written to correct Sentinel vault paths with proper frontmatter
+  4. Duplicate detection prevents re-importing already-present content
+  5. Dry-run mode shows what would be written without committing
+**Plans:** TBD
 
 Plans:
-- [ ] TBD (promote with /gsd-review-backlog when ready)
+- [ ] TBD
 
-### Phase 999.2: Messaging Business Registration & Receive-Without-Texting Options (BACKLOG)
-
-**Goal:** Explore alternatives to the personal Apple Messages bridge — investigate registering as a business to send/receive SMS/iMessage programmatically, or other receive mechanisms that don't require texting a known personal number first.
-
-**Ideas to explore:**
-- Apple Business Register / Apple Messages for Business — enables rich iMessage conversations with customers without a personal phone number
-- Twilio / Bandwidth / Vonage — programmatic SMS send/receive via a dedicated number; no personal iMessage dependency
-- Google Voice number as a receive endpoint polled via API
-- Short code registration for SMS (higher throughput, regulatory cost)
-- WhatsApp Business API — if the user is open to non-iMessage options
-- Trade-offs: cost, setup complexity, Apple-ecosystem lock-in vs. cross-platform reach
-
+### Phase 13: Messaging Alternatives
+**Goal:** Evaluate and implement alternatives to the personal Apple Messages bridge — business SMS/iMessage registration, dedicated number options, or cross-platform messaging that doesn't require texting a personal number first.
+**Depends on:** Phase 3
 **Requirements:** TBD
-**Plans:** 0 plans
+**Success Criteria** (what must be TRUE):
+  1. Options evaluated: Apple Messages for Business, Twilio/Vonage, WhatsApp Business API
+  2. Chosen option implemented as a Sentinel interface container
+  3. Receive-without-texting-first capability confirmed working
+**Plans:** TBD
 
 Plans:
-- [ ] TBD (promote with /gsd-review-backlog when ready)
+- [ ] TBD
 
-### Phase 999.3: README.md Updates & Licensing Review (BACKLOG)
-
-**Goal:** Keep README.md current as the project grows, and confirm the chosen license is appropriate given the tech stack (pi-mono, discord.py, alpaca-py, etc.) and intended use (personal + potential open-source contributor community).
-
-**Ideas to explore:**
-- Milestone-by-milestone README update cadence — what to add after each phase ships
-- License audit: check pi-mono, discord.py, alpaca-py, and other dependencies for license compatibility with the chosen project license
-- MIT vs. Apache 2.0 vs. AGPL considerations — especially if live trading code is included (AGPL would require derivative works to be open-source)
-- Contributor section: when to add CONTRIBUTING.md, CODE_OF_CONDUCT.md (ties into Phase 11)
-- Badge row: build status, Python version, Docker, license — when does this add value?
-- NOTICE file requirements if using Apache 2.0 licensed dependencies
-
+### Phase 14: README & Licensing
+**Goal:** Keep README.md accurate as phases ship and lock in the right open-source license given the dependency stack (pi-mono, discord.py, alpaca-py) and potential contributor community.
+**Depends on:** Phase 10
 **Requirements:** TBD
-**Plans:** 0 plans
+**Success Criteria** (what must be TRUE):
+  1. License chosen and committed (MIT, Apache 2.0, or AGPL) with rationale documented
+  2. Dependency license audit complete — no incompatibilities
+  3. README covers setup, architecture, and interface configuration accurately for the shipped phases
+  4. CONTRIBUTING.md and CODE_OF_CONDUCT.md present (can be stubs ahead of Phase 11)
+**Plans:** TBD
 
 Plans:
-- [ ] TBD (promote with /gsd-review-backlog when ready)
+- [ ] TBD
 
-### Phase 999.4: Knowledge Migration Tool — Import from Existing 2nd Brain Systems (BACKLOG)
-
-**Goal:** Build a migration pipeline that ingests data from existing personal knowledge systems (Notion, Roam Research, Obsidian with different structure, Logseq, etc.), classifies and categorizes the content, presents it for user review, and then restructures it to match the Sentinel's Obsidian vault conventions.
-
-**Ideas to explore:**
-- Source systems to support: Notion (JSON export), Roam Research (JSON/EDN export), Logseq (Markdown), legacy Obsidian vaults with different folder structure, nanoclaw or similar 2nd brain tools
-- Import pipeline: parse source format → extract entities (notes, tags, links, dates) → classify into Sentinel vault categories (users/, pathfinder/, music/, finance/, etc.)
-- Review UX: present classified content in batches via Discord or a simple web UI — user approves, reclassifies, or discards each item before it's written to Obsidian
-- Restructuring: apply vault conventions (frontmatter format, folder structure, linking patterns) to all approved content
-- Deduplication: detect near-duplicate notes from source vs. existing vault content before importing
-- Incremental import: support re-running the tool as the user migrates content in chunks
-- Rollback: dry-run mode that shows what would be written without committing to vault
-
+### Phase 15: Pi-mono Upgrade Strategy
+**Goal:** Safe, repeatable process for adopting new pi-mono releases — regression test suite for the JSONL RPC adapter, red/green parallel validation, and documented rollback path.
+**Depends on:** Phase 7
 **Requirements:** TBD
-**Plans:** 0 plans
+**Success Criteria** (what must be TRUE):
+  1. Regression test harness covers pi-adapter.ts RPC protocol (mock pi subprocess, verify JSONL contract)
+  2. Red/green migration: old and new versions run in parallel, outputs compared before cutover
+  3. Rollback procedure documented and tested
+  4. Upgrade CI workflow: pin → test → promote
+**Plans:** TBD
 
 Plans:
-- [ ] TBD (promote with /gsd-review-backlog when ready)
+- [ ] TBD
