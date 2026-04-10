@@ -62,7 +62,12 @@ Plans:
   2. Apple Messages bridge functional as tier-2 interface (feature-flagged)
   3. X-Sentinel-Key required on all non-health Core endpoints
   4. Message Envelope format stable and all interfaces conform to it
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — Wave 1: APIKeyMiddleware in sentinel-core, test_auth.py (4 tests), update 31 existing tests with X-Sentinel-Key header
+- [ ] 03-02-PLAN.md — Wave 2: Discord bot container — bot.py, Dockerfile, compose.yml, /sentask slash command with defer+thread+Core call
+- [ ] 03-03-PLAN.md — Wave 2: Apple Messages bridge — bridge.py (SQLite ROWID polling), launch.sh, README.md (Full Disk Access docs)
 
 ### Phase 4: AI Provider
 **Goal**: Provider configuration via env vars. Multiple providers switchable. Retry logic and fallback.
