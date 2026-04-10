@@ -36,7 +36,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Changing the LM Studio model URL requires only an environment variable change, no code edits
   4. A message that would exceed the model's context window is rejected with a clear error before being sent to LM Studio
   5. Pi harness version is pinned and an adapter layer isolates the rest of the system from Pi internals
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 01-01-PLAN.md — Wave 0: Docker Compose include scaffold, Python test harness stubs, .env.example fix
+- [ ] 01-02-PLAN.md — Wave 1: Pi harness Fastify bridge with adapter pattern and node:22-alpine Dockerfile
+- [ ] 01-03-PLAN.md — Wave 2: Sentinel Core FastAPI app — POST /message, token guard, LM Studio client, passing tests
 **UI hint**: no
 
 **Research flags:**
@@ -187,7 +191,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Loop | 0/0 | Not started | - |
+| 1. Core Loop | 0/3 | Planned | - |
 | 2. Memory Layer | 0/0 | Not started | - |
 | 3. Discord Interface + Envelope | 0/0 | Not started | - |
 | 4. AI Provider Polish | 0/0 | Not started | - |
