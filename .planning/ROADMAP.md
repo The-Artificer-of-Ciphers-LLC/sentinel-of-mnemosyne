@@ -9,7 +9,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 1: Core Loop** — Pi harness + Sentinel Core FastAPI, end-to-end AI response
 - [x] **Phase 2: Memory Layer** — Obsidian integration, context retrieval, session summaries, cross-session memory (completed 2026-04-10)
 - [ ] **Phase 3: Interfaces** — Discord bot, Apple Messages bridge, X-Sentinel-Key auth
-- [ ] **Phase 4: AI Provider** — Multi-provider support, retry logic, fallback, model registry
+- [x] **Phase 4: AI Provider** — Multi-provider support, retry logic, fallback, model registry (completed 2026-04-10)
 - [ ] **Phase 5: Pathfinder 2e Module** — NPC management, session notes, dialogue generation
 - [ ] **Phase 6: Music Lesson Module** — Practice logging, history queries, Obsidian vault structure
 - [ ] **Phase 7: Coder Interface** — Separate Pi environment, cloud routing, module scaffolding
@@ -85,10 +85,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Wave 1: pyproject.toml deps (litellm>=1.83.0, tenacity, anthropic), Settings provider env vars, models-seed.json
-- [ ] 04-02-PLAN.md — Wave 2: AIProvider Protocol (base.py), LiteLLMProvider with tenacity retry, Ollama/LlamaCpp stubs, delete LMStudioClient
-- [ ] 04-03-PLAN.md — Wave 3: ModelRegistry (hybrid live-fetch + seed), ProviderRouter (ConnectError-only fallback)
-- [ ] 04-04-PLAN.md — Wave 4: Wire main.py lifespan + message.py, update tests, full suite green
+- [x] 04-01-PLAN.md — Wave 1: pyproject.toml deps (litellm>=1.83.0, tenacity, anthropic), Settings provider env vars, models-seed.json
+- [x] 04-02-PLAN.md — Wave 2: AIProvider Protocol (base.py), LiteLLMProvider with tenacity retry, Ollama/LlamaCpp stubs, delete LMStudioClient
+- [x] 04-03-PLAN.md — Wave 3: ModelRegistry (hybrid live-fetch + seed), ProviderRouter (ConnectError-only fallback)
+- [x] 04-04-PLAN.md — Wave 4: Wire main.py lifespan + message.py, update tests, full suite green
 
 ### Phase 5: Pathfinder 2e Module
 **Goal**: DM co-pilot. Create and query NPCs, capture session notes, generate in-character dialogue.
