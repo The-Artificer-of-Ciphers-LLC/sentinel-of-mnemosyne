@@ -2,13 +2,14 @@
 POST /message route — Phase 2: memory-aware message processing.
 
 Flow:
-  1. Retrieve user context file from Obsidian (graceful skip on failure)
-  2. Retrieve hot-tier session summaries (last 3, graceful skip on failure)
-  3. Build messages array: context user/assistant pair + actual user message (per D-1)
-  4. Truncate injected context to 25% of context_window budget (prevents systematic 422s)
-  5. Token guard on full messages array
-  6. Forward to Pi harness via send_messages()
-  7. Write session summary to Obsidian via BackgroundTasks (best-effort, D-2/MEM-06)
+  1. Retrieve self context from Obsidian vault (self/identity.md + goals + relationships)
+  2. Retrieve current reminders (ops/reminders.md)
+  3. Retrieve hot-tier session summaries (last 3, graceful skip on failure)
+  4. Build messages array: context user/assistant pair + actual user message (per D-1)
+  5. Truncate injected context to 25% of context_window budget (prevents systematic 422s)
+  6. Token guard on full messages array
+  7. Forward to LM Studio
+  8. Write session summary to Obsidian via BackgroundTasks (best-effort, D-2/MEM-06)
 """
 import logging
 from datetime import datetime, timezone
@@ -43,7 +44,7 @@ async def post_message(
     background_tasks: BackgroundTasks,
 ) -> ResponseEnvelope:
     """
-    Receive a user message, inject Obsidian memory context, call Pi, write session summary.
+    Receive a user message, inject Obsidian lifebook context, call LM Studio, write session summary.
 
     Error responses:
       422 — message + context exceeds context window after truncation
@@ -54,21 +55,24 @@ async def post_message(
     context_window: int = request.app.state.context_window
     budget_tokens = int(context_window * CONTEXT_BUDGET_RATIO)
 
-    # 1 + 2. Retrieve context (both calls degrade gracefully — never raise)
-    user_context = await obsidian.get_user_context(envelope.user_id)
+    # 1 + 2 + 3. Retrieve context (all calls degrade gracefully — never raise)
+    self_context = await obsidian.get_self_context()
+    reminders = await obsidian.get_reminders()
     recent_sessions = await obsidian.get_recent_sessions(envelope.user_id, limit=3)
 
-    # 3. Build messages array with context prepended as user/assistant pair (per D-1)
+    # 4. Build messages array with context prepended as user/assistant pair (per D-1)
     messages: list[dict] = []
-    if user_context or recent_sessions:
+    if self_context or reminders or recent_sessions:
         context_parts: list[str] = []
-        if user_context:
-            context_parts.append(f"User profile:\n{user_context}")
+        if self_context:
+            context_parts.append(f"Vault context (identity, goals, relationships):\n{self_context}")
+        if reminders:
+            context_parts.append(f"Current reminders:\n{reminders}")
         if recent_sessions:
             context_parts.append("Recent session history:\n" + "\n---\n".join(recent_sessions))
         raw_context = "\n\n".join(context_parts)
 
-        # 4. Truncate injected context to budget before token guard
+        # 5. Truncate injected context to budget before token guard
         safe_context = _truncate_to_tokens(raw_context, budget_tokens)
         if safe_context != raw_context:
             logger.warning(
@@ -80,24 +84,26 @@ async def post_message(
         messages.append({"role": "assistant", "content": "Understood."})
     messages.append({"role": "user", "content": envelope.content})
 
-    # 5. Token guard on full messages array (MEM-07)
+    # 6. Token guard on full messages array (MEM-07)
     try:
         check_token_limit(messages, context_window)
     except TokenLimitError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    # 6. Call LM Studio directly (conversational use — Pi harness reserved for Coder Interface)
+    # 7. Call LM Studio directly (conversational use — Pi harness reserved for Coder Interface)
     lm_client = request.app.state.lm_client
     settings = request.app.state.settings
 
-    # Prepend Sentinel persona system prompt
+    # Prepend Sentinel persona system prompt (lifebook variant)
     full_messages = [
         {
             "role": "system",
             "content": (
-                "You are the Sentinel of Mnemosyne — a personal AI assistant. "
-                "You are helpful, direct, and remember context from prior sessions. "
-                "Answer conversationally. Do not use markdown unless the user asks for it."
+                "You are the Sentinel of Mnemosyne — a personal second brain and AI assistant. "
+                "You know the user's goals, gear, kids' schedules, and active projects from their Obsidian vault. "
+                "You are warm, direct, and unafraid to call out neglected gear or stale goals. "
+                "You remember context from prior sessions and reference it naturally. "
+                "Answer conversationally. Use markdown only when asked."
             ),
         },
         *messages,
@@ -110,7 +116,7 @@ async def post_message(
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=502, detail=f"LM Studio error: {exc.response.status_code}")
 
-    # 7. Best-effort session summary write (MEM-03, MEM-06: always write)
+    # 8. Best-effort session summary write (MEM-03, MEM-06: always write)
     background_tasks.add_task(
         _write_session_summary,
         obsidian,
@@ -133,12 +139,12 @@ async def _write_session_summary(
     """
     Best-effort session summary write. Failures are logged, not raised.
     Per D-2 (MEM-06): every completed exchange writes a session note.
-    Path: /core/sessions/{YYYY-MM-DD}/{user_id}-{HH-MM-SS}.md
+    Path: ops/sessions/{YYYY-MM-DD}/{user_id}-{HH-MM-SS}.md
     """
     now = datetime.now(timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H-%M-%S")
-    path = f"core/sessions/{date_str}/{user_id}-{time_str}.md"
+    path = f"ops/sessions/{date_str}/{user_id}-{time_str}.md"
     content = f"""---
 timestamp: {now.isoformat()}
 user_id: {user_id}
