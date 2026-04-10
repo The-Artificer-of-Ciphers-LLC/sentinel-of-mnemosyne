@@ -217,9 +217,21 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Regression test harness covers pi-adapter.ts RPC protocol (mock pi subprocess, verify JSONL contract)
   2. Red/green migration: old and new versions run in parallel, outputs compared before cutover
+
   3. Rollback procedure documented and tested
   4. Upgrade CI workflow: pin → test → promote
 **Plans:** TBD
 
 Plans:
 - [ ] TBD
+
+## Backlog
+
+### Phase 999.1: AI Security — Prompt Injection and Model Insecurity Hardening (BACKLOG)
+
+**Goal:** Audit the Sentinel for AI-specific attack surfaces — prompt injection via Obsidian vault content, user messages, or session notes; jailbreak patterns reaching the model; sensitive data leakage in context; and other OWASP LLM Top 10 risks. Harden accordingly.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
