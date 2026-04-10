@@ -82,7 +82,13 @@ Plans:
   2. Failed Pi calls retry 3 times with exponential backoff before failing
   3. When LM Studio unavailable, Core routes to Claude API automatically
   4. Model registry maps model names to context window sizes
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Wave 1: pyproject.toml deps (litellm>=1.83.0, tenacity, anthropic), Settings provider env vars, models-seed.json
+- [ ] 04-02-PLAN.md — Wave 2: AIProvider Protocol (base.py), LiteLLMProvider with tenacity retry, Ollama/LlamaCpp stubs, delete LMStudioClient
+- [ ] 04-03-PLAN.md — Wave 3: ModelRegistry (hybrid live-fetch + seed), ProviderRouter (ConnectError-only fallback)
+- [ ] 04-04-PLAN.md — Wave 4: Wire main.py lifespan + message.py, update tests, full suite green
 
 ### Phase 5: Pathfinder 2e Module
 **Goal**: DM co-pilot. Create and query NPCs, capture session notes, generate in-character dialogue.
