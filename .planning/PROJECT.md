@@ -106,8 +106,8 @@ A message goes in, an AI response that knows your history comes back — and wha
 ## Constraints
 
 - **Tech Stack**: Python/FastAPI for Sentinel Core — fits the AI/automation ecosystem, async handles concurrent interfaces cleanly
-- **Tech Stack**: Node.js 24+ for Pi harness container — pi-mono minimum requirement, do not use lower versions
-- **Tech Stack**: Docker Compose with override files — base compose never changes; modules/interfaces add override fragments
+- **Tech Stack**: Node.js 22 LTS for Pi harness container — pi-mono requires >=20.6.0; Node 22 LTS is the correct choice (Node 24 is not yet LTS)
+- **Tech Stack**: Docker Compose with `include` directive (Compose v2.20+) — preferred over `-f` flag stacking; resolves paths relative to each included file's directory
 - **Dependencies**: Pi harness is a black box in v0.x — call it cleanly, do not modify it
 - **Dependencies**: Obsidian must be running on the Mac for the REST API to be available — cannot be containerized
 - **Dependencies**: LM Studio must have a model loaded before the Sentinel can respond — operational dependency, not a code dependency
@@ -123,8 +123,8 @@ A message goes in, an AI response that knows your history comes back — and wha
 | Obsidian Local REST API for vault writes | Avoids race conditions of direct file writes; supports surgical edits (PATCH) and full-text search | — Pending |
 | LM Studio as primary AI provider | OpenAI-compatible API makes provider swap frictionless — just change env vars | — Pending |
 | FastAPI (Python) for Sentinel Core | Best ecosystem fit for AI/automation; async handles concurrent interfaces | — Pending |
-| Docker Compose override files for modularity | Base compose never changes; community can publish module override fragments independently | — Pending |
-| Pi RPC mode (stdin/stdout JSONL) over HTTP | Cleaner than wrapping a CLI in bash scripts; no web server required inside Pi container | — Pending |
+| Docker Compose `include` directive for modularity | Base compose never changes; `include` (Compose v2.20+) resolves paths per-file, cleaner than `-f` stacking | — Pending |
+| Pi HTTP bridge inside Pi container | Pi itself is stdin/stdout only — a thin Fastify bridge (~50-100 lines) exposes it over Docker network; not provided by pi-mono | — Pending |
 | Alpaca for trading API | Commission-free, paper/live at same endpoints (different keys), built for algorithmic trading | — Pending |
 | `ofxtools` for OFX parsing | Well-maintained Python library; open source; handles the XML complexity of OFX format | — Pending |
 
