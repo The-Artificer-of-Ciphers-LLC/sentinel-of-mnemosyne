@@ -47,7 +47,11 @@ Plans:
   4. A second conversation with the same user_id can demonstrate a specific detail from a prior session
   5. Token budget ceiling enforced — context injection never exceeds configured limit
   6. Write-selectivity threshold documented and enforced
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Wave 1: ObsidianClient, config/models/main.py wiring, bridge.ts messages array, test scaffolding
+- [ ] 02-02-PLAN.md — Wave 2: POST /message Phase 2 flow — context injection, BackgroundTasks write, token budget
 
 ### Phase 3: Interfaces
 **Goal**: The Sentinel is reachable from Discord and Apple Messages. All Core endpoints require authentication.
