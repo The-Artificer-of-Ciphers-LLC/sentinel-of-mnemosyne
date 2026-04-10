@@ -15,9 +15,6 @@ from typing import AsyncGenerator
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request as StarletteRequest
-from starlette.responses import Response
 
 from app.clients.lmstudio import LMStudioClient, get_context_window
 from app.clients.obsidian import ObsidianClient
@@ -27,18 +24,6 @@ from app.routes.message import router as message_router
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 logger = logging.getLogger(__name__)
-
-
-class APIKeyMiddleware(BaseHTTPMiddleware):
-    """Require X-Sentinel-Key header on all non-health endpoints (IFACE-06)."""
-
-    async def dispatch(self, request: StarletteRequest, call_next) -> Response:
-        if request.url.path == "/health":
-            return await call_next(request)
-        key = request.headers.get("X-Sentinel-Key", "")
-        if key != settings.sentinel_api_key:
-            return JSONResponse({"detail": "Unauthorized"}, status_code=401)
-        return await call_next(request)
 
 
 @asynccontextmanager
@@ -66,8 +51,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Client instances
     app.state.lm_client = LMStudioClient(
-        http_client, settings.lmstudio_base_url, settings.model_name,
-        num_ctx=settings.lmstudio_num_ctx,
+        http_client, settings.lmstudio_base_url, settings.model_name
     )
     app.state.pi_adapter = PiAdapterClient(http_client, settings.pi_harness_url)
 
@@ -101,7 +85,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(APIKeyMiddleware)
 app.include_router(message_router)
 
 

@@ -13,6 +13,10 @@ dependencies = [
     "pydantic-settings>=2.13.0",
     "httpx>=0.28.1",
     "tiktoken",
+    # AI provider libraries — pinned per supply-chain incident (LiteLLM 1.82.7-1.82.8 were malicious, March 2026)
+    "litellm>=1.83.0,<2.0",
+    "tenacity>=8.2.0,<10.0",
+    "anthropic>=0.93.0,<1.0",
 ]
 
 [project.optional-dependencies]

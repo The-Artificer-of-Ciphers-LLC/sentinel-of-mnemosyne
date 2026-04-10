@@ -17,10 +17,6 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [ ] **Phase 9: Autonomous Stock Trader (Paper)** — Alpaca paper trading, rules enforcement, 30-day run
 - [ ] **Phase 10: Live Trading** — Live keys, human approval flow, weekly performance summary
 - [ ] **Phase 11: Community & Polish** — Contributor docs, MODULE-SPEC.md, GitHub structure
-- [ ] **Phase 12: Knowledge Migration Tool** — Import from Notion/Roam/Logseq, classify, review, restructure to Sentinel vault conventions
-- [ ] **Phase 13: Messaging Alternatives** — Business registration, Twilio/Vonage, Apple Messages for Business, receive-without-texting options
-- [ ] **Phase 14: README & Licensing** — Keep README current as phases ship, audit dependency licenses, MIT vs Apache 2.0 vs AGPL
-- [ ] **Phase 15: Pi-mono Upgrade Strategy** — Regression test harness for pi-adapter.ts, red/green migration, rollback strategy
 
 ## Phase Details
 
@@ -66,12 +62,7 @@ Plans:
   2. Apple Messages bridge functional as tier-2 interface (feature-flagged)
   3. X-Sentinel-Key required on all non-health Core endpoints
   4. Message Envelope format stable and all interfaces conform to it
-**Plans**: 3 plans
-
-Plans:
-- [x] 03-01-PLAN.md — Wave 1: APIKeyMiddleware in sentinel-core, test_auth.py (4 tests), update 31 existing tests with X-Sentinel-Key header
-- [x] 03-02-PLAN.md — Wave 2: Discord bot container — bot.py, Dockerfile, compose.yml, /sentask slash command with defer+thread+Core call
-- [x] 03-03-PLAN.md — Wave 2: Apple Messages bridge — bridge.py (SQLite ROWID polling), launch.sh, README.md (Full Disk Access docs)
+**Plans**: TBD
 
 ### Phase 4: AI Provider
 **Goal**: Provider configuration via env vars. Multiple providers switchable. Retry logic and fallback.
@@ -82,13 +73,7 @@ Plans:
   2. Failed Pi calls retry 3 times with exponential backoff before failing
   3. When LM Studio unavailable, Core routes to Claude API automatically
   4. Model registry maps model names to context window sizes
-**Plans**: 4 plans
-
-Plans:
-- [ ] 04-01-PLAN.md — Wave 1: pyproject.toml deps (litellm>=1.83.0, tenacity, anthropic), Settings provider env vars, models-seed.json
-- [ ] 04-02-PLAN.md — Wave 2: AIProvider Protocol (base.py), LiteLLMProvider with tenacity retry, Ollama/LlamaCpp stubs, delete LMStudioClient
-- [ ] 04-03-PLAN.md — Wave 3: ModelRegistry (hybrid live-fetch + seed), ProviderRouter (ConnectError-only fallback)
-- [ ] 04-04-PLAN.md — Wave 4: Wire main.py lifespan + message.py, update tests, full suite green
+**Plans**: TBD
 
 ### Phase 5: Pathfinder 2e Module
 **Goal**: DM co-pilot. Create and query NPCs, capture session notes, generate in-character dialogue.
@@ -168,58 +153,23 @@ Plans:
   3. GitHub repo has labeled issues, PR template, accurate README
 **Plans**: TBD
 
-### Phase 12: Knowledge Migration Tool
-**Goal:** Build a migration pipeline that ingests data from existing personal knowledge systems (Notion, Roam Research, Logseq, legacy Obsidian vaults, nanoclaw, etc.), classifies and categorizes content, presents it for user review, then restructures it to match Sentinel vault conventions.
-**Depends on:** Phase 2
+## Backlog
+
+### Phase 999.1: Pi-mono Upgrade Strategy & Regression Testing (BACKLOG)
+
+**Goal:** Design a safe process for adopting new pi-mono releases — including regression test suite for the pi-harness adapter, red/green migration approach to validate the new version before cutover, and rollback strategy if the upgrade breaks the RPC protocol.
+
+**Context:** pi-mono is under active development and releases breaking changes every 2-4 days (noted in STATE.md). The adapter pattern in Phase 1 isolates pi-mono contact to `pi-adapter.ts`, but there's currently no automated way to detect when an upgrade breaks the RPC contract.
+
+**Ideas to explore:**
+- Regression test harness for pi-adapter.ts (mock pi subprocess, verify JSONL protocol)
+- Red/green migration: run old and new versions in parallel, compare outputs
+- Semantic versioning contract: what constitutes a breaking change in pi-mono?
+- Automated upgrade CI: pin → test → promote workflow
+- Canary deployment pattern for pi-harness container
+
 **Requirements:** TBD
-**Success Criteria** (what must be TRUE):
-  1. Source data from at least one system (Notion JSON export or Logseq markdown) parsed without data loss
-  2. Classified content presented for user review in batches via Discord before any vault write
-  3. Approved items written to correct Sentinel vault paths with proper frontmatter
-  4. Duplicate detection prevents re-importing already-present content
-  5. Dry-run mode shows what would be written without committing
-**Plans:** TBD
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] TBD
-
-### Phase 13: Messaging Alternatives
-**Goal:** Evaluate and implement alternatives to the personal Apple Messages bridge — business SMS/iMessage registration, dedicated number options, or cross-platform messaging that doesn't require texting a personal number first.
-**Depends on:** Phase 3
-**Requirements:** TBD
-**Success Criteria** (what must be TRUE):
-  1. Options evaluated: Apple Messages for Business, Twilio/Vonage, WhatsApp Business API
-  2. Chosen option implemented as a Sentinel interface container
-  3. Receive-without-texting-first capability confirmed working
-**Plans:** TBD
-
-Plans:
-- [ ] TBD
-
-### Phase 14: README & Licensing
-**Goal:** Keep README.md accurate as phases ship and lock in the right open-source license given the dependency stack (pi-mono, discord.py, alpaca-py) and potential contributor community.
-**Depends on:** Phase 10
-**Requirements:** TBD
-**Success Criteria** (what must be TRUE):
-  1. License chosen and committed (MIT, Apache 2.0, or AGPL) with rationale documented
-  2. Dependency license audit complete — no incompatibilities
-  3. README covers setup, architecture, and interface configuration accurately for the shipped phases
-  4. CONTRIBUTING.md and CODE_OF_CONDUCT.md present (can be stubs ahead of Phase 11)
-**Plans:** TBD
-
-Plans:
-- [ ] TBD
-
-### Phase 15: Pi-mono Upgrade Strategy
-**Goal:** Safe, repeatable process for adopting new pi-mono releases — regression test suite for the JSONL RPC adapter, red/green parallel validation, and documented rollback path.
-**Depends on:** Phase 7
-**Requirements:** TBD
-**Success Criteria** (what must be TRUE):
-  1. Regression test harness covers pi-adapter.ts RPC protocol (mock pi subprocess, verify JSONL contract)
-  2. Red/green migration: old and new versions run in parallel, outputs compared before cutover
-  3. Rollback procedure documented and tested
-  4. Upgrade CI workflow: pin → test → promote
-**Plans:** TBD
-
-Plans:
-- [ ] TBD
+- [ ] TBD (promote with /gsd-review-backlog when ready)

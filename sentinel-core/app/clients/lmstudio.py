@@ -32,12 +32,10 @@ class LMStudioClient:
         http_client: httpx.AsyncClient,
         base_url: str,
         model_name: str,
-        num_ctx: int = 8192,
     ) -> None:
         self._client = http_client
         self._base_url = base_url.rstrip("/")
         self._model_name = model_name
-        self._num_ctx = num_ctx
 
     async def complete(self, messages: list[dict]) -> str:
         """
@@ -47,12 +45,11 @@ class LMStudioClient:
         payload = {
             "model": self._model_name,
             "messages": messages,
-            "num_ctx": self._num_ctx,
         }
         resp = await self._client.post(
             f"{self._base_url}/chat/completions",
             json=payload,
-            timeout=180.0,
+            timeout=30.0,
         )
         resp.raise_for_status()
         data = resp.json()

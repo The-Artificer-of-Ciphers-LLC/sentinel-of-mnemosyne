@@ -5,7 +5,7 @@
 include:
   - path: sentinel-core/compose.yml
   - path: pi-harness/compose.yml
-  - path: interfaces/discord/compose.yml
 
 # Future modules (uncomment when phase is ready):
+#   - path: interfaces/discord/compose.yml
 #   - path: modules/pathfinder/compose.yml

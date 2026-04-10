@@ -10,8 +10,6 @@ from app.main import app
 from app.clients.pi_adapter import PiAdapterClient
 from app.config import settings
 
-AUTH_HEADER = {"X-Sentinel-Key": "test-key-for-pytest"}
-
 
 def _make_client(transport: httpx.MockTransport | None = None) -> httpx.AsyncClient:
     """Create an httpx.AsyncClient with an optional mock transport."""
@@ -40,36 +38,30 @@ def default_obsidian_client():
 @pytest.fixture
 def pi_harness_mock():
     """Mock Pi harness returning a fixed response."""
-
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/prompt":
             return httpx.Response(200, json={"content": "Hello from Pi"})
         if request.url.path == "/health":
             return httpx.Response(200, json={"status": "ok", "piAlive": True, "restarts": 0})
         return httpx.Response(404)
-
     return httpx.MockTransport(handler)
 
 
 @pytest.fixture
 def pi_harness_down_mock():
     """Mock Pi harness that refuses connections."""
-
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("Connection refused")
-
     return httpx.MockTransport(handler)
 
 
 @pytest.fixture
 def lmstudio_available_mock(mock_lmstudio_models_response):
     """Mock LM Studio returning 8192 context window."""
-
     def handler(request: httpx.Request) -> httpx.Response:
         if "/api/v0/models/" in request.url.path:
             return httpx.Response(200, json=mock_lmstudio_models_response)
         return httpx.Response(404)
-
     return httpx.MockTransport(handler)
 
 
@@ -83,11 +75,7 @@ async def test_post_message_returns_response_envelope(pi_harness_mock, lmstudio_
         app.state.context_window = 8192
         app.state.settings = settings
 
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "test"},
-            headers=AUTH_HEADER,
-        )
+        resp = await client.post("/message", json={"content": "hello", "user_id": "test"})
 
     assert resp.status_code == 200
     data = resp.json()
@@ -103,11 +91,7 @@ async def test_post_message_503_when_pi_unavailable(pi_harness_down_mock):
         app.state.context_window = 8192
         app.state.settings = settings
 
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "test"},
-            headers=AUTH_HEADER,
-        )
+        resp = await client.post("/message", json={"content": "hello", "user_id": "test"})
 
     assert resp.status_code == 503
     assert resp.json().get("detail") == "AI backend not ready"
@@ -123,11 +107,7 @@ async def test_post_message_422_when_message_too_long():
         app.state.context_window = 5  # guaranteed to reject any real message
         app.state.settings = settings
 
-        resp = await client.post(
-            "/message",
-            json={"content": short_message, "user_id": "test"},
-            headers=AUTH_HEADER,
-        )
+        resp = await client.post("/message", json={"content": short_message, "user_id": "test"})
 
     assert resp.status_code == 422
     detail = resp.json().get("detail", "")
@@ -210,11 +190,7 @@ async def test_context_injected_when_file_exists(pi_harness_mock, obsidian_with_
         app.state.context_window = 8192
         app.state.settings = settings
 
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "trekkie"},
-            headers=AUTH_HEADER,
-        )
+        resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"})
 
     assert resp.status_code == 200
     assert "messages" in captured_body
@@ -247,11 +223,7 @@ async def test_no_injection_when_user_file_missing(obsidian_no_context):
         app.state.context_window = 8192
         app.state.settings = settings
 
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "new_user"},
-            headers=AUTH_HEADER,
-        )
+        resp = await client.post("/message", json={"content": "hello", "user_id": "new_user"})
 
     assert resp.status_code == 200
     messages = captured_body.get("messages", [])
@@ -273,11 +245,7 @@ async def test_no_injection_when_obsidian_down(pi_harness_mock):
         app.state.context_window = 8192
         app.state.settings = settings
 
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "trekkie"},
-            headers=AUTH_HEADER,
-        )
+        resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"})
 
     assert resp.status_code == 200
 
@@ -291,11 +259,7 @@ async def test_response_succeeds_when_write_fails(pi_harness_mock, obsidian_writ
         app.state.context_window = 8192
         app.state.settings = settings
 
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "trekkie"},
-            headers=AUTH_HEADER,
-        )
+        resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"})
 
     assert resp.status_code == 200
     assert resp.json()["content"] == "Hello from Pi"
@@ -315,11 +279,7 @@ async def test_token_guard_fires_on_inflated_context(pi_harness_mock):
         app.state.context_window = 10  # tiny window — truncation overhead alone exceeds this
         app.state.settings = settings
 
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "trekkie"},
-            headers=AUTH_HEADER,
-        )
+        resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"})
 
     assert resp.status_code == 422
 
@@ -340,11 +300,7 @@ async def test_context_truncated_to_budget(pi_harness_mock):
         app.state.context_window = 400  # 25% budget = 100 tokens
         app.state.settings = settings
 
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "trekkie"},
-            headers=AUTH_HEADER,
-        )
+        resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"})
 
     # After truncation the full array fits within 400 tokens → 200 response
     assert resp.status_code == 200
