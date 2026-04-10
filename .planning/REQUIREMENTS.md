@@ -141,74 +141,72 @@
 
 ## Traceability
 
-*(Populated by roadmapper agent)*
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | — | Pending |
-| CORE-02 | — | Pending |
-| CORE-03 | — | Pending |
-| CORE-04 | — | Pending |
-| CORE-05 | — | Pending |
-| CORE-06 | — | Pending |
-| CORE-07 | — | Pending |
-| MEM-01 | — | Pending |
-| MEM-02 | — | Pending |
-| MEM-03 | — | Pending |
-| MEM-04 | — | Pending |
-| MEM-05 | — | Pending |
-| MEM-06 | — | Pending |
-| MEM-07 | — | Pending |
-| MEM-08 | — | Pending |
-| IFACE-01 | — | Pending |
-| IFACE-02 | — | Pending |
-| IFACE-03 | — | Pending |
-| IFACE-04 | — | Pending |
-| IFACE-05 | — | Pending |
-| IFACE-06 | — | Pending |
-| PROV-01 | — | Pending |
-| PROV-02 | — | Pending |
-| PROV-03 | — | Pending |
-| PROV-04 | — | Pending |
-| PROV-05 | — | Pending |
-| PF2E-01 | — | Pending |
-| PF2E-02 | — | Pending |
-| PF2E-03 | — | Pending |
-| PF2E-04 | — | Pending |
-| PF2E-05 | — | Pending |
-| MUSIC-01 | — | Pending |
-| MUSIC-02 | — | Pending |
-| MUSIC-03 | — | Pending |
-| CODER-01 | — | Pending |
-| CODER-02 | — | Pending |
-| CODER-03 | — | Pending |
-| FIN-01 | — | Pending |
-| FIN-02 | — | Pending |
-| FIN-03 | — | Pending |
-| FIN-04 | — | Pending |
-| FIN-05 | — | Pending |
-| FIN-06 | — | Pending |
-| FIN-07 | — | Pending |
-| FIN-08 | — | Pending |
-| TRADE-01 | — | Pending |
-| TRADE-02 | — | Pending |
-| TRADE-03 | — | Pending |
-| TRADE-04 | — | Pending |
-| TRADE-05 | — | Pending |
-| TRADE-06 | — | Pending |
-| TRADE-07 | — | Pending |
-| TRADE-08 | — | Pending |
-| TRADE-09 | — | Pending |
-| TRADE-10 | — | Pending |
-| COMM-01 | — | Pending |
-| COMM-02 | — | Pending |
-| COMM-03 | — | Pending |
+| CORE-01 | Phase 1 | Pending |
+| CORE-02 | Phase 1 | Pending |
+| CORE-03 | Phase 1 | Pending |
+| CORE-04 | Phase 1 | Pending |
+| CORE-05 | Phase 1 | Pending |
+| CORE-06 | Phase 1 | Pending |
+| CORE-07 | Phase 1 | Pending |
+| MEM-01 | Phase 2 | Pending |
+| MEM-02 | Phase 2 | Pending |
+| MEM-03 | Phase 2 | Pending |
+| MEM-04 | Phase 2 | Pending |
+| MEM-05 | Phase 2 | Pending |
+| MEM-06 | Phase 2 | Pending |
+| MEM-07 | Phase 2 | Pending |
+| MEM-08 | Phase 2 | Pending |
+| IFACE-01 | Phase 3 | Pending |
+| IFACE-02 | Phase 3 | Pending |
+| IFACE-03 | Phase 3 | Pending |
+| IFACE-04 | Phase 3 | Pending |
+| IFACE-05 | Phase 3 | Pending |
+| IFACE-06 | Phase 3 | Pending |
+| PROV-01 | Phase 4 | Pending |
+| PROV-02 | Phase 4 | Pending |
+| PROV-03 | Phase 4 | Pending |
+| PROV-04 | Phase 4 | Pending |
+| PROV-05 | Phase 4 | Pending |
+| PF2E-01 | Phase 5 | Pending |
+| PF2E-02 | Phase 5 | Pending |
+| PF2E-03 | Phase 5 | Pending |
+| PF2E-04 | Phase 5 | Pending |
+| PF2E-05 | Phase 5 | Pending |
+| MUSIC-01 | Phase 6 | Pending |
+| MUSIC-02 | Phase 6 | Pending |
+| MUSIC-03 | Phase 6 | Pending |
+| CODER-01 | Phase 7 | Pending |
+| CODER-02 | Phase 7 | Pending |
+| CODER-03 | Phase 7 | Pending |
+| FIN-01 | Phase 8 | Pending |
+| FIN-02 | Phase 8 | Pending |
+| FIN-03 | Phase 8 | Pending |
+| FIN-04 | Phase 8 | Pending |
+| FIN-05 | Phase 8 | Pending |
+| FIN-06 | Phase 8 | Pending |
+| FIN-07 | Phase 8 | Pending |
+| FIN-08 | Phase 8 | Pending |
+| TRADE-01 | Phase 9 | Pending |
+| TRADE-02 | Phase 9 | Pending |
+| TRADE-03 | Phase 9 | Pending |
+| TRADE-04 | Phase 9 | Pending |
+| TRADE-05 | Phase 9 | Pending |
+| TRADE-06 | Phase 9 | Pending |
+| TRADE-07 | Phase 9 | Pending |
+| TRADE-08 | Phase 10 | Pending |
+| TRADE-09 | Phase 10 | Pending |
+| TRADE-10 | Phase 10 | Pending |
+| COMM-01 | Phase 11 | Pending |
+| COMM-02 | Phase 11 | Pending |
+| COMM-03 | Phase 11 | Pending |
 
 **Coverage:**
-- v1 requirements: 53 total
-- Mapped to phases: 0 (populated by roadmapper)
-- Unmapped: 53 ⚠️ (pending roadmap creation)
+- v1 requirements: 58 total
+- Mapped to phases: 58
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-10*
-*Last updated: 2026-04-10 after initial definition*
+*Last updated: 2026-04-10 after roadmap creation*
