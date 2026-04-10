@@ -142,6 +142,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "Ensure Obsidian is running with Local REST API plugin enabled (HTTP mode port 27123)."
         )
 
+    # Security services — instantiated once, shared across all requests (SEC-01, SEC-02)
+    anthropic_client_for_scanner = (
+        AsyncAnthropic(api_key=settings.anthropic_api_key)
+        if settings.anthropic_api_key
+        else None
+    )
+    if anthropic_client_for_scanner is None:
+        logger.warning(
+            "ANTHROPIC_API_KEY not set — OutputScanner secondary classifier disabled (fail-open)"
+        )
+    app.state.injection_filter = InjectionFilter()
+    app.state.output_scanner = OutputScanner(anthropic_client_for_scanner)
+    logger.info("Security services initialized: InjectionFilter, OutputScanner")
+
     logger.info("Sentinel Core ready.")
     yield
 
