@@ -23,7 +23,7 @@ class PiAdapterClient:
         resp = await self._client.post(
             f"{self._harness_url}/prompt",
             json={"message": message},
-            timeout=35.0,  # Pi has 30s timeout; add 5s margin
+            timeout=190.0,  # Pi has 180s timeout; add 10s margin for large local models
         )
         resp.raise_for_status()
         return resp.json()["content"]

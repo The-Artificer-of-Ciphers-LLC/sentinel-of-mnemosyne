@@ -7,19 +7,25 @@ RUN apk add --no-cache curl
 
 WORKDIR /app
 
-# Install dependencies first (layer caching)
+# Install all deps (including devDeps for tsc)
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
+
+# Compile TypeScript → CommonJS in dist/
+COPY tsconfig.json ./
+COPY src/ ./src/
+RUN npm run build
+
+# Drop dev deps (typescript, @types) after compile
+RUN npm prune --omit=dev
 
 # CRITICAL: Add node_modules/.bin to PATH so 'pi' binary is found by spawn()
-# Without this, spawn('pi', ...) fails with ENOENT even though npm ci installed it
 ENV PATH="/app/node_modules/.bin:$PATH"
 
-COPY src/ ./src/
-COPY tsconfig.json ./
+# Entrypoint writes ~/.pi/agent/models.json from env vars at container start
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3000
-
-# Use --experimental-strip-types to run TypeScript directly in Node 22
-# (avoids a compile step in the container; acceptable for this service)
-CMD ["node", "--experimental-strip-types", "src/bridge.ts"]
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["node", "dist/bridge.js"]

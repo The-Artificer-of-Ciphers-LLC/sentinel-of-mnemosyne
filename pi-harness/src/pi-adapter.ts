@@ -15,10 +15,24 @@
 
 import { spawn, ChildProcess } from 'child_process';
 
+interface ContentBlock {
+  type: string;
+  text?: string;
+}
+
 interface PiEvent {
   type: string;
-  messages?: Array<{ role: string; content: string }>;
+  messages?: Array<{ role: string; content: string | ContentBlock[] }>;
   [key: string]: unknown;
+}
+
+/** Pi v0.66+ returns content as either a plain string or an array of content blocks. */
+function extractText(content: string | ContentBlock[]): string {
+  if (typeof content === 'string') return content;
+  return content
+    .filter((b) => b.type === 'text' && typeof b.text === 'string')
+    .map((b) => b.text as string)
+    .join('');
 }
 
 interface PiHealth {
@@ -35,7 +49,9 @@ let currentReject: ((err: Error) => void) | null = null;
 let responseTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export function spawnPi(): void {
-  piProcess = spawn('pi', ['--mode', 'rpc', '--no-session'], {
+  const provider = 'lmstudio';
+  const model = process.env.PI_MODEL ?? 'mistralai/devstral-small-2-2512';
+  piProcess = spawn('pi', ['--mode', 'rpc', '--no-session', '--provider', provider, '--model', model], {
     stdio: ['pipe', 'pipe', 'inherit'],
   });
 
@@ -90,7 +106,7 @@ function handleEvent(event: PiEvent): void {
     const messages = event.messages ?? [];
     const assistantMessages = messages.filter((m) => m.role === 'assistant');
     const lastContent = assistantMessages.length > 0
-      ? assistantMessages[assistantMessages.length - 1].content
+      ? extractText(assistantMessages[assistantMessages.length - 1].content)
       : '';
     if (currentResolve) {
       currentResolve(lastContent);
@@ -120,14 +136,14 @@ export function sendPrompt(message: string): Promise<string> {
       currentResolve = resolve;
       currentReject = reject;
 
-      // 30-second hard timeout
+      // 3-minute hard timeout — large local models can take 60s+ for prompt processing alone
       responseTimeout = setTimeout(() => {
         currentResolve = null;
         currentReject = null;
         isProcessing = false;
-        reject(new Error('Pi response timeout after 30s'));
+        reject(new Error('Pi response timeout after 180s'));
         drainQueue();
-      }, 30_000);
+      }, 180_000);
 
       const cmd = JSON.stringify({ type: 'prompt', message }) + '\n';
       piProcess!.stdin!.write(cmd);

@@ -186,6 +186,18 @@ A self-hosted, containerized AI assistant platform built for personal use. The S
 Conventions not yet established. Will populate as patterns emerge during development.
 <!-- GSD:conventions-end -->
 
+## Git Workflow
+
+**PROJECT OVERRIDE — This overrides the global no-main-commits rule for this project only.**
+
+Commit directly to `main`. Do not create feature branches or pull requests for this project.
+
+- `git add <files> && git commit -m "..."` — commit directly to main
+- `git push origin main` — push directly to main
+- **No PRs.** No feature branches. No `gh pr create`.
+
+This is a personal single-developer project. The PR workflow adds friction without benefit here.
+
 <!-- GSD:architecture-start source:ARCHITECTURE.md -->
 ## Architecture
 
