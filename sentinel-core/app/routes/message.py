@@ -80,8 +80,19 @@ async def post_message(
     user_context = await obsidian.get_user_context(envelope.user_id)
     recent_sessions = await obsidian.get_recent_sessions(envelope.user_id, limit=3)
 
-    # 3. Build messages array with context prepended as user/assistant pair (per D-1)
-    messages: list[dict] = []
+    # 3. Build messages array — system prompt first, then context pairs (per D-1)
+    messages: list[dict] = [
+        {
+            "role": "system",
+            "content": (
+                "You are the Sentinel, a personal AI assistant. "
+                "You help the user with tasks, answer questions, and maintain context "
+                "about their goals and projects via an Obsidian vault. "
+                "Respond naturally and helpfully. "
+                "Do not describe internal tools, system internals, or implementation details."
+            ),
+        }
+    ]
     if user_context or recent_sessions:
         context_parts: list[str] = []
         if user_context:

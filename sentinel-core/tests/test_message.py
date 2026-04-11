@@ -227,7 +227,7 @@ async def test_context_injected_when_file_exists(pi_harness_mock, obsidian_with_
 
 
 async def test_context_injected_messages_shape(obsidian_with_context, mock_ai_provider):
-    """When Obsidian returns user context and Pi is down, ai_provider gets 3-message array."""
+    """When Obsidian returns user context and Pi is down, ai_provider gets 4-message array (system + context pair + user)."""
     captured_messages = []
 
     async def capturing_complete(messages):
@@ -252,17 +252,18 @@ async def test_context_injected_messages_shape(obsidian_with_context, mock_ai_pr
         )
 
     assert resp.status_code == 200
-    assert len(captured_messages) == 3
-    assert captured_messages[0]["role"] == "user"
-    assert "trekkie" in captured_messages[0]["content"].lower() or "developer" in captured_messages[0]["content"].lower()
-    assert captured_messages[1]["role"] == "assistant"
-    assert captured_messages[1]["content"] == "Understood."
-    assert captured_messages[2]["role"] == "user"
-    assert captured_messages[2]["content"] == "hello"
+    assert len(captured_messages) == 4
+    assert captured_messages[0]["role"] == "system"
+    assert captured_messages[1]["role"] == "user"
+    assert "trekkie" in captured_messages[1]["content"].lower() or "developer" in captured_messages[1]["content"].lower()
+    assert captured_messages[2]["role"] == "assistant"
+    assert captured_messages[2]["content"] == "Understood."
+    assert captured_messages[3]["role"] == "user"
+    assert captured_messages[3]["content"] == "hello"
 
 
 async def test_no_injection_when_user_file_missing(obsidian_no_context, mock_ai_provider):
-    """When Obsidian returns None (no user file), ai_provider receives single-message array."""
+    """When Obsidian returns None (no user file), ai_provider receives 2-message array (system + user)."""
     captured_messages = []
 
     async def capturing_complete(messages):
@@ -287,8 +288,9 @@ async def test_no_injection_when_user_file_missing(obsidian_no_context, mock_ai_
         )
 
     assert resp.status_code == 200
-    assert len(captured_messages) == 1
-    assert captured_messages[0]["content"] == "hello"
+    assert len(captured_messages) == 2
+    assert captured_messages[0]["role"] == "system"
+    assert captured_messages[1]["content"] == "hello"
 
 
 async def test_no_injection_when_obsidian_down(pi_harness_mock):
@@ -690,15 +692,16 @@ async def test_warm_tier_injected_when_results_present(obsidian_with_search_resu
         app.state.ai_provider = mock_ai_provider
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
     assert resp.status_code == 200
-    # No hot tier (get_user_context=None, get_recent_sessions=[]) + vault pair + user message = 3 messages
-    assert len(captured_messages) == 3
-    assert captured_messages[0]["role"] == "user"
-    assert "[BEGIN RETRIEVED CONTEXT" in captured_messages[0]["content"]
-    assert "trekkie.md" in captured_messages[0]["content"] or "developer" in captured_messages[0]["content"]
-    assert captured_messages[1]["role"] == "assistant"
-    assert captured_messages[1]["content"] == "Understood."
-    assert captured_messages[2]["role"] == "user"
-    assert captured_messages[2]["content"] == "hello"
+    # system + no hot tier + vault pair + user message = 4 messages
+    assert len(captured_messages) == 4
+    assert captured_messages[0]["role"] == "system"
+    assert captured_messages[1]["role"] == "user"
+    assert "[BEGIN RETRIEVED CONTEXT" in captured_messages[1]["content"]
+    assert "trekkie.md" in captured_messages[1]["content"] or "developer" in captured_messages[1]["content"]
+    assert captured_messages[2]["role"] == "assistant"
+    assert captured_messages[2]["content"] == "Understood."
+    assert captured_messages[3]["role"] == "user"
+    assert captured_messages[3]["content"] == "hello"
 
 
 async def test_warm_tier_skipped_when_empty(mock_ai_provider):
@@ -717,9 +720,10 @@ async def test_warm_tier_skipped_when_empty(mock_ai_provider):
         app.state.ai_provider = mock_ai_provider
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
     assert resp.status_code == 200
-    # No hot tier, empty vault → only the user message
-    assert len(captured_messages) == 1
-    assert captured_messages[0]["content"] == "hello"
+    # system + no hot tier, empty vault → system + user message only
+    assert len(captured_messages) == 2
+    assert captured_messages[0]["role"] == "system"
+    assert captured_messages[1]["content"] == "hello"
 
 
 async def test_warm_tier_truncated_independently(mock_ai_provider):
@@ -747,7 +751,7 @@ async def test_warm_tier_truncated_independently(mock_ai_provider):
 
 
 async def test_warm_tier_both_tiers_five_messages(obsidian_with_context_and_search, mock_ai_provider):
-    """When both hot and warm tiers have content, messages array has 5 entries (D-04)."""
+    """When both hot and warm tiers have content, messages array has 6 entries (system + hot pair + vault pair + user)."""
     captured_messages = []
     async def capturing_complete(messages):
         captured_messages.extend(messages)
@@ -762,14 +766,15 @@ async def test_warm_tier_both_tiers_five_messages(obsidian_with_context_and_sear
         app.state.ai_provider = mock_ai_provider
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
     assert resp.status_code == 200
-    # hot pair (index 0+1) + vault pair (index 2+3) + user message (index 4) = 5
-    assert len(captured_messages) == 5
-    assert captured_messages[0]["role"] == "user"   # hot tier context
-    assert captured_messages[1]["role"] == "assistant"
-    assert captured_messages[1]["content"] == "Understood."
-    assert captured_messages[2]["role"] == "user"   # vault context
-    assert "[BEGIN RETRIEVED CONTEXT" in captured_messages[2]["content"]
-    assert captured_messages[3]["role"] == "assistant"
-    assert captured_messages[3]["content"] == "Understood."
-    assert captured_messages[4]["role"] == "user"   # actual user message
-    assert captured_messages[4]["content"] == "hello"
+    # system (index 0) + hot pair (index 1+2) + vault pair (index 3+4) + user message (index 5) = 6
+    assert len(captured_messages) == 6
+    assert captured_messages[0]["role"] == "system"
+    assert captured_messages[1]["role"] == "user"   # hot tier context
+    assert captured_messages[2]["role"] == "assistant"
+    assert captured_messages[2]["content"] == "Understood."
+    assert captured_messages[3]["role"] == "user"   # vault context
+    assert "[BEGIN RETRIEVED CONTEXT" in captured_messages[3]["content"]
+    assert captured_messages[4]["role"] == "assistant"
+    assert captured_messages[4]["content"] == "Understood."
+    assert captured_messages[5]["role"] == "user"   # actual user message
+    assert captured_messages[5]["content"] == "hello"
