@@ -1,0 +1,12 @@
+# garak LM Studio OpenAI-compatible endpoint config
+# Target: Sentinel Core's LM Studio provider (via host.docker.internal)
+# Source: garak.ai docs [CITED: garak.ai, verified 2026-04-10]
+# Note: This targets the raw LM Studio endpoint for model-level probing.
+# For endpoint-level probing (POST /message), pentest.py uses direct httpx calls.
+plugins:
+  generators:
+    - name: openai.OpenAICompatible
+      uri: "http://host.docker.internal:1234/v1"
+      key: "lmstudio"
+      name: "lmstudio-sentinel"
+      max_tokens: 512
