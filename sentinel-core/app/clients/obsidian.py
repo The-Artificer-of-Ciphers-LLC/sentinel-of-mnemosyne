@@ -28,17 +28,27 @@ class ObsidianClient:
             {"Authorization": f"Bearer {api_key}"} if api_key else {}
         )
 
+    async def _safe_request(self, coro, default, operation: str):
+        """Execute a coroutine, returning default on any failure."""
+        try:
+            return await coro
+        except Exception as exc:
+            if not isinstance(default, bool):
+                logger.warning("%s failed: %s", operation, exc)
+            return default
+
     async def check_health(self) -> bool:
         """Return True if Obsidian REST API is reachable. Non-raising."""
-        try:
+
+        async def _inner():
             resp = await self._client.get(
                 f"{self._base_url}/vault/",
                 headers=self._headers,
                 timeout=3.0,
             )
             return resp.status_code < 500
-        except Exception:
-            return False
+
+        return await self._safe_request(_inner(), False, "check_health")
 
     async def get_user_context(self, user_id: str) -> str | None:
         """
@@ -46,7 +56,8 @@ class ObsidianClient:
         Returns file body or None if 404 or unavailable.
         Per D-4: reads verbatim, no schema enforcement. Missing file = skip injection silently.
         """
-        try:
+
+        async def _inner():
             resp = await self._client.get(
                 f"{self._base_url}/vault/self/identity.md",
                 headers=self._headers,
@@ -56,9 +67,8 @@ class ObsidianClient:
                 return None
             resp.raise_for_status()
             return resp.text
-        except Exception:
-            logger.warning("ObsidianClient.get_user_context failed — skipping context injection")
-            return None
+
+        return await self._safe_request(_inner(), None, "get_user_context")
 
     async def read_self_context(self, path: str) -> str:
         """
@@ -67,7 +77,8 @@ class ObsidianClient:
         Returns empty string on any other error, logs warning.
         Called via asyncio.gather() for all 5 context paths in parallel.
         """
-        try:
+
+        async def _inner():
             resp = await self._client.get(
                 f"{self._base_url}/vault/{path}",
                 headers=self._headers,
@@ -77,9 +88,8 @@ class ObsidianClient:
                 return ""
             resp.raise_for_status()
             return resp.text
-        except Exception:
-            logger.warning(f"ObsidianClient.read_self_context({path!r}) failed — skipping")
-            return ""
+
+        return await self._safe_request(_inner(), "", "read_self_context")
 
     async def get_recent_sessions(self, user_id: str, limit: int = 3) -> list[str]:
         """
@@ -89,7 +99,8 @@ class ObsidianClient:
         Returns [] on any error (graceful degrade per D-3).
         MEM-05: hot-tier implementation.
         """
-        try:
+
+        async def _inner():
             now = datetime.now(timezone.utc)
             dates = [now.strftime("%Y-%m-%d")]
             yesterday = now.replace(day=now.day - 1) if now.day > 1 else now
@@ -112,7 +123,9 @@ class ObsidianClient:
                         filename = f if isinstance(f, str) else f.get("path", "")
                         if f"{user_id}-" in filename and filename.endswith(".md"):
                             # sort_key = date + filename for chronological sort
-                            candidates.append((f"{date}/{filename}", f"ops/sessions/{date}/{filename}"))
+                            candidates.append(
+                                (f"{date}/{filename}", f"ops/sessions/{date}/{filename}")
+                            )
                 except Exception:
                     continue
 
@@ -133,9 +146,8 @@ class ObsidianClient:
                 except Exception:
                     continue
             return contents
-        except Exception:
-            logger.warning("ObsidianClient.get_recent_sessions failed — skipping hot tier")
-            return []
+
+        return await self._safe_request(_inner(), [], "get_recent_sessions")
 
     async def write_session_summary(self, path: str, content: str) -> None:
         """
@@ -157,7 +169,8 @@ class ObsidianClient:
         MEM-08: callers use this method; implementation can switch keyword→vector without change.
         Returns [] on any error.
         """
-        try:
+
+        async def _inner():
             resp = await self._client.post(
                 f"{self._base_url}/search/simple/",
                 headers=self._headers,
@@ -166,6 +179,5 @@ class ObsidianClient:
             )
             resp.raise_for_status()
             return resp.json()
-        except Exception:
-            logger.warning("ObsidianClient.search_vault failed — returning empty results")
-            return []
+
+        return await self._safe_request(_inner(), [], "search_vault")
