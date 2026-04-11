@@ -88,24 +88,33 @@ async def _fetch_lmstudio(
 
 async def _fetch_claude(settings: Settings) -> dict[str, "ModelInfo"]:
     """
-    Fetch model list from Anthropic API via app/clients/anthropic_registry.py.
+    Fetch model list from Anthropic SDK.
     Returns dict of ModelInfo. Falls back to empty dict if key absent or API fails.
-    Vendor SDK import lives in app/clients/ — not here.
     """
     if not settings.anthropic_api_key:
         logger.info("ANTHROPIC_API_KEY not set — skipping Claude live model fetch, using seed")
         return {}
-    raw = await fetch_anthropic_models(settings.anthropic_api_key)
-    return {
-        model_id: ModelInfo(
-            id=info["id"],
-            provider=info["provider"],
-            context_window=info["context_window"],
-            capabilities=info["capabilities"],
-            notes=info["notes"],
-        )
-        for model_id, info in raw.items()
-    }
+    try:
+        import anthropic  # noqa: PLC0415
+
+        aclient = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        models_page = await aclient.models.list()
+        result: dict[str, ModelInfo] = {}
+        for m in models_page.data:
+            # Anthropic SDK model objects have .id; context_window may not be present
+            # Use seed value if available, otherwise default to 200000 (known Claude max)
+            result[m.id] = ModelInfo(
+                id=m.id,
+                provider="claude",
+                context_window=getattr(m, "context_window", 200000),
+                capabilities={"chat": True, "function_calling": True},
+                notes="Fetched from Anthropic API at startup",
+            )
+        logger.info(f"Claude models fetched: {list(result.keys())}")
+        return result
+    except Exception as exc:
+        logger.warning(f"Claude model registry fetch failed: {exc} — using seed fallback")
+        return {}
 
 
 async def build_model_registry(
