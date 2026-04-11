@@ -3,8 +3,12 @@ HTTP client for Pi harness bridge.
 Sentinel Core calls the Pi harness over HTTP — it never imports pi-mono directly.
 The pi-harness container is the single point of contact with @mariozechner/pi-coding-agent.
 """
+import os
+
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+
+PI_TIMEOUT_S = float(os.getenv("PI_TIMEOUT_S", "190"))
 
 
 class PiAdapterClient:
@@ -24,7 +28,7 @@ class PiAdapterClient:
         resp = await self._client.post(
             f"{self._harness_url}/prompt",
             json={"message": message},
-            timeout=190.0,  # Pi has 180s timeout; add 10s margin for large local models
+            timeout=PI_TIMEOUT_S,  # configurable via PI_TIMEOUT_S env var (default 190; Pi has 180s timeout)
         )
         resp.raise_for_status()
         return resp.json()["content"]
@@ -51,3 +55,12 @@ class PiAdapterClient:
         )
         resp.raise_for_status()
         return resp.json()["content"]
+
+    async def reset_session(self) -> None:
+        """
+        Reset Pi session by calling POST /reset on the bridge.
+        Bridge writes {"type":"new_session"} to Pi stdin, clearing conversation history.
+        Raises httpx.HTTPStatusError on non-2xx response.
+        """
+        resp = await self._client.post(f"{self._harness_url}/reset", timeout=5.0)
+        resp.raise_for_status()

@@ -163,3 +163,8 @@ export function getPiHealth(): PiHealth {
     restarts: restartCount,
   };
 }
+
+export function sendReset(): void {
+  if (!piProcess || !piProcess.stdin) return;
+  piProcess.stdin.write(JSON.stringify({ type: 'new_session' }) + '\n');
+}
