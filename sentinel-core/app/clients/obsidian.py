@@ -138,8 +138,9 @@ class ObsidianClient:
         """
         try:
             resp = await self._client.post(
-                f"{self._base_url}/search/simple/?query={query}",
+                f"{self._base_url}/search/simple/",
                 headers=self._headers,
+                params={"query": query},
                 timeout=5.0,
             )
             resp.raise_for_status()

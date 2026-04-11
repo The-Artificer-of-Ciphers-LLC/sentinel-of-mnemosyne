@@ -1,15 +1,18 @@
 """
-POST /message route — Phase 2: memory-aware message processing.
+POST /message route — Phase 7: warm tier vault search added.
 
 Flow:
   1. Retrieve user context file from Obsidian (graceful skip on failure)
   2. Retrieve hot-tier session summaries (last 3, graceful skip on failure)
-  3. Build messages array: context user/assistant pair + actual user message (per D-1)
-  4. Truncate injected context to 25% of context_window budget (prevents systematic 422s)
-  5. Token guard on full messages array
-  6. Forward to Pi harness via send_messages()
-  7. Call AI provider via ProviderRouter (primary with fallback per PROV-05)
-  8. Write session summary to Obsidian via BackgroundTasks (best-effort, D-2/MEM-06)
+  3. Build hot-tier context pair (user_context + sessions, truncated to SESSIONS_BUDGET_RATIO=0.15)
+  4. Search vault for relevant notes (warm tier, fires on every exchange — MEM-08)
+  5. Build warm-tier context pair (top-3 vault results, truncated to SEARCH_BUDGET_RATIO=0.10)
+     — skipped entirely if search_vault() returns empty list
+  6. Apply injection filter (SEC-01) to BOTH context blocks before appending to messages
+  7. Token guard on full messages array
+  8. Forward to Pi harness via send_messages()
+  9. Call AI provider via ProviderRouter (primary with fallback per PROV-05)
+  10. Write session summary to Obsidian via BackgroundTasks (best-effort, D-2/MEM-06)
 """
 import logging
 from datetime import datetime, timezone
@@ -24,7 +27,9 @@ from app.services.token_guard import TokenLimitError, check_token_limit
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-CONTEXT_BUDGET_RATIO = 0.25  # 25% of context_window reserved for injected context (D-Claude's Discretion)
+SESSIONS_BUDGET_RATIO = 0.15  # hot tier: user_context + recent_sessions (D-08)
+SEARCH_BUDGET_RATIO = 0.10    # warm tier: vault search results (D-08)
+# Combined = 0.25 (unchanged total ceiling)
 
 
 def _truncate_to_tokens(text: str, max_tokens: int) -> str:
@@ -35,6 +40,20 @@ def _truncate_to_tokens(text: str, max_tokens: int) -> str:
         return text
     truncated = enc.decode(tokens[:max_tokens])
     return truncated + "\n\n[...context truncated to fit token budget]"
+
+
+def _format_search_results(results: list[dict]) -> str:
+    """Format top vault search results as a markdown list. MEM-08 warm tier formatter."""
+    lines = ["Relevant vault notes:"]
+    for r in results:
+        filename = r.get("filename", "unknown")
+        matches = r.get("matches", [])
+        snippet = matches[0].get("context", "").strip() if matches else ""
+        if snippet:
+            lines.append(f"- **{filename}**: {snippet}")
+        else:
+            lines.append(f"- **{filename}**")
+    return "\n".join(lines)
 
 
 @router.post("/message", response_model=ResponseEnvelope)
@@ -53,7 +72,9 @@ async def post_message(
     """
     obsidian = request.app.state.obsidian_client
     context_window: int = request.app.state.context_window
-    budget_tokens = int(context_window * CONTEXT_BUDGET_RATIO)
+    sessions_budget = int(context_window * SESSIONS_BUDGET_RATIO)
+    search_budget = int(context_window * SEARCH_BUDGET_RATIO)
+    injection_filter = request.app.state.injection_filter
 
     # 1 + 2. Retrieve context (both calls degrade gracefully — never raise)
     user_context = await obsidian.get_user_context(envelope.user_id)
@@ -69,23 +90,32 @@ async def post_message(
             context_parts.append("Recent session history:\n" + "\n---\n".join(recent_sessions))
         raw_context = "\n\n".join(context_parts)
 
-        # 4. Truncate injected context to budget before token guard
-        safe_context = _truncate_to_tokens(raw_context, budget_tokens)
+        # 4. Truncate injected context to hot-tier budget before token guard
+        safe_context = _truncate_to_tokens(raw_context, sessions_budget)
         if safe_context != raw_context:
             logger.warning(
-                f"Context for user '{envelope.user_id}' truncated to {budget_tokens} tokens "
-                f"(budget ratio {CONTEXT_BUDGET_RATIO})"
+                f"Context for user '{envelope.user_id}' truncated to {sessions_budget} tokens "
+                f"(budget ratio {SESSIONS_BUDGET_RATIO})"
             )
 
         # 4b. Apply injection filter to vault context (SEC-01: framing wrapper + blocklist)
-        injection_filter = request.app.state.injection_filter
         filtered_context = injection_filter.wrap_context(safe_context)
 
         messages.append({"role": "user", "content": filtered_context})
         messages.append({"role": "assistant", "content": "Understood."})
 
+    # [WARM TIER] MEM-08: search vault on every exchange, inject top-3 results (D-03, D-04)
+    # search_vault uses raw envelope.content — search happens before injection filtering (D-06)
+    search_results = await obsidian.search_vault(envelope.content)
+    if search_results:  # D-05: skip entirely if empty — no empty block injected
+        vault_block = _format_search_results(search_results[:3])  # D-07: top-3 hardcoded
+        safe_vault = _truncate_to_tokens(vault_block, search_budget)  # D-09: independent budget
+        # Apply SEC-01 injection guard — vault content is untrusted user-controlled data
+        filtered_vault = injection_filter.wrap_context(safe_vault)
+        messages.append({"role": "user", "content": filtered_vault})
+        messages.append({"role": "assistant", "content": "Understood."})
+
     # Apply injection filter to user input (SEC-01: same code path as vault content)
-    injection_filter = request.app.state.injection_filter
     safe_input, _input_modified = injection_filter.filter_input(envelope.content)
     messages.append({"role": "user", "content": safe_input})
 
