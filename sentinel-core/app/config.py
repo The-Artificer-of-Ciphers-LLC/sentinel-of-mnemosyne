@@ -23,10 +23,6 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""  # blank = Claude provider disabled
     claude_model: str = "claude-haiku-4-5"  # runtime configurable
 
-    # Pi harness / LM Studio timeout (seconds)
-    # Increase if the 14B model needs more than 90s for initial generation.
-    lmstudio_timeout_s: int = 90
-
     # Ollama (stub — Linux workstation LAN)
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:14b"

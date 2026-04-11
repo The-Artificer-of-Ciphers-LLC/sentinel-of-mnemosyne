@@ -3,26 +3,31 @@ HTTP client for Pi harness bridge.
 Sentinel Core calls the Pi harness over HTTP — it never imports pi-mono directly.
 The pi-harness container is the single point of contact with @mariozechner/pi-coding-agent.
 """
-import logging
-
 import httpx
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
-
-logger = logging.getLogger(__name__)
 
 
 class PiAdapterClient:
     """HTTP client for the Pi harness Fastify bridge."""
 
-    def __init__(
-        self,
-        http_client: httpx.AsyncClient,
-        harness_url: str,
-        timeout_s: float = 90.0,
-    ) -> None:
+    def __init__(self, http_client: httpx.AsyncClient, harness_url: str) -> None:
         self._client = http_client
         self._harness_url = harness_url.rstrip("/")
-        self._timeout_s = timeout_s
+
+    async def send_prompt(self, message: str) -> str:
+        """
+        Send a message to Pi harness POST /prompt.
+        Returns the AI response content string.
+        Raises httpx.ConnectError if Pi harness is unreachable (caller handles as 503).
+        Raises httpx.HTTPStatusError for 503/504 from Pi harness.
+        """
+        resp = await self._client.post(
+            f"{self._harness_url}/prompt",
+            json={"message": message},
+            timeout=190.0,  # Pi has 180s timeout; add 10s margin for large local models
+        )
+        resp.raise_for_status()
+        return resp.json()["content"]
 
     @retry(
         stop=stop_after_attempt(3),
@@ -42,22 +47,7 @@ class PiAdapterClient:
         resp = await self._client.post(
             f"{self._harness_url}/prompt",
             json={"messages": messages},
-            timeout=self._timeout_s,
+            timeout=30.0,  # hard 30s ceiling per call (PROV-03)
         )
         resp.raise_for_status()
         return resp.json()["content"]
-
-    async def reset_session(self) -> None:
-        """
-        Reset the Pi harness session by sending new_session RPC.
-        Fire-and-forget: failures are logged and swallowed so a reset error
-        never blocks a user request.
-        """
-        try:
-            resp = await self._client.post(
-                f"{self._harness_url}/session/reset",
-                timeout=5.0,
-            )
-            resp.raise_for_status()
-        except Exception as exc:
-            logger.warning(f"Pi harness session reset failed (continuing): {exc}")
