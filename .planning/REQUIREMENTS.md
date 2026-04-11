@@ -188,7 +188,7 @@
 | SEC-01 | Phase 5 | Complete |
 | SEC-02 | Phase 5 | Complete |
 | SEC-03 | Phase 5 | Complete |
-| SEC-04 | Phase 5 | Pending |
+| SEC-04 | Phase 24 | Complete |
 | PF2E-01 | Phase 11 | Pending |
 | PF2E-02 | Phase 11 | Pending |
 | PF2E-03 | Phase 11 | Pending |

@@ -42,9 +42,11 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [ ] **Phase 19: README & Licensing** — Keep README current as phases ship, audit dependency licenses, MIT vs Apache 2.0 vs AGPL
 - [ ] **Phase 20: Pi-mono Upgrade Strategy** — Regression test harness for pi-adapter.ts, red/green migration, rollback strategy
 - [x] **Phase 21: Production Recovery — Security Pipeline + Discord** — Restore InjectionFilter, OutputScanner, and Discord include deleted by commit 6cfb0d3 (completed 2026-04-11)
-- [ ] **Phase 22: Requirements Traceability Repair** — Execute Phase 08 scope (never run) + extend through Phase 10; fix checkboxes, Nyquist matrices, STATE.md count
-- [ ] **Phase 23: Pi Harness /reset Route** — Add POST /reset to bridge.ts, restore configurable timeout_s; closes CORE-07 PARTIAL gap
-- [ ] **Phase 24: Pentest Agent Wire + Missing Verification Artifacts** — Wire pentest-agent compose include (SEC-04); generate VERIFICATION.md for Phases 02, 05, 07
+- [x] **Phase 22: Requirements Traceability Repair** — Execute Phase 08 scope (never run) + extend through Phase 10; fix checkboxes, Nyquist matrices, STATE.md count (completed 2026-04-11)
+- [x] **Phase 23: Pi Harness /reset Route** — Add POST /reset to bridge.ts, restore configurable timeout_s; closes CORE-07 PARTIAL gap (completed 2026-04-11)
+- [x] **Phase 24: Pentest Agent Wire + Missing Verification Artifacts** — Wire pentest-agent compose include (SEC-04); generate VERIFICATION.md for Phases 02, 05, 07 (completed 2026-04-11)
+- [x] **Phase 25: v0.40 Pre-Beta Refactoring** — Eliminate duplicates (DUP-01–05), complete stubs (STUB-01–08), fix architecture contradictions (CONTRA-01–04), implement RD-01–RD-10 (completed 2026-04-11)
+- [ ] **Phase 26: Nyquist Validation Cleanup** — Create/repair VALIDATION.md for Phases 04, 06, 07, 10; add missing Phase 10 bot subcommand test stubs
 
 ## Phase Details
 
@@ -363,4 +365,17 @@ Plans:
   8. `shared/sentinel_client.py` exists and is imported by both interfaces; no inline `call_core()` remains
   9. All 10 directives (RD-01–RD-10) implemented per V040-REFACTORING-DIRECTIVE.md §5
   10. Route registry matches §7 exactly: 4 routes in sentinel-core, 3 in pi-harness
+**Plans:** 4/4 plans complete
+
+### Phase 26: Nyquist Validation Cleanup
+**Goal:** Bring Nyquist compliance to the 4 phases that shipped without it — create VALIDATION.md for Phases 04 and 06, repair the non-compliant VALIDATION.md files for Phases 07 and 10, and add the two missing Phase 10 bot subcommand test stubs. Closes all remaining LOW-severity tech debt from the v0.1–v0.4 audit.
+**Depends on:** Phase 22, Phase 25
+**Gap Closure:** Closes Nyquist tech debt from v0.1–v0.4 audit (phases 04, 06, 07, 10); closes missing test stubs for 2B-01 and 2B-03
+**Requirements:** — (quality/documentation only; no new feature requirements)
+**Success Criteria** (what must be TRUE):
+  1. `04-VALIDATION.md` exists with `nyquist_compliant: true` and a Nyquist test matrix
+  2. `06-VALIDATION.md` exists with `nyquist_compliant: true` and a Nyquist test matrix
+  3. `07-VALIDATION.md` updated: `nyquist_compliant: true`, `status: complete`
+  4. `10-VALIDATION.md` updated: `nyquist_compliant: true`, `status: complete`
+  5. `test_bot_subcommands.py` and `test_bot_thread_persistence.py` created; all tests pass
 **Plans:** TBD
