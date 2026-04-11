@@ -1,6 +1,6 @@
 # Sentinel of Mnemosyne — Roadmap
 
-Current status: **v0.4 Functional Alpha COMPLETE — beginning v0.5 The Dungeon.**
+Current status: **v0.4 gap closure in progress (Phases 21–24) — v0.5 The Dungeon begins after gaps closed.**
 
 The full milestone details, module specifications, and design decisions live in the [PRD](docs/PRD-Sentinel-of-Mnemosyne.md) and [Architecture Doc](docs/ARCHITECTURE-Core.md). This file is the quick-reference version.
 
@@ -36,7 +36,7 @@ The full milestone details, module specifications, and design decisions live in 
 
 ---
 
-## ✅ v0.4 — Functional Alpha Complete *(COMPLETE)*
+## ⚠️ v0.4 — Functional Alpha *(gap closure in progress)*
 **Goal:** Robust, swappable AI provider configuration — stable foundation everything else builds on.
 
 **Phases delivered:**
@@ -44,10 +44,18 @@ The full milestone details, module specifications, and design decisions live in 
 - Phase 05 — AI Security / Prompt injection hardening
 - Phase 06 — Discord Regression Fix
 - Phase 07 — Phase 2 Verification / Memory layer UAT
-- Phase 08 — Requirements Traceability Repair
+- Phase 08 — Requirements Traceability Repair *(scoped, never executed — see Phase 22)*
 - Phase 10 — Knowledge Migration Tool / Import from existing second brain (2nd brain vault structure, 27-command Discord system, parallel context injection)
 
-**Success criteria met:** Switch AI providers via env file only. Pi harness API contract finalized. Existing Obsidian data migrated.
+**Audit status (2026-04-11):** 4 critical regressions found — `POST /message` crashes on every request, Discord container re-commented (3rd time), Phase 08 never executed, Pi `/reset` route missing. See `.planning/v0.1-v0.4-MILESTONE-AUDIT.md`.
+
+**Gap closure phases (must complete before v0.4 is signed off):**
+- Phase 21 — Production Recovery: restore `injection_filter.py`, `output_scanner.py`, uncomment Discord (closes SEC-01, SEC-02, IFACE-02/03/04, CORE-03)
+- Phase 22 — Requirements Traceability Repair: execute Phase 08 scope + extend through Phase 10 (closes documentation gaps)
+- Phase 23 — Pi Harness `/reset` Route: add missing route to `bridge.ts`, restore configurable timeout (closes CORE-07)
+- Phase 24 — Pentest Agent Wire + Verification Artifacts: wire `pentest-agent/compose.yml`, generate missing VERIFICATION.md for Phases 02/05/07 (closes SEC-04, GAP-06)
+
+**Success criteria:** Switch AI providers via env file only. Pi harness API contract finalized. Existing Obsidian data migrated. All E2E flows operational.
 
 ---
 
