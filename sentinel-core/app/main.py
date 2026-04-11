@@ -4,6 +4,8 @@ Sentinel Core — FastAPI application entry point.
 Architecture:
   POST /message → APIKeyMiddleware → token guard → Pi harness (Fastify bridge) → Pi subprocess → AI provider
   GET  /health  → always 200, reports obsidian status as non-blocking field
+  GET  /status  → authenticated system status (obsidian, pi_harness, ai_provider)
+  GET  /context/{user_id} → authenticated debug context dump
 
 Lifespan creates shared resources (httpx client, model registry, ProviderRouter) at startup.
 Uses lifespan context manager (not deprecated @app.on_event — see Pitfall 5).
@@ -20,12 +22,11 @@ from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response
 
 from app.clients.litellm_provider import LiteLLMProvider
-from app.clients.llamacpp_provider import LlamaCppProvider
 from app.clients.obsidian import ObsidianClient
-from app.clients.ollama_provider import OllamaProvider
 from app.clients.pi_adapter import PiAdapterClient
 from app.config import settings
 from app.routes.message import router as message_router
+from app.routes.status import router as status_router
 from app.services.injection_filter import InjectionFilter
 from app.services.model_registry import build_model_registry
 from app.services.output_scanner import OutputScanner
@@ -63,9 +64,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Determine active model id for context window lookup
     _active_model = (
-        settings.model_name if settings.ai_provider == "lmstudio"
-        else settings.claude_model if settings.ai_provider == "claude"
-        else settings.ollama_model if settings.ai_provider == "ollama"
+        settings.model_name
+        if settings.ai_provider == "lmstudio"
+        else settings.claude_model
+        if settings.ai_provider == "claude"
+        else settings.ollama_model
+        if settings.ai_provider == "ollama"
         else settings.llamacpp_model
     )
     _model_info = model_registry.get(_active_model)
@@ -78,31 +82,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info(f"Context window: {context_window} tokens (model: {_active_model})")
     app.state.context_window = context_window
 
-    # Instantiate all providers
-    lmstudio_provider = LiteLLMProvider(
-        model_string=f"openai/{settings.model_name}",
-        api_base=settings.lmstudio_base_url,
-        api_key="lmstudio",
-    )
-    claude_provider = (
-        LiteLLMProvider(
-            model_string=settings.claude_model,
-            api_key=settings.anthropic_api_key or "no-key",
-        )
-        if settings.anthropic_api_key
-        else None
-    )
-
-    ollama_provider = OllamaProvider(settings.ollama_base_url, settings.ollama_model)
-    llamacpp_provider = LlamaCppProvider(settings.llamacpp_base_url, settings.llamacpp_model)
-
-    # Select primary provider
+    # All 4 backends route through LiteLLMProvider (RD-02 — eliminate stub providers)
     _provider_map = {
-        "lmstudio": lmstudio_provider,
-        "claude": claude_provider,
-        "ollama": ollama_provider,
-        "llamacpp": llamacpp_provider,
+        "lmstudio": LiteLLMProvider(
+            model_string=f"openai/{settings.model_name}",
+            api_base=settings.lmstudio_base_url,
+            api_key="lmstudio",
+        ),
+        "ollama": LiteLLMProvider(
+            model_string=f"ollama/{settings.ollama_model}",
+            api_base=settings.ollama_base_url,
+        ),
+        "llamacpp": LiteLLMProvider(
+            model_string=f"openai/{settings.llamacpp_model}",
+            api_base=settings.llamacpp_base_url,
+        ),
     }
+    if settings.anthropic_api_key:
+        _provider_map["claude"] = LiteLLMProvider(
+            model_string=settings.claude_model,
+            api_key=settings.anthropic_api_key,
+        )
+
+    lmstudio_provider = _provider_map["lmstudio"]
     primary = _provider_map.get(settings.ai_provider, lmstudio_provider)
     if primary is None:
         logger.error(
@@ -114,7 +116,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Select fallback provider
     fallback = None
     if settings.ai_fallback_provider == "claude":
-        fallback = claude_provider
+        fallback = _provider_map.get("claude")
         if fallback is None:
             logger.warning(
                 "AI_FALLBACK_PROVIDER=claude but ANTHROPIC_API_KEY not set — no fallback available"
@@ -122,6 +124,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Wire ProviderRouter into app.state
     app.state.ai_provider = ProviderRouter(primary, fallback_provider=fallback)
+    # Expose provider name for /status endpoint (RD-05)
+    app.state.ai_provider_name = settings.ai_provider
     logger.info(
         f"AI provider: {settings.ai_provider} "
         f"(fallback: {settings.ai_fallback_provider})"
@@ -154,6 +158,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     async def _secondary_classifier(excerpt: str, fired_patterns: list[str]) -> str:
         from app.services.output_scanner import _CLASSIFIER_SYSTEM
+
         messages = [
             {"role": "system", "content": _CLASSIFIER_SYSTEM},
             {
@@ -184,6 +189,7 @@ app = FastAPI(
 
 app.add_middleware(APIKeyMiddleware)
 app.include_router(message_router)
+app.include_router(status_router)
 
 
 @app.get("/health")
@@ -194,7 +200,9 @@ async def health(request: Request) -> JSONResponse:
         obsidian_ok = await request.app.state.obsidian_client.check_health()
     except Exception:
         pass
-    return JSONResponse({
-        "status": "ok",
-        "obsidian": "ok" if obsidian_ok else "degraded",
-    })
+    return JSONResponse(
+        {
+            "status": "ok",
+            "obsidian": "ok" if obsidian_ok else "degraded",
+        }
+    )
