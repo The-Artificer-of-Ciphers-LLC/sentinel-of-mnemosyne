@@ -855,3 +855,80 @@ async def test_warm_tier_both_tiers_five_messages(obsidian_with_context_and_sear
     assert captured_messages[4]["content"] == "Understood."
     assert captured_messages[5]["role"] == "user"   # actual user message
     assert captured_messages[5]["content"] == "hello"
+
+
+# ---------------------------------------------------------------------------
+# Wave 5 tests — Phase 9 D-01 narrow bare except in Pi call block
+# ---------------------------------------------------------------------------
+
+
+async def test_pi_harness_request_error_falls_back_to_ai_provider(mock_ai_provider):
+    """When Pi harness raises httpx.RequestError, AI provider fallback fires (200 response)."""
+    mock_ai_provider.complete.return_value = "AI fallback response"
+
+    mock_pi = AsyncMock()
+    mock_pi.reset_session.return_value = None
+    mock_pi.send_messages.side_effect = httpx.ConnectError("Pi connection refused")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.pi_adapter = mock_pi
+        app.state.ai_provider = mock_ai_provider
+
+        resp = await client.post(
+            "/message",
+            json={"content": "hello", "user_id": "test"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["content"] == "AI fallback response"
+    mock_ai_provider.complete.assert_called_once()
+
+
+async def test_pi_harness_http_status_error_falls_back_to_ai_provider(mock_ai_provider):
+    """When Pi harness raises httpx.HTTPStatusError, AI provider fallback fires (200 response)."""
+    mock_ai_provider.complete.return_value = "AI fallback response"
+
+    mock_request = MagicMock()
+    mock_response = MagicMock()
+    mock_response.status_code = 503
+
+    mock_pi = AsyncMock()
+    mock_pi.reset_session.return_value = None
+    mock_pi.send_messages.side_effect = httpx.HTTPStatusError(
+        "503 Service Unavailable", request=mock_request, response=mock_response
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.pi_adapter = mock_pi
+        app.state.ai_provider = mock_ai_provider
+
+        resp = await client.post(
+            "/message",
+            json={"content": "hello", "user_id": "test"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["content"] == "AI fallback response"
+    mock_ai_provider.complete.assert_called_once()
+
+
+async def test_pi_harness_key_error_propagates_as_502(mock_ai_provider):
+    """When Pi harness raises KeyError (non-httpx, protocol bug), exception propagates as 502."""
+    mock_pi = AsyncMock()
+    mock_pi.reset_session.return_value = None
+    mock_pi.send_messages.side_effect = KeyError("content")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.pi_adapter = mock_pi
+        app.state.ai_provider = mock_ai_provider
+
+        resp = await client.post(
+            "/message",
+            json={"content": "hello", "user_id": "test"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 502
+    mock_ai_provider.complete.assert_not_called()

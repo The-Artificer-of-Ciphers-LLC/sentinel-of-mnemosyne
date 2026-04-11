@@ -69,7 +69,7 @@ async def post_message(
     Error responses:
       422 — message + context exceeds context window after truncation
       503 — AI provider (primary and fallback) unavailable
-      502 — unexpected AI provider error
+      502 — unexpected AI provider or Pi harness error
     """
     obsidian = request.app.state.obsidian_client
     context_window: int = request.app.state.context_window

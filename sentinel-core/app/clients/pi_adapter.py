@@ -24,21 +24,6 @@ class PiAdapterClient:
         self._harness_url = harness_url.rstrip("/")
         self._timeout_s = timeout_s
 
-    async def send_prompt(self, message: str) -> str:
-        """
-        Send a message to Pi harness POST /prompt.
-        Returns the AI response content string.
-        Raises httpx.ConnectError if Pi harness is unreachable (caller handles as 503).
-        Raises httpx.HTTPStatusError for 503/504 from Pi harness.
-        """
-        resp = await self._client.post(
-            f"{self._harness_url}/prompt",
-            json={"message": message},
-            timeout=190.0,  # Pi has 180s timeout; add 10s margin for large local models
-        )
-        resp.raise_for_status()
-        return resp.json()["content"]
-
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=4),
