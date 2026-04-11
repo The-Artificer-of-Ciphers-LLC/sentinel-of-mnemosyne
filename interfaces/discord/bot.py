@@ -50,6 +50,18 @@ from shared.sentinel_client import SentinelCoreClient
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def _read_secret(name: str, env_fallback: str = "") -> str:
+    """Read a Docker secret from /run/secrets/<name>.
+    Falls back to env_fallback value (for local dev without Docker secrets)."""
+    path = f"/run/secrets/{name}"
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return env_fallback
+
+
 # Public API for this module (consumed by tests and future integrations)
 __all__ = [
     "handle_sentask_subcommand",
@@ -58,8 +70,8 @@ __all__ = [
     "_persist_thread_id",
 ]
 
-DISCORD_BOT_TOKEN: str = os.environ.get("DISCORD_BOT_TOKEN", "")
-SENTINEL_API_KEY: str = os.environ.get("SENTINEL_API_KEY", "")
+DISCORD_BOT_TOKEN: str = _read_secret("discord_bot_token", os.environ.get("DISCORD_BOT_TOKEN", ""))
+SENTINEL_API_KEY: str = _read_secret("sentinel_api_key", os.environ.get("SENTINEL_API_KEY", ""))
 SENTINEL_CORE_URL = os.environ.get("SENTINEL_CORE_URL", "http://sentinel-core:8000")
 DISCORD_ALLOWED_CHANNELS_RAW = os.environ.get("DISCORD_ALLOWED_CHANNELS", "")
 
@@ -272,7 +284,7 @@ async def handle_sentask_subcommand(subcmd: str, args: str, user_id: str) -> str
 async def _persist_thread_id(thread_id: int) -> None:
     """Append thread ID to ops/discord-threads.md using PATCH (append). Best-effort."""
     obsidian_url = os.environ.get("OBSIDIAN_API_URL", "http://host.docker.internal:27124")
-    obsidian_key = os.environ.get("OBSIDIAN_API_KEY", "")
+    obsidian_key = _read_secret("obsidian_api_key", os.environ.get("OBSIDIAN_API_KEY", ""))
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             await client.patch(
@@ -302,7 +314,7 @@ class SentinelBot(discord.Client):
         await self.tree.sync()
         # Load persisted thread IDs from vault (D-04)
         obsidian_url = os.environ.get("OBSIDIAN_API_URL", "http://host.docker.internal:27124")
-        obsidian_key = os.environ.get("OBSIDIAN_API_KEY", "")
+        obsidian_key = _read_secret("obsidian_api_key", os.environ.get("OBSIDIAN_API_KEY", ""))
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(

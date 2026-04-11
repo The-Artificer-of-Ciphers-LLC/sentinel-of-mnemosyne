@@ -2,8 +2,25 @@
 Sentinel Core configuration.
 All settings loaded from environment variables via pydantic-settings.
 Never call os.getenv() directly — use settings singleton instead.
+
+Secret fields (API keys, tokens) are read from /run/secrets/<name> files when running
+in Docker. Falls back to environment variables for local development without Docker secrets.
 """
+from typing import Any
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
+
+
+def _read_secret(name: str, env_fallback: str = "") -> str:
+    """Read a Docker secret from /run/secrets/<name>.
+    Falls back to env_fallback value (for local dev without Docker secrets)."""
+    path = f"/run/secrets/{name}"
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return env_fallback
 
 
 class Settings(BaseSettings):
@@ -30,6 +47,38 @@ class Settings(BaseSettings):
     # llama.cpp (stub — OpenAI-compatible server)
     llamacpp_base_url: str = "http://localhost:8080"
     llamacpp_model: str = "local-model"
+
+    # LM Studio API key (optional — only if LM Studio auth is enabled)
+    lmstudio_api_key: str = ""
+
+    # Alpaca trading keys (optional — trading module only)
+    alpaca_paper_api_key: str = ""
+    alpaca_paper_secret_key: str = ""
+    alpaca_live_api_key: str = ""
+    alpaca_live_secret_key: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_secrets(cls, values: Any) -> Any:
+        """Populate secret fields from /run/secrets/ files.
+        File value wins over env var; falls back to whatever env var provides."""
+        secret_map = {
+            "sentinel_api_key": "sentinel_api_key",
+            "obsidian_api_key": "obsidian_api_key",
+            "lmstudio_api_key": "lmstudio_api_key",
+            "anthropic_api_key": "anthropic_api_key",
+            "alpaca_paper_api_key": "alpaca_paper_api_key",
+            "alpaca_paper_secret_key": "alpaca_paper_secret_key",
+            "alpaca_live_api_key": "alpaca_live_api_key",
+            "alpaca_live_secret_key": "alpaca_live_secret_key",
+        }
+        if not isinstance(values, dict):
+            return values
+        for field, secret_name in secret_map.items():
+            file_val = _read_secret(secret_name)
+            if file_val:
+                values[field] = file_val
+        return values
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
