@@ -10,6 +10,7 @@ Pattern corpus source: OWASP LLM Prompt Injection Prevention Cheat Sheet
 """
 import logging
 import re
+import unicodedata
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,13 @@ class InjectionFilter:
     """
 
     def sanitize(self, text: str) -> tuple[str, bool]:
-        """Strip injection patterns. Returns (sanitized_text, was_modified)."""
+        """Strip injection patterns. Returns (sanitized_text, was_modified).
+
+        Applies NFKC normalization before pattern matching to defeat homoglyph
+        substitution attacks (e.g. '𝗶𝗴𝗻𝗼𝗿𝗲' → 'ignore').
+        """
+        result = unicodedata.normalize("NFKC", text)
         modified = False
-        result = text
         for pattern in _INJECTION_PATTERNS:
             new = pattern.sub("[REDACTED]", result)
             if new != result:
