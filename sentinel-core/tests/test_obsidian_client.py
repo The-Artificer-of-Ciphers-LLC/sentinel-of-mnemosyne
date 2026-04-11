@@ -7,10 +7,10 @@ from app.clients.obsidian import ObsidianClient
 
 @pytest.fixture
 def obsidian_user_context_mock():
-    """MockTransport: returns 200 with markdown body for user context path."""
+    """MockTransport: returns 200 with markdown body for self/identity.md path (D-01)."""
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
-        if "/vault/core/users/" in path and path.endswith(".md"):
+        if path == "/vault/self/identity.md":
             return httpx.Response(200, text="# User: trekkie\n\nI am a developer.")
         return httpx.Response(404)
     return httpx.MockTransport(handler)
@@ -34,16 +34,16 @@ def obsidian_connect_error_mock():
 
 @pytest.fixture
 def obsidian_directory_listing_mock():
-    """MockTransport: returns a directory listing JSON for session paths."""
+    """MockTransport: returns a directory listing JSON for ops/sessions/ paths."""
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
-        if "/vault/core/sessions/" in path and path.endswith("/"):
+        if "/vault/ops/sessions/" in path and path.endswith("/"):
             # Return a list of filenames including one for trekkie
             return httpx.Response(
                 200,
                 json=["trekkie-12-00-00.md", "trekkie-13-00-00.md", "other-user-14-00-00.md"],
             )
-        if "/vault/core/sessions/" in path and path.endswith(".md"):
+        if "/vault/ops/sessions/" in path and path.endswith(".md"):
             return httpx.Response(200, text="## Session content for trekkie")
         return httpx.Response(404)
     return httpx.MockTransport(handler)
@@ -134,11 +134,11 @@ async def test_write_session_summary_calls_put(obsidian_put_capture_mock):
     async with AsyncClient(transport=obsidian_put_capture_mock, base_url="http://test") as client:
         obsidian = ObsidianClient(client, "http://test", "test-api-key")
         await obsidian.write_session_summary(
-            "core/sessions/2026-04-10/trekkie-12-00-00.md",
+            "ops/sessions/2026-04-10/trekkie-12-00-00.md",
             "# Session\n\nContent here."
         )
     assert len(obsidian_put_capture_mock.captured) == 1
-    assert "core/sessions/2026-04-10/trekkie-12-00-00.md" in obsidian_put_capture_mock.captured[0]["path"]
+    assert "ops/sessions/2026-04-10/trekkie-12-00-00.md" in obsidian_put_capture_mock.captured[0]["path"]
 
 
 async def test_search_vault_returns_list(obsidian_search_mock):
@@ -172,3 +172,80 @@ async def test_check_health_returns_false_on_error(obsidian_connect_error_mock):
         obsidian = ObsidianClient(client, "http://test", "test-api-key")
         result = await obsidian.check_health()
     assert result is False
+
+
+# ---------------------------------------------------------------------------
+# Phase 10 — read_self_context() single-path method (MEM-02, 2B-02)
+# Implemented in Plan 10-03. Tests exercise the per-path method;
+# asyncio.gather() over all 5 paths is tested in test_message.py.
+# ---------------------------------------------------------------------------
+
+import unittest.mock
+
+
+@pytest.fixture
+def obsidian_self_context_200_mock():
+    """MockTransport: returns 200 with body for /vault/self/identity.md."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/vault/self/identity.md":
+            return httpx.Response(200, text="# Identity\n\nStub body.")
+        return httpx.Response(404)
+
+    return httpx.MockTransport(handler)
+
+
+@pytest.fixture
+def obsidian_self_context_error_mock():
+    """MockTransport: raises ConnectError for all requests."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("Connection refused")
+
+    return httpx.MockTransport(handler)
+
+
+async def test_get_self_context_parallel_all_present(obsidian_self_context_200_mock):
+    """read_self_context(path) returns non-empty string when vault file is present."""
+    async with AsyncClient(
+        transport=obsidian_self_context_200_mock, base_url="http://test"
+    ) as client:
+        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        result = await obsidian.read_self_context("self/identity.md")
+    assert isinstance(result, str), "read_self_context() must return a str"
+    assert result.strip(), "File is present — result must be non-empty"
+
+
+async def test_get_self_context_parallel_one_404(obsidian_404_mock):
+    """read_self_context(path) returns empty string silently on 404 (per D-02)."""
+    async with AsyncClient(
+        transport=obsidian_404_mock, base_url="http://test"
+    ) as client:
+        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        result = await obsidian.read_self_context("self/methodology.md")
+    assert result == "", "404 must return empty string"
+
+
+async def test_get_self_context_parallel_error_returns_empty(obsidian_self_context_error_mock):
+    """read_self_context(path) returns empty string on connection error."""
+    async with AsyncClient(
+        transport=obsidian_self_context_error_mock, base_url="http://test"
+    ) as client:
+        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        result = await obsidian.read_self_context("self/goals.md")
+    assert result == "", "Error must return empty string"
+
+
+async def test_get_self_context_404_no_log(obsidian_404_mock):
+    """read_self_context(path) does NOT call logger.warning on 404 (silent per D-02)."""
+    async with AsyncClient(
+        transport=obsidian_404_mock, base_url="http://test"
+    ) as client:
+        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        import app.clients.obsidian as obsidian_module
+        with unittest.mock.patch.object(obsidian_module.logger, "warning") as mock_warn:
+            result = await obsidian.read_self_context("self/relationships.md")
+        mock_warn.assert_not_called()
+    assert result == ""
+
+
