@@ -42,6 +42,8 @@ async def test_auth_accepts_valid_key():
     from app.config import settings
     from app.clients.pi_adapter import PiAdapterClient
 
+    from app.services.injection_filter import InjectionFilter
+
     # Seed app.state so the route handler doesn't crash on state access
     mock_obsidian = AsyncMock()
     mock_obsidian.get_user_context.return_value = None
@@ -50,6 +52,10 @@ async def test_auth_accepts_valid_key():
     app.state.obsidian_client = mock_obsidian
     app.state.context_window = 8192
     app.state.settings = settings
+    app.state.injection_filter = InjectionFilter()
+    mock_output_scanner = AsyncMock()
+    mock_output_scanner.scan.return_value = (True, None)
+    app.state.output_scanner = mock_output_scanner
 
     # Pi harness mock — connect error so route falls through to ai_provider
     def pi_handler(request: httpx.Request) -> httpx.Response:
