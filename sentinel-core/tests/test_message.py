@@ -16,13 +16,6 @@ from app.services.provider_router import ProviderUnavailableError
 AUTH_HEADER = {"X-Sentinel-Key": "test-key-for-pytest"}
 
 
-def _make_client(transport: httpx.MockTransport | None = None) -> httpx.AsyncClient:
-    """Create an httpx.AsyncClient with an optional mock transport."""
-    if transport is not None:
-        return httpx.AsyncClient(transport=transport, base_url="http://pi-harness")
-    return httpx.AsyncClient()
-
-
 @pytest.fixture(autouse=True)
 def default_app_state(mock_ai_provider):
     """
@@ -58,26 +51,6 @@ def default_app_state(mock_ai_provider):
 
 
 @pytest.fixture
-def pi_harness_mock():
-    """Mock Pi harness returning a fixed response."""
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/prompt":
-            return httpx.Response(200, json={"content": "Hello from Pi"})
-        if request.url.path == "/health":
-            return httpx.Response(200, json={"status": "ok", "piAlive": True, "restarts": 0})
-        return httpx.Response(404)
-    return httpx.MockTransport(handler)
-
-
-@pytest.fixture
-def pi_harness_down_mock():
-    """Mock Pi harness that refuses connections."""
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("Connection refused")
-    return httpx.MockTransport(handler)
-
-
-@pytest.fixture
 def lmstudio_available_mock(mock_lmstudio_models_response):
     """Mock LM Studio returning 8192 context window."""
     def handler(request: httpx.Request) -> httpx.Response:
@@ -87,12 +60,9 @@ def lmstudio_available_mock(mock_lmstudio_models_response):
     return httpx.MockTransport(handler)
 
 
-async def test_post_message_returns_response_envelope(pi_harness_mock, mock_ai_provider):
+async def test_post_message_returns_response_envelope(mock_ai_provider):
     """POST /message with valid content returns ResponseEnvelope with content and model fields."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(pi_harness_mock)
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
-
         resp = await client.post(
             "/message",
             json={"content": "hello", "user_id": "test"},
@@ -105,13 +75,11 @@ async def test_post_message_returns_response_envelope(pi_harness_mock, mock_ai_p
     assert "model" in data
 
 
-async def test_post_message_503_when_pi_and_ai_provider_unavailable(pi_harness_down_mock, mock_ai_provider):
-    """POST /message returns 503 when Pi harness is down AND AI provider is unavailable."""
+async def test_post_message_503_when_pi_and_ai_provider_unavailable(mock_ai_provider):
+    """POST /message returns 503 when AI provider is unavailable."""
     mock_ai_provider.complete.side_effect = ProviderUnavailableError("Primary provider unavailable")
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(pi_harness_down_mock)
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.ai_provider = mock_ai_provider
 
         resp = await client.post(
@@ -199,7 +167,7 @@ def obsidian_write_fails():
     return mock
 
 
-async def test_context_injected_when_file_exists(pi_harness_mock, obsidian_with_context, mock_ai_provider):
+async def test_context_injected_when_file_exists(obsidian_with_context, mock_ai_provider):
     """When Obsidian returns user context, ai_provider receives a 3-message messages array."""
     captured_messages = []
 
@@ -210,8 +178,6 @@ async def test_context_injected_when_file_exists(pi_harness_mock, obsidian_with_
     mock_ai_provider.complete.side_effect = capturing_complete
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(pi_harness_mock)
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.obsidian_client = obsidian_with_context
         app.state.ai_provider = mock_ai_provider
 
@@ -222,14 +188,11 @@ async def test_context_injected_when_file_exists(pi_harness_mock, obsidian_with_
         )
 
     assert resp.status_code == 200
-    # Pi harness succeeded so ai_provider.complete may not have been called.
-    # Check either pi captured it OR ai_provider was called with 3 messages.
-    # The Pi harness mock returns "Hello from Pi" — pi succeeded, so content is from Pi.
-    assert resp.json()["content"] in ("Hello from Pi", "Hello from AI")
+    assert resp.json()["content"] == "Hello from AI"
 
 
 async def test_context_injected_messages_shape(obsidian_with_context, mock_ai_provider):
-    """When Obsidian returns user context and Pi is down, ai_provider gets 4-message array (system + context pair + user)."""
+    """When Obsidian returns user context, ai_provider gets 4-message array (system + context pair + user)."""
     captured_messages = []
 
     async def capturing_complete(messages):
@@ -238,12 +201,7 @@ async def test_context_injected_messages_shape(obsidian_with_context, mock_ai_pr
 
     mock_ai_provider.complete.side_effect = capturing_complete
 
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
-
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.obsidian_client = obsidian_with_context
         app.state.ai_provider = mock_ai_provider
 
@@ -274,12 +232,7 @@ async def test_no_injection_when_user_file_missing(obsidian_no_context, mock_ai_
 
     mock_ai_provider.complete.side_effect = capturing_complete
 
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
-
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.obsidian_client = obsidian_no_context
         app.state.ai_provider = mock_ai_provider
 
@@ -295,7 +248,7 @@ async def test_no_injection_when_user_file_missing(obsidian_no_context, mock_ai_
     assert captured_messages[1]["content"] == "hello"
 
 
-async def test_no_injection_when_obsidian_down(pi_harness_mock):
+async def test_no_injection_when_obsidian_down():
     """When Obsidian is unreachable, response is still 200 (graceful degrade per D-3)."""
     obsidian_down = AsyncMock()
     obsidian_down.get_user_context.return_value = None  # graceful — returns None not raises
@@ -303,8 +256,6 @@ async def test_no_injection_when_obsidian_down(pi_harness_mock):
     obsidian_down.write_session_summary.return_value = None
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(pi_harness_mock)
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.obsidian_client = obsidian_down
 
         resp = await client.post(
@@ -316,11 +267,9 @@ async def test_no_injection_when_obsidian_down(pi_harness_mock):
     assert resp.status_code == 200
 
 
-async def test_response_succeeds_when_write_fails(pi_harness_mock, obsidian_write_fails):
+async def test_response_succeeds_when_write_fails(obsidian_write_fails):
     """Session summary write failure does not affect the HTTP response (D-2 failure handling)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(pi_harness_mock)
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.obsidian_client = obsidian_write_fails
 
         resp = await client.post(
@@ -330,10 +279,10 @@ async def test_response_succeeds_when_write_fails(pi_harness_mock, obsidian_writ
         )
 
     assert resp.status_code == 200
-    assert resp.json()["content"] == "Hello from Pi"
+    assert resp.json()["content"] == "Test AI response"
 
 
-async def test_token_guard_fires_on_inflated_context(pi_harness_mock):
+async def test_token_guard_fires_on_inflated_context():
     """Token guard raises 422 when context-injected messages exceed context_window."""
     huge_context = AsyncMock()
     huge_context.get_user_context.return_value = "word " * 5000  # ~5000 tokens
@@ -341,8 +290,6 @@ async def test_token_guard_fires_on_inflated_context(pi_harness_mock):
     huge_context.write_session_summary.return_value = None
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(pi_harness_mock)
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.obsidian_client = huge_context
         app.state.context_window = 10  # tiny window — truncation overhead alone exceeds this
 
@@ -355,7 +302,7 @@ async def test_token_guard_fires_on_inflated_context(pi_harness_mock):
     assert resp.status_code == 422
 
 
-async def test_context_truncated_to_budget(pi_harness_mock):
+async def test_context_truncated_to_budget():
     """Context exceeding 25% of context_window is truncated before token guard runs."""
     # context_window=400 tokens → 25% budget = 100 tokens
     # 500-word context will exceed the 100-token budget and must be truncated
@@ -365,8 +312,6 @@ async def test_context_truncated_to_budget(pi_harness_mock):
     long_context.write_session_summary.return_value = None
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(pi_harness_mock)
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.obsidian_client = long_context
         app.state.context_window = 400  # 25% budget = 100 tokens
 
@@ -407,16 +352,11 @@ async def test_send_messages_sends_array():
     assert "message" not in captured  # must NOT send legacy field
 
 
-async def test_ai_provider_called_when_pi_down(mock_ai_provider):
-    """When Pi harness is down, ai_provider.complete() is called as fallback."""
-    mock_ai_provider.complete.return_value = "AI fallback response"
-
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
+async def test_ai_provider_called(mock_ai_provider):
+    """ai_provider.complete() is called for every message (Pi is always bypassed)."""
+    mock_ai_provider.complete.return_value = "AI response"
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.ai_provider = mock_ai_provider
 
         resp = await client.post(
@@ -426,7 +366,7 @@ async def test_ai_provider_called_when_pi_down(mock_ai_provider):
         )
 
     assert resp.status_code == 200
-    assert resp.json()["content"] == "AI fallback response"
+    assert resp.json()["content"] == "AI response"
     mock_ai_provider.complete.assert_called_once()
 
 
@@ -434,12 +374,7 @@ async def test_provider_unavailable_returns_503(mock_ai_provider):
     """ProviderUnavailableError from ai_provider → HTTP 503."""
     mock_ai_provider.complete.side_effect = ProviderUnavailableError("Both providers failed")
 
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
-
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.ai_provider = mock_ai_provider
 
         resp = await client.post(
@@ -497,12 +432,7 @@ async def test_injection_filter_applied_to_user_input(mock_ai_provider, mock_inj
 
     mock_ai_provider.complete.side_effect = capturing_complete
 
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
-
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.ai_provider = mock_ai_provider
         app.state.injection_filter = mock_injection_filter
         app.state.output_scanner = mock_output_scanner_safe
@@ -531,12 +461,7 @@ async def test_injection_filter_clean_input_unchanged(mock_ai_provider, mock_inj
 
     mock_ai_provider.complete.side_effect = capturing_complete
 
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
-
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.ai_provider = mock_ai_provider
         app.state.injection_filter = mock_injection_filter
         app.state.output_scanner = mock_output_scanner_safe
@@ -557,12 +482,7 @@ async def test_output_scanner_blocks_confirmed_leak(mock_ai_provider, mock_injec
     """POST /message returns HTTP 500 when OutputScanner detects a confirmed leak."""
     mock_ai_provider.complete.return_value = "Here is your secret: sk-ant-abc123xyz"
 
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
-
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.ai_provider = mock_ai_provider
         app.state.injection_filter = mock_injection_filter
         app.state.output_scanner = mock_output_scanner_leak
@@ -582,12 +502,7 @@ async def test_output_scanner_fails_open_on_timeout(mock_ai_provider, mock_injec
     # mock_output_scanner_safe returns (True, None) — same as fail-open behavior
     mock_ai_provider.complete.return_value = "Normal response"
 
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
-
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.ai_provider = mock_ai_provider
         app.state.injection_filter = mock_injection_filter
         app.state.output_scanner = mock_output_scanner_safe
@@ -606,12 +521,7 @@ async def test_output_scanner_clean_response_passes(mock_ai_provider, mock_injec
     """POST /message returns 200 with content when OutputScanner reports clean."""
     mock_ai_provider.complete.return_value = "Totally clean response"
 
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
-
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.ai_provider = mock_ai_provider
         app.state.injection_filter = mock_injection_filter
         app.state.output_scanner = mock_output_scanner_safe
@@ -668,11 +578,7 @@ def obsidian_with_context_and_search():
 
 async def test_warm_tier_called_on_every_message(mock_ai_provider):
     """search_vault() is called on every POST /message exchange (D-03)."""
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.ai_provider = mock_ai_provider
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
     assert resp.status_code == 200
@@ -686,11 +592,7 @@ async def test_warm_tier_injected_when_results_present(obsidian_with_search_resu
         captured_messages.extend(messages)
         return "Hello from AI"
     mock_ai_provider.complete.side_effect = capturing_complete
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.obsidian_client = obsidian_with_search_results
         app.state.ai_provider = mock_ai_provider
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
@@ -715,11 +617,7 @@ async def test_warm_tier_skipped_when_empty(mock_ai_provider):
         captured_messages.extend(messages)
         return "Hello from AI"
     mock_ai_provider.complete.side_effect = capturing_complete
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.ai_provider = mock_ai_provider
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
     assert resp.status_code == 200
@@ -740,94 +638,13 @@ async def test_warm_tier_truncated_independently(mock_ai_provider):
         {"filename": "notes/long.md", "score": 1.0,
          "matches": [{"match": {"start": 0, "end": 100}, "context": "word " * 500}]}
     ]
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.obsidian_client = long_vault_obsidian
         app.state.ai_provider = mock_ai_provider
         app.state.context_window = 400  # SEARCH_BUDGET_RATIO=0.10 → 40 tokens budget
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
     # After truncation the full array fits within 400 tokens → 200
     assert resp.status_code == 200
-
-
-# ---------------------------------------------------------------------------
-# Wave 5 tests — Phase 9 D-01 narrow bare except in Pi call block
-# ---------------------------------------------------------------------------
-
-
-async def test_pi_harness_request_error_falls_back_to_ai_provider(mock_ai_provider):
-    """When Pi harness raises httpx.RequestError, AI provider fallback fires (200 response)."""
-    mock_ai_provider.complete.return_value = "AI fallback response"
-
-    mock_pi = AsyncMock()
-    mock_pi.reset_session.return_value = None
-    mock_pi.send_messages.side_effect = httpx.ConnectError("Pi connection refused")
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.pi_adapter = mock_pi
-        app.state.ai_provider = mock_ai_provider
-
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "test"},
-            headers=AUTH_HEADER,
-        )
-
-    assert resp.status_code == 200
-    assert resp.json()["content"] == "AI fallback response"
-    mock_ai_provider.complete.assert_called_once()
-
-
-async def test_pi_harness_http_status_error_falls_back_to_ai_provider(mock_ai_provider):
-    """When Pi harness raises httpx.HTTPStatusError, AI provider fallback fires (200 response)."""
-    mock_ai_provider.complete.return_value = "AI fallback response"
-
-    mock_request = MagicMock()
-    mock_response = MagicMock()
-    mock_response.status_code = 503
-
-    mock_pi = AsyncMock()
-    mock_pi.reset_session.return_value = None
-    mock_pi.send_messages.side_effect = httpx.HTTPStatusError(
-        "503 Service Unavailable", request=mock_request, response=mock_response
-    )
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.pi_adapter = mock_pi
-        app.state.ai_provider = mock_ai_provider
-
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "test"},
-            headers=AUTH_HEADER,
-        )
-
-    assert resp.status_code == 200
-    assert resp.json()["content"] == "AI fallback response"
-    mock_ai_provider.complete.assert_called_once()
-
-
-async def test_pi_harness_key_error_propagates_as_502(mock_ai_provider):
-    """When Pi harness raises KeyError (non-httpx, protocol bug), exception propagates as 502."""
-    mock_pi = AsyncMock()
-    mock_pi.reset_session.return_value = None
-    mock_pi.send_messages.side_effect = KeyError("content")
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.pi_adapter = mock_pi
-        app.state.ai_provider = mock_ai_provider
-
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "test"},
-            headers=AUTH_HEADER,
-        )
-
-    assert resp.status_code == 502
-    mock_ai_provider.complete.assert_not_called()
 
 
 async def test_warm_tier_both_tiers_five_messages(obsidian_with_context_and_search, mock_ai_provider):
@@ -837,11 +654,7 @@ async def test_warm_tier_both_tiers_five_messages(obsidian_with_context_and_sear
         captured_messages.extend(messages)
         return "Hello from AI"
     mock_ai_provider.complete.side_effect = capturing_complete
-    def pi_down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(httpx.MockTransport(pi_down))
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.obsidian_client = obsidian_with_context_and_search
         app.state.ai_provider = mock_ai_provider
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
@@ -866,7 +679,7 @@ async def test_warm_tier_both_tiers_five_messages(obsidian_with_context_and_sear
 # ---------------------------------------------------------------------------
 
 
-async def test_session_write_uses_ops_sessions_path(pi_harness_mock):
+async def test_session_write_uses_ops_sessions_path():
     """write_session_summary() is called with a path under ops/sessions/.
 
     RED until Plan 10-02 updates the path in sentinel-core/app/routes/message.py.
@@ -879,8 +692,6 @@ async def test_session_write_uses_ops_sessions_path(pi_harness_mock):
     mock_obsidian.read_self_context.return_value = ""
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        pi_http = _make_client(pi_harness_mock)
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
         app.state.obsidian_client = mock_obsidian
 
         resp = await client.post(
@@ -895,80 +706,3 @@ async def test_session_write_uses_ops_sessions_path(pi_harness_mock):
     assert "ops/sessions" in path_arg, (
         f"Expected session write path to contain 'ops/sessions', got: {path_arg!r}"
     )
-
-
-# ---------------------------------------------------------------------------
-# Wave 5 tests — Phase 9 D-01 narrow bare except in Pi call block
-# ---------------------------------------------------------------------------
-
-
-async def test_pi_harness_request_error_falls_back_to_ai_provider(mock_ai_provider):
-    """When Pi harness raises httpx.RequestError, AI provider fallback fires (200 response)."""
-    mock_ai_provider.complete.return_value = "AI fallback response"
-
-    mock_pi = AsyncMock()
-    mock_pi.reset_session.return_value = None
-    mock_pi.send_messages.side_effect = httpx.ConnectError("Pi connection refused")
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.pi_adapter = mock_pi
-        app.state.ai_provider = mock_ai_provider
-
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "test"},
-            headers=AUTH_HEADER,
-        )
-
-    assert resp.status_code == 200
-    assert resp.json()["content"] == "AI fallback response"
-    mock_ai_provider.complete.assert_called_once()
-
-
-async def test_pi_harness_http_status_error_falls_back_to_ai_provider(mock_ai_provider):
-    """When Pi harness raises httpx.HTTPStatusError, AI provider fallback fires (200 response)."""
-    mock_ai_provider.complete.return_value = "AI fallback response"
-
-    mock_request = MagicMock()
-    mock_response = MagicMock()
-    mock_response.status_code = 503
-
-    mock_pi = AsyncMock()
-    mock_pi.reset_session.return_value = None
-    mock_pi.send_messages.side_effect = httpx.HTTPStatusError(
-        "503 Service Unavailable", request=mock_request, response=mock_response
-    )
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.pi_adapter = mock_pi
-        app.state.ai_provider = mock_ai_provider
-
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "test"},
-            headers=AUTH_HEADER,
-        )
-
-    assert resp.status_code == 200
-    assert resp.json()["content"] == "AI fallback response"
-    mock_ai_provider.complete.assert_called_once()
-
-
-async def test_pi_harness_key_error_propagates_as_502(mock_ai_provider):
-    """When Pi harness raises KeyError (non-httpx, protocol bug), exception propagates as 502."""
-    mock_pi = AsyncMock()
-    mock_pi.reset_session.return_value = None
-    mock_pi.send_messages.side_effect = KeyError("content")
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.pi_adapter = mock_pi
-        app.state.ai_provider = mock_ai_provider
-
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "test"},
-            headers=AUTH_HEADER,
-        )
-
-    assert resp.status_code == 502
-    mock_ai_provider.complete.assert_not_called()

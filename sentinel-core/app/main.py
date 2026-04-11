@@ -2,7 +2,7 @@
 Sentinel Core — FastAPI application entry point.
 
 Architecture:
-  POST /message → APIKeyMiddleware → token guard → Pi harness (Fastify bridge) → Pi subprocess → AI provider
+  POST /message → APIKeyMiddleware → token guard → AI provider
   GET  /health  → always 200, reports obsidian status as non-blocking field
   GET  /status  → authenticated system status (obsidian, pi_harness, ai_provider)
   GET  /context/{user_id} → authenticated debug context dump
@@ -23,7 +23,6 @@ from starlette.responses import Response
 
 from app.clients.litellm_provider import LiteLLMProvider
 from app.clients.obsidian import ObsidianClient
-from app.clients.pi_adapter import PiAdapterClient
 from app.config import settings
 from app.routes.message import router as message_router
 from app.routes.status import router as status_router
@@ -130,8 +129,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         f"AI provider: {settings.ai_provider} "
         f"(fallback: {settings.ai_fallback_provider})"
     )
-
-    app.state.pi_adapter = PiAdapterClient(http_client, settings.pi_harness_url)
 
     # Obsidian client — degrades gracefully if Obsidian is not running
     obsidian_client = ObsidianClient(

@@ -10,15 +10,18 @@ Flow:
      — skipped entirely if search_vault() returns empty list
   6. Apply injection filter (SEC-01) to BOTH context blocks before appending to messages
   7. Token guard on full messages array
-  8. Forward to Pi harness via send_messages()
-  9. Call AI provider via ProviderRouter (primary with fallback per PROV-05)
-  10. Write session summary to Obsidian via BackgroundTasks (best-effort, D-2/MEM-06)
+  8. Call AI provider via ProviderRouter (primary with fallback per PROV-05)
+  9. Write session summary to Obsidian via BackgroundTasks (best-effort, D-2/MEM-06)
+
+Note: Pi harness is NOT used in the message route. Pi is a coding agent that makes multiple
+LLM calls per request (tool use loop), which spams LM Studio with stacked requests at 0%.
+Chat completion goes directly to LiteLLMProvider → LM Studio as a single OpenAI-compatible
+/v1/chat/completions call.
 """
 import asyncio
 import logging
 from datetime import datetime, timezone
 
-import httpx
 import tiktoken
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
@@ -70,9 +73,11 @@ async def post_message(
     Error responses:
       422 — message + context exceeds context window after truncation
       503 — AI provider (primary and fallback) unavailable
-      502 — unexpected AI provider or Pi harness error
+      502 — unexpected AI provider error
     """
     obsidian = request.app.state.obsidian_client
+    ai_provider = request.app.state.ai_provider
+    settings = request.app.state.settings
     context_window: int = request.app.state.context_window
     sessions_budget = int(context_window * SESSIONS_BUDGET_RATIO)
     search_budget = int(context_window * SEARCH_BUDGET_RATIO)
@@ -152,39 +157,20 @@ async def post_message(
     except TokenLimitError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    # 6. Forward to Pi harness via messages array
-    pi_adapter = request.app.state.pi_adapter
-    settings = request.app.state.settings
-
-    # Reset pi-harness session before each exchange so accumulated history
-    # never exceeds one exchange worth of context (prevents OOM on 14B model).
-    await pi_adapter.reset_session()
-
+    # 6. Call AI provider via ProviderRouter (primary with fallback per PROV-05)
+    # Pi harness is intentionally bypassed here: Pi is a coding agent that runs a
+    # tool-use loop and issues multiple LLM calls per request, stacking requests at
+    # LM Studio. Chat completion must go directly to LiteLLMProvider.
     try:
-        content = await pi_adapter.send_messages(messages)
-    except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-        # Pi connectivity or protocol failure — fall through to direct AI provider call
-        logger.warning(f"Pi harness unavailable ({type(exc).__name__}: {exc}), falling back to AI provider")
-        content = None
+        content = await ai_provider.complete(messages)
+    except ProviderUnavailableError as exc:
+        logger.error(f"All AI providers unavailable: {exc}")
+        raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
-        # Unexpected Pi protocol error (e.g., malformed response KeyError) — surface as 502
-        logger.error(f"Unexpected Pi harness error ({type(exc).__name__}: {exc})")
-        raise HTTPException(status_code=502, detail=f"Pi harness error: {type(exc).__name__}")
+        logger.error(f"Unexpected AI provider error: {type(exc).__name__}: {exc}")
+        raise HTTPException(status_code=502, detail=f"AI provider error: {type(exc).__name__}")
 
-    # 7. Call AI provider via ProviderRouter (primary with fallback per PROV-05)
-    if content is None:
-        ai_provider = request.app.state.ai_provider
-
-        try:
-            content = await ai_provider.complete(messages)
-        except ProviderUnavailableError as exc:
-            logger.error(f"All AI providers unavailable: {exc}")
-            raise HTTPException(status_code=503, detail=str(exc))
-        except Exception as exc:
-            logger.error(f"Unexpected AI provider error: {type(exc).__name__}: {exc}")
-            raise HTTPException(status_code=502, detail=f"AI provider error: {type(exc).__name__}")
-
-    # 7b. Output leak scan (SEC-02: regex + Haiku secondary classifier, fail-open)
+    # 6b. Output leak scan (SEC-02: regex + Haiku secondary classifier, fail-open)
     output_scanner = request.app.state.output_scanner
     is_safe, block_reason = await output_scanner.scan(content)
     if not is_safe:

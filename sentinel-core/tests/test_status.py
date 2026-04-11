@@ -67,7 +67,7 @@ async def test_status_obsidian_down(mock_obsidian, mock_http_client):
 
 
 async def test_status_pi_down(mock_obsidian, mock_http_client):
-    """When pi /health request fails, returns status=degraded with pi_harness=unreachable."""
+    """When pi /health request fails, returns status=ok with pi_harness=unreachable (Pi is not a health gate)."""
     mock_obsidian.check_health.return_value = True
     mock_http_client.get.side_effect = Exception("connection refused")
 
@@ -76,7 +76,7 @@ async def test_status_pi_down(mock_obsidian, mock_http_client):
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "degraded"
+    assert data["status"] == "ok"
     assert data["pi_harness"] == "unreachable"
 
 
