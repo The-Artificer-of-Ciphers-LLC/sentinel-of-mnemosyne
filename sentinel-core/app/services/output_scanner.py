@@ -1,8 +1,8 @@
 """
-OutputScanner — regex-based secret detection + Claude Haiku 4.5 secondary classifier.
+OutputScanner — regex-based secret detection + AI secondary classifier.
 
 Per SEC-02: scans AI response before it leaves POST /message.
-Fail-open design: timeout or API error → log + allow (never block on infrastructure failure).
+Fail-open design: timeout or error → log + allow (never block on infrastructure failure).
 
 Pattern corpus: mazen160/secrets-patterns-db (github.com/mazen160/secrets-patterns-db)
 + project-specific secret names from .env.example.
@@ -12,8 +12,7 @@ Private IP patterns excluded from initial blocklist (see Research Pitfall 5).
 import asyncio
 import logging
 import re
-
-from anthropic import AsyncAnthropic
+from collections.abc import Callable, Awaitable
 
 logger = logging.getLogger(__name__)
 
@@ -38,17 +37,24 @@ SAFE — if the text is discussing secrets in the abstract, explaining formats, 
 No other output."""
 
 SECONDARY_TIMEOUT_S = 2.0
-HAIKU_MODEL = "claude-haiku-4-5"
+
+# Type alias for the secondary classifier callable.
+# Accepts (excerpt: str, fired_patterns: list[str]) and returns a verdict string ("LEAK" or "SAFE").
+SecondaryClassifier = Callable[[str, list[str]], Awaitable[str]]
 
 
 class OutputScanner:
     """
     Scan AI response output for secret leakage before the response leaves POST /message.
-    Uses two-stage detection: fast regex → independent Haiku secondary classifier.
+    Uses two-stage detection: fast regex → independent secondary classifier.
+
+    The secondary classifier is a generic async callable injected at construction time.
+    It must accept (excerpt: str, fired_patterns: list[str]) and return "LEAK" or "SAFE".
+    Passing None disables the secondary stage (fail-open).
     """
 
-    def __init__(self, anthropic_client: AsyncAnthropic | None) -> None:
-        self._client = anthropic_client
+    def __init__(self, classifier: SecondaryClassifier | None) -> None:
+        self._classifier = classifier
 
     def _regex_scan(self, response: str) -> list[str]:
         """Return list of pattern names that fired."""
@@ -61,7 +67,7 @@ class OutputScanner:
         is_safe=True  → allow response
         is_safe=False → block response (confirmed leak)
 
-        Fail-open: timeout, API error, or missing anthropic_client → is_safe=True (log only).
+        Fail-open: timeout, error, or missing classifier → is_safe=True (log only).
         """
         fired = self._regex_scan(response)
         if not fired:
@@ -69,13 +75,13 @@ class OutputScanner:
 
         logger.warning(f"Output regex matched patterns: {fired} — routing to secondary classifier")
 
-        if self._client is None:
-            logger.warning("OutputScanner: no Anthropic client configured — failing open")
+        if self._classifier is None:
+            logger.warning("OutputScanner: no secondary classifier configured — failing open")
             return True, None
 
         try:
             verdict = await asyncio.wait_for(
-                self._classify_with_haiku(response, fired),
+                self._classify(response, fired),
                 timeout=SECONDARY_TIMEOUT_S,
             )
             if verdict == "LEAK":
@@ -113,22 +119,12 @@ class OutputScanner:
                     return response[start:end]
         return response[:2000]
 
-    async def _classify_with_haiku(self, response: str, fired_patterns: list[str]) -> str:
+    async def _classify(self, response: str, fired_patterns: list[str]) -> str:
         """
-        Call Claude Haiku 4.5 to classify whether regex match is a genuine leak.
-        Returns 'LEAK' or 'SAFE'.
+        Call the injected secondary classifier to determine whether the regex match
+        is a genuine secret leak.  Returns 'LEAK' or 'SAFE'.
         """
-        excerpt = self._extract_excerpt(response, fired_patterns)  # centered on match position
-        message = await self._client.messages.create(
-            model=HAIKU_MODEL,
-            max_tokens=5,
-            system=_CLASSIFIER_SYSTEM,
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"Triggered patterns: {fired_patterns}\n\nText excerpt:\n{excerpt}",
-                }
-            ],
-        )
-        verdict = message.content[0].text.strip().upper()
-        return verdict if verdict in ("LEAK", "SAFE") else "SAFE"
+        excerpt = self._extract_excerpt(response, fired_patterns)
+        verdict = await self._classifier(excerpt, fired_patterns)
+        normalised = verdict.strip().upper() if isinstance(verdict, str) else "SAFE"
+        return normalised if normalised in ("LEAK", "SAFE") else "SAFE"
