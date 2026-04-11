@@ -73,13 +73,13 @@ async def test_send_messages_succeeds_on_retry(pi_client, http_client):
 
 @pytest.mark.asyncio
 async def test_send_messages_hard_timeout_set(pi_client, http_client):
-    """send_messages uses 30s hard timeout per call (PROV-03)."""
+    """send_messages uses 90s hard timeout per call (PROV-03)."""
     http_client.post.return_value = make_mock_response("ok")
 
     await pi_client.send_messages([{"role": "user", "content": "hi"}])
 
     call_kwargs = http_client.post.call_args[1]
-    assert call_kwargs["timeout"] == 30.0
+    assert call_kwargs["timeout"] == 90.0
 
 
 @pytest.mark.asyncio
