@@ -1,5 +1,10 @@
-# Environment — contains secrets, never commit
+# Environment — contains non-secret config
 .env
+
+# Docker secrets — contain real values, never commit
+secrets/*
+!secrets/.gitkeep
+!secrets/README.md
 
 # Obsidian vault — your personal data, stays on your machine
 mnemosyne/
