@@ -17,6 +17,7 @@ Flow:
 import logging
 from datetime import datetime, timezone
 
+import httpx
 import tiktoken
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
@@ -146,9 +147,14 @@ async def post_message(
 
     try:
         content = await pi_adapter.send_messages(messages)
-    except Exception:
-        # Pi harness unavailable — fall through to direct AI provider call below
+    except (httpx.RequestError, httpx.HTTPStatusError) as exc:
+        # Pi connectivity or protocol failure — fall through to direct AI provider call
+        logger.warning(f"Pi harness unavailable ({type(exc).__name__}: {exc}), falling back to AI provider")
         content = None
+    except Exception as exc:
+        # Unexpected Pi protocol error (e.g., malformed response KeyError) — surface as 502
+        logger.error(f"Unexpected Pi harness error ({type(exc).__name__}: {exc})")
+        raise HTTPException(status_code=502, detail=f"Pi harness error: {type(exc).__name__}")
 
     # 7. Call AI provider via ProviderRouter (primary with fallback per PROV-05)
     if content is None:
