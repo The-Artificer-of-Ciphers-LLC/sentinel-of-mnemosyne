@@ -620,3 +620,156 @@ async def test_output_scanner_clean_response_passes(mock_ai_provider, mock_injec
 
     assert resp.status_code == 200
     assert resp.json()["content"] == "Totally clean response"
+
+
+# ---------------------------------------------------------------------------
+# Wave 4 tests — Phase 7 MEM-08 warm tier injection (MEM-05, MEM-08)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def obsidian_with_search_results():
+    """Mock ObsidianClient that returns vault search results and no hot-tier context."""
+    mock = AsyncMock()
+    mock.get_user_context.return_value = None
+    mock.get_recent_sessions.return_value = []
+    mock.write_session_summary.return_value = None
+    mock.search_vault.return_value = [
+        {
+            "filename": "core/users/trekkie.md",
+            "score": 1.0,
+            "matches": [{"match": {"start": 0, "end": 17}, "context": "I am a developer."}],
+        }
+    ]
+    return mock
+
+
+@pytest.fixture
+def obsidian_with_context_and_search():
+    """Mock ObsidianClient that returns both hot-tier context and vault search results."""
+    mock = AsyncMock()
+    mock.get_user_context.return_value = "# User: trekkie\n\nI am a developer."
+    mock.get_recent_sessions.return_value = []
+    mock.write_session_summary.return_value = None
+    mock.search_vault.return_value = [
+        {
+            "filename": "core/users/trekkie.md",
+            "score": 1.0,
+            "matches": [{"match": {"start": 0, "end": 17}, "context": "I am a developer."}],
+        }
+    ]
+    return mock
+
+
+async def test_warm_tier_called_on_every_message(mock_ai_provider):
+    """search_vault() is called on every POST /message exchange (D-03)."""
+    def pi_down(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        pi_http = _make_client(httpx.MockTransport(pi_down))
+        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
+        app.state.ai_provider = mock_ai_provider
+        resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
+    assert resp.status_code == 200
+    app.state.obsidian_client.search_vault.assert_called_once_with("hello")
+
+
+async def test_warm_tier_injected_when_results_present(obsidian_with_search_results, mock_ai_provider):
+    """When search_vault returns results, a 2nd user/assistant pair is injected (D-04)."""
+    captured_messages = []
+    async def capturing_complete(messages):
+        captured_messages.extend(messages)
+        return "Hello from AI"
+    mock_ai_provider.complete.side_effect = capturing_complete
+    def pi_down(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        pi_http = _make_client(httpx.MockTransport(pi_down))
+        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
+        app.state.obsidian_client = obsidian_with_search_results
+        app.state.ai_provider = mock_ai_provider
+        resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
+    assert resp.status_code == 200
+    # No hot tier (get_user_context=None, get_recent_sessions=[]) + vault pair + user message = 3 messages
+    assert len(captured_messages) == 3
+    assert captured_messages[0]["role"] == "user"
+    assert "[BEGIN RETRIEVED CONTEXT" in captured_messages[0]["content"]
+    assert "trekkie.md" in captured_messages[0]["content"] or "developer" in captured_messages[0]["content"]
+    assert captured_messages[1]["role"] == "assistant"
+    assert captured_messages[1]["content"] == "Understood."
+    assert captured_messages[2]["role"] == "user"
+    assert captured_messages[2]["content"] == "hello"
+
+
+async def test_warm_tier_skipped_when_empty(mock_ai_provider):
+    """When search_vault returns [], no vault pair is injected (D-05)."""
+    # default_app_state already sets search_vault.return_value = []
+    captured_messages = []
+    async def capturing_complete(messages):
+        captured_messages.extend(messages)
+        return "Hello from AI"
+    mock_ai_provider.complete.side_effect = capturing_complete
+    def pi_down(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        pi_http = _make_client(httpx.MockTransport(pi_down))
+        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
+        app.state.ai_provider = mock_ai_provider
+        resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
+    assert resp.status_code == 200
+    # No hot tier, empty vault → only the user message
+    assert len(captured_messages) == 1
+    assert captured_messages[0]["content"] == "hello"
+
+
+async def test_warm_tier_truncated_independently(mock_ai_provider):
+    """Vault block is truncated independently to SEARCH_BUDGET_RATIO, not combined with hot tier (D-09)."""
+    long_vault_obsidian = AsyncMock()
+    long_vault_obsidian.get_user_context.return_value = None
+    long_vault_obsidian.get_recent_sessions.return_value = []
+    long_vault_obsidian.write_session_summary.return_value = None
+    # Return a result where context snippet is very long
+    long_vault_obsidian.search_vault.return_value = [
+        {"filename": "notes/long.md", "score": 1.0,
+         "matches": [{"match": {"start": 0, "end": 100}, "context": "word " * 500}]}
+    ]
+    def pi_down(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        pi_http = _make_client(httpx.MockTransport(pi_down))
+        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
+        app.state.obsidian_client = long_vault_obsidian
+        app.state.ai_provider = mock_ai_provider
+        app.state.context_window = 400  # SEARCH_BUDGET_RATIO=0.10 → 40 tokens budget
+        resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
+    # After truncation the full array fits within 400 tokens → 200
+    assert resp.status_code == 200
+
+
+async def test_warm_tier_both_tiers_five_messages(obsidian_with_context_and_search, mock_ai_provider):
+    """When both hot and warm tiers have content, messages array has 5 entries (D-04)."""
+    captured_messages = []
+    async def capturing_complete(messages):
+        captured_messages.extend(messages)
+        return "Hello from AI"
+    mock_ai_provider.complete.side_effect = capturing_complete
+    def pi_down(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        pi_http = _make_client(httpx.MockTransport(pi_down))
+        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
+        app.state.obsidian_client = obsidian_with_context_and_search
+        app.state.ai_provider = mock_ai_provider
+        resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
+    assert resp.status_code == 200
+    # hot pair (index 0+1) + vault pair (index 2+3) + user message (index 4) = 5
+    assert len(captured_messages) == 5
+    assert captured_messages[0]["role"] == "user"   # hot tier context
+    assert captured_messages[1]["role"] == "assistant"
+    assert captured_messages[1]["content"] == "Understood."
+    assert captured_messages[2]["role"] == "user"   # vault context
+    assert "[BEGIN RETRIEVED CONTEXT" in captured_messages[2]["content"]
+    assert captured_messages[3]["role"] == "assistant"
+    assert captured_messages[3]["content"] == "Understood."
+    assert captured_messages[4]["role"] == "user"   # actual user message
+    assert captured_messages[4]["content"] == "hello"
