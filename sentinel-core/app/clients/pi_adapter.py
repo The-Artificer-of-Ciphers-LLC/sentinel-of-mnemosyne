@@ -29,23 +29,6 @@ class PiAdapterClient:
         resp.raise_for_status()
         return resp.json()["content"]
 
-    async def reset_session(self) -> None:
-        """
-        POST /reset — tell Pi harness to start a fresh session.
-        Graceful: logs warning on failure, never raises.
-        Called before each exchange so accumulated Pi history never exceeds one turn.
-        """
-        import logging
-        logger = logging.getLogger(__name__)
-        try:
-            resp = await self._client.post(
-                f"{self._harness_url}/reset",
-                timeout=5.0,
-            )
-            resp.raise_for_status()
-        except Exception as exc:
-            logger.warning(f"Pi harness reset_session failed — continuing: {exc}")
-
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=4),
