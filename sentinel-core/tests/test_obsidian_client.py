@@ -7,10 +7,10 @@ from app.clients.obsidian import ObsidianClient
 
 @pytest.fixture
 def obsidian_user_context_mock():
-    """MockTransport: returns 200 with markdown body for user context path."""
+    """MockTransport: returns 200 with markdown body for self/identity.md path (D-01)."""
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
-        if "/vault/core/users/" in path and path.endswith(".md"):
+        if path == "/vault/self/identity.md":
             return httpx.Response(200, text="# User: trekkie\n\nI am a developer.")
         return httpx.Response(404)
     return httpx.MockTransport(handler)
@@ -34,16 +34,16 @@ def obsidian_connect_error_mock():
 
 @pytest.fixture
 def obsidian_directory_listing_mock():
-    """MockTransport: returns a directory listing JSON for session paths."""
+    """MockTransport: returns a directory listing JSON for ops/sessions/ paths."""
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
-        if "/vault/core/sessions/" in path and path.endswith("/"):
+        if "/vault/ops/sessions/" in path and path.endswith("/"):
             # Return a list of filenames including one for trekkie
             return httpx.Response(
                 200,
                 json=["trekkie-12-00-00.md", "trekkie-13-00-00.md", "other-user-14-00-00.md"],
             )
-        if "/vault/core/sessions/" in path and path.endswith(".md"):
+        if "/vault/ops/sessions/" in path and path.endswith(".md"):
             return httpx.Response(200, text="## Session content for trekkie")
         return httpx.Response(404)
     return httpx.MockTransport(handler)
@@ -134,11 +134,11 @@ async def test_write_session_summary_calls_put(obsidian_put_capture_mock):
     async with AsyncClient(transport=obsidian_put_capture_mock, base_url="http://test") as client:
         obsidian = ObsidianClient(client, "http://test", "test-api-key")
         await obsidian.write_session_summary(
-            "core/sessions/2026-04-10/trekkie-12-00-00.md",
+            "ops/sessions/2026-04-10/trekkie-12-00-00.md",
             "# Session\n\nContent here."
         )
     assert len(obsidian_put_capture_mock.captured) == 1
-    assert "core/sessions/2026-04-10/trekkie-12-00-00.md" in obsidian_put_capture_mock.captured[0]["path"]
+    assert "ops/sessions/2026-04-10/trekkie-12-00-00.md" in obsidian_put_capture_mock.captured[0]["path"]
 
 
 async def test_search_vault_returns_list(obsidian_search_mock):

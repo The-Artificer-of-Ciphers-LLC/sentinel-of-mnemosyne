@@ -208,12 +208,12 @@ async def _write_session_summary(
     """
     Best-effort session summary write. Failures are logged, not raised.
     Per D-2 (MEM-06): every completed exchange writes a session note.
-    Path: /core/sessions/{YYYY-MM-DD}/{user_id}-{HH-MM-SS}.md
+    Path: /ops/sessions/{YYYY-MM-DD}/{user_id}-{HH-MM-SS}.md
     """
     now = datetime.now(timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H-%M-%S")
-    path = f"core/sessions/{date_str}/{user_id}-{time_str}.md"
+    path = f"ops/sessions/{date_str}/{user_id}-{time_str}.md"
     content = f"""---
 timestamp: {now.isoformat()}
 user_id: {user_id}

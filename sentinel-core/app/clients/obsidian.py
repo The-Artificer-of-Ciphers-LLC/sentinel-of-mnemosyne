@@ -42,13 +42,13 @@ class ObsidianClient:
 
     async def get_user_context(self, user_id: str) -> str | None:
         """
-        GET /vault/core/users/{user_id}.md
+        GET /vault/self/identity.md — single user system (D-01).
         Returns file body or None if 404 or unavailable.
         Per D-4: reads verbatim, no schema enforcement. Missing file = skip injection silently.
         """
         try:
             resp = await self._client.get(
-                f"{self._base_url}/vault/core/users/{user_id}.md",
+                f"{self._base_url}/vault/self/identity.md",
                 headers=self._headers,
                 timeout=5.0,
             )
@@ -63,7 +63,7 @@ class ObsidianClient:
     async def get_recent_sessions(self, user_id: str, limit: int = 3) -> list[str]:
         """
         Hot tier: return content of last `limit` session files for this user_id.
-        Strategy: list today's and yesterday's session directories by filename,
+        Strategy: list today's and yesterday's ops/sessions/ directories by filename,
         filter to files matching user_id, sort descending, fetch content for top N.
         Returns [] on any error (graceful degrade per D-3).
         MEM-05: hot-tier implementation.
@@ -78,7 +78,7 @@ class ObsidianClient:
             for date in dates:
                 try:
                     resp = await self._client.get(
-                        f"{self._base_url}/vault/core/sessions/{date}/",
+                        f"{self._base_url}/vault/ops/sessions/{date}/",
                         headers=self._headers,
                         timeout=5.0,
                     )
@@ -91,7 +91,7 @@ class ObsidianClient:
                         filename = f if isinstance(f, str) else f.get("path", "")
                         if f"{user_id}-" in filename and filename.endswith(".md"):
                             # sort_key = date + filename for chronological sort
-                            candidates.append((f"{date}/{filename}", f"core/sessions/{date}/{filename}"))
+                            candidates.append((f"{date}/{filename}", f"ops/sessions/{date}/{filename}"))
                 except Exception:
                     continue
 
