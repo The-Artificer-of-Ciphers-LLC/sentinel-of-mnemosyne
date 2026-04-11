@@ -6,7 +6,9 @@ The pi-harness container is the single point of contact with @mariozechner/pi-co
 import os
 
 import httpx
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception_type
+
+from app.clients.retry_config import RETRY_STOP, RETRY_WAIT
 
 PI_TIMEOUT_S = float(os.getenv("PI_TIMEOUT_S", "190"))
 
@@ -40,6 +42,7 @@ class PiAdapterClient:
         Called before each exchange so accumulated Pi history never exceeds one turn.
         """
         import logging
+
         logger = logging.getLogger(__name__)
         try:
             resp = await self._client.post(
@@ -51,8 +54,8 @@ class PiAdapterClient:
             logger.warning(f"Pi harness reset_session failed — continuing: {exc}")
 
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=4),
+        stop=RETRY_STOP,
+        wait=RETRY_WAIT,
         retry=retry_if_exception_type((httpx.ConnectError, httpx.TimeoutException)),
         reraise=True,
     )
