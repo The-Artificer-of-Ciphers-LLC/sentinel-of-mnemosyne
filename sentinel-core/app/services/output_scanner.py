@@ -95,12 +95,30 @@ class OutputScanner:
             logger.warning(f"Output scanner: secondary classifier error ({exc}) — failing open")
             return True, None
 
+    def _extract_excerpt(self, response: str, fired_patterns: list[str]) -> str:
+        """
+        Return a 2000-char window centered on the first regex match position.
+        Centers 500 chars before the match start and 1500 chars after, so the
+        matched secret is always visible to the secondary classifier regardless
+        of where it appears in the response.
+        Falls back to response[:2000] if no match is found (should not happen
+        in practice since fired_patterns are derived from a prior regex scan).
+        """
+        for name, pat in _SECRET_PATTERNS:
+            if name in fired_patterns:
+                m = pat.search(response)
+                if m:
+                    start = max(0, m.start() - 500)
+                    end = min(len(response), m.start() + 1500)
+                    return response[start:end]
+        return response[:2000]
+
     async def _classify_with_haiku(self, response: str, fired_patterns: list[str]) -> str:
         """
         Call Claude Haiku 4.5 to classify whether regex match is a genuine leak.
         Returns 'LEAK' or 'SAFE'.
         """
-        excerpt = response[:2000]  # avoid token inflation
+        excerpt = self._extract_excerpt(response, fired_patterns)  # centered on match position
         message = await self._client.messages.create(
             model=HAIKU_MODEL,
             max_tokens=5,
