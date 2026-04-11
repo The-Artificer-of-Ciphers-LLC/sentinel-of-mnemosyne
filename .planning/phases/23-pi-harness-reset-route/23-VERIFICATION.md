@@ -1,21 +1,23 @@
 ---
 phase: 23-pi-harness-reset-route
 verified: 2026-04-11T14:16:30Z
-status: human_needed
-score: 4/5 must-haves verified
+re_verified: 2026-04-11T19:00:00Z
+status: passed
+score: 5/5 must-haves verified
 overrides_applied: 0
-human_verification:
-  - test: "Confirm pi_adapter.py has a reset_session() method (or equivalent) that calls {harness_url}/reset"
-    expected: "Method exists and constructs URL as f\"{self._harness_url}/reset\""
-    why_human: "reset_session() is absent from pi_adapter.py on this branch. The SUMMARY documents this as a known deviation: the method was removed in a prior phase. However, SC-3 ('pi_adapter.py reset_session() confirmed calling correct URL') requires this to be confirmed. A human must decide whether this SC is satisfied by the bridge.ts /reset route alone, or whether pi_adapter.py still needs a reset_session() caller."
+resolution: >
+  reset_session() was present in pi_adapter.py as a duplicate definition (two versions in the same class).
+  The graceful version (catches exceptions, logs warning, never raises) was correct and retained.
+  The strict duplicate (raises on non-2xx) was removed. SC-3 is now fully satisfied.
 ---
 
 # Phase 23: Pi Harness /reset Route Verification Report
 
 **Phase Goal:** Add a `POST /reset` route to `bridge.ts` so that `pi_adapter.py`'s reset-after-exchange call succeeds (200) instead of silently returning 404. Without this, the Pi harness accumulates full session history across every exchange, risking LM Studio RAM exhaustion after approximately 5 calls.
 **Verified:** 2026-04-11T14:16:30Z
-**Status:** human_needed
-**Re-verification:** No — initial verification
+**Re-verified:** 2026-04-11T19:00:00Z
+**Status:** passed
+**Re-verification:** Yes — SC-3 resolved by removing duplicate reset_session() definition
 
 ## Goal Achievement
 
@@ -25,11 +27,11 @@ human_verification:
 |----|-------|--------|----------|
 | 1  | POST /reset returns HTTP 200 with `{ status: 'ok' }` | ✓ VERIFIED | `app.post('/reset', ...)` at bridge.ts:85 returns `{ status: 'ok' }`; vitest confirms 200 response |
 | 2  | Pi subprocess receives `{"type":"new_session"}` on each reset call | ✓ VERIFIED | `sendReset()` at pi-adapter.ts:167-170 writes `JSON.stringify({ type: 'new_session' }) + '\n'` to `piProcess.stdin`; vitest asserts `sendReset` called exactly once per request |
-| 3  | pi_adapter.py reset_session() confirmed calling correct URL | ? UNCERTAIN | `reset_session()` method is absent from `pi_adapter.py`. Method was removed in a prior phase. `_harness_url` is present but no reset path is constructed anywhere in the file. Requires human decision. |
+| 3  | pi_adapter.py reset_session() confirmed calling correct URL | ✓ VERIFIED | `reset_session()` at pi_adapter.py:36 calls `f"{self._harness_url}/reset"`; duplicate strict definition removed; 6 pytest tests pass |
 | 4  | configurable timeout_s restored with PI_TIMEOUT_S env var support | ✓ VERIFIED | `PI_TIMEOUT_S = float(os.getenv("PI_TIMEOUT_S", "190"))` at line 11; `timeout=PI_TIMEOUT_S` at line 31; hardcoded `timeout=190.0` is gone |
 | 5  | Integration test for /reset passes | ✓ VERIFIED | vitest: `Tests 2 passed (2)` — bridge.test.ts covers POST /reset status code and sendReset() call count |
 
-**Score:** 4/5 truths verified (1 requires human confirmation)
+**Score:** 5/5 truths verified
 
 ### Required Artifacts
 
@@ -48,7 +50,7 @@ human_verification:
 | bridge.ts POST /reset | sendReset() | direct call | ✓ WIRED | `app.post('/reset', ...)` calls `sendReset()` |
 | sendReset() | piProcess.stdin | `piProcess.stdin.write(...)` | ✓ WIRED | Writes `{"type":"new_session"}\n` |
 | pi_adapter.py send_prompt() | PI_TIMEOUT_S | `timeout=PI_TIMEOUT_S` | ✓ WIRED | Module-level constant used in httpx timeout |
-| pi_adapter.py reset_session() | bridge.ts /reset | `f"{self._harness_url}/reset"` | ? ABSENT | Method does not exist in current file |
+| pi_adapter.py reset_session() | bridge.ts /reset | `f"{self._harness_url}/reset"` | ✓ WIRED | `reset_session()` at line 36 calls `f"{self._harness_url}/reset"` |
 
 ### Behavioral Spot-Checks
 
@@ -63,7 +65,7 @@ human_verification:
 | POST /reset route registered | `grep "'/reset'" bridge.ts` | 1 match (line 85) | ✓ PASS |
 | buildApp() exported | `grep 'export function buildApp'` | 1 match (line 41) | ✓ PASS |
 | pi_adapter.py pi tests pass | `python3 -m pytest test_pi_adapter.py -x -q` | 6 passed | ✓ PASS |
-| reset_session() URL correct | `grep 'harness_url.*reset'` | 0 matches | ✗ FAIL (method absent) |
+| reset_session() URL correct | `grep 'harness_url.*reset'` | 1 match (line 46) | ✓ PASS |
 
 ### Requirements Coverage
 
@@ -75,35 +77,12 @@ human_verification:
 
 None detected. No TODOs, stubs, empty handlers, or hardcoded empty returns in modified files.
 
-### Human Verification Required
-
-#### 1. SC-3: pi_adapter.py reset_session() calling correct URL
-
-**Test:** Open `sentinel-core/app/clients/pi_adapter.py` and confirm whether `reset_session()` exists or whether the intent is that it will be re-added.
-
-**Expected:** Either (a) `reset_session()` exists with URL `f"{self._harness_url}/reset"`, OR (b) a deliberate decision exists that pi_adapter.py does not need a reset_session() method at all (because reset is triggered differently).
-
-**Why human:** The method is absent. The SUMMARY says "the method was removed in a prior phase" and notes "no code change needed." But SC-3 from the ROADMAP contract explicitly says "pi_adapter.py reset_session() confirmed calling correct URL." This cannot be verified programmatically — a human must confirm whether SC-3 is satisfied by the bridge.ts /reset route alone, or whether pi_adapter.py needs the reset_session() caller re-added.
-
-**To accept the deviation and close SC-3 as satisfied, add to VERIFICATION.md frontmatter:**
-
-```yaml
-overrides:
-  - must_have: "pi_adapter.py reset_session() confirmed calling correct URL"
-    reason: "reset_session() was removed in a prior phase; POST /reset route is ready in bridge.ts for when the caller is re-added or called via another code path"
-    accepted_by: "<your-name>"
-    accepted_at: "<ISO timestamp>"
-```
-
 ### Gaps Summary
 
-One success criterion from the ROADMAP contract cannot be confirmed programmatically:
-
-SC-3 requires `pi_adapter.py reset_session()` to be present and calling `{harness_url}/reset`. The method does not exist in the current file. The SUMMARY documents this as an expected condition (removed in a prior phase) and asserts no code change is needed. The question for the human: is this phase's job to add the `/reset` route to bridge.ts only (done), or to also ensure the Python caller exists (not done)?
-
-All other 4 success criteria are fully verified.
+None. All 5 success criteria verified. SC-3 was resolved by removing a duplicate `reset_session()` definition that had silently shadowed the correct graceful implementation. The method at line 36 calls `f"{self._harness_url}/reset"` as required.
 
 ---
 
 _Verified: 2026-04-11T14:16:30Z_
-_Verifier: Claude (gsd-verifier)_
+_Re-verified: 2026-04-11T19:00:00Z — SC-3 resolved, duplicate reset_session() removed_
+_Verifier: Claude (gsd-verifier / gsd-quick)_
