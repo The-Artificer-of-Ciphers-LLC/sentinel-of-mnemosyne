@@ -1,10 +1,10 @@
 """
-POST /message route — Phase 7: warm tier vault search added.
+POST /message route — Phase 10: 5-file parallel self/ context read (D-02).
 
 Flow:
-  1. Retrieve user context file from Obsidian (graceful skip on failure)
+  1. Retrieve 5 self/ context files in parallel via asyncio.gather() (graceful skip on failure per D-02)
   2. Retrieve hot-tier session summaries (last 3, graceful skip on failure)
-  3. Build hot-tier context pair (user_context + sessions, truncated to SESSIONS_BUDGET_RATIO=0.15)
+  3. Build hot-tier context pair (self_contents + sessions, truncated to SESSIONS_BUDGET_RATIO=0.15)
   4. Search vault for relevant notes (warm tier, fires on every exchange — MEM-08)
   5. Build warm-tier context pair (top-3 vault results, truncated to SEARCH_BUDGET_RATIO=0.10)
      — skipped entirely if search_vault() returns empty list
@@ -14,6 +14,7 @@ Flow:
   9. Call AI provider via ProviderRouter (primary with fallback per PROV-05)
   10. Write session summary to Obsidian via BackgroundTasks (best-effort, D-2/MEM-06)
 """
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -77,11 +78,23 @@ async def post_message(
     search_budget = int(context_window * SEARCH_BUDGET_RATIO)
     injection_filter = request.app.state.injection_filter
 
-    # 1 + 2. Retrieve context (both calls degrade gracefully — never raise)
-    user_context = await obsidian.get_user_context(envelope.user_id)
+    # 1. Session-start parallel reads: 5 self/ files + recent sessions (D-02, 2B-02)
+    _SELF_PATHS = [
+        "self/identity.md",
+        "self/methodology.md",
+        "self/goals.md",
+        "self/relationships.md",
+        "ops/reminders.md",
+    ]
+    self_results = await asyncio.gather(
+        *[obsidian.read_self_context(p) for p in _SELF_PATHS],
+        return_exceptions=True,
+    )
+    # Filter: keep only non-empty strings (return_exceptions=True makes exceptions plain values)
+    self_contents = [r for r in self_results if isinstance(r, str) and r.strip()]
     recent_sessions = await obsidian.get_recent_sessions(envelope.user_id, limit=3)
 
-    # 3. Build messages array — system prompt first, then context pairs (per D-1)
+    # 2. Build messages array — system prompt first, then context pairs (per D-1)
     messages: list[dict] = [
         {
             "role": "system",
@@ -94,15 +107,17 @@ async def post_message(
             ),
         }
     ]
-    if user_context or recent_sessions:
-        context_parts: list[str] = []
-        if user_context:
-            context_parts.append(f"User profile:\n{user_context}")
-        if recent_sessions:
-            context_parts.append("Recent session history:\n" + "\n---\n".join(recent_sessions))
+
+    context_parts: list[str] = []
+    if self_contents:
+        context_parts.append("Personal context:\n" + "\n\n---\n\n".join(self_contents))
+    if recent_sessions:
+        context_parts.append("Recent session history:\n" + "\n---\n".join(recent_sessions))
+
+    if context_parts:
         raw_context = "\n\n".join(context_parts)
 
-        # 4. Truncate injected context to hot-tier budget before token guard
+        # 3. Truncate injected context to hot-tier budget before token guard (SESSIONS_BUDGET_RATIO)
         safe_context = _truncate_to_tokens(raw_context, sessions_budget)
         if safe_context != raw_context:
             logger.warning(
@@ -110,7 +125,7 @@ async def post_message(
                 f"(budget ratio {SESSIONS_BUDGET_RATIO})"
             )
 
-        # 4b. Apply injection filter to vault context (SEC-01: framing wrapper + blocklist)
+        # 4. Apply injection filter to vault context (SEC-01: framing wrapper + blocklist)
         filtered_context = injection_filter.wrap_context(safe_context)
 
         messages.append({"role": "user", "content": filtered_context})

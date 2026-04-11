@@ -36,6 +36,7 @@ def default_app_state(mock_ai_provider):
     mock_obsidian.get_recent_sessions.return_value = []
     mock_obsidian.write_session_summary.return_value = None
     mock_obsidian.search_vault.return_value = []
+    mock_obsidian.read_self_context.return_value = ""
     app.state.obsidian_client = mock_obsidian
     app.state.ai_provider = mock_ai_provider
     app.state.context_window = 8192
@@ -166,9 +167,10 @@ def test_user_id_accepts_valid_chars():
 
 @pytest.fixture
 def obsidian_with_context():
-    """Mock ObsidianClient that returns user context and no sessions."""
+    """Mock ObsidianClient that returns self/ context and no sessions."""
     mock = AsyncMock()
     mock.get_user_context.return_value = "# User: trekkie\n\nI am a developer."
+    mock.read_self_context.return_value = "# User: trekkie\n\nI am a developer."
     mock.get_recent_sessions.return_value = []
     mock.write_session_summary.return_value = None
     mock.search_vault.return_value = []
@@ -648,9 +650,10 @@ def obsidian_with_search_results():
 
 @pytest.fixture
 def obsidian_with_context_and_search():
-    """Mock ObsidianClient that returns both hot-tier context and vault search results."""
+    """Mock ObsidianClient that returns both hot-tier self/ context and vault search results."""
     mock = AsyncMock()
     mock.get_user_context.return_value = "# User: trekkie\n\nI am a developer."
+    mock.read_self_context.return_value = "# User: trekkie\n\nI am a developer."
     mock.get_recent_sessions.return_value = []
     mock.write_session_summary.return_value = None
     mock.search_vault.return_value = [
@@ -873,6 +876,7 @@ async def test_session_write_uses_ops_sessions_path(pi_harness_mock):
     mock_obsidian.get_recent_sessions.return_value = []
     mock_obsidian.write_session_summary.return_value = None
     mock_obsidian.search_vault.return_value = []
+    mock_obsidian.read_self_context.return_value = ""
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         pi_http = _make_client(pi_harness_mock)
@@ -889,8 +893,7 @@ async def test_session_write_uses_ops_sessions_path(pi_harness_mock):
     mock_obsidian.write_session_summary.assert_called_once()
     path_arg = mock_obsidian.write_session_summary.call_args[0][0]
     assert "ops/sessions" in path_arg, (
-        f"Expected session write path to contain 'ops/sessions', got: {path_arg!r} "
-        "(RED — expected until Plan 10-02 changes message.py)"
+        f"Expected session write path to contain 'ops/sessions', got: {path_arg!r}"
     )
 
 
