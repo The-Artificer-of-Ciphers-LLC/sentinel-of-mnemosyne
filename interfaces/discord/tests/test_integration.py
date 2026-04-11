@@ -22,23 +22,33 @@ import os
 import subprocess
 from pathlib import Path
 
-import discord
 import pytest
 
+try:
+    import discord as _discord_module
+except ImportError:
+    _discord_module = None  # type: ignore[assignment]
+
 # --------------------------------------------------------------------------- #
-# Skip entire module if credentials are not set (D-05, D-06)
+# Skip entire module if credentials are not set (D-05, D-06) or discord.py
+# is not installed in the current Python environment.
 # --------------------------------------------------------------------------- #
 
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 DISCORD_TEST_CHANNEL_ID_RAW = os.getenv("DISCORD_TEST_CHANNEL_ID", "")
 
 _SKIP_REASON = ""
-if not DISCORD_BOT_TOKEN:
+if _discord_module is None:
+    _SKIP_REASON = "discord.py not installed in this environment (install inside the Discord container)"
+elif not DISCORD_BOT_TOKEN:
     _SKIP_REASON = "DISCORD_BOT_TOKEN not set"
 elif not DISCORD_TEST_CHANNEL_ID_RAW:
     _SKIP_REASON = "DISCORD_TEST_CHANNEL_ID not set"
 
 pytestmark = pytest.mark.skipif(bool(_SKIP_REASON), reason=_SKIP_REASON or "credentials present")
+
+# Re-bind to the real module so type annotations work when tests run.
+discord = _discord_module  # type: ignore[assignment]
 
 
 # --------------------------------------------------------------------------- #
