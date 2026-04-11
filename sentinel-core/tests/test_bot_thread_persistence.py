@@ -132,42 +132,39 @@ async def test_thread_ids_startup_graceful_on_404():
 
 
 async def test_thread_id_persisted_on_creation():
-    """_persist_thread_id(99999) sends 99999 in a PUT body to ops/discord-threads.md.
+    """_persist_thread_id(99999) sends 99999 in a PATCH body to ops/discord-threads.md.
 
+    Uses PATCH (append) rather than PUT to avoid read-modify-write race conditions.
     RED: _persist_thread_id does not yet exist in bot.py.  Will be GREEN after
-    Plan 10-02 adds the function.
+    Plan 10-04 adds the function.
     """
     import httpx
-
-    put_bodies: list[str] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "GET" and "ops/discord-threads.md" in request.url.path:
-            return httpx.Response(200, text="# Discord Thread IDs\n")
-        if request.method == "PUT" and "ops/discord-threads.md" in request.url.path:
-            put_bodies.append(request.content.decode())
-            return httpx.Response(200)
-        return httpx.Response(404)
 
     # _persist_thread_id does not yet exist — AttributeError is the expected RED failure
     persist_fn = getattr(bot, "_persist_thread_id", None)
     assert persist_fn is not None, (
         "_persist_thread_id not found in bot module "
-        "(RED — expected until Plan 10-02 adds the function)"
+        "(RED — expected until Plan 10-04 adds the function)"
     )
 
     with patch("bot.httpx") as mock_httpx:
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client.get = AsyncMock(return_value=httpx.Response(200, text="# Discord Thread IDs\n"))
 
-        captured_put = AsyncMock(return_value=httpx.Response(200))
-        mock_client.put = captured_put
+        captured_patch = AsyncMock(return_value=httpx.Response(200))
+        mock_client.patch = captured_patch
         mock_httpx.AsyncClient.return_value = mock_client
 
         await persist_fn(99999)
 
-    assert any("99999" in body for body in put_bodies), (
-        "99999 was not found in any PUT body sent to ops/discord-threads.md"
+    assert captured_patch.called, (
+        "_persist_thread_id did not call httpx PATCH on ops/discord-threads.md"
+    )
+    # Extract the content kwarg from the PATCH call and verify 99999 is present
+    call_kwargs = captured_patch.call_args
+    content_arg = call_kwargs.kwargs.get("content", b"")
+    assert b"99999" in content_arg, (
+        f"99999 was not found in PATCH body sent to ops/discord-threads.md. "
+        f"Got content: {content_arg!r}"
     )
