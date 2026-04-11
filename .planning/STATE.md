@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 23 SC-3 gap resolved — 23-VERIFICATION.md 5/5 PASS
-last_updated: "2026-04-11T19:00:00.000Z"
-last_activity: 2026-04-11
+stopped_at: Completed 23-pi-harness-reset-route-01-PLAN.md
+last_updated: "2026-04-11T19:07:53.790Z"
+last_activity: 2026-04-11 -- Phase 24 planning complete
 progress:
   total_phases: 24
-  completed_phases: 5
-  total_plans: 18
-  completed_plans: 21
+  completed_phases: 8
+  total_plans: 22
+  completed_plans: 25
   percent: 100
 ---
 
@@ -29,8 +29,8 @@ Phase: 23 (pi-harness-reset-route) — COMPLETE
 Plan: 1 of 1
 Milestone: v0.4 Functional Alpha — COMPLETE
 Next milestone: v0.5 The Dungeon (Pathfinder 2e module)
-Status: Phase 23 complete — awaiting next phase
-Last activity: 2026-04-11
+Status: Ready to execute
+Last activity: 2026-04-11 -- Phase 24 planning complete
 
 ## Milestone Progress
 
@@ -74,6 +74,10 @@ Progress (v0.4): [██████████] 100%
 | Phase 23-pi-harness-reset-route P01 | 3 | 2 tasks | 7 files |
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 25 added: V0.40 pre-beta refactoring — eliminate duplicates (DUP-01–05), complete stubs (STUB-01–08), fix architecture contradictions (CONTRA-01–04), implement RD-01 through RD-10
 
 ### Decisions
 
