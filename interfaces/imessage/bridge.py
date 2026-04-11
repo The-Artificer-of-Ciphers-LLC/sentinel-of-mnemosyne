@@ -22,8 +22,10 @@ import os
 import re
 import sqlite3
 import sys
+from pathlib import Path
 
 import httpx
+from shared.sentinel_client import SentinelCoreClient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,6 +42,34 @@ SENTINEL_CORE_URL: str = os.environ.get("SENTINEL_CORE_URL", "http://localhost:8
 POLL_INTERVAL_SECONDS: float = float(os.environ.get("IMESSAGE_POLL_INTERVAL", "3.0"))
 DB_PATH: str = os.path.expanduser("~/Library/Messages/chat.db")
 
+# Module-level SentinelCoreClient — initialized after env vars are set
+_sentinel_client = SentinelCoreClient(
+    base_url=SENTINEL_CORE_URL,
+    api_key=SENTINEL_API_KEY,
+    timeout=200.0,
+)
+
+
+def _decode_attributed_body(blob: bytes) -> str | None:
+    """Decode macOS Ventura+ NSKeyedArchiver attributedBody blob to plain text.
+
+    Real attributedBody blobs are NSKeyedArchiver archives. The plain text
+    lives inside the $objects array (at the entry that contains NS.string),
+    not at the root level of the parsed plist.
+    """
+    try:
+        import plistlib
+
+        plist = plistlib.loads(blob)
+        # NSKeyedArchiver format: walk $objects and return the first NS.string found
+        for obj in plist.get("$objects", []):
+            if isinstance(obj, dict) and "NS.string" in obj:
+                return obj["NS.string"]
+        # Fallback for flat/synthetic test plists
+        return plist.get("NS.string", None)
+    except Exception:
+        return None
+
 
 def sanitize_imessage_handle(handle: str) -> str:
     """
@@ -55,11 +85,12 @@ def poll_new_messages(conn: sqlite3.Connection, last_rowid: int) -> list[tuple[i
     """
     Fetch incoming messages with ROWID > last_rowid from chat.db.
     Returns list of (rowid, handle, text) tuples.
-    Skips attributedBody-only messages (text is empty after COALESCE) with a warning.
+    Falls back to attributedBody decoding when text column is NULL (Ventura+).
+    Skips messages where both text and attributedBody are NULL.
     """
     rows = conn.execute(
         """
-        SELECT m.ROWID, h.id, COALESCE(m.text, '') AS text
+        SELECT m.ROWID, h.id, m.text, m.attributedBody
         FROM message m
         JOIN handle h ON m.handle_id = h.ROWID
         WHERE m.is_from_me = 0
@@ -71,52 +102,20 @@ def poll_new_messages(conn: sqlite3.Connection, last_rowid: int) -> list[tuple[i
     ).fetchall()
 
     results: list[tuple[int, str, str]] = []
-    for rowid, handle, text in rows:
-        if not text.strip():
-            # Ventura+ attributedBody-only message — text is NULL or empty
-            # Full attributedBody decoding not implemented in Phase 3
-            logger.warning(
-                f"Skipping attributedBody-only message ROWID {rowid} from {handle} "
-                "(Ventura+ message with no plain-text field)"
-            )
+    for rowid, handle, raw_text, attributed_body in rows:
+        text = raw_text or _decode_attributed_body(attributed_body or b"")
+        if not text or not text.strip():
+            # Skip truly empty messages (both text and attributedBody are NULL or empty)
             continue
         results.append((rowid, handle, text))
     return results
-
-
-async def call_core(client: httpx.AsyncClient, user_id: str, content: str) -> str:
-    """
-    POST message to Sentinel Core. Returns AI response content string.
-    Handles timeouts and HTTP errors gracefully.
-    """
-    try:
-        resp = await client.post(
-            f"{SENTINEL_CORE_URL}/message",
-            json={"content": content, "user_id": user_id},
-            headers={"X-Sentinel-Key": SENTINEL_API_KEY},
-            timeout=200.0,
-        )
-        resp.raise_for_status()
-        return resp.json()["content"]
-    except httpx.TimeoutException:
-        logger.warning(f"Core timeout for user {user_id}")
-        return "The Sentinel took too long to respond. Please try again."
-    except httpx.HTTPStatusError as exc:
-        logger.error(f"Core HTTP error {exc.response.status_code} for user {user_id}")
-        if exc.response.status_code == 401:
-            return "Authentication error — check SENTINEL_API_KEY configuration."
-        if exc.response.status_code == 422:
-            return "Your message is too long for the current context window."
-        return f"The Sentinel encountered an error (HTTP {exc.response.status_code})."
-    except httpx.RequestError as exc:
-        logger.error(f"Core unreachable: {exc}")
-        return "The Sentinel Core is unreachable. Check that it is running."
 
 
 def send_imessage_reply(handle: str, text: str) -> None:
     """Send AI response back to sender via macpymessenger (AppleScript wrapper)."""
     try:
         from macpymessenger import Messenger  # type: ignore[import]
+
         messenger = Messenger()
         messenger.send(handle, text)
         logger.info(f"Reply sent to {handle}")
@@ -130,6 +129,22 @@ def send_imessage_reply(handle: str, text: str) -> None:
 
 async def run_bridge() -> None:
     """Main polling loop. Runs until interrupted."""
+    # Full Disk Access guard — fail-closed before any polling begins (D-05)
+    chat_db = Path.home() / "Library" / "Messages" / "chat.db"
+    try:
+        with chat_db.open("rb"):
+            pass
+    except PermissionError:
+        sys.stderr.write(
+            "\n[iMessage Bridge] Full Disk Access required.\n"
+            "macOS protects ~/Library/Messages/chat.db with SIP.\n"
+            "To grant access:\n"
+            "  1. Open System Settings -> Privacy & Security -> Full Disk Access\n"
+            "  2. Enable access for Terminal (or whichever app runs this bridge)\n"
+            "  3. Restart this process\n\n"
+        )
+        sys.exit(1)
+
     logger.info(f"iMessage bridge starting. Polling {DB_PATH} every {POLL_INTERVAL_SECONDS}s.")
     last_rowid: int = 0
 
@@ -160,7 +175,7 @@ async def run_bridge() -> None:
                     user_id = sanitize_imessage_handle(handle)
                     logger.info(f"New message from {handle} (user_id={user_id}): {text[:80]}")
 
-                    ai_response = await call_core(http_client, user_id, text)
+                    ai_response = await _sentinel_client.send_message(user_id, text, http_client)
                     send_imessage_reply(handle, ai_response)
 
             except sqlite3.Error as exc:

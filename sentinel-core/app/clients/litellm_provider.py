@@ -16,9 +16,9 @@ import litellm
 from tenacity import (
     retry,
     retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
 )
+
+from app.clients.retry_config import RETRY_STOP, RETRY_WAIT
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +53,8 @@ class LiteLLMProvider:
 
     @retry(
         retry=retry_if_exception_type(_RETRYABLE),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=4),
+        stop=RETRY_STOP,
+        wait=RETRY_WAIT,
         reraise=True,
     )
     async def complete(self, messages: list[dict]) -> str:

@@ -243,9 +243,74 @@ async def test_get_self_context_404_no_log(obsidian_404_mock):
     ) as client:
         obsidian = ObsidianClient(client, "http://test", "test-api-key")
         import app.clients.obsidian as obsidian_module
+
         with unittest.mock.patch.object(obsidian_module.logger, "warning") as mock_warn:
             result = await obsidian.read_self_context("self/relationships.md")
         mock_warn.assert_not_called()
     assert result == ""
 
 
+# ---------------------------------------------------------------------------
+# Phase 25-04 — _safe_request() helper (RD-04 / DUP-02)
+# ---------------------------------------------------------------------------
+
+import pytest
+from unittest.mock import AsyncMock
+
+
+@pytest.fixture
+def mock_obsidian_client():
+    """ObsidianClient backed by a mock httpx.AsyncClient."""
+    mock_http = AsyncMock()
+    return ObsidianClient(mock_http, "http://test", "test-api-key")
+
+
+async def test_safe_request_returns_result_on_success(mock_obsidian_client):
+    """_safe_request passes through the coroutine result."""
+
+    async def coro():
+        return "vault content"
+
+    result = await mock_obsidian_client._safe_request(coro(), "default", "test_op")
+    assert result == "vault content"
+
+
+async def test_safe_request_returns_default_on_exception(mock_obsidian_client):
+    """_safe_request catches exceptions and returns the default."""
+
+    async def coro():
+        raise httpx.ConnectError("boom")
+
+    result = await mock_obsidian_client._safe_request(coro(), [], "test_op")
+    assert result == []
+
+
+async def test_safe_request_logs_warning_for_list_default(mock_obsidian_client, caplog):
+    """Non-bool default triggers a warning log."""
+    import logging
+
+    async def coro():
+        raise Exception("err")
+
+    with caplog.at_level(logging.WARNING):
+        await mock_obsidian_client._safe_request(coro(), [], "op_name")
+    assert "op_name" in caplog.text
+
+
+async def test_safe_request_silent_suppresses_log(mock_obsidian_client, caplog):
+    """silent=True suppresses the warning log (used by check_health)."""
+    import logging
+
+    async def coro():
+        raise Exception("err")
+
+    with caplog.at_level(logging.WARNING):
+        await mock_obsidian_client._safe_request(coro(), False, "check_health", silent=True)
+    assert "check_health" not in caplog.text
+
+
+async def test_write_session_summary_propagates_exception(mock_obsidian_client):
+    """write_session_summary is NOT wrapped in _safe_request — must raise."""
+    mock_obsidian_client._client.put = AsyncMock(side_effect=httpx.ConnectError("down"))
+    with pytest.raises(Exception):
+        await mock_obsidian_client.write_session_summary("ops/sessions/test.md", "content")

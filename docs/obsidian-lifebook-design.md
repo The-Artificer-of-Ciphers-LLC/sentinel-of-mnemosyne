@@ -36,16 +36,18 @@ templates/             — note templates (not read by Sentinel)
 
 ### Self context (`get_self_context`)
 
-Concatenates three files on every message:
+Concatenates five files on every message:
 
 | File | Purpose |
 |------|---------|
 | `self/identity.md` | Sentinel persona — values, working style, what it pays attention to |
+| `self/methodology.md` | How to work with notes and structure knowledge |
 | `self/goals.md` | Current active threads and priorities |
 | `self/relationships.md` | Kids schedules, family context, key people |
+| `ops/reminders.md` | Time-bound commitments injected alongside self/ context |
 
-All three are fetched in parallel. Any file that returns 404 or errors is silently skipped —
-the other two still inject. If all three fail, context injection is skipped for that exchange.
+All five are fetched in parallel. Any file that returns 404 or errors is silently skipped —
+the others still inject. If all five fail, context injection is skipped for that exchange.
 
 ### Reminders (`get_reminders`)
 
@@ -117,11 +119,8 @@ On each `/message` request, Core builds a single context block from three source
 it as a `user`/`assistant` pair before the actual user message:
 
 ```
-Vault context (identity, goals, relationships):
-<self/identity.md + self/goals.md + self/relationships.md>
-
-Current reminders:
-<ops/reminders.md>
+Vault context (identity, methodology, goals, relationships, reminders):
+<self/identity.md + self/methodology.md + self/goals.md + self/relationships.md + ops/reminders.md>
 
 Recent session history:
 <last 3 session files>
@@ -172,7 +171,7 @@ flow — the only difference is the message that reaches Core (or the local help
 
 | Purpose | Path pattern |
 |---------|-------------|
-| Self context | `self/identity.md`, `self/goals.md`, `self/relationships.md` |
+| Self context | `self/identity.md`, `self/methodology.md`, `self/goals.md`, `self/relationships.md`, `ops/reminders.md` |
 | Reminders | `ops/reminders.md` |
 | Session logs | `ops/sessions/{YYYY-MM-DD}/{user_id}-{HH-MM-SS}.md` |
 | Inbox captures | `inbox/{YYYYMMDDHHMMSS}-{slug}.md` |

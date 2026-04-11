@@ -48,7 +48,7 @@
 - [x] **SEC-01**: Prompt injection attack surface documented and mitigations in place — InjectionFilter service guards all vault content and user messages before they reach the model
 - [x] **SEC-02**: Sensitive data (API keys, personal context) does not leak through model responses — OutputScanner service scrubs responses before delivery
 - [x] **SEC-03**: OWASP LLM Top 10 checklist reviewed and all applicable findings addressed
-- [ ] **SEC-04**: Jailbreak resistance baseline documented — automated pen test agent (garak + ofelia) runs weekly and writes results to Obsidian; first executed baseline report present
+- [x] **SEC-04**: Jailbreak resistance baseline documented — automated pen test agent (garak + ofelia) runs weekly and writes results to Obsidian; first executed baseline report present
 
 ### Knowledge Migration Tool (2nd Brain)
 
