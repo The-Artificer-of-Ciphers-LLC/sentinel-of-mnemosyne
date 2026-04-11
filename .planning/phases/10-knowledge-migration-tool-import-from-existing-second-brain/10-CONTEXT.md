@@ -91,7 +91,7 @@ These are read via `ObsidianClient` using existing GET `/vault/{path}` calls. Al
 | `:tasks` | Show and manage the ops/queue/ task queue |
 | `:stats` | Vault metrics: note count, orphans, link density, hub sizes |
 | `:graph [query]` | Graph analysis: orphans, triangles, density, backlinks |
-| `:next` | Workboard reconciliation + condition-based maintenance recommendations |
+| `:next` | Workboard reconciliation — surfaces what needs attention based on vault state |
 | `:learn [topic]` | Research a topic and grow the knowledge graph |
 | `:remember [observation]` | Capture friction or methodology learning to ops/observations/ |
 | `:rethink` | Review accumulated observations and tensions; triage each |
@@ -102,7 +102,7 @@ These are read via `ObsidianClient` using existing GET `/vault/{path}` calls. Al
 | Command | Behavior |
 |---------|----------|
 | `:plugin:help` | Contextual guidance — what commands exist and when to use each |
-| `:plugin:health` | Full vault diagnostics: orphans, dangling links, schema violations, hub coherence, stale content, neglected gear |
+| `:plugin:health` | Full vault diagnostics: orphans, dangling links, hub coherence, stale content |
 | `:plugin:ask [question]` | Query the methodology knowledge base |
 | `:plugin:architect` | Research-backed vault evolution advice |
 | `:plugin:setup` | Initial vault structure creation |
@@ -112,53 +112,17 @@ These are read via `ObsidianClient` using existing GET `/vault/{path}` calls. Al
 | `:plugin:add-domain [domain]` | Extend vault with a new domain area |
 | `:plugin:recommend` | Architecture advice for current vault state |
 
-### D-04: Note Schema Enforcement
-
-**Decision:** Every note written by the system to `notes/` includes this YAML frontmatter:
-
-```yaml
----
-description: One sentence adding context beyond the title (~150 chars)
-type: insight | pattern | preference | fact | decision | question | gear
-status: active | someday | done | archived
-context: studio | car | anywhere
-gear: []
-priority: high | medium | low | someday
-created: YYYY-MM-DD
----
-```
-
-`description` is required on every note. All other fields are optional. Gear notes additionally include `category`, `proficiency`, `hours_logged`.
-
-Notes are titled as prose sentences (claims, not topic labels). The system enforces this when writing notes.
-
-### D-05: `:next` — Condition-Based Maintenance
-
-**Decision:** `:next` evaluates these conditions against vault state before recommending work:
-
-| Signal | Threshold | Action |
-|--------|-----------|--------|
-| Observations pending in ops/observations/ | ≥10 | Suggest `:rethink` |
-| Tensions pending in ops/tensions/ | ≥5 | Suggest `:rethink` |
-| Hub size | >40 notes | Suggest split |
-| Orphan notes | Any | Flag for connection-finding |
-| Dangling links | Any | Flag for resolution |
-| Stale health check | >7 days | Suggest `:plugin:health` |
-| Inbox age | >3 days | Suggest `:ralph` |
-| Gear not touched | >30 days | Nudge to practice session |
-
-### D-06: Thread Continuity Fix
+### D-04: Thread Continuity Fix
 
 **Decision:** `SENTINEL_THREAD_IDS` in bot.py must persist across restarts. Store active thread IDs in Obsidian at `ops/discord-threads.md` (simple newline-delimited list). On bot startup, read this file and populate the in-memory set. On new thread creation, write the thread ID to the file immediately.
 
 ### D-07: Voice and Personality
 
-**Decision:** The Sentinel's response style when operating in 2nd brain commands is warm, direct, and opinionated. Contractions, shorter sentences, casual tone. Nudges are specific and name the actual gear/task/pattern.
+**Decision:** The Sentinel's response style when operating in 2nd brain commands is warm, direct, and opinionated. Contractions, shorter sentences, casual tone. Nudges are specific.
 
 Examples:
-- "You haven't touched the Subharmonicon in 3 weeks — car time tomorrow?"
-- "12 notes connected, no orphans. But the Bitbox still has zero session notes."
-- "You said you wanted to learn the Matriarch by March. No sessions logged. What's blocking you?"
+- "12 notes connected, no orphans. Inbox has 4 items older than 3 days — want to process?"
+- "You said you wanted to finish that project. No progress logged this week. What's blocking you?"
 
 ### D-08: `:help` Response
 
@@ -178,15 +142,6 @@ Exception: session summaries written by the background task go directly to `ops/
 
 <specifics>
 ## Specific Ideas
-
-**User's gear (must be representable as notes with proficiency tracking):**
-- Synths: Moog Muse, Matriarch, GrandMother, Mother 32, DFAM, Subharmonicon, Subsequent 37
-- Eurorack: full rack with Tiptop ART modules, 1010 Bitbox, 1010 Bluebox, RAS Bonkers, z5000
-- Controllers/production: NI Komplete, SL61 Mk3, Maschine+, Ableton Push 3 Standalone, Traktor S4 Mk3, Ableton Move, Ableton Live Suite
-
-**Core pattern to break:** Buying gear without learning it. The system surfaces neglected gear and nudges toward practice sessions.
-
-**Car time:** A recurring untapped opportunity. Notes with `context: car` are surfaced by `:next` when the user is likely mobile.
 
 **Kids logistics:** Sensitive data in `self/relationships.md`. Never referenced outside the vault.
 
