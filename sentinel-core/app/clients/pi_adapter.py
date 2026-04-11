@@ -55,3 +55,12 @@ class PiAdapterClient:
         )
         resp.raise_for_status()
         return resp.json()["content"]
+
+    async def reset_session(self) -> None:
+        """
+        Reset Pi session by calling POST /reset on the bridge.
+        Bridge writes {"type":"new_session"} to Pi stdin, clearing conversation history.
+        Raises httpx.HTTPStatusError on non-2xx response.
+        """
+        resp = await self._client.post(f"{self._harness_url}/reset", timeout=5.0)
+        resp.raise_for_status()
