@@ -77,17 +77,9 @@ async def post_message(
                 f"(budget ratio {CONTEXT_BUDGET_RATIO})"
             )
 
-        # 4b. Apply injection filter to vault context (SEC-01: framing wrapper + blocklist)
-        injection_filter = request.app.state.injection_filter
-        filtered_context = injection_filter.wrap_context(safe_context)
-
-        messages.append({"role": "user", "content": filtered_context})
+        messages.append({"role": "user", "content": safe_context})
         messages.append({"role": "assistant", "content": "Understood."})
-
-    # Apply injection filter to user input (SEC-01: same code path as vault content)
-    injection_filter = request.app.state.injection_filter
-    safe_input, _input_modified = injection_filter.filter_input(envelope.content)
-    messages.append({"role": "user", "content": safe_input})
+    messages.append({"role": "user", "content": envelope.content})
 
     # 5. Token guard on full messages array (MEM-07)
     try:
@@ -117,21 +109,6 @@ async def post_message(
         except Exception as exc:
             logger.error(f"Unexpected AI provider error: {type(exc).__name__}: {exc}")
             raise HTTPException(status_code=502, detail=f"AI provider error: {type(exc).__name__}")
-
-    # 7b. Output leak scan (SEC-02: regex + Haiku secondary classifier, fail-open)
-    output_scanner = request.app.state.output_scanner
-    is_safe, block_reason = await output_scanner.scan(content)
-    if not is_safe:
-        logger.error(
-            f"Output scanner blocked response for user '{envelope.user_id}': {block_reason}"
-        )
-        background_tasks.add_task(
-            _log_leak_incident,
-            obsidian,
-            envelope.user_id,
-            block_reason or "unknown",
-        )
-        raise HTTPException(status_code=500, detail="Response blocked by security scanner")
 
     # 8. Best-effort session summary write (MEM-03, MEM-06: always write)
     model_label = f"{settings.ai_provider}/{settings.model_name}"
@@ -182,36 +159,3 @@ model: {model}
         logger.debug(f"Session summary written: {path}")
     except Exception as exc:
         logger.warning(f"Session summary write failed for {user_id}: {exc}")
-
-
-async def _log_leak_incident(
-    obsidian,
-    user_id: str,
-    block_reason: str,
-) -> None:
-    """
-    Best-effort incident log write. Failures are logged, not raised.
-    Path: security/leak-incidents/{timestamp}.md
-    """
-    now = datetime.now(timezone.utc)
-    timestamp = now.strftime("%Y-%m-%dT%H-%M-%S")
-    path = f"security/leak-incidents/{timestamp}.md"
-    content = f"""---
-timestamp: {now.isoformat()}
-user_id: {user_id}
-type: output_leak_incident
----
-
-## Leak Incident
-
-**Detected:** {now.isoformat()}
-**User:** {user_id}
-**Reason:** {block_reason}
-
-Response was blocked. Original content withheld from this log for safety.
-"""
-    try:
-        await obsidian.write_session_summary(path, content)
-        logger.info(f"Leak incident logged: {path}")
-    except Exception as exc:
-        logger.warning(f"Leak incident log write failed: {exc}")

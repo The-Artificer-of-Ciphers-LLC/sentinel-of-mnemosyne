@@ -14,10 +14,7 @@ RUN pip install --no-cache-dir \
     "pydantic>=2.7.0" \
     "pydantic-settings>=2.13.0" \
     "httpx>=0.28.1" \
-    "tiktoken" \
-    "anthropic>=0.93.0,<1.0" \
-    "litellm>=1.83.0,<2.0" \
-    "tenacity>=8.2.0,<10.0"
+    "tiktoken"
 
 COPY . .
 
