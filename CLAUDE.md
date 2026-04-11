@@ -186,6 +186,23 @@ A self-hosted, containerized AI assistant platform built for personal use. The S
 Conventions not yet established. Will populate as patterns emerge during development.
 <!-- GSD:conventions-end -->
 
+## Protected Files — NEVER Delete or Overwrite
+
+The following files are immutable planning artifacts. **You are not authorised to delete, rename, move, or overwrite them.** They have been deleted silently three times by AI agents and each incident required manual recovery.
+
+| File | Protection |
+|------|-----------|
+| `.planning/ROADMAP.md` | macOS `uchg` flag + PreToolUse hook + this rule |
+
+**To update ROADMAP.md legitimately (human only):**
+```bash
+chflags nouchg .planning/ROADMAP.md
+# make edits
+chflags uchg .planning/ROADMAP.md
+```
+
+AI agents: if you believe ROADMAP.md needs updating, output the proposed change as text and stop. Do not attempt to modify the file directly.
+
 ## Git Workflow
 
 **PROJECT OVERRIDE — This overrides the global no-main-commits rule for this project only.**
