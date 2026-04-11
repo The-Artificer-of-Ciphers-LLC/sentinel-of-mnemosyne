@@ -22,6 +22,7 @@ import os
 import re
 import sqlite3
 import sys
+from pathlib import Path
 
 import httpx
 
@@ -41,6 +42,17 @@ POLL_INTERVAL_SECONDS: float = float(os.environ.get("IMESSAGE_POLL_INTERVAL", "3
 DB_PATH: str = os.path.expanduser("~/Library/Messages/chat.db")
 
 
+def _decode_attributed_body(blob: bytes) -> str | None:
+    """Decode macOS Ventura+ NSKeyedArchiver attributedBody blob to plain text."""
+    try:
+        import plistlib
+
+        plist = plistlib.loads(blob)
+        return plist.get("NS.string", None)
+    except Exception:
+        return None
+
+
 def sanitize_imessage_handle(handle: str) -> str:
     """
     Convert iMessage handle to a valid user_id matching ^[a-zA-Z0-9_-]+$.
@@ -55,11 +67,12 @@ def poll_new_messages(conn: sqlite3.Connection, last_rowid: int) -> list[tuple[i
     """
     Fetch incoming messages with ROWID > last_rowid from chat.db.
     Returns list of (rowid, handle, text) tuples.
-    Skips attributedBody-only messages (text is empty after COALESCE) with a warning.
+    Falls back to attributedBody decoding when text column is NULL (Ventura+).
+    Skips messages where both text and attributedBody are NULL.
     """
     rows = conn.execute(
         """
-        SELECT m.ROWID, h.id, COALESCE(m.text, '') AS text
+        SELECT m.ROWID, h.id, m.text, m.attributedBody
         FROM message m
         JOIN handle h ON m.handle_id = h.ROWID
         WHERE m.is_from_me = 0
@@ -71,14 +84,10 @@ def poll_new_messages(conn: sqlite3.Connection, last_rowid: int) -> list[tuple[i
     ).fetchall()
 
     results: list[tuple[int, str, str]] = []
-    for rowid, handle, text in rows:
-        if not text.strip():
-            # Ventura+ attributedBody-only message — text is NULL or empty
-            # Full attributedBody decoding not implemented in Phase 3
-            logger.warning(
-                f"Skipping attributedBody-only message ROWID {rowid} from {handle} "
-                "(Ventura+ message with no plain-text field)"
-            )
+    for rowid, handle, raw_text, attributed_body in rows:
+        text = raw_text or _decode_attributed_body(attributed_body or b"")
+        if not text or not text.strip():
+            # Skip truly empty messages (both text and attributedBody are NULL or empty)
             continue
         results.append((rowid, handle, text))
     return results
@@ -117,6 +126,7 @@ def send_imessage_reply(handle: str, text: str) -> None:
     """Send AI response back to sender via macpymessenger (AppleScript wrapper)."""
     try:
         from macpymessenger import Messenger  # type: ignore[import]
+
         messenger = Messenger()
         messenger.send(handle, text)
         logger.info(f"Reply sent to {handle}")
@@ -130,6 +140,21 @@ def send_imessage_reply(handle: str, text: str) -> None:
 
 async def run_bridge() -> None:
     """Main polling loop. Runs until interrupted."""
+    # Full Disk Access guard — fail-closed before any polling begins (D-05)
+    chat_db = Path.home() / "Library" / "Messages" / "chat.db"
+    try:
+        chat_db.open("rb").close()
+    except PermissionError:
+        sys.stderr.write(
+            "\n[iMessage Bridge] Full Disk Access required.\n"
+            "macOS protects ~/Library/Messages/chat.db with SIP.\n"
+            "To grant access:\n"
+            "  1. Open System Settings -> Privacy & Security -> Full Disk Access\n"
+            "  2. Enable access for Terminal (or whichever app runs this bridge)\n"
+            "  3. Restart this process\n\n"
+        )
+        sys.exit(1)
+
     logger.info(f"iMessage bridge starting. Polling {DB_PATH} every {POLL_INTERVAL_SECONDS}s.")
     last_rowid: int = 0
 
