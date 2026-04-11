@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 import httpx
+from shared.sentinel_client import SentinelCoreClient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,6 +41,13 @@ SENTINEL_API_KEY: str = os.environ.get("SENTINEL_API_KEY", "")
 SENTINEL_CORE_URL: str = os.environ.get("SENTINEL_CORE_URL", "http://localhost:8000")
 POLL_INTERVAL_SECONDS: float = float(os.environ.get("IMESSAGE_POLL_INTERVAL", "3.0"))
 DB_PATH: str = os.path.expanduser("~/Library/Messages/chat.db")
+
+# Module-level SentinelCoreClient — initialized after env vars are set
+_sentinel_client = SentinelCoreClient(
+    base_url=SENTINEL_CORE_URL,
+    api_key=SENTINEL_API_KEY,
+    timeout=200.0,
+)
 
 
 def _decode_attributed_body(blob: bytes) -> str | None:
@@ -91,35 +99,6 @@ def poll_new_messages(conn: sqlite3.Connection, last_rowid: int) -> list[tuple[i
             continue
         results.append((rowid, handle, text))
     return results
-
-
-async def call_core(client: httpx.AsyncClient, user_id: str, content: str) -> str:
-    """
-    POST message to Sentinel Core. Returns AI response content string.
-    Handles timeouts and HTTP errors gracefully.
-    """
-    try:
-        resp = await client.post(
-            f"{SENTINEL_CORE_URL}/message",
-            json={"content": content, "user_id": user_id},
-            headers={"X-Sentinel-Key": SENTINEL_API_KEY},
-            timeout=200.0,
-        )
-        resp.raise_for_status()
-        return resp.json()["content"]
-    except httpx.TimeoutException:
-        logger.warning(f"Core timeout for user {user_id}")
-        return "The Sentinel took too long to respond. Please try again."
-    except httpx.HTTPStatusError as exc:
-        logger.error(f"Core HTTP error {exc.response.status_code} for user {user_id}")
-        if exc.response.status_code == 401:
-            return "Authentication error — check SENTINEL_API_KEY configuration."
-        if exc.response.status_code == 422:
-            return "Your message is too long for the current context window."
-        return f"The Sentinel encountered an error (HTTP {exc.response.status_code})."
-    except httpx.RequestError as exc:
-        logger.error(f"Core unreachable: {exc}")
-        return "The Sentinel Core is unreachable. Check that it is running."
 
 
 def send_imessage_reply(handle: str, text: str) -> None:
@@ -185,7 +164,7 @@ async def run_bridge() -> None:
                     user_id = sanitize_imessage_handle(handle)
                     logger.info(f"New message from {handle} (user_id={user_id}): {text[:80]}")
 
-                    ai_response = await call_core(http_client, user_id, text)
+                    ai_response = await _sentinel_client.send_message(user_id, text, http_client)
                     send_imessage_reply(handle, ai_response)
 
             except sqlite3.Error as exc:

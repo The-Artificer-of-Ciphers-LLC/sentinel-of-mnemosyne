@@ -45,6 +45,7 @@ import os
 import discord
 import httpx
 from discord import app_commands
+from shared.sentinel_client import SentinelCoreClient
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -74,6 +75,13 @@ if DISCORD_ALLOWED_CHANNELS_RAW.strip():
 # Track thread IDs created by this bot instance so on_message knows which to respond to.
 # Uses the parent channel ID set for allowlist checks on thread replies.
 SENTINEL_THREAD_IDS: set[int] = set()
+
+# Module-level SentinelCoreClient — shared across all interactions
+_sentinel_client = SentinelCoreClient(
+    base_url=SENTINEL_CORE_URL,
+    api_key=SENTINEL_API_KEY,
+    timeout=200.0,
+)
 
 # Subcommand help text (D-08 — grouped by category)
 SUBCOMMAND_HELP = """\
@@ -145,36 +153,13 @@ _PLUGIN_PROMPTS: dict[str, str] = {
 }
 
 
-async def call_core(user_id: str, message: str) -> str:
+async def _call_core(user_id: str, message: str) -> str:
     """
-    POST to Sentinel Core /message. Returns the AI response string.
-    All error cases return a user-facing string rather than raising.
-    Reads Obsidian context for user_id automatically via Core's memory layer.
+    Route message through the shared SentinelCoreClient.
+    Creates a per-call httpx.AsyncClient as the client owns no persistent connection state.
     """
-    try:
-        async with httpx.AsyncClient(timeout=200.0) as client:
-            resp = await client.post(
-                f"{SENTINEL_CORE_URL}/message",
-                json={"content": message, "user_id": user_id},
-                headers={"X-Sentinel-Key": SENTINEL_API_KEY},
-            )
-            resp.raise_for_status()
-            return resp.json()["content"]
-    except httpx.TimeoutException:
-        logger.warning(f"Core timeout for user {user_id}")
-        return "The Sentinel took too long to respond. Please try again."
-    except httpx.HTTPStatusError as exc:
-        if exc.response.status_code == 422:
-            return "Your message is too long for the current context window."
-        elif exc.response.status_code == 401:
-            logger.error("Core returned 401 — SENTINEL_API_KEY mismatch")
-            return "Authentication error — check SENTINEL_API_KEY configuration."
-        else:
-            logger.error(f"Core HTTP error {exc.response.status_code} for user {user_id}")
-            return f"The Sentinel encountered an error (HTTP {exc.response.status_code})."
-    except httpx.RequestError as exc:
-        logger.error(f"Core unreachable: {exc}")
-        return "The Sentinel Core is unreachable. Please check the service."
+    async with httpx.AsyncClient() as http_client:
+        return await _sentinel_client.send_message(user_id, message, http_client)
 
 
 async def handle_sentask_subcommand(subcmd: str, args: str, user_id: str) -> str:
@@ -191,61 +176,67 @@ async def handle_sentask_subcommand(subcmd: str, args: str, user_id: str) -> str
         if plugin_name == "ask":
             if not args.strip():
                 return "Usage: `:plugin:ask <question>` — query the methodology knowledge base."
-            return await call_core(user_id, f"Answer this question about my 2nd brain methodology: {args.strip()}")
+            return await _call_core(user_id, f"Answer this question about my 2nd brain methodology: {args.strip()}")
         if plugin_name == "add-domain":
             if not args.strip():
                 return "Usage: `:plugin:add-domain <domain>` — extend vault with a new domain area."
-            return await call_core(user_id, f"Extend my vault with a new domain area: {args.strip()}")
+            return await _call_core(user_id, f"Extend my vault with a new domain area: {args.strip()}")
         fixed_prompt = _PLUGIN_PROMPTS.get(plugin_name)
         if fixed_prompt:
-            return await call_core(user_id, fixed_prompt)
+            return await _call_core(user_id, fixed_prompt)
         return f"Unknown plugin command `:{subcmd}`. Try `:plugin:help`."
 
     # Arg-taking standard commands
     if subcmd == "capture":
         if not args.strip():
             return "Usage: `:capture <text>` — provide something to capture."
-        return await call_core(user_id, f"Capture this insight to my inbox/ for processing: {args.strip()}")
+        return await _call_core(user_id, f"Capture this insight to my inbox/ for processing: {args.strip()}")
 
     if subcmd == "seed":
         if not args.strip():
             return "Usage: `:seed <text>` — drop raw content into inbox/."
-        return await call_core(user_id, f"Add this raw content to my inbox/ without processing: {args.strip()}")
+        return await _call_core(user_id, f"Add this raw content to my inbox/ without processing: {args.strip()}")
 
     if subcmd == "connect":
         if not args.strip():
             return "Usage: `:connect <note title>` — find connections for a note."
-        return await call_core(user_id, f"Find connections for the note '{args.strip()}' and add a wikilink to the appropriate hub MOC.")
+        return await _call_core(
+            user_id,
+            f"Find connections for the note '{args.strip()}' and add a wikilink to the appropriate hub MOC.",
+        )
 
     if subcmd == "review":
         if not args.strip():
             return "Usage: `:review <note title>` — verify note quality."
-        return await call_core(user_id, f"Review note quality for '{args.strip()}': check claim title, YAML frontmatter (description, type, topics, status), and wikilinks. Be precise and literal. Do not elaborate beyond the requested format.")
+        return await _call_core(
+            user_id,
+            f"Review note quality for '{args.strip()}': check claim title, YAML frontmatter (description, type, topics, status), and wikilinks. Be precise and literal. Do not elaborate beyond the requested format.",
+        )
 
     if subcmd == "graph":
         query = args.strip() or "all"
         prompt = f"Run graph analysis on my vault{': ' + query if query != 'all' else ''}. Report orphans, triangles, link density, and backlinks."
-        return await call_core(user_id, prompt)
+        return await _call_core(user_id, prompt)
 
     if subcmd == "learn":
         if not args.strip():
             return "Usage: `:learn <topic>` — research a topic."
-        return await call_core(user_id, f"Research the topic '{args.strip()}' and grow my knowledge graph with new permanent notes.")
+        return await _call_core(user_id, f"Research the topic '{args.strip()}' and grow my knowledge graph with new permanent notes.")
 
     if subcmd == "remember":
         if not args.strip():
             return "Usage: `:remember <observation>` — capture a methodology learning."
-        return await call_core(user_id, f"Capture this operational observation to ops/observations/: {args.strip()}")
+        return await _call_core(user_id, f"Capture this operational observation to ops/observations/: {args.strip()}")
 
     if subcmd == "revisit":
         if not args.strip():
             return "Usage: `:revisit <note title>` — revisit and update a note."
-        return await call_core(user_id, f"Revisit and update the note '{args.strip()}' with current understanding.")
+        return await _call_core(user_id, f"Revisit and update the note '{args.strip()}' with current understanding.")
 
     # No-arg standard commands (dict lookup)
     fixed_prompt = _SUBCOMMAND_PROMPTS.get(subcmd)
     if fixed_prompt:
-        return await call_core(user_id, fixed_prompt)
+        return await _call_core(user_id, fixed_prompt)
 
     return f"Unknown command `:{subcmd}`. Try `:help` for available commands."
 
@@ -324,7 +315,7 @@ class SentinelBot(discord.Client):
         logger.info(f"Thread reply from {user_id} in thread {message.channel.id}: {message.content[:60]}")
 
         async with message.channel.typing():
-            ai_response = await call_core(user_id, message.content)
+            ai_response = await _call_core(user_id, message.content)
 
         await message.channel.send(ai_response)
 
@@ -380,14 +371,12 @@ async def sentask(interaction: discord.Interaction, message: str) -> None:
         args = parts[1] if len(parts) > 1 else ""
         ai_response = await handle_sentask_subcommand(subcmd, args, user_id)
     else:
-        ai_response = await call_core(user_id, message)
+        ai_response = await _call_core(user_id, message)
 
     # 4. Send AI response — into thread if created, fallback to channel
     if thread:
         await thread.send(ai_response)
-        await interaction.followup.send(
-            f"Response ready in {thread.mention}", ephemeral=True
-        )
+        await interaction.followup.send(f"Response ready in {thread.mention}", ephemeral=True)
     else:
         await interaction.followup.send(ai_response)
 

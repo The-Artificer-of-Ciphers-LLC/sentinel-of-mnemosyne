@@ -27,6 +27,9 @@ if [[ -z "${SENTINEL_API_KEY:-}" ]]; then
     exit 1
 fi
 
+# Set PYTHONPATH to repo root so `from shared.sentinel_client import ...` resolves
+export PYTHONPATH="$(cd "$(dirname "$0")/../.." && pwd):${PYTHONPATH:-}"
+
 echo "[imessage-bridge] Starting bridge (IMESSAGE_ENABLED=true)..."
 echo "[imessage-bridge] IMPORTANT: Ensure Full Disk Access is granted in System Settings."
 
