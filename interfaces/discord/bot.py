@@ -15,22 +15,6 @@ Subcommands (prefix message with :):
   :health     — vault health check
   :goals      — show current active goals
   :reminders  — show current time-bound reminders
-  :ralph      — batch process inbox queue
-  :pipeline   — full 6 Rs pipeline
-  :reweave    — backward pass to update older notes
-  :check      — validate schema compliance
-  :rethink    — review observations and tensions
-  :refactor   — suggest vault restructuring
-  :tasks      — show task queue
-  :stats      — vault metrics
-  :graph      — graph analysis
-  :learn      — research a topic
-  :remember   — capture a methodology observation
-  :revisit    — revisit and update a note
-  :connect    — find connections for a note
-  :review     — verify note quality
-  :seed       — drop raw content into inbox/
-  :plugin:*   — plugin commands (help, health, architect, setup, tutorial, upgrade, reseed, add-domain, recommend)
 
 Thread replies:
   Any non-bot message in a Sentinel thread triggers another Core call,
@@ -48,14 +32,6 @@ from discord import app_commands
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Public API for this module (consumed by tests and future integrations)
-__all__ = [
-    "handle_sentask_subcommand",
-    "_SUBCOMMAND_PROMPTS",
-    "_PLUGIN_PROMPTS",
-    "_persist_thread_id",
-]
 
 DISCORD_BOT_TOKEN = os.environ["DISCORD_BOT_TOKEN"]
 SENTINEL_API_KEY = os.environ["SENTINEL_API_KEY"]
@@ -75,73 +51,26 @@ if DISCORD_ALLOWED_CHANNELS_RAW.strip():
 # Uses the parent channel ID set for allowlist checks on thread replies.
 SENTINEL_THREAD_IDS: set[int] = set()
 
-# Subcommand help text (D-08 — grouped by category)
+# Subcommand help text
 SUBCOMMAND_HELP = """\
-**Sentinel 2nd Brain Commands** — prefix with `:` inside a /sentask thread:
+**Sentinel subcommands** — prefix your message with `:` to invoke:
 
-**Standard Commands**
-`:help` — show this command list
-`:capture <text>` — extract insights from source material; route to inbox/
-`:seed <text>` — drop raw content into inbox/ with zero friction
-`:ralph` — batch process inbox/ queue (Reduce + Reflect)
-`:pipeline` — run full 6 Rs pipeline (Record → Reduce → Reflect → Reweave → Verify → Rethink)
-`:connect <note title>` — find connections for a note; add wikilink to hub MOC
-`:reweave` — backward pass: update older notes with recent vault additions
-`:review <note title>` — verify note quality (claim title, schema, wikilinks)
-`:check` — validate schema compliance across all notes/
-`:rethink` — review observations and tensions; triage each
-`:refactor` — suggest vault restructuring improvements
-`:tasks` — show ops/queue/ task queue
-`:stats` — vault metrics (note count, orphans, link density)
-`:graph [query]` — graph analysis (orphans, triangles, density, backlinks)
-`:next` — surface what needs attention based on vault state
-`:learn <topic>` — research a topic and grow the knowledge graph
-`:remember <observation>` — capture a methodology learning to ops/observations/
-`:revisit <note title>` — revisit and update an old note
-
-**Plugin Commands** (prefix `:plugin:`)
-`:plugin:help` — contextual guidance on commands and when to use each
-`:plugin:health` — full vault diagnostics
-`:plugin:ask <question>` — query the methodology knowledge base
-`:plugin:architect` — research-backed vault evolution advice
-`:plugin:setup` — create initial vault structure
-`:plugin:tutorial` — interactive walkthrough of the 2nd brain system
-`:plugin:upgrade` — check for methodology improvements
-`:plugin:reseed` — principled vault restructuring
-`:plugin:add-domain <domain>` — extend vault with a new domain area
-`:plugin:recommend` — architecture advice for current vault state
+`:help` — show this list
+`:capture <text>` — capture a thought to your Obsidian inbox
+`:next` — what to work on next based on current goals
+`:health` — vault health check (orphan notes, stale goals, neglected gear)
+`:goals` — show current active goals
+`:reminders` — show current time-bound reminders
 
 Regular messages (no `:` prefix) go straight to the AI.
 """
 
-# Map subcommand names to the prompt sent to Core (standard no-arg commands)
+# Map subcommand names to the prompt sent to Core
 _SUBCOMMAND_PROMPTS: dict[str, str] = {
-    # Existing commands
     "next": "What should I work on next based on my current goals?",
     "health": "Run a health check on my vault and report orphan notes, stale goals, neglected gear.",
     "goals": "Show me my current active goals.",
     "reminders": "What are my current time-bound reminders?",
-    # New standard commands (D-03)
-    "ralph": "Process my inbox queue — work through items in inbox/ and move completed ones to notes/ following the 2nd brain pipeline.",
-    "pipeline": "Run the full 6 Rs pipeline on my inbox queue: Record → Reduce → Reflect → Reweave → Verify → Rethink.",
-    "reweave": "Run a reweave pass on my vault — identify notes that should be updated given recent additions. Update older notes with new context and connections.",
-    "check": "Validate _schema compliance across all notes/ files. Report FAIL items (missing description, missing topics, YAML errors) and WARN items (stale status, isolated notes).",
-    "rethink": "Review accumulated observations and tensions in ops/observations/ and ops/tensions/. Triage each: PROMOTE, IMPLEMENT, METHODOLOGY, ARCHIVE, or KEEP PENDING.",
-    "refactor": "Review vault organization and suggest restructuring improvements.",
-    "tasks": "Show the ops/queue/ task queue. List pending items by status.",
-    "stats": "Report vault metrics: note count in notes/, orphan count, link density, hub sizes, inbox depth.",
-}
-
-# Map plugin subcommand names to the prompt sent to Core (plugin: prefix commands)
-_PLUGIN_PROMPTS: dict[str, str] = {
-    "help": "List all available Sentinel 2nd brain commands grouped by category with one-line descriptions.",
-    "health": "Run full vault diagnostics: orphan notes, dangling wiki links, hub coherence, stale content. Return a structured health report.",
-    "architect": "Review the current vault structure and provide research-backed advice for evolution.",
-    "setup": "Create the initial vault structure for the 2nd brain system: self/, notes/, ops/, inbox/, templates/ directories with stub files.",
-    "tutorial": "Walk me through the 2nd brain system interactively — explain each command and when to use it.",
-    "upgrade": "Check for methodology improvements based on recent usage patterns and observations.",
-    "reseed": "Perform a principled vault restructuring based on accumulated observations.",
-    "recommend": "Analyze the current vault state and provide architecture advice.",
 }
 
 
@@ -185,88 +114,17 @@ async def handle_sentask_subcommand(subcmd: str, args: str, user_id: str) -> str
     if subcmd == "help":
         return SUBCOMMAND_HELP
 
-    # plugin: prefix routing (D-12) — check BEFORE dict lookup
-    if subcmd.startswith("plugin:"):
-        plugin_name = subcmd[7:]  # strip "plugin:" prefix
-        if plugin_name == "ask":
-            if not args.strip():
-                return "Usage: `:plugin:ask <question>` — query the methodology knowledge base."
-            return await call_core(user_id, f"Answer this question about my 2nd brain methodology: {args.strip()}")
-        if plugin_name == "add-domain":
-            if not args.strip():
-                return "Usage: `:plugin:add-domain <domain>` — extend vault with a new domain area."
-            return await call_core(user_id, f"Extend my vault with a new domain area: {args.strip()}")
-        fixed_prompt = _PLUGIN_PROMPTS.get(plugin_name)
-        if fixed_prompt:
-            return await call_core(user_id, fixed_prompt)
-        return f"Unknown plugin command `:{subcmd}`. Try `:plugin:help`."
-
-    # Arg-taking standard commands
     if subcmd == "capture":
         if not args.strip():
             return "Usage: `:capture <text>` — provide something to capture."
-        return await call_core(user_id, f"Capture this insight to my inbox/ for processing: {args.strip()}")
-
-    if subcmd == "seed":
-        if not args.strip():
-            return "Usage: `:seed <text>` — drop raw content into inbox/."
-        return await call_core(user_id, f"Add this raw content to my inbox/ without processing: {args.strip()}")
-
-    if subcmd == "connect":
-        if not args.strip():
-            return "Usage: `:connect <note title>` — find connections for a note."
-        return await call_core(user_id, f"Find connections for the note '{args.strip()}' and add a wikilink to the appropriate hub MOC.")
-
-    if subcmd == "review":
-        if not args.strip():
-            return "Usage: `:review <note title>` — verify note quality."
-        return await call_core(user_id, f"Review note quality for '{args.strip()}': check claim title, YAML frontmatter (description, type, topics, status), and wikilinks. Be precise and literal. Do not elaborate beyond the requested format.")
-
-    if subcmd == "graph":
-        query = args.strip() or "all"
-        prompt = f"Run graph analysis on my vault{': ' + query if query != 'all' else ''}. Report orphans, triangles, link density, and backlinks."
+        prompt = f"Capture this to my inbox: {args.strip()}"
         return await call_core(user_id, prompt)
 
-    if subcmd == "learn":
-        if not args.strip():
-            return "Usage: `:learn <topic>` — research a topic."
-        return await call_core(user_id, f"Research the topic '{args.strip()}' and grow my knowledge graph with new permanent notes.")
-
-    if subcmd == "remember":
-        if not args.strip():
-            return "Usage: `:remember <observation>` — capture a methodology learning."
-        return await call_core(user_id, f"Capture this operational observation to ops/observations/: {args.strip()}")
-
-    if subcmd == "revisit":
-        if not args.strip():
-            return "Usage: `:revisit <note title>` — revisit and update a note."
-        return await call_core(user_id, f"Revisit and update the note '{args.strip()}' with current understanding.")
-
-    # No-arg standard commands (dict lookup)
     fixed_prompt = _SUBCOMMAND_PROMPTS.get(subcmd)
     if fixed_prompt:
         return await call_core(user_id, fixed_prompt)
 
     return f"Unknown command `:{subcmd}`. Try `:help` for available commands."
-
-
-async def _persist_thread_id(thread_id: int) -> None:
-    """Append thread ID to ops/discord-threads.md using PATCH (append). Best-effort."""
-    obsidian_url = os.environ.get("OBSIDIAN_API_URL", "http://host.docker.internal:27124")
-    obsidian_key = os.environ.get("OBSIDIAN_API_KEY", "")
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.patch(
-                f"{obsidian_url}/vault/ops/discord-threads.md",
-                headers={
-                    "Authorization": f"Bearer {obsidian_key}",
-                    "Content-Type": "text/markdown",
-                    "Obsidian-API-Content-Insertion-Position": "end",
-                },
-                content=f"{thread_id}\n".encode("utf-8"),
-            )
-    except Exception as exc:
-        logger.warning(f"Failed to persist thread ID {thread_id}: {exc}")
 
 
 class SentinelBot(discord.Client):
@@ -279,25 +137,8 @@ class SentinelBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self) -> None:
-        """Called once per process startup — safe point to sync command tree and load thread IDs."""
+        """Called once per process startup — safe point to sync command tree."""
         await self.tree.sync()
-        # Load persisted thread IDs from vault (D-04)
-        obsidian_url = os.environ.get("OBSIDIAN_API_URL", "http://host.docker.internal:27124")
-        obsidian_key = os.environ.get("OBSIDIAN_API_KEY", "")
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(
-                    f"{obsidian_url}/vault/ops/discord-threads.md",
-                    headers={"Authorization": f"Bearer {obsidian_key}"},
-                )
-                if resp.status_code == 200:
-                    for line in resp.text.splitlines():
-                        line = line.strip()
-                        if line.isdigit():
-                            SENTINEL_THREAD_IDS.add(int(line))
-                    logger.info(f"Loaded {len(SENTINEL_THREAD_IDS)} persisted thread IDs")
-        except Exception as exc:
-            logger.warning(f"Could not load thread IDs from vault: {exc}")
         logger.info("Slash commands synced globally (up to 1hr propagation).")
 
     async def on_ready(self) -> None:
@@ -365,7 +206,6 @@ async def sentask(interaction: discord.Interaction, message: str) -> None:
             auto_archive_duration=60,
         )
         SENTINEL_THREAD_IDS.add(thread.id)
-        await _persist_thread_id(thread.id)
         logger.info(f"Created thread {thread.id} '{thread_name}' for user {interaction.user.id}")
     except discord.Forbidden as exc:
         logger.error(f"Missing permission to create thread (403): {exc}")
