@@ -60,6 +60,27 @@ class ObsidianClient:
             logger.warning("ObsidianClient.get_user_context failed — skipping context injection")
             return None
 
+    async def read_self_context(self, path: str) -> str:
+        """
+        GET /vault/{path} — reads a single self/ or ops/ context file.
+        Returns empty string on 404 silently (no log entry, per D-02).
+        Returns empty string on any other error, logs warning.
+        Called via asyncio.gather() for all 5 context paths in parallel.
+        """
+        try:
+            resp = await self._client.get(
+                f"{self._base_url}/vault/{path}",
+                headers=self._headers,
+                timeout=5.0,
+            )
+            if resp.status_code == 404:
+                return ""
+            resp.raise_for_status()
+            return resp.text
+        except Exception:
+            logger.warning(f"ObsidianClient.read_self_context({path!r}) failed — skipping")
+            return ""
+
     async def get_recent_sessions(self, user_id: str, limit: int = 3) -> list[str]:
         """
         Hot tier: return content of last `limit` session files for this user_id.
