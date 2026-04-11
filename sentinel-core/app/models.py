@@ -10,6 +10,9 @@ class MessageEnvelope(BaseModel):
         max_length=64,
         pattern=r"^[a-zA-Z0-9_-]+$",
     )
+    source: str | None = None          # Interface identifier (e.g., "discord", "imessage")
+    channel_id: str | None = None      # Interface-specific channel identifier
+    # id, timestamp, attachments, metadata: reserved for future expansion — not currently in use
 
 
 class ResponseEnvelope(BaseModel):
