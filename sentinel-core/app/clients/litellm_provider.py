@@ -5,7 +5,7 @@ Handles LM Studio, Claude, Ollama, and llama.cpp through LiteLLM's unified inter
 Tenacity retry: 3 attempts, exponential backoff 1s→2s→4s.
 Retryable: RateLimitError, ServiceUnavailableError, httpx.ConnectError, httpx.TimeoutException
 Fatal (no retry): AuthenticationError (401), BadRequestError (422), NotFoundError (404)
-Hard timeout: 30 seconds per litellm.acompletion() call (PROV-03).
+Hard timeout: 120 seconds per litellm.acompletion() call (PROV-03 — raised from 30s for local 14B MLX model).
 
 Supply chain note: litellm>=1.83.0 required — versions 1.82.7-1.82.8 were malicious (March 2026).
 """
@@ -66,7 +66,7 @@ class LiteLLMProvider:
         kwargs: dict = {
             "model": self._model_string,
             "messages": messages,
-            "timeout": 30.0,  # hard per-call ceiling (PROV-03)
+            "timeout": 120.0,  # hard per-call ceiling (PROV-03 — raised from 30s for local 14B MLX)
         }
         if self._api_base:
             kwargs["api_base"] = self._api_base

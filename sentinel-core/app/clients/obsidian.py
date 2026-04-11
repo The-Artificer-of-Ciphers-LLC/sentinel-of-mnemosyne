@@ -11,7 +11,7 @@ HTTPS mode: use https://host.docker.internal:27124 with OBSIDIAN_VERIFY_SSL=fals
 MEM-08: search abstraction — keyword search now, vector later without caller changes.
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 

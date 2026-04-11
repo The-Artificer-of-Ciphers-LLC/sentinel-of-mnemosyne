@@ -71,7 +71,7 @@ class PiAdapterClient:
         resp = await self._client.post(
             f"{self._harness_url}/prompt",
             json={"messages": messages},
-            timeout=30.0,  # hard 30s ceiling per call (PROV-03)
+            timeout=120.0,  # hard per-call ceiling (PROV-03 — raised from 30s for local 14B MLX)
         )
         resp.raise_for_status()
         return resp.json()["content"]
