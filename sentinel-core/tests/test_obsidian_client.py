@@ -172,3 +172,80 @@ async def test_check_health_returns_false_on_error(obsidian_connect_error_mock):
         obsidian = ObsidianClient(client, "http://test", "test-api-key")
         result = await obsidian.check_health()
     assert result is False
+
+
+# ---------------------------------------------------------------------------
+# Phase 10 stubs — parallel self/ context reads (MEM-02, MEM-03)
+# RED until Plan 10-03 adds read_self_context() to ObsidianClient.
+# ---------------------------------------------------------------------------
+
+_SELF_PATHS = [
+    "self/identity.md",
+    "self/methodology.md",
+    "self/goals.md",
+    "self/relationships.md",
+    "ops/reminders.md",
+]
+
+
+@pytest.fixture
+def obsidian_self_context_parallel_mock():
+    """MockTransport: returns stub body for each of the 5 self/ paths; 404 otherwise."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        for self_path in _SELF_PATHS:
+            if path.endswith(self_path):
+                return httpx.Response(200, text=f"# Content for {self_path}\n\nStub body.")
+        return httpx.Response(404)
+
+    return httpx.MockTransport(handler)
+
+
+@pytest.fixture
+def obsidian_self_context_one_missing_mock():
+    """MockTransport: returns 404 for self/methodology.md; 200 with body for the other 4."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("self/methodology.md"):
+            return httpx.Response(404)
+        for self_path in _SELF_PATHS:
+            if path.endswith(self_path):
+                return httpx.Response(200, text=f"# Content for {self_path}\n\nStub body.")
+        return httpx.Response(404)
+
+    return httpx.MockTransport(handler)
+
+
+async def test_get_self_context_parallel_all_present(obsidian_self_context_parallel_mock):
+    """read_self_context() returns 5 non-empty strings when all self/ files are present.
+
+    RED until Plan 10-03 adds read_self_context() to ObsidianClient.
+    """
+    async with AsyncClient(
+        transport=obsidian_self_context_parallel_mock, base_url="http://test"
+    ) as client:
+        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        # read_self_context() does not yet exist — AttributeError is the RED failure
+        result = await obsidian.read_self_context()
+    assert isinstance(result, list), "read_self_context() must return a list"
+    assert len(result) == 5, f"Expected 5 results, got {len(result)}"
+    assert all(r for r in result), "All 5 paths present — no result should be empty"
+
+
+async def test_get_self_context_parallel_one_404(obsidian_self_context_one_missing_mock):
+    """read_self_context() returns empty string for a missing file; others are non-empty.
+
+    RED until Plan 10-03 adds read_self_context() to ObsidianClient.
+    """
+    async with AsyncClient(
+        transport=obsidian_self_context_one_missing_mock, base_url="http://test"
+    ) as client:
+        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        result = await obsidian.read_self_context()
+    assert isinstance(result, list), "read_self_context() must return a list"
+    assert len(result) == 5, f"Expected 5 results, got {len(result)}"
+    # methodology.md returns 404 — its slot must be empty string or None
+    non_empty = [r for r in result if r]
+    assert len(non_empty) == 4, "Exactly 4 paths present; 1 missing → 4 non-empty results"

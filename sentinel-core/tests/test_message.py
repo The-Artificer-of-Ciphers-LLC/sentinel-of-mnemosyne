@@ -858,6 +858,43 @@ async def test_warm_tier_both_tiers_five_messages(obsidian_with_context_and_sear
 
 
 # ---------------------------------------------------------------------------
+# Wave 6 tests — Phase 10 session path migration (ops/sessions/)
+# RED until Plan 10-02 changes message.py line 216 to use ops/sessions/.
+# ---------------------------------------------------------------------------
+
+
+async def test_session_write_uses_ops_sessions_path(pi_harness_mock):
+    """write_session_summary() is called with a path under ops/sessions/.
+
+    RED until Plan 10-02 updates the path in sentinel-core/app/routes/message.py.
+    """
+    mock_obsidian = AsyncMock()
+    mock_obsidian.get_user_context.return_value = None
+    mock_obsidian.get_recent_sessions.return_value = []
+    mock_obsidian.write_session_summary.return_value = None
+    mock_obsidian.search_vault.return_value = []
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        pi_http = _make_client(pi_harness_mock)
+        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
+        app.state.obsidian_client = mock_obsidian
+
+        resp = await client.post(
+            "/message",
+            json={"content": "hello", "user_id": "trekkie"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+    mock_obsidian.write_session_summary.assert_called_once()
+    path_arg = mock_obsidian.write_session_summary.call_args[0][0]
+    assert "ops/sessions" in path_arg, (
+        f"Expected session write path to contain 'ops/sessions', got: {path_arg!r} "
+        "(RED — expected until Plan 10-02 changes message.py)"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Wave 5 tests — Phase 9 D-01 narrow bare except in Pi call block
 # ---------------------------------------------------------------------------
 
