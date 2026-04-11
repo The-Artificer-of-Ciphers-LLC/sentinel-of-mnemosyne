@@ -6,6 +6,10 @@ os.environ.setdefault("SENTINEL_API_KEY", "test-key-for-pytest")
 
 from app.main import app
 
+# Sentinel value used by teardown to distinguish "attribute was absent" from
+# "attribute was set to None".
+_MISSING = object()
+
 
 async def test_auth_rejects_missing_key():
     """POST /message without X-Sentinel-Key returns 401 Unauthorized."""
@@ -44,36 +48,62 @@ async def test_auth_accepts_valid_key():
 
     from app.services.injection_filter import InjectionFilter
 
-    # Seed app.state so the route handler doesn't crash on state access
-    mock_obsidian = AsyncMock()
-    mock_obsidian.get_user_context.return_value = None
-    mock_obsidian.get_recent_sessions.return_value = []
-    mock_obsidian.write_session_summary.return_value = None
-    app.state.obsidian_client = mock_obsidian
-    app.state.context_window = 8192
-    app.state.settings = settings
-    app.state.injection_filter = InjectionFilter()
-    mock_output_scanner = AsyncMock()
-    mock_output_scanner.scan.return_value = (True, None)
-    app.state.output_scanner = mock_output_scanner
+    _state_keys = (
+        "obsidian_client",
+        "context_window",
+        "settings",
+        "injection_filter",
+        "output_scanner",
+        "pi_adapter",
+        "ai_provider",
+    )
+    # Save originals so we can restore them after the test.
+    _orig = {k: getattr(app.state, k, _MISSING) for k in _state_keys}
 
-    # Pi harness mock — connect error so route falls through to ai_provider
-    def pi_handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("not running in test")
+    try:
+        # Seed app.state so the route handler doesn't crash on state access
+        mock_obsidian = AsyncMock()
+        mock_obsidian.get_user_context.return_value = None
+        mock_obsidian.get_recent_sessions.return_value = []
+        mock_obsidian.write_session_summary.return_value = None
+        app.state.obsidian_client = mock_obsidian
+        app.state.context_window = 8192
+        app.state.settings = settings
+        app.state.injection_filter = InjectionFilter()
+        mock_output_scanner = AsyncMock()
+        mock_output_scanner.scan.return_value = (True, None)
+        app.state.output_scanner = mock_output_scanner
 
-    pi_http = httpx.AsyncClient(transport=httpx.MockTransport(pi_handler), base_url="http://pi-harness")
-    app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
+        # Pi harness mock — connect error so route falls through to ai_provider
+        def pi_handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("not running in test")
 
-    # AI provider mock — returns a response so route completes successfully
-    mock_ai = AsyncMock()
-    mock_ai.complete = AsyncMock(return_value="Auth test response")
-    app.state.ai_provider = mock_ai
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post(
-            "/message",
-            json={"content": "hello", "user_id": "test"},
-            headers={"X-Sentinel-Key": "test-key-for-pytest"},
+        pi_http = httpx.AsyncClient(
+            transport=httpx.MockTransport(pi_handler), base_url="http://pi-harness"
         )
-    # Auth passed — downstream may 200, 422, or 503 but NOT 401
-    assert resp.status_code != 401
+        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
+
+        # AI provider mock — returns a response so route completes successfully
+        mock_ai = AsyncMock()
+        mock_ai.complete = AsyncMock(return_value="Auth test response")
+        app.state.ai_provider = mock_ai
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/message",
+                json={"content": "hello", "user_id": "test"},
+                headers={"X-Sentinel-Key": "test-key-for-pytest"},
+            )
+        # Auth passed — downstream may 200, 422, or 503 but NOT 401
+        assert resp.status_code != 401
+    finally:
+        # Restore every attribute to its pre-test value so mutations don't
+        # bleed into subsequent tests running in the same process.
+        for k, v in _orig.items():
+            if v is _MISSING:
+                try:
+                    delattr(app.state, k)
+                except AttributeError:
+                    pass
+            else:
+                setattr(app.state, k, v)
