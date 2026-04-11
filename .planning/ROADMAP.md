@@ -347,3 +347,20 @@ Plans:
   4. 05-VERIFICATION.md created for Phase 05 (AI Security)
   5. 07-VERIFICATION.md created for Phase 07 (MEM-08/Warm Tier)
 **Plans:** TBD
+
+### Phase 25: v0.40 Pre-Beta Refactoring
+**Goal:** Eliminate all duplicates (DUP-01–05), complete all stubs (STUB-01–08), fix architecture contradictions (CONTRA-01–04), and implement RD-01 through RD-10 as defined in V040-REFACTORING-DIRECTIVE.md. Ships when all 10 acceptance criteria in Section 10 are true.
+**Depends on:** Phase 23, Phase 24
+**Requirements:** SEC-04
+**Success Criteria** (what must be TRUE):
+  1. `grep -rn "def call_core"` returns 0 results in interfaces/
+  2. `grep -rn "NotImplementedError"` returns 0 results in app/
+  3. `pytest` in sentinel-core exits 0; `vitest run` in pi-harness exits 0
+  4. All test files listed in V040-REFACTORING-DIRECTIVE.md §9 exist and pass
+  5. `docker compose config` succeeds with no warnings
+  6. `security/pentest/jailbreak_baseline.py` passes; SEC-04 checkbox checked in REQUIREMENTS.md
+  7. Every architecture contradiction in V040-REFACTORING-DIRECTIVE.md §4 resolved (docs match code)
+  8. `shared/sentinel_client.py` exists and is imported by both interfaces; no inline `call_core()` remains
+  9. All 10 directives (RD-01–RD-10) implemented per V040-REFACTORING-DIRECTIVE.md §5
+  10. Route registry matches §7 exactly: 4 routes in sentinel-core, 3 in pi-harness
+**Plans:** TBD
