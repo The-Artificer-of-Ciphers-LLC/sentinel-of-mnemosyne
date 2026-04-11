@@ -8,20 +8,24 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 
 - [x] **Phase 1: Core Loop** — Pi harness + Sentinel Core FastAPI, end-to-end AI response
 - [x] **Phase 2: Memory Layer** — Obsidian integration, context retrieval, session summaries, cross-session memory (completed 2026-04-10)
-- [ ] **Phase 3: Interfaces** — Discord bot, Apple Messages bridge, X-Sentinel-Key auth
+- [x] **Phase 3: Interfaces** — Discord bot, Apple Messages bridge, X-Sentinel-Key auth (completed 2026-04-10)
 - [x] **Phase 4: AI Provider** — Multi-provider support, retry logic, fallback, model registry (completed 2026-04-10)
 - [x] **Phase 5: AI Security** — Prompt injection hardening, OWASP LLM Top 10 audit, sensitive data leakage review (completed 2026-04-10)
-- [ ] **Phase 6: Knowledge Migration Tool** — Import from Notion/Roam/Logseq, classify, review, restructure to Sentinel vault conventions
-- [ ] **Phase 7: Pathfinder 2e Module** — NPC management, session notes, dialogue generation
-- [ ] **Phase 8: Music Lesson Module** — Practice logging, history queries, Obsidian vault structure
-- [ ] **Phase 9: Coder Interface** — Separate Pi environment, cloud routing, module scaffolding
-- [ ] **Phase 10: Personal Finance Module** — OFX import, categorization, budgets, natural language queries
-- [ ] **Phase 11: Autonomous Stock Trader (Paper)** — Alpaca paper trading, rules enforcement, 30-day run
-- [ ] **Phase 12: Live Trading** — Live keys, human approval flow, weekly performance summary
-- [ ] **Phase 13: Community & Polish** — Contributor docs, MODULE-SPEC.md, GitHub structure
-- [ ] **Phase 14: Messaging Alternatives** — Business registration, Twilio/Vonage, Apple Messages for Business, receive-without-texting options
-- [ ] **Phase 15: README & Licensing** — Keep README current as phases ship, audit dependency licenses, MIT vs Apache 2.0 vs AGPL
-- [ ] **Phase 16: Pi-mono Upgrade Strategy** — Regression test harness for pi-adapter.ts, red/green migration, rollback strategy
+- [ ] **Phase 6: Discord Deployment Regression Fix** — Restore Discord container include (IFACE-02/03/04 regression)
+- [ ] **Phase 7: Phase 2 Verification + MEM-08 + MEM-05 Warm Tier** — Generate Phase 2 VERIFICATION.md, wire search_vault() callers
+- [ ] **Phase 8: Requirements Traceability Repair** — Add SEC-01..04, fix stale checkboxes, Nyquist validation for phases 1/3/4
+- [ ] **Phase 9: Tech Debt Cleanup** — Fix Pi bare except, remove dead send_prompt()
+- [ ] **Phase 10: Knowledge Migration Tool** — Import from Notion/Roam/Logseq, classify, review, restructure to Sentinel vault conventions
+- [ ] **Phase 11: Pathfinder 2e Module** — NPC management, session notes, dialogue generation
+- [ ] **Phase 12: Music Lesson Module** — Practice logging, history queries, Obsidian vault structure
+- [ ] **Phase 13: Coder Interface** — Separate Pi environment, cloud routing, module scaffolding
+- [ ] **Phase 14: Personal Finance Module** — OFX import, categorization, budgets, natural language queries
+- [ ] **Phase 15: Autonomous Stock Trader (Paper)** — Alpaca paper trading, rules enforcement, 30-day run
+- [ ] **Phase 16: Live Trading** — Live keys, human approval flow, weekly performance summary
+- [ ] **Phase 17: Community & Polish** — Contributor docs, MODULE-SPEC.md, GitHub structure
+- [ ] **Phase 18: Messaging Alternatives** — Business registration, Twilio/Vonage, Apple Messages for Business, receive-without-texting options
+- [ ] **Phase 19: README & Licensing** — Keep README current as phases ship, audit dependency licenses, MIT vs Apache 2.0 vs AGPL
+- [ ] **Phase 20: Pi-mono Upgrade Strategy** — Regression test harness for pi-adapter.ts, red/green migration, rollback strategy
 
 ## Phase Details
 
@@ -103,13 +107,63 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Wave 1: InjectionFilter service + tests, OutputScanner service + tests, OWASP LLM Top 10 checklist
-- [ ] 05-02-PLAN.md — Wave 2: Wire InjectionFilter + OutputScanner into main.py lifespan and POST /message pipeline
-- [ ] 05-03-PLAN.md — Wave 2: Pen test agent container (garak + ofelia), docker-compose.yml include entry
+- [x] 05-01-PLAN.md — Wave 1: InjectionFilter service + tests, OutputScanner service + tests, OWASP LLM Top 10 checklist
+- [x] 05-02-PLAN.md — Wave 2: Wire InjectionFilter + OutputScanner into main.py lifespan and POST /message pipeline
+- [x] 05-03-PLAN.md — Wave 3: Pen test agent container (garak + ofelia), docker-compose.yml include entry
 
-### Phase 6: Knowledge Migration Tool
+### Phase 6: Discord Deployment Regression Fix
+**Goal:** Restore the Discord container to the live docker-compose.yml. The include was verified uncommented at Phase 3 close but was commented out during Phase 5 work. `docker compose up` must start the Discord bot.
+**Depends on:** Phase 5
+**Gap Closure:** Closes IFACE-02, IFACE-03, IFACE-04 regression; restores cross-phase integration from docker-compose.yml root to interfaces/discord/compose.yml
+**Requirements:** IFACE-02, IFACE-03, IFACE-04
+**Success Criteria** (what must be TRUE):
+  1. `docker compose up` starts the Discord bot container without manual intervention
+  2. A Discord message receives an AI response end-to-end
+  3. Slash command deferred acknowledgement completes within 3 seconds
+**Plans:** 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Wave 1: Uncomment discord include in docker-compose.yml
+- [ ] 06-02-PLAN.md — Wave 2: Integration test for IFACE-02/03/04 + DISCORD_TEST_CHANNEL_ID in .env.example
+
+### Phase 7: Phase 2 Verification + MEM-08 + MEM-05 Warm Tier
+**Goal:** Close the three Phase 2 open items: generate the missing VERIFICATION.md artifact, wire search_vault() into the production message pipeline (satisfies MEM-08 and activates the warm tier for MEM-05), and confirm tiered retrieval is actually functional end-to-end.
+**Depends on:** Phase 5
+**Gap Closure:** Closes Phase 2 VERIFICATION.md blocker; closes MEM-08 (search abstraction with production callers); closes MEM-05 warm tier gap (search_vault wired, not just defined)
+**Requirements:** MEM-05, MEM-08
+**Success Criteria** (what must be TRUE):
+  1. Phase 2 VERIFICATION.md exists and passes gsd-verifier checks
+  2. search_vault() is called from the production message pipeline (warm tier active)
+  3. Hot → warm tier escalation path exercised in at least one test
+  4. MEM-08 checkbox updated to `[x]` in REQUIREMENTS.md
+**Plans:** TBD
+
+### Phase 8: Requirements Traceability Repair
+**Goal:** Make REQUIREMENTS.md an accurate, complete record of the milestone. SEC-01..04 were already added as part of gap closure phase creation. Fix all stale checkboxes and run Nyquist validation on the three non-compliant phases.
+**Depends on:** Phase 6, Phase 7
+**Gap Closure:** Corrects stale CORE/IFACE/PROV checkboxes; achieves Nyquist compliance for phases 1, 3, 4; corrects all traceability phase numbers
+**Requirements:** SEC-01, SEC-02, SEC-03, SEC-04
+**Success Criteria** (what must be TRUE):
+  1. SEC-01..04 checkboxes show `[x]` (SEC-01..03 already satisfied; SEC-04 satisfied after pen test baseline confirmed)
+  2. CORE-01..07, IFACE-01..06, PROV-01..05 checkboxes show `[x]`
+  3. ROADMAP.md Phase 3 checkbox shows `[x]`
+  4. Phases 1, 3, 4 each have a VALIDATION.md with `nyquist_compliant: true`
+  5. REQUIREMENTS.md coverage count and all traceability phase numbers accurate
+**Plans:** TBD
+
+### Phase 9: Tech Debt Cleanup
+**Goal:** Fix code quality issues identified in the v1.0 audit. Must be resolved before implementing any new features.
+**Depends on:** Phase 6, Phase 7
+**Gap Closure:** Closes 2 medium/low severity tech debt items from audit
+**Requirements:** — (no new requirements; correctness fixes to existing code)
+**Success Criteria** (what must be TRUE):
+  1. `message.py` bare `except Exception` replaced with targeted exception handling — `KeyError` on malformed Pi JSON surfaces as a protocol error, not a silent fallthrough to ai_provider
+  2. Dead method `send_prompt()` removed from `pi_adapter.py`; no callers existed, deletion confirmed by grep
+**Plans:** TBD
+
+### Phase 10: Knowledge Migration Tool
 **Goal:** Build a migration pipeline that ingests data from existing personal knowledge systems (Notion, Roam Research, Logseq, legacy Obsidian vaults, nanoclaw, etc.), classifies and categorizes content, presents it for user review, then restructures it to match Sentinel vault conventions.
-**Depends on:** Phase 2
+**Depends on:** Phase 9
 **Requirements:** TBD
 **Success Criteria** (what must be TRUE):
   1. Source data from at least one system (Notion JSON export or Logseq markdown) parsed without data loss
@@ -119,12 +173,9 @@ Plans:
   5. Dry-run mode shows what would be written without committing
 **Plans:** TBD
 
-Plans:
-- [ ] TBD
-
-### Phase 7: Pathfinder 2e Module
+### Phase 11: Pathfinder 2e Module
 **Goal**: DM co-pilot. Create and query NPCs, capture session notes, generate in-character dialogue.
-**Depends on**: Phase 3
+**Depends on**: Phase 9
 **Requirements**: PF2E-01, PF2E-02, PF2E-03, PF2E-04, PF2E-05
 **Success Criteria** (what must be TRUE):
   1. NPC created via interface, saved to `/pathfinder/npcs/{name}.md`
@@ -134,9 +185,9 @@ Plans:
   5. Module added to system via single compose include entry
 **Plans**: TBD
 
-### Phase 8: Music Lesson Module
+### Phase 12: Music Lesson Module
 **Goal**: Practice journal. Log sessions, query history in natural language.
-**Depends on**: Phase 3
+**Depends on**: Phase 9
 **Requirements**: MUSIC-01, MUSIC-02, MUSIC-03
 **Success Criteria** (what must be TRUE):
   1. Practice session logged via Discord, written to `/music/practice-log/{date}.md`
@@ -144,9 +195,9 @@ Plans:
   3. `/music/` vault structure established and documented
 **Plans**: TBD
 
-### Phase 9: Coder Interface
+### Phase 13: Coder Interface
 **Goal**: Separate coding environment, cloud routing for heavy tasks, module scaffolding generator.
-**Depends on**: Phase 4
+**Depends on**: Phase 9
 **Requirements**: CODER-01, CODER-02, CODER-03
 **Success Criteria** (what must be TRUE):
   1. Coder Pi environment isolated from production Sentinel
@@ -154,9 +205,9 @@ Plans:
   3. User can request a new module stub and receive a populated directory
 **Plans**: TBD
 
-### Phase 10: Personal Finance Module
+### Phase 14: Personal Finance Module
 **Goal**: OFX import, AI categorization with learning, budget alerts, natural language queries, monthly reports.
-**Depends on**: Phase 3
+**Depends on**: Phase 9
 **Requirements**: FIN-01, FIN-02, FIN-03, FIN-04, FIN-05, FIN-06, FIN-07, FIN-08
 **Success Criteria** (what must be TRUE):
   1. OFX file imported via Discord, duplicates skipped across imports
@@ -167,9 +218,9 @@ Plans:
   6. Monthly summary auto-generated at month end
 **Plans**: TBD
 
-### Phase 11: Autonomous Stock Trader (Paper)
+### Phase 15: Autonomous Stock Trader (Paper)
 **Goal**: 30-day paper trading run. Personal rules enforced. Full rationale audit trail.
-**Depends on**: Phase 4
+**Depends on**: Phase 9
 **Requirements**: TRADE-01, TRADE-02, TRADE-03, TRADE-04, TRADE-05, TRADE-06, TRADE-07
 **Success Criteria** (what must be TRUE):
   1. Alpaca paper trades placed and queried via alpaca-py
@@ -180,9 +231,9 @@ Plans:
   6. 30-day run completed with human-readable logs
 **Plans**: TBD
 
-### Phase 12: Live Trading
+### Phase 16: Live Trading
 **Goal**: Live trading with human approval gate. Separate keys, weekly performance summary.
-**Depends on**: Phase 11 (30-day paper run complete)
+**Depends on**: Phase 15 (30-day paper run complete)
 **Requirements**: TRADE-08, TRADE-09, TRADE-10
 **Success Criteria** (what must be TRUE):
   1. Live and paper API keys use distinct env var names (no accidental cross-wiring)
@@ -190,9 +241,9 @@ Plans:
   3. Weekly P&L summary delivered to user and written to Obsidian
 **Plans**: TBD
 
-### Phase 13: Community & Polish
+### Phase 17: Community & Polish
 **Goal**: Open for contributors. Documented setup, module spec, GitHub structure.
-**Depends on**: Phase 12
+**Depends on**: Phase 16
 **Requirements**: COMM-01, COMM-02, COMM-03
 **Success Criteria** (what must be TRUE):
   1. New contributor can set up the system from README alone
@@ -200,9 +251,9 @@ Plans:
   3. GitHub repo has labeled issues, PR template, accurate README
 **Plans**: TBD
 
-### Phase 14: Messaging Alternatives
+### Phase 18: Messaging Alternatives
 **Goal:** Evaluate and implement alternatives to the personal Apple Messages bridge — business SMS/iMessage registration, dedicated number options, or cross-platform messaging that doesn't require texting a personal number first.
-**Depends on:** Phase 3
+**Depends on:** Phase 9
 **Requirements:** TBD
 **Success Criteria** (what must be TRUE):
   1. Options evaluated: Apple Messages for Business, Twilio/Vonage, WhatsApp Business API
@@ -210,26 +261,20 @@ Plans:
   3. Receive-without-texting-first capability confirmed working
 **Plans:** TBD
 
-Plans:
-- [ ] TBD
-
-### Phase 15: README & Licensing
+### Phase 19: README & Licensing
 **Goal:** Keep README.md accurate as phases ship and lock in the right open-source license given the dependency stack (pi-mono, discord.py, alpaca-py) and potential contributor community.
-**Depends on:** Phase 12
+**Depends on:** Phase 16
 **Requirements:** TBD
 **Success Criteria** (what must be TRUE):
   1. License chosen and committed (MIT, Apache 2.0, or AGPL) with rationale documented
   2. Dependency license audit complete — no incompatibilities
   3. README covers setup, architecture, and interface configuration accurately for the shipped phases
-  4. CONTRIBUTING.md and CODE_OF_CONDUCT.md present (can be stubs ahead of Phase 13)
+  4. CONTRIBUTING.md and CODE_OF_CONDUCT.md present (can be stubs ahead of Phase 17)
 **Plans:** TBD
 
-Plans:
-- [ ] TBD
-
-### Phase 16: Pi-mono Upgrade Strategy
+### Phase 20: Pi-mono Upgrade Strategy
 **Goal:** Safe, repeatable process for adopting new pi-mono releases — regression test suite for the JSONL RPC adapter, red/green parallel validation, and documented rollback path.
-**Depends on:** Phase 9
+**Depends on:** Phase 13
 **Requirements:** TBD
 **Success Criteria** (what must be TRUE):
   1. Regression test harness covers pi-adapter.ts RPC protocol (mock pi subprocess, verify JSONL contract)
@@ -237,9 +282,3 @@ Plans:
   3. Rollback procedure documented and tested
   4. Upgrade CI workflow: pin → test → promote
 **Plans:** TBD
-
-Plans:
-- [ ] TBD
-
-Plans:
-- [ ] TBD
