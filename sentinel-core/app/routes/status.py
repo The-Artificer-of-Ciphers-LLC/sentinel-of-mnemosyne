@@ -2,7 +2,7 @@
 
 import asyncio
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Path, Request
 from starlette.responses import JSONResponse
 
 router = APIRouter()
@@ -33,7 +33,10 @@ async def system_status(request: Request) -> JSONResponse:
 
 
 @router.get("/context/{user_id}")
-async def debug_context(request: Request, user_id: str) -> JSONResponse:
+async def debug_context(
+    request: Request,
+    user_id: str = Path(..., pattern=r"^[a-zA-Z0-9_-]+$"),
+) -> JSONResponse:
     obsidian = request.app.state.obsidian_client
     self_paths = [
         "self/identity.md",

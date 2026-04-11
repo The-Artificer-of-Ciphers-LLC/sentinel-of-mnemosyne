@@ -51,11 +51,21 @@ _sentinel_client = SentinelCoreClient(
 
 
 def _decode_attributed_body(blob: bytes) -> str | None:
-    """Decode macOS Ventura+ NSKeyedArchiver attributedBody blob to plain text."""
+    """Decode macOS Ventura+ NSKeyedArchiver attributedBody blob to plain text.
+
+    Real attributedBody blobs are NSKeyedArchiver archives. The plain text
+    lives inside the $objects array (at the entry that contains NS.string),
+    not at the root level of the parsed plist.
+    """
     try:
         import plistlib
 
         plist = plistlib.loads(blob)
+        # NSKeyedArchiver format: walk $objects and return the first NS.string found
+        for obj in plist.get("$objects", []):
+            if isinstance(obj, dict) and "NS.string" in obj:
+                return obj["NS.string"]
+        # Fallback for flat/synthetic test plists
         return plist.get("NS.string", None)
     except Exception:
         return None
@@ -122,7 +132,8 @@ async def run_bridge() -> None:
     # Full Disk Access guard — fail-closed before any polling begins (D-05)
     chat_db = Path.home() / "Library" / "Messages" / "chat.db"
     try:
-        chat_db.open("rb").close()
+        with chat_db.open("rb"):
+            pass
     except PermissionError:
         sys.stderr.write(
             "\n[iMessage Bridge] Full Disk Access required.\n"

@@ -297,15 +297,15 @@ async def test_safe_request_logs_warning_for_list_default(mock_obsidian_client, 
     assert "op_name" in caplog.text
 
 
-async def test_safe_request_no_log_for_bool_default(mock_obsidian_client, caplog):
-    """Bool default (check_health pattern) suppresses the warning log."""
+async def test_safe_request_silent_suppresses_log(mock_obsidian_client, caplog):
+    """silent=True suppresses the warning log (used by check_health)."""
     import logging
 
     async def coro():
         raise Exception("err")
 
     with caplog.at_level(logging.WARNING):
-        await mock_obsidian_client._safe_request(coro(), False, "check_health")
+        await mock_obsidian_client._safe_request(coro(), False, "check_health", silent=True)
     assert "check_health" not in caplog.text
 
 

@@ -58,8 +58,8 @@ __all__ = [
     "_persist_thread_id",
 ]
 
-DISCORD_BOT_TOKEN = os.environ["DISCORD_BOT_TOKEN"]
-SENTINEL_API_KEY = os.environ["SENTINEL_API_KEY"]
+DISCORD_BOT_TOKEN: str = os.environ.get("DISCORD_BOT_TOKEN", "")
+SENTINEL_API_KEY: str = os.environ.get("SENTINEL_API_KEY", "")
 SENTINEL_CORE_URL = os.environ.get("SENTINEL_CORE_URL", "http://sentinel-core:8000")
 DISCORD_ALLOWED_CHANNELS_RAW = os.environ.get("DISCORD_ALLOWED_CHANNELS", "")
 

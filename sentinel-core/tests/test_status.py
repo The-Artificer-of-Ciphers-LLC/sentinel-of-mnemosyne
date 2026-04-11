@@ -93,7 +93,7 @@ async def test_status_includes_ai_provider(mock_obsidian, mock_http_client):
 
 
 async def test_status_requires_auth():
-    """GET /status without X-Sentinel-Key returns 403."""
+    """GET /status without X-Sentinel-Key returns 401."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/status")
 
@@ -122,7 +122,7 @@ async def test_context_includes_recent_sessions_count():
 
 
 async def test_context_requires_auth():
-    """GET /context/testuser without X-Sentinel-Key returns 403."""
+    """GET /context/testuser without X-Sentinel-Key returns 401."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/context/testuser")
 

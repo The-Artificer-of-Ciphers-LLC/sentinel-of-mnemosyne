@@ -28,12 +28,12 @@ class ObsidianClient:
             {"Authorization": f"Bearer {api_key}"} if api_key else {}
         )
 
-    async def _safe_request(self, coro, default, operation: str):
+    async def _safe_request(self, coro, default, operation: str, silent: bool = False):
         """Execute a coroutine, returning default on any failure."""
         try:
             return await coro
         except Exception as exc:
-            if not isinstance(default, bool):
+            if not silent:
                 logger.warning("%s failed: %s", operation, exc)
             return default
 
@@ -48,7 +48,7 @@ class ObsidianClient:
             )
             return resp.status_code < 500
 
-        return await self._safe_request(_inner(), False, "check_health")
+        return await self._safe_request(_inner(), False, "check_health", silent=True)
 
     async def get_user_context(self, user_id: str) -> str | None:
         """
@@ -103,7 +103,7 @@ class ObsidianClient:
         async def _inner():
             now = datetime.now(timezone.utc)
             dates = [now.strftime("%Y-%m-%d")]
-            yesterday = now.replace(day=now.day - 1) if now.day > 1 else now
+            yesterday = now - timedelta(days=1)
             dates.append(yesterday.strftime("%Y-%m-%d"))
 
             candidates: list[tuple[str, str]] = []  # (sort_key, path)
