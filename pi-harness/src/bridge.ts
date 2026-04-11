@@ -9,7 +9,7 @@
  */
 
 import Fastify from 'fastify';
-import { spawnPi, sendPrompt, getPiHealth } from './pi-adapter';
+import { spawnPi, sendPrompt, getPiHealth, resetSession } from './pi-adapter';
 
 const app = Fastify({ logger: true });
 
@@ -63,6 +63,20 @@ app.post<{ Body: PromptBody }>('/prompt', async (request, reply) => {
     if (errMessage.includes('timeout')) {
       return reply.code(504).send({ error: errMessage });
     }
+    return reply.code(500).send({ error: errMessage });
+  }
+});
+
+app.post('/session/reset', async (_request, reply) => {
+  const health = getPiHealth();
+  if (!health.alive) {
+    return reply.code(503).send({ error: 'Pi subprocess not alive' });
+  }
+  try {
+    await resetSession();
+    return reply.send({ ok: true });
+  } catch (err: unknown) {
+    const errMessage = err instanceof Error ? err.message : 'Unknown error';
     return reply.code(500).send({ error: errMessage });
   }
 });

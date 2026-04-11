@@ -157,6 +157,28 @@ export function sendPrompt(message: string): Promise<string> {
   });
 }
 
+/**
+ * Reset the pi-coding-agent session.
+ * Sends {"type": "new_session"} via stdin — fire-and-forget (no agent_end event follows).
+ * Rejects if pi subprocess is not alive.
+ */
+export function resetSession(): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (!piProcess) {
+      reject(new Error('Pi subprocess not alive'));
+      return;
+    }
+    const cmd = JSON.stringify({ type: 'new_session' }) + '\n';
+    piProcess.stdin!.write(cmd, (err) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
 export function getPiHealth(): PiHealth {
   return {
     alive: piProcess !== null,

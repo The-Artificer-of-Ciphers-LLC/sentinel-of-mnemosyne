@@ -99,6 +99,10 @@ async def post_message(
     pi_adapter = request.app.state.pi_adapter
     settings = request.app.state.settings
 
+    # Reset pi-harness session before each exchange so accumulated history
+    # never exceeds one exchange worth of context (prevents OOM on 14B model).
+    await pi_adapter.reset_session()
+
     try:
         content = await pi_adapter.send_messages(messages)
     except Exception:

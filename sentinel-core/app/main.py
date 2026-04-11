@@ -128,7 +128,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         f"(fallback: {settings.ai_fallback_provider})"
     )
 
-    app.state.pi_adapter = PiAdapterClient(http_client, settings.pi_harness_url)
+    app.state.pi_adapter = PiAdapterClient(
+        http_client,
+        settings.pi_harness_url,
+        timeout_s=float(settings.lmstudio_timeout_s),
+    )
 
     # Obsidian client — degrades gracefully if Obsidian is not running
     obsidian_client = ObsidianClient(
