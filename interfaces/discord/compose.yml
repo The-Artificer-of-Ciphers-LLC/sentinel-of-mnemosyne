@@ -7,4 +7,8 @@ services:
       dockerfile: interfaces/discord/Dockerfile
     env_file:
       - ../../.env
+    secrets:
+      - discord_bot_token
+      - sentinel_api_key
+      - obsidian_api_key
     restart: unless-stopped

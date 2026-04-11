@@ -17,6 +17,15 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    secrets:
+      - obsidian_api_key
+      - sentinel_api_key
+      - lmstudio_api_key
+      - anthropic_api_key
+      - alpaca_paper_api_key
+      - alpaca_paper_secret_key
+      - alpaca_live_api_key
+      - alpaca_live_secret_key
     depends_on:
       pi-harness:
         condition: service_started

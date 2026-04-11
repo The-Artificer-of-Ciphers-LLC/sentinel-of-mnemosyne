@@ -20,3 +20,26 @@ include:
 
 # Future modules (uncomment when phase is ready):
 #   - path: modules/pathfinder/compose.yml
+
+# Top-level secrets block — maps each secret name to its file on the host.
+# Secret files live in secrets/ (gitignored). See secrets/README.md.
+# Compose v2 file-based secrets: mounted at /run/secrets/<name> inside containers.
+secrets:
+  obsidian_api_key:
+    file: ./secrets/obsidian_api_key
+  sentinel_api_key:
+    file: ./secrets/sentinel_api_key
+  discord_bot_token:
+    file: ./secrets/discord_bot_token
+  lmstudio_api_key:
+    file: ./secrets/lmstudio_api_key
+  anthropic_api_key:
+    file: ./secrets/anthropic_api_key
+  alpaca_paper_api_key:
+    file: ./secrets/alpaca_paper_api_key
+  alpaca_paper_secret_key:
+    file: ./secrets/alpaca_paper_secret_key
+  alpaca_live_api_key:
+    file: ./secrets/alpaca_live_api_key
+  alpaca_live_secret_key:
+    file: ./secrets/alpaca_live_secret_key
