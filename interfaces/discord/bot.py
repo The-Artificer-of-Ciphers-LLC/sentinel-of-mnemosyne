@@ -162,6 +162,34 @@ async def _call_core(user_id: str, message: str) -> str:
         return await _sentinel_client.send_message(user_id, message, http_client)
 
 
+_HELP_KEYWORDS = frozenset({"commands", "help", "what can you do", "what do you do", "how do i use"})
+
+
+async def _route_message(user_id: str, message: str) -> str:
+    """
+    Unified message router used by both /sentask and on_message thread replies.
+
+    Routing order:
+    1. Colon-prefixed subcommands (`:help`, `:capture`, etc.)
+    2. Natural-language help intent (short message containing help/commands keywords)
+    3. Everything else → AI via _call_core
+    """
+    if message.startswith(":"):
+        parts = message[1:].split(" ", 1)
+        subcmd = parts[0].lower()
+        args = parts[1] if len(parts) > 1 else ""
+        return await handle_sentask_subcommand(subcmd, args, user_id)
+
+    # Intercept natural-language help queries locally — never send to AI.
+    # Prevents Obsidian session context from producing leaked/irrelevant responses
+    # when the user is just asking what the bot can do.
+    msg_lower = message.lower()
+    if len(message) < 120 and any(kw in msg_lower for kw in _HELP_KEYWORDS):
+        return SUBCOMMAND_HELP
+
+    return await _call_core(user_id, message)
+
+
 async def handle_sentask_subcommand(subcmd: str, args: str, user_id: str) -> str:
     """
     Route `:subcommand` prefixed messages to the correct handler.
@@ -315,7 +343,7 @@ class SentinelBot(discord.Client):
         logger.info(f"Thread reply from {user_id} in thread {message.channel.id}: {message.content[:60]}")
 
         async with message.channel.typing():
-            ai_response = await _call_core(user_id, message.content)
+            ai_response = await _route_message(user_id, message.content)
 
         await message.channel.send(ai_response)
 
@@ -363,15 +391,9 @@ async def sentask(interaction: discord.Interaction, message: str) -> None:
     except discord.HTTPException as exc:
         logger.error(f"Failed to create thread (HTTP {exc.status}, code {exc.code}): {exc}")
 
-    # 3. Parse subcommand prefix or call Core directly
+    # 3. Route message — subcommand, help-intent, or AI
     user_id = str(interaction.user.id)
-    if message.startswith(":"):
-        parts = message[1:].split(" ", 1)
-        subcmd = parts[0].lower()
-        args = parts[1] if len(parts) > 1 else ""
-        ai_response = await handle_sentask_subcommand(subcmd, args, user_id)
-    else:
-        ai_response = await _call_core(user_id, message)
+    ai_response = await _route_message(user_id, message)
 
     # 4. Send AI response — into thread if created, fallback to channel
     if thread:
