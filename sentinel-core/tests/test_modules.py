@@ -66,6 +66,12 @@ async def test_proxy_module():
 
     assert resp.status_code == 200
     assert resp.json() == {"result": "ok"}
+    # D-GB-01/D-GB-02: verify X-Sentinel-Key was forwarded to the module
+    call_kwargs = app.state.http_client.post.call_args
+    forwarded_headers = call_kwargs.kwargs.get("headers", {})
+    assert forwarded_headers.get("X-Sentinel-Key") == AUTH_HEADERS["X-Sentinel-Key"], (
+        f"X-Sentinel-Key not forwarded to module. Got headers: {forwarded_headers}"
+    )
 
 
 async def test_proxy_module_unavailable():
