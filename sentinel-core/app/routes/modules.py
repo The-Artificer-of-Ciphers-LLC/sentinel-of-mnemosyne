@@ -50,14 +50,18 @@ async def proxy_module(name: str, path: str, request: Request) -> JSONResponse:
     module = registry[name]
     target_url = f"{module.base_url.rstrip('/')}/{path}"
     body = await request.body()
-    # X-Sentinel-Key is intentionally not forwarded: modules run on the internal Docker
-    # network and sentinel-core is the trust boundary. Module-specific auth, if needed,
-    # is the module's responsibility.
+    # Forward X-Sentinel-Key to the module so it can verify the request comes from sentinel-core.
+    # Per ARCHITECTURE-Core.md §3.4: all modules receive SENTINEL_API_KEY for auth.
+    # Without forwarding, modules that enforce auth will reject the proxy call with 401 (seen as 503).
+    sentinel_key = request.headers.get("X-Sentinel-Key", "")
     try:
         resp = await request.app.state.http_client.post(
             target_url,
             content=body,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "X-Sentinel-Key": sentinel_key,
+            },
         )
         try:
             content = resp.json()
