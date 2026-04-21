@@ -45,6 +45,9 @@ os.environ.setdefault("SENTINEL_API_KEY", "test-key-for-pytest")
 
 _discord_dir = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, os.path.abspath(_discord_dir))
+# Add repo root so `shared` package is importable
+_repo_root = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+sys.path.insert(0, os.path.abspath(_repo_root))
 
 import bot  # noqa: E402
 
@@ -64,7 +67,7 @@ async def test_help_subcommand_returns_help_text():
 
 async def test_known_subcommand_calls_core():
     """handle_sentask_subcommand('goals', '', user) calls Core with the goals prompt."""
-    with patch("bot.call_core", new=AsyncMock(return_value="Your goals are: ...")) as mock_core:
+    with patch("bot._call_core", new=AsyncMock(return_value="Your goals are: ...")) as mock_core:
         result = await bot.handle_sentask_subcommand("goals", "", "user123")
 
     mock_core.assert_called_once()
@@ -92,7 +95,7 @@ async def test_subcommand_prompts_dict_populated():
 
 async def test_plugin_subcommand_routing():
     """handle_sentask_subcommand('plugin:health', '', user) routes to plugin prompts."""
-    with patch("bot.call_core", new=AsyncMock(return_value="vault health ok")) as mock_core:
+    with patch("bot._call_core", new=AsyncMock(return_value="vault health ok")) as mock_core:
         result = await bot.handle_sentask_subcommand("plugin:health", "", "user123")
 
     mock_core.assert_called_once()

@@ -1,7 +1,7 @@
 """
 Sentinel Discord Bot — Phase 3 Interface.
 
-Command: /sentask <message>
+Command: /sen <message>
   1. Defer within 3s (IFACE-03 — shows "Bot is thinking...")
   2. Create public thread named from first 50 chars of message (IFACE-04)
   3. Parse subcommand prefix (:cmd) or call Core POST /message with X-Sentinel-Key (IFACE-06)
@@ -97,7 +97,7 @@ _sentinel_client = SentinelCoreClient(
 
 # Subcommand help text (D-08 — grouped by category)
 SUBCOMMAND_HELP = """\
-**Sentinel 2nd Brain Commands** — prefix with `:` inside a /sentask thread:
+**Sentinel 2nd Brain Commands** — prefix with `:` inside a /sen thread:
 
 **Standard Commands**
 `:help` — show this command list
@@ -363,11 +363,11 @@ class SentinelBot(discord.Client):
 bot = SentinelBot()
 
 
-@bot.tree.command(name="sentask", description="Ask the Sentinel a question or give it a task")
+@bot.tree.command(name="sen", description="Ask the Sentinel a question or give it a task")
 @app_commands.describe(message="Your message to the Sentinel (prefix with : for subcommands)")
-async def sentask(interaction: discord.Interaction, message: str) -> None:
+async def sen(interaction: discord.Interaction, message: str) -> None:
     """
-    /sentask <message> — Primary Sentinel interaction command.
+    /sen <message> — Primary Sentinel interaction command.
 
     Creates a new thread per invocation. Multi-turn: replies inside the thread
     continue the conversation context — Obsidian memory is read on every exchange.
