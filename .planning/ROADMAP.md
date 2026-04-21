@@ -46,7 +46,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 23: Pi Harness /reset Route** — Add POST /reset to bridge.ts, restore configurable timeout_s; closes CORE-07 PARTIAL gap (completed 2026-04-11)
 - [x] **Phase 24: Pentest Agent Wire + Missing Verification Artifacts** — Wire pentest-agent compose include (SEC-04); generate VERIFICATION.md for Phases 02, 05, 07 (completed 2026-04-11)
 - [x] **Phase 25: v0.40 Pre-Beta Refactoring** — Eliminate duplicates (DUP-01–05), complete stubs (STUB-01–08), fix architecture contradictions (CONTRA-01–04), implement RD-01–RD-10 (completed 2026-04-11)
-- [ ] **Phase 26: Nyquist Validation Cleanup** — Create/repair VALIDATION.md for Phases 04, 06, 07, 10; add missing Phase 10 bot subcommand test stubs
+- [x] **Phase 26: Nyquist Validation Cleanup** — Create/repair VALIDATION.md for Phases 04, 06, 07, 10; add missing Discord subcommand test stubs (completed 2026-04-21)
 
 ## Phase Details
 
@@ -377,5 +377,11 @@ Plans:
   2. `06-VALIDATION.md` exists with `nyquist_compliant: true` and a Nyquist test matrix
   3. `07-VALIDATION.md` updated: `nyquist_compliant: true`, `status: complete`
   4. `10-VALIDATION.md` updated: `nyquist_compliant: true`, `status: complete`
-  5. `test_bot_subcommands.py` and `test_bot_thread_persistence.py` created; all tests pass
-**Plans:** TBD
+  5. `test_subcommands.py` and `test_thread_persistence.py` expanded; 12 tests pass
+**Status:** COMPLETE (verified 2026-04-21, 5/5 must-haves, human UAT passed)
+**Plans:** 3/3 plans complete
+
+Plans:
+- [x] 26-01-PLAN.md — Discord test suite expansion (4 unit tests + 1 integration stub, conftest fixture)
+- [x] 26-02-PLAN.md — Repair 07-VALIDATION.md and 10-VALIDATION.md (Nyquist compliance)
+- [x] 26-03-PLAN.md — Create 04-VALIDATION.md and 06-VALIDATION.md from scratch
