@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.40
 milestone_name: Pre-Beta Refactoring
 status: executing
-stopped_at: Phase 27 gap-closure plans added (27-07 through 27-10)
-last_updated: "2026-04-21T03:44:04.575Z"
+stopped_at: context exhaustion at 93% (2026-04-21)
+last_updated: "2026-04-21T12:59:37.033Z"
 last_activity: 2026-04-21 -- Phase --phase execution started
 progress:
   total_phases: 26
@@ -113,11 +113,12 @@ None.
 | 260411-kdc | Remove duplicate reset_session() from pi_adapter.py — close Phase 23 SC-3 gap, 23-VERIFICATION.md 5/5 PASS | 2026-04-11 | 2e91e92 | [260411-kdc-restore-reset-session-to-pi-adapter-py-p](.planning/quick/260411-kdc-restore-reset-session-to-pi-adapter-py-p/) |
 | 260411-q4h | convert from .env for secrets to docker secrets — 9 secrets migrated to /run/secrets/ files | 2026-04-11 | a1a8322 | [260411-q4h](.planning/quick/260411-q4h-convert-from-env-for-secrets-to-docker-s/) |
 | 260420-xbc | Fix discord thread tracking restart bug and build bulletproof pytest integration and discord uat test suite | 2026-04-21 | 5326de5 | [260420-xbc-fix-discord-thread-tracking-restart-bug-](.planning/quick/260420-xbc-fix-discord-thread-tracking-restart-bug-/) |
+| 260421-nm2 | update all documentation for 0.40 release — README Path B architecture, secrets setup, Discord subcommands, sentinel.sh flags, secrets/README.md full rewrite | 2026-04-21 | 49e40aa | [260421-nm2-update-all-documentation-for-0-40-releas](.planning/quick/260421-nm2-update-all-documentation-for-0-40-releas/) |
 
 ## Session Continuity
 
-Last session: --stopped-at
-Stopped at: Phase 27 gap-closure plans added (27-07 through 27-10)
-Resume file: --resume-file
+Last session: 2026-04-21T21:00:05.350Z
+Stopped at: Completed quick task 260421-nm2: update all documentation for 0.40 release
+Resume file: None
 
 **Planned Phase:** 27 (Architecture Pivot) — 10 plans — 2026-04-21T03:18:38.251Z
