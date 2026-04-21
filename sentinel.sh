@@ -24,4 +24,16 @@ for p in ${PROFILES[@]+"${PROFILES[@]}"}; do
   PROFILE_FLAGS+=("--profile" "$p")
 done
 
+# On teardown, include all known opt-in profiles so profiled services (e.g. pi-harness)
+# are stopped even when the caller didn't pass their --flag.
+ALL_KNOWN_PROFILES=(pi discord pathfinder music finance trader coder)
+for arg in ${ARGS[@]+"${ARGS[@]}"}; do
+  if [[ "$arg" == "down" ]]; then
+    for p in "${ALL_KNOWN_PROFILES[@]}"; do
+      PROFILE_FLAGS+=("--profile" "$p")
+    done
+    break
+  fi
+done
+
 docker compose ${PROFILE_FLAGS[@]+"${PROFILE_FLAGS[@]}"} ${ARGS[@]+"${ARGS[@]}"}
