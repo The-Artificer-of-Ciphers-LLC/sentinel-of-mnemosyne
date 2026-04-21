@@ -284,7 +284,7 @@ async def handle_sentask_subcommand(subcmd: str, args: str, user_id: str) -> str
 
 async def _persist_thread_id(thread_id: int) -> None:
     """Append thread ID to ops/discord-threads.md using PATCH (append). Best-effort."""
-    obsidian_url = os.environ.get("OBSIDIAN_API_URL", "http://host.docker.internal:27124")
+    obsidian_url = os.environ.get("OBSIDIAN_API_URL", "http://host.docker.internal:27123")
     obsidian_key = _read_secret("obsidian_api_key", os.environ.get("OBSIDIAN_API_KEY", ""))
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -325,7 +325,7 @@ class SentinelBot(discord.Client):
                 "decorator runs before bot = SentinelBot()."
             )
         # Load persisted thread IDs from vault (D-04)
-        obsidian_url = os.environ.get("OBSIDIAN_API_URL", "http://host.docker.internal:27124")
+        obsidian_url = os.environ.get("OBSIDIAN_API_URL", "http://host.docker.internal:27123")
         obsidian_key = _read_secret("obsidian_api_key", os.environ.get("OBSIDIAN_API_KEY", ""))
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:

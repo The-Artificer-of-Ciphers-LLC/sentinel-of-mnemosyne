@@ -11,4 +11,7 @@ services:
       - discord_bot_token
       - sentinel_api_key
       - obsidian_api_key
+    depends_on:
+      sentinel-core:
+        condition: service_healthy
     restart: unless-stopped
