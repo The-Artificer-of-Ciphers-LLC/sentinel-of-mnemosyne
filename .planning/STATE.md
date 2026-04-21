@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.40
 milestone_name: Pre-Beta Refactoring
-status: executing
-stopped_at: context exhaustion at 93% (2026-04-21)
-last_updated: "2026-04-21T12:59:37.033Z"
-last_activity: 2026-04-21 -- Phase --phase execution started
+status: complete
+stopped_at: milestone closed 2026-04-21
+last_updated: "2026-04-21T00:00:00.000Z"
+last_activity: 2026-04-21 -- v0.40 milestone archived
 progress:
   total_phases: 26
   completed_phases: 11
@@ -114,10 +114,11 @@ None.
 | 260411-q4h | convert from .env for secrets to docker secrets — 9 secrets migrated to /run/secrets/ files | 2026-04-11 | a1a8322 | [260411-q4h](.planning/quick/260411-q4h-convert-from-env-for-secrets-to-docker-s/) |
 | 260420-xbc | Fix discord thread tracking restart bug and build bulletproof pytest integration and discord uat test suite | 2026-04-21 | 5326de5 | [260420-xbc-fix-discord-thread-tracking-restart-bug-](.planning/quick/260420-xbc-fix-discord-thread-tracking-restart-bug-/) |
 | 260421-nm2 | update all documentation for 0.40 release — README Path B architecture, secrets setup, Discord subcommands, sentinel.sh flags, secrets/README.md full rewrite | 2026-04-21 | 49e40aa | [260421-nm2-update-all-documentation-for-0-40-releas](.planning/quick/260421-nm2-update-all-documentation-for-0-40-releas/) |
+| 260421-nzr | update contributing.md to reflect current v0.40 design, it still references the pi interface | 2026-04-21 | 7d9a26e | [260421-nzr-update-contributing-md-to-reflect-curren](.planning/quick/260421-nzr-update-contributing-md-to-reflect-curren/) |
 
 ## Session Continuity
 
-Last session: 2026-04-21T21:00:05.350Z
+Last session: 2026-04-21T21:16:31.741Z
 Stopped at: Completed quick task 260421-nm2: update all documentation for 0.40 release
 Resume file: None
 
