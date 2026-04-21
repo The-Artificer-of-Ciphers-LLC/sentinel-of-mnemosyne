@@ -19,16 +19,16 @@ created: 2026-04-11
 |----------|-------|
 | **Framework** | pytest 8.x + pytest-asyncio 0.23 |
 | **Config file** | `sentinel-core/pyproject.toml` `[tool.pytest.ini_options]` |
-| **Quick run command** | `cd sentinel-core && python -m pytest tests/test_obsidian_client.py tests/test_message.py -x` |
-| **Full suite command** | `cd sentinel-core && python -m pytest tests/ -x && cd ../interfaces/discord && python -m pytest tests/ -x` |
+| **Quick run command** | `cd sentinel-core && python3 -m pytest tests/test_obsidian_client.py tests/test_message.py -x` |
+| **Full suite command** | `cd sentinel-core && python3 -m pytest tests/ -x && cd ../interfaces/discord && python3 -m pytest tests/ -x` |
 | **Estimated runtime** | ~30 seconds |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run `cd sentinel-core && python -m pytest tests/test_obsidian_client.py tests/test_message.py -x`
-- **After every plan wave:** Run `cd sentinel-core && python -m pytest tests/ -x`
+- **After every task commit:** Run `cd sentinel-core && python3 -m pytest tests/test_obsidian_client.py tests/test_message.py -x`
+- **After every plan wave:** Run `cd sentinel-core && python3 -m pytest tests/ -x`
 - **Before `/gsd-verify-work`:** Full suite must be green
 - **Max feedback latency:** ~30 seconds
 
@@ -38,16 +38,16 @@ created: 2026-04-11
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 10-01-01 | 01 | 0 | 2B-01 | — | N/A | unit | `cd interfaces/discord && python -m pytest tests/test_subcommands.py -x` | ✅ | ✅ green |
-| 10-01-02 | 01 | 0 | 2B-03 | — | N/A | unit | `cd interfaces/discord && python -m pytest tests/test_thread_persistence.py -x` | ✅ | ✅ green |
-| 10-01-03 | 01 | 0 | MEM-02 | — | N/A | unit | `cd sentinel-core && python -m pytest tests/test_obsidian_client.py -x -k "user_context"` | ✅ | ✅ green |
-| 10-01-04 | 01 | 0 | MEM-03 | — | N/A | unit | `cd sentinel-core && python -m pytest tests/test_message.py -x -k "session_summary"` | ✅ | ✅ green |
-| 10-02-01 | 02 | 1 | MEM-02 | — | N/A | unit | `cd sentinel-core && python -m pytest tests/test_obsidian_client.py -x -k "user_context"` | ✅ | ✅ green |
-| 10-02-02 | 02 | 1 | 2B-02 | — | N/A | unit | `cd sentinel-core && python -m pytest tests/test_obsidian_client.py -x -k "self_context"` | ✅ | ✅ green |
-| 10-02-03 | 02 | 1 | MEM-03 | — | N/A | unit | `cd sentinel-core && python -m pytest tests/test_message.py -x -k "session_summary"` | ✅ | ✅ green |
-| 10-03-01 | 03 | 2 | 2B-01 | — | N/A | unit | `cd interfaces/discord && python -m pytest tests/test_subcommands.py -x` | ✅ | ✅ green |
-| 10-03-02 | 03 | 2 | 2B-03 | — | N/A | unit | `cd interfaces/discord && python -m pytest tests/test_thread_persistence.py -x` | ✅ | ✅ green |
-| 10-03-03 | 03 | 2 | 2B-04 | — | N/A | unit | `cd interfaces/discord && python -m pytest tests/test_subcommands.py -x -k "check"` | ✅ | ✅ green |
+| 10-01-01 | 01 | 0 | 2B-01 | — | N/A | unit | `cd interfaces/discord && python3 -m pytest tests/test_subcommands.py -x` | ✅ | ✅ green |
+| 10-01-02 | 01 | 0 | 2B-03 | — | N/A | unit | `cd interfaces/discord && python3 -m pytest tests/test_thread_persistence.py -x` | ✅ | ✅ green |
+| 10-01-03 | 01 | 0 | MEM-02 | — | N/A | unit | `cd sentinel-core && python3 -m pytest tests/test_obsidian_client.py -x -k "user_context"` | ✅ | ✅ green |
+| 10-01-04 | 01 | 0 | MEM-03 | — | N/A | unit | `cd sentinel-core && python3 -m pytest tests/test_message.py -x -k "session_summary"` | ✅ | ✅ green |
+| 10-02-01 | 02 | 1 | MEM-02 | — | N/A | unit | `cd sentinel-core && python3 -m pytest tests/test_obsidian_client.py -x -k "user_context"` | ✅ | ✅ green |
+| 10-02-02 | 02 | 1 | 2B-02 | — | N/A | unit | `cd sentinel-core && python3 -m pytest tests/test_obsidian_client.py -x -k "self_context"` | ✅ | ✅ green |
+| 10-02-03 | 02 | 1 | MEM-03 | — | N/A | unit | `cd sentinel-core && python3 -m pytest tests/test_message.py -x -k "session_summary"` | ✅ | ✅ green |
+| 10-03-01 | 03 | 2 | 2B-01 | — | N/A | unit | `cd interfaces/discord && python3 -m pytest tests/test_subcommands.py -x` | ✅ | ✅ green |
+| 10-03-02 | 03 | 2 | 2B-03 | — | N/A | unit | `cd interfaces/discord && python3 -m pytest tests/test_thread_persistence.py -x` | ✅ | ✅ green |
+| 10-03-03 | 03 | 2 | 2B-04 | — | N/A | unit | `cd interfaces/discord && python3 -m pytest tests/test_subcommands.py -x -k "check"` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

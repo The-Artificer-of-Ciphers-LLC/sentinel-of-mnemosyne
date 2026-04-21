@@ -17,9 +17,9 @@ updated: "2026-04-21T00:00:00.000Z"
 expected: All three commands exit 0; `-k check` selects exactly `test_check_subcommand_calls_core`
 
 ```bash
-cd interfaces/discord && python -m pytest tests/test_subcommands.py -x
-cd interfaces/discord && python -m pytest tests/test_thread_persistence.py -x
-cd interfaces/discord && python -m pytest tests/test_subcommands.py -x -k "check"
+cd interfaces/discord && python3 -m pytest tests/test_subcommands.py -x
+cd interfaces/discord && python3 -m pytest tests/test_thread_persistence.py -x
+cd interfaces/discord && python3 -m pytest tests/test_subcommands.py -x -k "check"
 ```
 
 result: [pending]

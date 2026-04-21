@@ -21,7 +21,7 @@ created: 2026-04-10
 | **Framework** | pytest 8.x + pytest-asyncio |
 | **Config file** | `interfaces/discord/tests/conftest.py` |
 | **Quick run command** | `docker compose config --services` |
-| **Full suite command** | `cd interfaces/discord && python -m pytest tests/test_integration.py -v` |
+| **Full suite command** | `cd interfaces/discord && python3 -m pytest tests/test_integration.py -v` |
 | **Estimated runtime** | < 5 seconds (3 tests skip cleanly without env vars) |
 
 ---
@@ -29,7 +29,7 @@ created: 2026-04-10
 ## Sampling Rate
 
 - **After every task commit:** Run `docker compose config --services` — verify `discord` in output
-- **After every plan wave:** Run `cd interfaces/discord && python -m pytest tests/test_integration.py -v`
+- **After every plan wave:** Run `cd interfaces/discord && python3 -m pytest tests/test_integration.py -v`
 - **Before `/gsd-verify-work`:** Full suite + manual UAT (live Discord interaction required)
 - **Max feedback latency:** < 5 seconds
 
@@ -41,9 +41,9 @@ created: 2026-04-10
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
 | 06-01-01 | 01 | 1 | IFACE-02 | — | N/A | smoke | `docker compose config --services \| grep -c discord` | ✅ | ✅ green |
 | 06-01-02 | 01 | 1 | IFACE-03 | — | N/A | manual | Read `interfaces/discord/bot.py` lines 197–228 — verify `interaction.response.defer(thinking=True)` called before `followup.send` | ✅ | ✅ green |
-| 06-02-01 | 02 | 2 | IFACE-02 | — | N/A | integration | `cd interfaces/discord && python -m pytest tests/test_integration.py -v -k "iface02"` | ✅ | ✅ green |
-| 06-02-02 | 02 | 2 | IFACE-03 | — | N/A | integration | `cd interfaces/discord && python -m pytest tests/test_integration.py -v -k "iface03"` | ✅ | ✅ green |
-| 06-02-03 | 02 | 2 | IFACE-04 | — | N/A | integration | `cd interfaces/discord && python -m pytest tests/test_integration.py -v -k "iface04"` | ✅ | ✅ green |
+| 06-02-01 | 02 | 2 | IFACE-02 | — | N/A | integration | `cd interfaces/discord && python3 -m pytest tests/test_integration.py -v -k "iface02"` | ✅ | ✅ green |
+| 06-02-02 | 02 | 2 | IFACE-03 | — | N/A | integration | `cd interfaces/discord && python3 -m pytest tests/test_integration.py -v -k "iface03"` | ✅ | ✅ green |
+| 06-02-03 | 02 | 2 | IFACE-04 | — | N/A | integration | `cd interfaces/discord && python3 -m pytest tests/test_integration.py -v -k "iface04"` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

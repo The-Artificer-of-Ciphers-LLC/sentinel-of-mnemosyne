@@ -20,8 +20,8 @@ created: 2026-04-10
 |----------|-------|
 | **Framework** | pytest 8.x + pytest-asyncio |
 | **Config file** | `sentinel-core/pyproject.toml` (`[tool.pytest.ini_options]`) |
-| **Quick run command** | `cd sentinel-core && python -m pytest tests/test_litellm_provider.py tests/test_model_registry.py tests/test_provider_router.py -x -q` |
-| **Full suite command** | `cd sentinel-core && python -m pytest -v` |
+| **Quick run command** | `cd sentinel-core && python3 -m pytest tests/test_litellm_provider.py tests/test_model_registry.py tests/test_provider_router.py -x -q` |
+| **Full suite command** | `cd sentinel-core && python3 -m pytest -v` |
 | **Estimated runtime** | ~30 seconds (62 tests) |
 
 ---
@@ -29,7 +29,7 @@ created: 2026-04-10
 ## Sampling Rate
 
 - **After every task commit:** Run quick run command
-- **After every plan wave:** Run `cd sentinel-core && python -m pytest -v`
+- **After every plan wave:** Run `cd sentinel-core && python3 -m pytest -v`
 - **Before `/gsd-verify-work`:** Full suite must be green (62/62)
 - **Max feedback latency:** ~30 seconds
 
@@ -39,13 +39,13 @@ created: 2026-04-10
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 04-01-01 | 01 | 1 | PROV-01 | — | N/A | smoke | `cd sentinel-core && python -m pytest -v --co -q \| grep -c test` — verify test suite loads without import errors | ✅ | ✅ green |
+| 04-01-01 | 01 | 1 | PROV-01 | — | N/A | smoke | `cd sentinel-core && python3 -m pytest -v --co -q \| grep -c test` — verify test suite loads without import errors | ✅ | ✅ green |
 | 04-01-02 | 01 | 1 | PROV-04 | — | N/A | manual | Read `sentinel-core/models-seed.json` — verify 5 model entries with context_window fields present | ✅ | ✅ green |
-| 04-02-01 | 02 | 2 | PROV-02 | — | N/A | unit | `cd sentinel-core && python -m pytest tests/test_litellm_provider.py -v` | ✅ | ✅ green |
-| 04-02-02 | 02 | 2 | PROV-03 | — | N/A | unit | `cd sentinel-core && python -m pytest tests/test_litellm_provider.py -v -k "retry"` | ✅ | ✅ green |
-| 04-03-01 | 03 | 3 | PROV-04 | — | N/A | unit | `cd sentinel-core && python -m pytest tests/test_model_registry.py -v` | ✅ | ✅ green |
-| 04-03-02 | 03 | 3 | PROV-05 | — | N/A | unit | `cd sentinel-core && python -m pytest tests/test_provider_router.py -v` | ✅ | ✅ green |
-| 04-04-01 | 04 | 4 | PROV-01-05 | — | N/A | integration | `cd sentinel-core && python -m pytest -v` | ✅ | ✅ green |
+| 04-02-01 | 02 | 2 | PROV-02 | — | N/A | unit | `cd sentinel-core && python3 -m pytest tests/test_litellm_provider.py -v` | ✅ | ✅ green |
+| 04-02-02 | 02 | 2 | PROV-03 | — | N/A | unit | `cd sentinel-core && python3 -m pytest tests/test_litellm_provider.py -v -k "retry"` | ✅ | ✅ green |
+| 04-03-01 | 03 | 3 | PROV-04 | — | N/A | unit | `cd sentinel-core && python3 -m pytest tests/test_model_registry.py -v` | ✅ | ✅ green |
+| 04-03-02 | 03 | 3 | PROV-05 | — | N/A | unit | `cd sentinel-core && python3 -m pytest tests/test_provider_router.py -v` | ✅ | ✅ green |
+| 04-04-01 | 04 | 4 | PROV-01-05 | — | N/A | integration | `cd sentinel-core && python3 -m pytest -v` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

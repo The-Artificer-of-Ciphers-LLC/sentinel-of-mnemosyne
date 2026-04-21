@@ -53,9 +53,9 @@ human_verification:
 
 Run in terminal:
 ```bash
-cd interfaces/discord && python -m pytest tests/test_subcommands.py -x
-cd interfaces/discord && python -m pytest tests/test_thread_persistence.py -x
-cd interfaces/discord && python -m pytest tests/test_subcommands.py -x -k "check"
+cd interfaces/discord && python3 -m pytest tests/test_subcommands.py -x
+cd interfaces/discord && python3 -m pytest tests/test_thread_persistence.py -x
+cd interfaces/discord && python3 -m pytest tests/test_subcommands.py -x -k "check"
 ```
 
 Expected: all exit 0; -k check selects exactly test_check_subcommand_calls_core.
