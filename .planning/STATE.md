@@ -1,36 +1,35 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.40
-milestone_name: Pre-Beta Refactoring
-status: complete
-stopped_at: milestone closed 2026-04-21
+milestone: v0.5
+milestone_name: The Dungeon
+status: active
+stopped_at: ~
 last_updated: "2026-04-21T00:00:00.000Z"
-last_activity: 2026-04-21 -- v0.40 milestone archived
+last_activity: 2026-04-21 -- Milestone v0.5 started
 progress:
-  total_phases: 26
-  completed_phases: 11
-  total_plans: 29
-  completed_plans: 35
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-10)
+See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase --phase — 27
+**Current focus:** Milestone v0.5 — The Dungeon (Pathfinder 2e module)
 
 ## Current Position
 
-Phase: --phase (27) — EXECUTING
-Plan: 1 of --name
-Milestone: v0.4 Functional Alpha — COMPLETE
-Next milestone: v0.5 The Dungeon (Pathfinder 2e module)
-Status: Executing Phase --phase
-Last activity: 2026-04-21 -- Phase --phase execution started
+Phase: Not started (defining requirements)
+Plan: —
+Milestone: v0.5 The Dungeon — IN PROGRESS
+Status: Defining requirements
+Last activity: 2026-04-21 — Milestone v0.5 started
 
 ## Milestone Progress
 

@@ -10,6 +10,21 @@ A self-hosted, containerized AI assistant platform built for personal use. The S
 
 A message goes in, an AI response that knows your history comes back — and what mattered gets written to Obsidian so the next conversation starts smarter.
 
+## Current Milestone: v0.5 The Dungeon
+
+**Goal:** Build the Pathfinder 2e module — the first full Path B reference implementation with NPC management, dialogue engine, rules adjudication, monster harvesting, and bidirectional Foundry VTT integration.
+
+**Target features:**
+- NPC management (create/update/query via Discord, stored in Obsidian)
+- NPC Foundry VTT PF2E-compatible JSON export
+- NPC token art via Midjourney /imagine DM prompt
+- Dialogue engine ("party says [X]" → in-character NPC reply)
+- Monster harvesting (components → craftable items → PF2E vendor values)
+- Rules engine (PF2E RAW lookup + rules-reasoning + Obsidian persistence)
+- Session note capture with structured Obsidian output
+- Foundry VTT connector (export NPC JSON; receive chat/rolls from Foundry module)
+- Module delivered as Docker Compose include
+
 ## Requirements
 
 ### Validated
@@ -53,9 +68,14 @@ A message goes in, an AI response that knows your history comes back — and wha
 ### Active
 
 **Pathfinder 2e Module (v0.5)**
-- [ ] NPC management — create, update, query NPCs via interface
+- [ ] NPC management — create, update, query NPCs via Discord; data stored in Obsidian
+- [ ] NPC Foundry VTT export — PF2E-compatible JSON importable as Foundry actor
+- [ ] NPC token art — Midjourney /imagine prompt sent as Discord DM to bot 936929561302675456
+- [ ] Dialogue engine — "party says [X]" → in-character reply grounded in Obsidian NPC profile
+- [ ] Monster harvesting — killed monster → harvestable components, craftable items, PF2E vendor value (gp/sp/cp)
+- [ ] Rules engine — search valid PF2E sources for RAW rulings; reason from rules if not sourced; save rulings to Obsidian
 - [ ] Session note capture with structured Obsidian output
-- [ ] Dialogue generation on demand
+- [ ] Foundry VTT connector — bidirectional: export NPC JSON to Foundry, receive chat/rolls from Foundry module
 - [ ] Module delivered as Docker Compose include (Path B reference implementation)
 
 **Music Lesson Module (v0.6)**
@@ -166,4 +186,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-21 after v0.40 milestone — Path B architecture pivot, module gateway, 35 requirements validated*
+*Last updated: 2026-04-21 — v0.5 The Dungeon milestone started*
