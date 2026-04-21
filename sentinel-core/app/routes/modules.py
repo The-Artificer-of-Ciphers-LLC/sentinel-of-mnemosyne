@@ -50,12 +50,19 @@ async def proxy_module(name: str, path: str, request: Request) -> JSONResponse:
     module = registry[name]
     target_url = f"{module.base_url.rstrip('/')}/{path}"
     body = await request.body()
+    # X-Sentinel-Key is intentionally not forwarded: modules run on the internal Docker
+    # network and sentinel-core is the trust boundary. Module-specific auth, if needed,
+    # is the module's responsibility.
     try:
         resp = await request.app.state.http_client.post(
             target_url,
             content=body,
             headers={"Content-Type": "application/json"},
         )
-        return JSONResponse(content=resp.json(), status_code=resp.status_code)
+        try:
+            content = resp.json()
+        except Exception:
+            content = {"body": resp.text}
+        return JSONResponse(content=content, status_code=resp.status_code)
     except httpx.ConnectError:
         raise HTTPException(status_code=503, detail={"error": "module unavailable"})

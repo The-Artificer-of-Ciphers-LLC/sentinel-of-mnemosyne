@@ -19,9 +19,9 @@ for arg in "$@"; do
   esac
 done
 
-PROFILE_FLAGS=""
+PROFILE_FLAGS=()
 for p in "${PROFILES[@]}"; do
-  PROFILE_FLAGS="$PROFILE_FLAGS --profile $p"
+  PROFILE_FLAGS+=("--profile" "$p")
 done
 
-docker compose $PROFILE_FLAGS "${ARGS[@]}"
+docker compose "${PROFILE_FLAGS[@]}" "${ARGS[@]}"

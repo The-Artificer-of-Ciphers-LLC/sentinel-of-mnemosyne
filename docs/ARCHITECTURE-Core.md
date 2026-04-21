@@ -642,19 +642,28 @@ DISCORD_ALLOWED_CHANNELS=
 
 ```bash
 #!/bin/bash
-COMPOSE_FILES="-f docker-compose.yml"
+# Uses Docker Compose profiles + include directive (NOT -f stacking).
+# Profiles are declared in each service's compose.yml via `profiles: [name]`.
+PROFILES=()
+ARGS=()
 
 for arg in "$@"; do
-  case $arg in
-    --discord)     COMPOSE_FILES="$COMPOSE_FILES -f interfaces/discord/docker-compose.override.yml" ;;
-    --messages)    COMPOSE_FILES="$COMPOSE_FILES -f interfaces/messages/docker-compose.override.yml" ;;
-    --pathfinder)  COMPOSE_FILES="$COMPOSE_FILES -f modules/pathfinder/docker-compose.yml" ;;
-    --music)       COMPOSE_FILES="$COMPOSE_FILES -f modules/music/docker-compose.yml" ;;
-    --pi)          COMPOSE_FILES="$COMPOSE_FILES -f pi-harness/docker-compose.yml" ;;
+  case "$arg" in
+    --discord)    PROFILES+=("discord") ;;
+    --pathfinder) PROFILES+=("pathfinder") ;;
+    --music)      PROFILES+=("music") ;;
+    --finance)    PROFILES+=("finance") ;;
+    --pi)         PROFILES+=("pi") ;;
+    *)            ARGS+=("$arg") ;;
   esac
 done
 
-docker compose $COMPOSE_FILES "${@: -1}"
+PROFILE_FLAGS=()
+for p in "${PROFILES[@]}"; do
+  PROFILE_FLAGS+=("--profile" "$p")
+done
+
+docker compose "${PROFILE_FLAGS[@]}" "${ARGS[@]}"
 
 # Usage:
 # ./sentinel.sh --discord up -d

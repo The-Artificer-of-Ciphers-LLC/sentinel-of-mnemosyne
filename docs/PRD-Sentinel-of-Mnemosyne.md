@@ -393,7 +393,7 @@ acceptable as a base position," this is a low-risk starting point.
 - `/trading/rules/my-rules.md` — your personal trading rules (you write this)
 - `/trading/performance/{YYYY-MM}.md` — monthly P&L and analysis
 
-**Dependencies:** Alpaca Python SDK (`alpaca-trade-api` or the newer `alpaca-py`), a news/financial data API, Alpaca paper trading account (free to create).
+**Dependencies:** Alpaca Python SDK (`alpaca-py`), a news/financial data API, Alpaca paper trading account (free to create).
 
 ---
 

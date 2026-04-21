@@ -332,7 +332,8 @@ class SentinelBot(discord.Client):
         logger.info("Slash commands synced globally (up to 1hr propagation).")
 
     async def on_ready(self) -> None:
-        logger.info(f"Sentinel bot ready: {self.user} (id={self.user.id})")
+        user = self.user
+        logger.info(f"Sentinel bot ready: {user} (id={user.id if user else 'unknown'})")
 
     async def on_message(self, message: discord.Message) -> None:
         """
