@@ -25,6 +25,7 @@ from app.clients.litellm_provider import LiteLLMProvider
 from app.clients.obsidian import ObsidianClient
 from app.config import settings
 from app.routes.message import router as message_router
+from app.routes.modules import router as modules_router
 from app.routes.status import router as status_router
 from app.services.injection_filter import InjectionFilter
 from app.services.model_registry import build_model_registry
@@ -169,6 +170,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.output_scanner = OutputScanner(_secondary_classifier)
     logger.info("Security services initialized: InjectionFilter, OutputScanner")
 
+    # Module registry — in-memory; populated by POST /modules/register at runtime (Phase 27)
+    app.state.module_registry = {}
+
     logger.info("Sentinel Core ready.")
     yield
 
@@ -187,6 +191,7 @@ app = FastAPI(
 app.add_middleware(APIKeyMiddleware)
 app.include_router(message_router)
 app.include_router(status_router)
+app.include_router(modules_router)
 
 
 @app.get("/health")
