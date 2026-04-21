@@ -20,8 +20,8 @@ for arg in "$@"; do
 done
 
 PROFILE_FLAGS=()
-for p in "${PROFILES[@]}"; do
+for p in ${PROFILES[@]+"${PROFILES[@]}"}; do
   PROFILE_FLAGS+=("--profile" "$p")
 done
 
-docker compose "${PROFILE_FLAGS[@]}" "${ARGS[@]}"
+docker compose ${PROFILE_FLAGS[@]+"${PROFILE_FLAGS[@]}"} ${ARGS[@]+"${ARGS[@]}"}
