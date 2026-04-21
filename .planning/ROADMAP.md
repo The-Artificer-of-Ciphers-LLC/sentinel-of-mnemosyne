@@ -187,7 +187,7 @@ Plans:
 **Plans:** TBD
 
 ### Phase 11: Pathfinder 2e Module
-**Goal**: DM co-pilot. Create and query NPCs, capture session notes, generate in-character dialogue.
+**Goal**: Deliver the first module under the Path B contract. A FastAPI container that registers with sentinel-core via POST /modules/register at startup, exposes NPC management and session note endpoints, and is added to the stack via a single `docker compose --profile pathfinder` entry. This is the v0.5 reference implementation for all future modules.
 **Depends on**: Phase 9
 **Requirements**: PF2E-01, PF2E-02, PF2E-03, PF2E-04, PF2E-05
 **Success Criteria** (what must be TRUE):

@@ -23,7 +23,7 @@ The core philosophy is flexibility over prescription. Whether you want a Dungeon
 
 **Obsidian as the heart.** All persistent knowledge — session summaries, NPC records, music practice logs, code snippets, user preferences — lives in an Obsidian vault. This means your data is always human-readable, portable plain-text markdown files, not locked in a proprietary database.
 
-**The Pi harness as the brain.** The [pi-mono coding-agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) is the AI execution layer. It handles the conversation loop, tool calls, and skill dispatch. It runs in its own Docker container, isolated for safety, and exposes a minimal API to the rest of the system.
+**LiteLLM-direct as the AI layer.** The Sentinel calls LiteLLM → the configured AI provider (LM Studio, Claude API, Ollama, LlamaCpp) directly. No intermediate layer. Pi harness is an optional power tool for advanced coding tasks, activated via `./sentinel.sh --pi`, scoped to v0.7.
 
 **Pluggable interfaces.** How you talk to the Sentinel is up to you. Discord, Apple Messages, Slack, WhatsApp, Telegram — each interface lives in its own Docker container and talks to the core engine via a defined standard. You want a new interface? Drop in the container, wire the hooks, done.
 
@@ -40,23 +40,41 @@ The core philosophy is flexibility over prescription. Whether you want a Dungeon
 ### 3.1 High-Level Component Map
 
 ```
-[ Interface Container ]       (Discord, Messages, Slack, etc.)
-         |
-         |  Standard Message Envelope (see §3.3)
-         v
-[ Sentinel Core Container ]   (Router, context manager, hook dispatcher)
-         |
-         |  Pi API call
-         v
-[ Pi Harness Container ]      (coding-agent — AI execution, tool use, skill dispatch)
-         |
-         |  File writes / reads
-         v
-[ Obsidian Vault ]            (Mnemosyne — persistent markdown knowledge base)
-         |
-         v
-[ Module Containers ]         (Pathfinder, Music, Coder, etc. — optional, pluggable)
+┌─────────────────────────────────────────────────┐
+│            INTERFACE LAYER                      │
+│   (Discord /sen, Messages — one container each) │
+└────────────────────┬────────────────────────────┘
+                     │  HTTP POST /message
+                     │  X-Sentinel-Key header
+                     ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                 SENTINEL CORE CONTAINER                         │
+│   FastAPI router · APIKeyMiddleware                             │
+│   ModelRegistry · ProviderRouter · Module Registry              │
+│   POST /message (chat) · POST /modules/register                 │
+│   POST /modules/{name}/{path} (proxy)                           │
+└──────────┬─────────────────┬───────────────────────────────────┘
+           │                 │
+           │ LiteLLM         │ httpx proxy (registered modules)
+           ▼                 ▼
+┌──────────────────┐  ┌──────────────────────┐
+│  AI PROVIDER     │  │  MODULE CONTAINERS   │
+│  LiteLLMProvider │  │  (v0.5+: Pathfinder, │
+│  → LM Studio     │  │  Music, Finance, etc)│
+│  → Claude API    │  │  Each: FastAPI        │
+└──────────────────┘  │  POST /register →    │
+                      │  sentinel-core       │
+                      └──────────────────────┘
+
+              ┌──────────────────────────┐
+              │  OBSIDIAN VAULT (host)   │
+              │  REST API plugin         │
+              └──────────────────────────┘
+
+[ Pi Harness ] — optional, only with sentinel.sh --pi flag, v0.7 scope
 ```
+
+sentinel-core is the API gateway: it handles all chat completions via LiteLLM-direct and proxies all module requests to registered module containers. Interface containers translate channel-specific messages into the standard envelope and post to sentinel-core. Module containers register their endpoints with sentinel-core at startup via `POST /modules/register`.
 
 ### 3.2 Container Roles
 
@@ -64,16 +82,19 @@ The core philosophy is flexibility over prescription. Whether you want a Dungeon
 Responsible for receiving input from a specific communication channel (Discord, Apple Messages, etc.) and translating it into the standard Sentinel message envelope. It sends the envelope to the Core and delivers the response back to the originating channel. Interface containers know nothing about AI or Obsidian — they are pure translation layers.
 
 **Sentinel Core Container**
-The router and context manager. Receives incoming message envelopes, enriches them with relevant context (retrieved from Obsidian), dispatches them to the Pi harness, and handles the response. Also responsible for deciding what to write back to Obsidian after each interaction. This is the component most likely to have Sentinel-specific logic (routing rules, context retrieval, module dispatch).
+The API gateway and context manager. Receives incoming message envelopes, enriches them with relevant context (retrieved from Obsidian), calls LiteLLM directly for chat completions, and handles the response. Also maintains the module registry and proxies module requests. This is the single process that must be running for chat and module routing to work.
 
-**Pi Harness Container**
-The [pi-mono coding-agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) running in Docker. Receives a prompt plus context from the Core, executes against the configured AI (LM Studio by default), and returns a structured response. Exposes a small HTTP API. Treat this as a black box for v0.x — the goal is to call it cleanly, not modify it.
+**AI Provider (LiteLLM)**
+LiteLLM runs inside the Sentinel Core container — not a separate service. It abstracts LM Studio, Claude API, Ollama, and llama.cpp behind a single `acompletion()` interface. The configured AI provider is set via environment variables. No intermediate layer between sentinel-core and the AI.
 
 **Obsidian Vault**
-Not a container — a mounted folder on the host filesystem that both the Core and the Pi harness can read from and write to. Obsidian on your Mac reads the same folder. Markdown files, organized by module conventions. No database, no migrations.
+Not a container — a folder on the host filesystem accessible via the Obsidian Local REST API plugin. Obsidian on your Mac reads the same folder. Markdown files, organized by module conventions. No database, no migrations.
 
 **Module Containers**
-Optional containers that add capability. A module can expose API endpoints the Core can call, or it can register as a "skill" the Pi harness can invoke. Modules may also have their own Obsidian folder conventions (e.g., `/pathfinder/npcs/`, `/music/lessons/`).
+Optional FastAPI containers (v0.5+) that add capability. Each module calls `POST /modules/register` on sentinel-core at startup, declaring its `name`, `base_url`, and available `routes`. sentinel-core then proxies `POST /modules/{name}/{path}` requests to the appropriate module. Modules may have their own Obsidian folder conventions (e.g., `/pathfinder/npcs/`, `/music/lessons/`).
+
+**Pi Harness Container (optional — v0.7 scope)**
+The pi-mono coding-agent running in Docker, activated via `./sentinel.sh --pi`. An advanced coding tool for interactive code-generation tasks. Not in the standard chat message path.
 
 ### 3.3 Standard Message Envelope (Draft)
 
