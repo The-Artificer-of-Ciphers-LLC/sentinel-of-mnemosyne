@@ -39,6 +39,7 @@ Thread replies:
 User identity: str(interaction.user.id) — Discord snowflake as string.
 Thread per invocation: each /sentask creates a fresh thread (never reuses).
 """
+import asyncio
 import logging
 import os
 
@@ -358,9 +359,21 @@ class SentinelBot(discord.Client):
         if not isinstance(message.channel, discord.Thread):
             return
 
-        # Only respond in threads we created
-        if message.channel.id not in SENTINEL_THREAD_IDS:
+        # Only respond in threads we created — check in-memory set first, then fall
+        # back to owner_id for restart-survivable behaviour (D-04 restart fix).
+        thread = message.channel
+        is_sentinel_thread = (
+            thread.id in SENTINEL_THREAD_IDS
+            or thread.owner_id == self.user.id
+        )
+        if not is_sentinel_thread:
             return
+
+        # Re-persist thread ID if it was recovered via owner_id fallback so future
+        # restarts populate SENTINEL_THREAD_IDS from the Obsidian cache.
+        if thread.id not in SENTINEL_THREAD_IDS:
+            SENTINEL_THREAD_IDS.add(thread.id)
+            asyncio.ensure_future(_persist_thread_id(thread.id))
 
         user_id = str(message.author.id)
         logger.info(f"Thread reply from {user_id} in thread {message.channel.id}: {message.content[:60]}")

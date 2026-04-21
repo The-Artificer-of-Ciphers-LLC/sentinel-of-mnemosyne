@@ -205,3 +205,67 @@ async def test_persist_thread_id_integration(test_run_path):
         f"Thread ID 99999 not found in vault note content: {get_resp.content!r}"
     )
     # obsidian_teardown autouse fixture handles DELETE /vault/{test_run_path}/ after yield
+
+
+# ---------------------------------------------------------------------------
+# Task 1 (260420-xbc): owner_id fallback path — restart survivability
+# ---------------------------------------------------------------------------
+
+
+async def test_on_message_owner_id_fallback():
+    """on_message responds to a thread owned by the bot even when its ID is not in
+    SENTINEL_THREAD_IDS (simulates restart scenario where in-memory set was empty).
+    After handling the message, the thread ID must be added back to SENTINEL_THREAD_IDS.
+    """
+    # SENTINEL_THREAD_IDS is cleared by the autouse fixture — 55555 is NOT present.
+    assert 55555 not in bot.SENTINEL_THREAD_IDS
+
+    # Build a mock Thread where thread.id = 55555 and thread.owner_id = 999 (bot's user id).
+    mock_thread = MagicMock()
+    mock_thread.id = 55555
+    mock_thread.owner_id = 999
+
+    # typing() must behave as an async context manager.
+    typing_cm = MagicMock()
+    typing_cm.__aenter__ = AsyncMock(return_value=None)
+    typing_cm.__aexit__ = AsyncMock(return_value=None)
+    mock_thread.typing = MagicMock(return_value=typing_cm)
+    mock_thread.send = AsyncMock()
+
+    # Build a mock Message (not a bot, channel = that thread).
+    mock_message = MagicMock()
+    mock_message.author.bot = False
+    mock_message.channel = mock_thread
+    mock_message.author.id = "user1"
+    mock_message.content = "hello"
+
+    # Patch discord.Thread so isinstance(mock_thread, discord.Thread) is True.
+    import sys
+    discord_stub = sys.modules["discord"]
+    original_thread_cls = discord_stub.Thread
+    discord_stub.Thread = type(mock_thread)
+
+    # Set bot.bot.user to report id=999 (the bot's snowflake).
+    # SentinelBot uses the discord stub which has no .user attribute by default;
+    # assign it directly on the instance then restore after the test.
+    mock_user = MagicMock()
+    mock_user.id = 999
+    original_user = getattr(bot.bot, "user", MagicMock())
+    bot.bot.user = mock_user
+
+    try:
+        with patch("bot._route_message", new=AsyncMock(return_value="response")):
+            with patch("bot.asyncio") as mock_asyncio:
+                mock_asyncio.ensure_future = MagicMock()
+                await bot.bot.on_message(mock_message)
+    finally:
+        bot.bot.user = original_user
+        discord_stub.Thread = original_thread_cls
+
+    # Bot must have replied.
+    mock_thread.send.assert_called_once_with("response")
+
+    # Thread ID must be added back to in-memory set by the fallback path.
+    assert 55555 in bot.SENTINEL_THREAD_IDS, (
+        "owner_id fallback did not re-add thread 55555 to SENTINEL_THREAD_IDS"
+    )
