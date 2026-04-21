@@ -386,6 +386,38 @@ async def test_provider_unavailable_returns_503(mock_ai_provider):
     assert resp.status_code == 503
 
 
+async def test_bad_request_error_returns_422(mock_ai_provider):
+    """litellm.BadRequestError from ai_provider → HTTP 422 (context overflow, client error)."""
+    import litellm
+    mock_ai_provider.complete.side_effect = litellm.BadRequestError(
+        message="context_length_exceeded", model="test-model", llm_provider="lm-studio"
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.ai_provider = mock_ai_provider
+
+        resp = await client.post(
+            "/message",
+            json={"content": "hello", "user_id": "test"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 422
+    assert "capacity" in resp.json()["detail"].lower() or "context" in resp.json()["detail"].lower()
+
+
+async def test_missing_user_id_returns_422():
+    """POST /message without user_id → 422 (required field)."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/message",
+            json={"content": "hello"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # Wave 3 tests — Phase 5 security pipeline (SEC-01, SEC-02)
 # ---------------------------------------------------------------------------

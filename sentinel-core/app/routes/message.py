@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 
 import tiktoken
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from litellm import BadRequestError as LiteLLMBadRequestError
 
 from app.models import MessageEnvelope, ResponseEnvelope
 from app.services.provider_router import ProviderUnavailableError
@@ -71,7 +72,7 @@ async def post_message(
     Receive a user message, inject Obsidian memory context, call AI provider, write session summary.
 
     Error responses:
-      422 — message + context exceeds context window after truncation
+      422 — message + context exceeds context window after truncation, or model rejected request
       503 — AI provider (primary and fallback) unavailable
       502 — unexpected AI provider error
     """
@@ -166,6 +167,12 @@ async def post_message(
     except ProviderUnavailableError as exc:
         logger.error(f"All AI providers unavailable: {exc}")
         raise HTTPException(status_code=503, detail=str(exc))
+    except LiteLLMBadRequestError as exc:
+        logger.warning(f"AI provider rejected request (BadRequestError): {exc}")
+        raise HTTPException(
+            status_code=422,
+            detail="Message plus context exceeds model capacity. Try a shorter message.",
+        )
     except Exception as exc:
         logger.error(f"Unexpected AI provider error: {type(exc).__name__}: {exc}")
         raise HTTPException(status_code=502, detail=f"AI provider error: {type(exc).__name__}")
