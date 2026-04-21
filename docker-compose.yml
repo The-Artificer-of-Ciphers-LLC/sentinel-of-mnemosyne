@@ -3,18 +3,12 @@
 # Add future modules and interfaces as include entries here.
 # Never use `docker compose -f` stacking — use include only.
 #
-# Startup order: pi-harness must be healthy before sentinel-core begins serving
-# requests.  This is enforced via `depends_on: pi-harness: condition:
-# service_started` in sentinel-core/compose.yml.  Docker Compose merges all
-# included services into a single project graph, so cross-include depends_on
-# references resolve correctly at runtime.
-#
-# If pi-harness is slow to initialise, sentinel-core degrades gracefully:
-# PiAdapterClient raises ConnectError on the first request and the route falls
-# through to the configured ai_provider fallback.
+# Pi harness is NOT in the base stack — it is an opt-in power tool.
+# Activate via: ./sentinel.sh --pi up
+# Pi harness feature scope: v0.7. See ARCHITECTURE-Core.md.
 include:
   - path: sentinel-core/compose.yml
-  - path: pi-harness/compose.yml
+  # Pi harness: opt-in via `./sentinel.sh --pi up`. NOT in base stack. See v0.7 scope.
   - path: interfaces/discord/compose.yml  # DO NOT COMMENT — restored 3x, required for Discord interface
   - path: security/pentest-agent/compose.yml
 
