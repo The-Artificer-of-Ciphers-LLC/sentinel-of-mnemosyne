@@ -139,3 +139,69 @@ async def test_setup_hook_graceful_on_404():
     assert bot.SENTINEL_THREAD_IDS == set(), (
         "SENTINEL_THREAD_IDS should be empty after 404 response"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 26 expansion: Integration test with live Obsidian teardown (2B-03)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_persist_thread_id_integration(test_run_path):
+    """_persist_thread_id writes thread ID to Obsidian and teardown removes the test path.
+
+    Requires: OBSIDIAN_BASE_URL and OBSIDIAN_API_KEY env vars pointing to a running
+    Obsidian instance with the Local REST API plugin active.
+
+    Skips automatically when Obsidian is unreachable (ConnectError / connection refused).
+    The obsidian_teardown autouse fixture (conftest.py) deletes ops/test-run-{uuid}/
+    after this test completes.
+    """
+    import os as _os
+
+    base_url = _os.environ.get("OBSIDIAN_BASE_URL", "http://host.docker.internal:27124")
+    api_key = _os.environ.get("OBSIDIAN_API_KEY", "")
+    test_note_path = f"{test_run_path}/thread-test.md"
+
+    # Skip gracefully if Obsidian is not reachable
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as probe:
+            probe_resp = await probe.get(
+                f"{base_url}/vault/",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+    except (httpx.ConnectError, httpx.TimeoutException, OSError):
+        pytest.skip("Obsidian REST API not reachable — skipping integration test")
+
+    if probe_resp.status_code == 401:
+        pytest.skip("OBSIDIAN_API_KEY invalid — skipping integration test")
+
+    # Write a note under the test-run path via Obsidian REST API
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        put_resp = await client.put(
+            f"{base_url}/vault/{test_note_path}",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "text/markdown",
+            },
+            content=b"# Thread persistence integration test\n99999\n",
+        )
+
+    assert put_resp.status_code in (200, 204), (
+        f"Failed to write test note to Obsidian at {test_note_path}: {put_resp.status_code}"
+    )
+
+    # Read it back — verify our write landed
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        get_resp = await client.get(
+            f"{base_url}/vault/{test_note_path}",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+
+    assert get_resp.status_code == 200, (
+        f"Note written but not readable at {test_note_path}: {get_resp.status_code}"
+    )
+    assert b"99999" in get_resp.content, (
+        f"Thread ID 99999 not found in vault note content: {get_resp.content!r}"
+    )
+    # obsidian_teardown autouse fixture handles DELETE /vault/{test_run_path}/ after yield
