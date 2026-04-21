@@ -51,6 +51,9 @@ os.environ.setdefault("SENTINEL_API_KEY", "test-key-for-pytest")
 # Add interfaces/discord to path
 _discord_dir = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, os.path.abspath(_discord_dir))
+# Add repo root so `shared` package is importable
+_repo_root = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+sys.path.insert(0, os.path.abspath(_repo_root))
 
 import bot  # noqa: E402
 
