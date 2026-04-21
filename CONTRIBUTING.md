@@ -2,7 +2,7 @@
 
 This guide is for anyone who wants to build a new module or interface for the Sentinel — including future-you coming back six months from now having forgotten how this all fits together.
 
-The design principle: **you should be able to add a module without touching anything in the core.** A module is a Docker container (or a few), a Docker Compose override file, and a set of pi skill files. That's it.
+The design principle: **you should be able to add a module without touching anything in the core.** A module is a Docker container (or a few), a Docker Compose override file, and optionally an HTTP API the Core can call. That's it.
 
 ---
 
@@ -11,7 +11,6 @@ The design principle: **you should be able to add a module without touching anyt
 ### Prerequisites
 
 - Python 3.12
-- Node.js 22 LTS
 - Docker Compose v2 (`docker compose`, not `docker-compose`)
 
 ### Clone and setup
@@ -53,13 +52,13 @@ docker compose up
 
 When a user sends a message:
 
-1. An **interface container** receives it and posts a JSON envelope to the Core at `POST /message`
-2. The **Sentinel Core** retrieves relevant context from Obsidian, builds a prompt, and sends it to the Pi harness
-3. The **Pi harness** (the `coding-agent` AI runner) executes the prompt against LM Studio and returns a response
+1. An **interface container** receives a message and posts a JSON envelope to the Core at `POST /message`
+2. The **Sentinel Core** retrieves relevant context from Obsidian and builds a prompt
+3. The Core calls **LiteLLM** directly to get an AI response (LM Studio, Claude, or other configured provider)
 4. The Core writes a session note to Obsidian and returns the response to the interface
 5. The interface delivers it back to the user
 
-Modules hook in at step 2/3: they register as pi **skills** that the AI can invoke, and they optionally expose HTTP endpoints the Core can call directly.
+Modules extend this flow by exposing HTTP endpoints the Core can call during step 3 (for data retrieval or specialized operations). The Pi harness is NOT in the default message path — it is an optional coding tool started with `./sentinel.sh --pi`, scoped to the v0.7 Coder module.
 
 ---
 
@@ -82,43 +81,16 @@ modules/
     ├── docker-compose.override.yml   ← adds your container(s) to the system
     ├── Dockerfile                    ← your container definition
     ├── requirements.txt              ← or package.json, depending on language
-    ├── main.py                       ← your module's main logic
-    └── skills/
-        └── your-skill-name.md        ← one or more pi skill files
+    └── main.py                       ← your module's main logic
 ```
 
-### Step 3 — Write your pi skill file(s)
+### Step 3 — Expose an HTTP API (if your module does work on request)
 
-Skills are what the AI calls when it needs your module to do something. A skill is a markdown file with YAML frontmatter:
+If the Core needs to call your module during a conversation (e.g., to log data or look something up), expose an HTTP endpoint your module container serves. The Core calls module endpoints via the `sentinel-net` Docker network using the container name as the hostname.
 
-```markdown
----
-name: music-log-practice
-description: Log a music practice session. Use when the user mentions practicing an instrument, working on a piece, or doing a lesson. Arguments: duration in minutes, pieces worked on, notes about the session.
----
+Example: a music module might expose `POST http://sentinel-music:8100/log-practice` which the Core calls when the AI determines a practice session should be logged.
 
-# Log Practice Session
-
-When invoked, write a practice session entry to the Obsidian vault.
-
-The entry should go to `/music/practice-log/YYYY-MM-DD.md` with this frontmatter:
-
-```yaml
----
-date: [today's date]
-duration_minutes: [from arguments]
-pieces: [from arguments]
-tags: [practice, music]
----
-```
-
-After writing the file, confirm to the user that the session was logged and ask if they want to add any additional notes.
-```
-
-Key rules for skill files:
-- `name` must be lowercase with hyphens only, 1–64 characters
-- `description` is what the AI reads to decide whether to call this skill — be specific about when to use it and what arguments it expects
-- The body is the instruction the AI follows when the skill is invoked — write it clearly, as if explaining to a capable assistant
+If your module only writes to Obsidian on its own schedule (e.g., a finance importer running a cron job), you do not need to expose any HTTP endpoints.
 
 ### Step 4 — Write your Docker Compose override
 
@@ -135,15 +107,15 @@ services:
       - OBSIDIAN_API_URL=${OBSIDIAN_API_URL}
       - OBSIDIAN_API_KEY=${OBSIDIAN_API_KEY}
       - ANY_MODULE_SPECIFIC_VARS=${YOUR_VAR}
-    volumes:
-      - ./modules/your-module-name/skills:/app/skills:ro
 ```
 
 The `sentinel-net` network is defined in the base `docker-compose.yml` — all containers must join it to communicate.
 
-### Step 5 — Register your skills with the Pi harness
+### Step 5 — Register your module endpoint with the Core (optional)
 
-Skills in `modules/your-module-name/skills/` need to be visible to the Pi harness container. The recommended approach is a shared Docker volume mounted into both your module container and the Pi harness. See the base `docker-compose.yml` for the `pi-skills` volume definition.
+If your module exposes HTTP endpoints the Core should call, document the endpoint URL and expected request/response shape in your module's README. The Core's ProviderRouter or a module-dispatch service routes calls to registered module endpoints.
+
+Future versions (v0.5+) will have a formal module registration API. For now, the Core calls module endpoints explicitly based on configuration.
 
 ### Step 6 — Define your Obsidian folder structure
 
@@ -173,7 +145,7 @@ This makes vault-wide search and the Core's context retrieval work correctly.
 
 # Check logs
 docker logs sentinel-your-module
-docker logs pi-harness
+docker logs sentinel-core
 ```
 
 ---
