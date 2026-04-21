@@ -1,6 +1,6 @@
 # Sentinel of Mnemosyne — Core Architecture
-**Version:** 0.2
-**Date:** 2026-04-20
+**Version:** 0.40
+**Date:** 2026-04-21
 **Scope:** Core system (Path B) — Interface layer, Sentinel Core container, AI provider layer, Module API gateway, Obsidian vault. Pi harness is optional (v0.7 scope, `--pi` flag only).
 
 ---

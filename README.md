@@ -1,10 +1,33 @@
 # Sentinel of Mnemosyne
 
-A self-hosted, containerized AI assistant platform built on open, composable components. You bring your own AI, your own memory, and your own interface — the Sentinel wires them together.
+A self-hosted, containerized AI assistant platform built for personal use. The Sentinel wires together a local AI engine (LM Studio on a Mac Mini), an Obsidian vault as persistent memory, and pluggable interface/module containers — so the same engine can serve as a DM co-pilot, music practice journal, finance tracker, or autonomous stock trader depending on what you attach to it.
 
-**The brain:** [pi-mono coding-agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) — AI execution, tool use, skill dispatch.
-**The heart:** [Obsidian](https://obsidian.md) vault (Mnemosyne) — persistent knowledge as human-readable markdown.
-**The nervous system:** Sentinel Core — routes messages, retrieves context, orchestrates writes.
+**Core value:** A message goes in, an AI response that knows your history comes back — and what mattered gets written to Obsidian so the next conversation starts smarter.
+
+---
+
+## Architecture at a Glance
+
+```
+[ Interface Container ]     (Discord, Apple Messages, ...)
+         |
+         | HTTP POST /message  (X-Sentinel-Key header)
+         v
+[ Sentinel Core ]           (Python/FastAPI)
+    |               |                   |
+    | LiteLLM       | httpx proxy       | REST API
+    v               v                   v
+[ AI Providers ]  [ Module Containers ] [ Obsidian Local REST API ]
+  LM Studio         (v0.5+: Pathfinder,   Mnemosyne vault
+  Claude API         Music, Finance...)
+  Ollama (future)
+
+[ Pi Harness ] — optional, ./sentinel.sh --pi, scoped to v0.7 (Coder module)
+```
+
+**Request flow:** Sentinel Core calls LiteLLM directly for all chat. The Pi harness is NOT in the default message path — it is an optional coding tool started only with the `--pi` flag and scoped to the v0.7 Coder module.
+
+All components are Docker containers. LM Studio runs natively on a Mac Mini. The Obsidian vault is a local folder on your Mac — plain markdown files you always own.
 
 ---
 
@@ -16,42 +39,14 @@ The design goal is maximum flexibility with a stable, narrow core API. You add a
 
 ---
 
-## Architecture at a Glance
-
-```
-[ Interface Container ]     (Discord, Apple Messages, Slack, ...)
-         |
-         | HTTP POST /message  (X-Sentinel-Key header)
-         v
-[ Sentinel Core ]           (Python/FastAPI — router & context manager)
-    |          |                        |
-    | HTTP      | HTTP                   | REST API
-    v          v                        v
-[ Pi Harness ] [ AI Provider Layer ] [ Obsidian Local REST API ]
-[ (coding- ]   [ (ProviderRouter)  ] [ Mnemosyne vault          ]
-[  agent)  ]   [ LM Studio/Claude/ ]
-               [ Ollama/llama.cpp  ]
-         |
-         v
-[ LM Studio on Mac Mini ]   (primary — or any OpenAI-compatible endpoint)
-[ Claude API ]              (optional fallback)
-[ Ollama / llama.cpp ]      (stub — future)
-```
-
-**Request flow:** Sentinel Core tries Pi harness first. If Pi is unreachable, it falls back to calling the AI provider layer directly via `ProviderRouter`. The Pi path is preferred because it supports tool use and skill dispatch; the direct path is the reliability backstop.
-
-All components are Docker containers. LM Studio runs natively on a Mac Mini. The Obsidian vault is a local folder on your Mac — plain markdown files you always own.
-
----
-
-## Modules (Planned)
+## Modules
 
 | Module | Purpose | Status |
 |---|---|---|
-| Core | Routing, context, Obsidian writes | In development |
+| Core | Routing, context, Obsidian writes | Working (v0.40) |
 | Pathfinder 2e DM | NPC management, dialogue, session notes | Planned v0.5 |
 | Music Lesson Tracker | Practice logs, chord ideas, progress | Planned v0.6 |
-| Coder Interface | AI-assisted module development | Planned v0.7 |
+| Coder Interface | AI-assisted module development (uses Pi harness) | Planned v0.7 |
 | Personal Finance | OFX import, spending analysis, budgets | Planned v0.8 |
 | Stock Trader | Research + rule-constrained paper/live trading | Planned v0.9 |
 | Media Discovery | ListenBrainz + Discogs wantlist integration | Future |
@@ -63,12 +58,13 @@ All components are Docker containers. LM Studio runs natively on a Mac Mini. The
 - **Docker Desktop** (Mac) or Docker + Docker Compose on Linux
 - **LM Studio** running on a Mac Mini (or any machine on your local network) with a model loaded and the local server started
 - **Obsidian** with the [Local REST API community plugin](https://github.com/coddingtonbear/obsidian-local-rest-api) installed and enabled
-- **Node.js 22 LTS** (used inside the Pi harness container — the Dockerfile handles this, but good to know)
 - A Discord bot token if using the Discord interface
+
+> **Node.js 22 LTS** is only needed if you run the Pi harness (`--pi` flag, v0.7 scope). The Dockerfile handles it inside the container — it is not a host-level prerequisite for standard operation.
 
 ---
 
-## Quick Start (v0.1 — Core Loop Only)
+## Quick Start
 
 > This gets you a working AI response via `curl`. Full interface setup comes later.
 
@@ -78,32 +74,76 @@ git clone https://github.com/The-Artificer-of-Ciphers-LLC/sentinel-of-mnemosyne.
 cd sentinel-of-mnemosyne
 ```
 
-**2. Copy the environment template and fill it in**
+**2. Create your secret files**
+
+Secrets live in the `secrets/` directory as individual files — one file per secret. See [secrets/README.md](secrets/README.md) for the full list and why this is safer than `.env`.
+
 ```bash
-cp .env.example .env
-# Edit .env with your LM Studio IP, Obsidian API key, etc.
+# Required always
+echo -n "your-obsidian-api-key" > secrets/obsidian_api_key
+echo -n "$(openssl rand -hex 32)" > secrets/sentinel_api_key
+
+# Required for Discord interface
+echo -n "your-discord-bot-token" > secrets/discord_bot_token
+
+# Optional: Claude API fallback
+echo -n "your-anthropic-key" > secrets/anthropic_api_key
 ```
 
-**3. Start LM Studio on your Mac Mini**
+**3. Configure non-secret settings**
+```bash
+cp .env.example .env
+# Edit .env — set LMSTUDIO_BASE_URL to your Mac Mini IP, adjust MODEL_NAME if needed
+# .env contains only non-secret config (URLs, log levels, modes)
+```
+
+**4. Start LM Studio on your Mac Mini**
 - Open LM Studio → Local Server → Start server
 - Note the IP address and port (default: `1234`)
 - Make sure a model is loaded
 
-**4. Start the core containers**
+**5. Start the core containers**
 ```bash
+# Core only
 ./sentinel.sh up -d
-# Or: docker compose up -d
+
+# Core + Discord
+./sentinel.sh --discord up -d
 ```
 
-**5. Test it**
+**6. Test it**
 ```bash
+SENTINEL_KEY=$(cat secrets/sentinel_api_key)
 curl -X POST http://localhost:8000/message \
   -H "Content-Type: application/json" \
-  -H "X-Sentinel-Key: your-sentinel-api-key" \
+  -H "X-Sentinel-Key: $SENTINEL_KEY" \
   -d '{"id":"test-001","source":"curl","user_id":"you","channel_id":"test","timestamp":"2026-04-06T12:00:00Z","content":"Hello, are you there?","attachments":[],"metadata":{}}'
 ```
 
-You should get an AI response back. That's v0.1.
+You should get an AI response back.
+
+---
+
+## sentinel.sh Flags
+
+```
+./sentinel.sh [flags] <docker compose args>
+
+Flags:
+  --discord      Start Discord bot interface
+  --pi           Start Pi harness (optional coding tool — v0.7 scope)
+  --pathfinder   Start Pathfinder 2e DM module (v0.5, planned)
+  --music        Start Music Lesson Tracker module (v0.6, planned)
+  --finance      Start Personal Finance module (v0.8, planned)
+  --trader       Start Stock Trader module (v0.9, planned)
+  --coder        Start Coder Interface module (v0.7, planned)
+
+Examples:
+  ./sentinel.sh up -d                          # Core only
+  ./sentinel.sh --discord up -d                # Core + Discord
+  ./sentinel.sh --discord --pathfinder up -d   # Core + Discord + Pathfinder
+  ./sentinel.sh down                           # Stop all services
+```
 
 ---
 
@@ -112,7 +152,7 @@ You should get an AI response back. That's v0.1.
 Each interface is a Docker Compose override file. To add Discord:
 
 ```bash
-# Add your Discord bot token to .env, then:
+# Create secrets/discord_bot_token with your bot token, then:
 ./sentinel.sh --discord up -d
 ```
 
@@ -122,13 +162,50 @@ See `interfaces/discord/` for setup details.
 
 ## Adding a Module
 
-Each module ships as a Docker Compose override file and a set of pi skill files. To add a module:
+Each module ships as a Docker Compose override file. To add a module:
 
 ```bash
-./sentinel.sh --discord --music up -d
+./sentinel.sh --discord --pathfinder up -d
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build your own module.
+
+---
+
+## Discord Commands
+
+The bot responds to `/sen <message>` in allowed channels.
+
+To use a subcommand, prefix your message with `:`:
+
+| Command | What it does |
+|---|---|
+| `/sen :help` | List all subcommands |
+| `/sen :capture <text>` | Capture text to Obsidian inbox |
+| `/sen :next` | What to work on next based on your goals |
+| `/sen :health` | Vault health check |
+| `/sen :goals` | Show current active goals |
+| `/sen :reminders` | Show current time-bound reminders |
+| `/sen :ralph` | Batch process inbox queue |
+| `/sen :pipeline` | Run full 6 Rs processing pipeline |
+| `/sen :reweave` | Backward pass to update older notes |
+| `/sen :check` | Validate schema compliance |
+| `/sen :rethink` | Review observations and tensions |
+| `/sen :refactor` | Suggest vault restructuring |
+| `/sen :tasks` | Show task queue |
+| `/sen :stats` | Vault metrics |
+| `/sen :graph` | Graph analysis |
+| `/sen :learn <topic>` | Research a topic and capture to vault |
+| `/sen :remember <observation>` | Capture a methodology observation |
+| `/sen :revisit <note>` | Revisit and update a note |
+| `/sen :connect <note>` | Find connections for a note |
+| `/sen :review <note>` | Verify note quality |
+| `/sen :seed <content>` | Drop raw content into inbox/ |
+| `/sen :plugin:help` | List plugin commands |
+| `/sen :plugin:health` | Plugin health check |
+| `/sen :plugin:architect` | Architecture review |
+
+Any reply in a Sentinel thread also triggers the AI — no slash command needed.
 
 ---
 
@@ -136,16 +213,24 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build your own module.
 
 ```
 sentinel-of-mnemosyne/
-├── docker-compose.yml          # Core containers (Sentinel Core + Pi Harness)
-├── .env.example                # Environment variable template
-├── sentinel.sh                 # Convenience wrapper for docker compose
+├── docker-compose.yml          # Core + includes for all services (Compose v2.20+)
+├── .env.example                # Non-secret configuration template
+├── sentinel.sh                 # docker compose wrapper with --discord, --pi, etc. flags
 ├── sentinel-core/              # Python/FastAPI core container
-├── pi-harness/                 # Node.js 24 pi coding-agent container
+│   ├── app/                    # Application code
+│   │   ├── clients/            # LiteLLM provider, Obsidian client
+│   │   ├── routes/             # /message, /modules, /status, /health
+│   │   └── services/           # ProviderRouter, InjectionFilter, OutputScanner
+│   └── compose.yml
+├── pi-harness/                 # Node.js pi coding-agent (optional — --pi flag, v0.7 scope)
 ├── interfaces/
-│   ├── discord/                # Discord bot interface
-│   └── messages/               # Apple Messages bridge (Mac-side component)
-├── modules/                    # Module containers (added as project grows)
-├── skills/                     # Pi skill files shared across modules
+│   ├── discord/                # Discord bot (/sen command)
+│   └── messages/               # Apple Messages bridge (Mac-native component)
+├── modules/                    # Module containers (v0.5+ when phases ship)
+├── skills/                     # Skill files for module dispatch
+├── secrets/                    # Secret files (gitignored — one file per secret)
+├── security/                   # Security tooling
+├── shared/                     # Shared Python client libraries
 ├── mnemosyne/                  # Obsidian vault (gitignored — your data stays yours)
 └── docs/
     ├── PRD-Sentinel-of-Mnemosyne.md
@@ -156,21 +241,23 @@ sentinel-of-mnemosyne/
 
 ## Configuration Reference
 
-All configuration is done through `.env`. See `.env.example` for the full list with descriptions. Key variables:
+Non-secret configuration lives in `.env`. See `.env.example` for the full list with descriptions. Secret values live in `secrets/` — see [secrets/README.md](secrets/README.md).
 
 | Variable | Purpose |
 |---|---|
 | `LMSTUDIO_BASE_URL` | LM Studio server URL (e.g., `http://192.168.1.x:1234/v1`) |
-| `MODEL_NAME` | Model identifier for direct LiteLLM calls (e.g., `llama-3.2-8b-instruct`) |
-| `PI_MODEL` | Model name passed to the Pi harness settings |
+| `MODEL_NAME` | Model identifier for LiteLLM calls (e.g., `llama-3.2-8b-instruct`) |
 | `AI_PROVIDER` | Active AI backend: `lmstudio` (default), `claude`, `ollama`, `llamacpp` |
 | `AI_FALLBACK_PROVIDER` | Fallback on connectivity failure: `claude` or `none` (default) |
-| `ANTHROPIC_API_KEY` | Anthropic API key — required when `AI_PROVIDER=claude` or `AI_FALLBACK_PROVIDER=claude` |
+| `ANTHROPIC_API_KEY` | In `secrets/anthropic_api_key` — required when provider is `claude` |
 | `CLAUDE_MODEL` | Claude model ID (default: `claude-haiku-4-5`) |
 | `OBSIDIAN_API_URL` | URL for the Obsidian Local REST API plugin |
-| `OBSIDIAN_API_KEY` | API key from the Obsidian plugin settings |
-| `SENTINEL_API_KEY` | Shared secret between Core and interface containers |
+| `OBSIDIAN_API_KEY` | In `secrets/obsidian_api_key` — from Obsidian plugin settings |
+| `SENTINEL_API_KEY` | In `secrets/sentinel_api_key` — shared secret for interface auth |
+| `DISCORD_ALLOWED_CHANNELS` | Comma-separated channel IDs (empty = all channels) |
 | `LOG_LEVEL` | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `PI_MODEL` | Model name for Pi harness — only needed with `--pi` flag |
+| `PI_HARNESS_URL` | Pi harness address — only needed with `--pi` flag |
 
 ---
 
@@ -179,13 +266,13 @@ All configuration is done through `.env`. See `.env.example` for the full list w
 - [Product Requirements Document](docs/PRD-Sentinel-of-Mnemosyne.md) — vision, modules, milestones
 - [Core Architecture](docs/ARCHITECTURE-Core.md) — technical decisions, API specs, Docker layout
 - [Contributing Guide](CONTRIBUTING.md) — how to build modules and interfaces
-- [Roadmap](ROADMAP.md) — milestone summary
+- [Secrets Setup](secrets/README.md) — all secret files and how to create them
 
 ---
 
 ## Status
 
-This project is in early development. v0.1 (the core loop) is the current target. The architecture and API contracts documented here are stable enough to build against, but may evolve before v1.0.
+This project is at v0.40 (pre-beta). The core loop, Discord interface, and LiteLLM-direct AI path are working. The architecture described here is the canonical v0.40 Path B design — LiteLLM-direct chat, Pi harness as an optional future coding tool. Module milestones (v0.5+) are planned.
 
 ---
 
