@@ -398,6 +398,28 @@ async def _teardown_obsidian(obsidian_url: str, obsidian_key: str) -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 
+async def _warmup_llm(base_url: str, api_key: str) -> None:
+    """Fire one unrecorded LLM call to prime the model before tests begin.
+
+    LM Studio occasionally returns BadRequestError on the very first request
+    after a long idle period (KV-cache reset). The warm-up absorbs that hit
+    so the recorded happy-path test doesn't catch it.
+    """
+    auth = {"X-Sentinel-Key": api_key}
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        for _ in range(3):
+            try:
+                r = await client.post(
+                    f"{base_url}/message",
+                    json={"content": "ping", "user_id": "uat-warmup"},
+                    headers=auth,
+                )
+                if r.status_code == 200:
+                    return
+            except Exception:
+                pass
+
+
 async def run_all(
     bot_token: str,
     channel_id: int,
@@ -406,6 +428,7 @@ async def run_all(
     obsidian_url: str,
     obsidian_key: str,
 ) -> None:
+    await _warmup_llm(sentinel_url, sentinel_key)
     try:
         await test_sentinel_api(sentinel_url, sentinel_key)
         await test_command_routing(sentinel_url, sentinel_key)
