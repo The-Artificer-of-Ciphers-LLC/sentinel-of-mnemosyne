@@ -311,7 +311,18 @@ class SentinelBot(discord.Client):
 
     async def setup_hook(self) -> None:
         """Called once per process startup — safe point to sync command tree and load thread IDs."""
-        await self.tree.sync()
+        synced_commands = await self.tree.sync()
+        synced_count = len(synced_commands) if synced_commands else 0
+        logger.info(
+            f"Slash commands synced to Discord API: {synced_count} command(s) registered "
+            f"(global sync — up to 1hr propagation to all servers)."
+        )
+        if synced_count == 0:
+            logger.warning(
+                "tree.sync() returned 0 commands — /sen may not be visible in Discord. "
+                "Verify bot has applications.commands scope and the @bot.tree.command "
+                "decorator runs before bot = SentinelBot()."
+            )
         # Load persisted thread IDs from vault (D-04)
         obsidian_url = os.environ.get("OBSIDIAN_API_URL", "http://host.docker.internal:27124")
         obsidian_key = _read_secret("obsidian_api_key", os.environ.get("OBSIDIAN_API_KEY", ""))
@@ -329,7 +340,6 @@ class SentinelBot(discord.Client):
                     logger.info(f"Loaded {len(SENTINEL_THREAD_IDS)} persisted thread IDs")
         except Exception as exc:
             logger.warning(f"Could not load thread IDs from vault: {exc}")
-        logger.info("Slash commands synced globally (up to 1hr propagation).")
 
     async def on_ready(self) -> None:
         user = self.user
