@@ -100,3 +100,62 @@ async def test_plugin_subcommand_routing():
 
     mock_core.assert_called_once()
     assert result == "vault health ok"
+
+
+# ---------------------------------------------------------------------------
+# Phase 26 expansion: :seed, :check, :pipeline subcommand coverage (2B-01, 2B-04)
+# ---------------------------------------------------------------------------
+
+
+async def test_seed_subcommand_calls_core():
+    """handle_sentask_subcommand('seed', 'raw text', user) calls _call_core with inbox seed prompt."""
+    with patch("bot._call_core", new=AsyncMock(return_value="Seeded.")) as mock_core:
+        result = await bot.handle_sentask_subcommand("seed", "raw text for inbox", "user123")
+
+    mock_core.assert_called_once()
+    call_args = mock_core.call_args
+    # First positional arg is user_id, second is the prompt string
+    assert call_args[0][0] == "user123"
+    prompt = call_args[0][1]
+    assert "inbox" in prompt.lower(), f"Expected 'inbox' in seed prompt, got: {prompt!r}"
+    assert "raw text for inbox" in prompt, f"Seed args not in prompt: {prompt!r}"
+    assert result == "Seeded."
+
+
+async def test_seed_subcommand_no_args_returns_usage():
+    """handle_sentask_subcommand('seed', '', user) returns usage string without calling Core."""
+    with patch("bot._call_core", new=AsyncMock()) as mock_core:
+        result = await bot.handle_sentask_subcommand("seed", "", "user123")
+
+    mock_core.assert_not_called()
+    assert ":seed" in result, f"Expected ':seed' in usage hint, got: {result!r}"
+
+
+async def test_check_subcommand_calls_core():
+    """:check is a no-arg standard subcommand; it routes through _SUBCOMMAND_PROMPTS dict to _call_core."""
+    assert "check" in bot._SUBCOMMAND_PROMPTS, (
+        "':check' key missing from _SUBCOMMAND_PROMPTS — 2B-04 requirement not met"
+    )
+    with patch("bot._call_core", new=AsyncMock(return_value="Check complete.")) as mock_core:
+        result = await bot.handle_sentask_subcommand("check", "", "user123")
+
+    mock_core.assert_called_once()
+    call_args = mock_core.call_args
+    assert call_args[0][0] == "user123"
+    assert isinstance(call_args[0][1], str) and len(call_args[0][1]) > 0
+    assert result == "Check complete."
+
+
+async def test_pipeline_subcommand_calls_core():
+    """:pipeline is a no-arg standard subcommand; it routes through _SUBCOMMAND_PROMPTS dict to _call_core."""
+    assert "pipeline" in bot._SUBCOMMAND_PROMPTS, (
+        "':pipeline' key missing from _SUBCOMMAND_PROMPTS — 2B-01 requirement not met"
+    )
+    with patch("bot._call_core", new=AsyncMock(return_value="Pipeline running.")) as mock_core:
+        result = await bot.handle_sentask_subcommand("pipeline", "", "user123")
+
+    mock_core.assert_called_once()
+    call_args = mock_core.call_args
+    assert call_args[0][0] == "user123"
+    assert isinstance(call_args[0][1], str) and len(call_args[0][1]) > 0
+    assert result == "Pipeline running."
