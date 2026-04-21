@@ -14,6 +14,7 @@ for arg in "$@"; do
     --finance)    PROFILES+=("finance") ;;
     --trader)     PROFILES+=("trader") ;;
     --coder)      PROFILES+=("coder") ;;
+    --pi)         PROFILES+=("pi") ;;
     *)            ARGS+=("$arg") ;;
   esac
 done

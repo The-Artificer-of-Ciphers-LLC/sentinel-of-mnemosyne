@@ -2,6 +2,7 @@
 # Paths are resolved relative to this file's directory.
 services:
   pi-harness:
+    profiles: [pi]   # opt-in only; activated via `./sentinel.sh --pi`
     build:
       context: .
       dockerfile: Dockerfile
