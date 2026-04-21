@@ -10,8 +10,7 @@ OBSIDIAN_API_KEY = os.environ.get("OBSIDIAN_API_KEY", "")
 
 
 def pytest_configure(config):
-    """Register asyncio_mode=auto and custom markers for this test directory."""
-    config.option.asyncio_mode = "auto"
+    """Register custom markers for this test directory."""
     config.addinivalue_line(
         "markers", "integration: mark test as requiring live Obsidian REST API"
     )
