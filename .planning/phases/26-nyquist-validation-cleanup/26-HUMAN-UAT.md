@@ -1,5 +1,5 @@
 ---
-status: partial
+status: resolved
 phase: 26-nyquist-validation-cleanup
 source: [26-VERIFICATION.md]
 started: "2026-04-21T00:00:00.000Z"
@@ -22,14 +22,14 @@ cd interfaces/discord && python3 -m pytest tests/test_thread_persistence.py -x
 cd interfaces/discord && python3 -m pytest tests/test_subcommands.py -x -k "check"
 ```
 
-result: [pending]
+result: PASS — 9/9 subcommand tests passed; 3 passed + 1 skipped (integration, Obsidian not running) in thread persistence; -k check selected exactly test_check_subcommand_calls_core
 
 ## Summary
 
 total: 1
-passed: 0
+passed: 1
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
