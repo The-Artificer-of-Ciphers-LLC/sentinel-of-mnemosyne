@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.40
 milestone_name: Pre-Beta Refactoring
 status: executing
-stopped_at: Phase 27 context updated — 4 gap items added
-last_updated: "2026-04-21T03:31:29.628Z"
-last_activity: 2026-04-21 -- Phase 26 execution started
+stopped_at: Phase 27 gap-closure plans added (27-07 through 27-10)
+last_updated: "2026-04-21T03:44:04.575Z"
+last_activity: 2026-04-21 -- Phase --phase execution started
 progress:
   total_phases: 26
   completed_phases: 11
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 27 — architecture-pivot
+**Current focus:** Phase --phase — 27
 
 ## Current Position
 
-Phase: 27 (architecture-pivot) — READY
-Plan: 1 of 5
+Phase: --phase (27) — EXECUTING
+Plan: 1 of --name
 Milestone: v0.4 Functional Alpha — COMPLETE
 Next milestone: v0.5 The Dungeon (Pathfinder 2e module)
-Status: Executing Phase 26
-Last activity: 2026-04-21 -- Phase 26 execution started
+Status: Executing Phase --phase
+Last activity: 2026-04-21 -- Phase --phase execution started
 
 ## Milestone Progress
 
@@ -112,6 +112,7 @@ None.
 | 260411-c70 | Replan milestones to match PRD: v0.4 Functional Alpha COMPLETE (phases 01–10), module milestones v0.5–v1.0 restored | 2026-04-11 | — | [260411-c70-replan-milestones-based-on-architecture-](.planning/quick/260411-c70-replan-milestones-based-on-architecture-/) |
 | 260411-kdc | Remove duplicate reset_session() from pi_adapter.py — close Phase 23 SC-3 gap, 23-VERIFICATION.md 5/5 PASS | 2026-04-11 | 2e91e92 | [260411-kdc-restore-reset-session-to-pi-adapter-py-p](.planning/quick/260411-kdc-restore-reset-session-to-pi-adapter-py-p/) |
 | 260411-q4h | convert from .env for secrets to docker secrets — 9 secrets migrated to /run/secrets/ files | 2026-04-11 | a1a8322 | [260411-q4h](.planning/quick/260411-q4h-convert-from-env-for-secrets-to-docker-s/) |
+| 260420-xbc | Fix discord thread tracking restart bug and build bulletproof pytest integration and discord uat test suite | 2026-04-21 | 5326de5 | [260420-xbc-fix-discord-thread-tracking-restart-bug-](.planning/quick/260420-xbc-fix-discord-thread-tracking-restart-bug-/) |
 
 ## Session Continuity
 
