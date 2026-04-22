@@ -11,9 +11,10 @@ include:
   - path: pi-harness/compose.yml         # profiles: [pi] inside — only starts with ./sentinel.sh --pi
   - path: interfaces/discord/compose.yml  # DO NOT COMMENT — restored 3x, required for Discord interface
   - path: security/pentest-agent/compose.yml
+  - path: modules/pathfinder/compose.yml  # profiles: [pf2e] inside — activate with ./sentinel.sh --pf2e up
 
-# Future modules (uncomment when phase is ready):
-#   - path: modules/pathfinder/compose.yml
+# Future modules: add include entries here following the modules/pathfinder/compose.yml pattern.
+# Each module compose.yml must declare profiles: ["<profile-name>"] to remain opt-in.
 
 # Top-level secrets block — maps each secret name to its file on the host.
 # Secret files live in secrets/ (gitignored). See secrets/README.md.

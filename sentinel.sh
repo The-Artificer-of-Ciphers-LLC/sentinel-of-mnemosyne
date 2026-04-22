@@ -9,7 +9,7 @@ for arg in "$@"; do
   case "$arg" in
     --discord)    PROFILES+=("discord") ;;
     --imessage)   echo "iMessage runs natively on Mac, not in Docker." && exit 1 ;;
-    --pathfinder) PROFILES+=("pathfinder") ;;
+    --pf2e)       PROFILES+=("pf2e") ;;
     --music)      PROFILES+=("music") ;;
     --finance)    PROFILES+=("finance") ;;
     --trader)     PROFILES+=("trader") ;;
@@ -26,7 +26,7 @@ done
 
 # On teardown, include all known opt-in profiles so profiled services (e.g. pi-harness)
 # are stopped even when the caller didn't pass their --flag.
-ALL_KNOWN_PROFILES=(pi discord pathfinder music finance trader coder)
+ALL_KNOWN_PROFILES=(pi discord pf2e music finance trader coder)
 for arg in ${ARGS[@]+"${ARGS[@]}"}; do
   if [[ "$arg" == "down" ]]; then
     for p in "${ALL_KNOWN_PROFILES[@]}"; do
