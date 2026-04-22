@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.5
-milestone_name: The Dungeon
-status: active
-stopped_at: ~
-last_updated: "2026-04-21T00:00:00.000Z"
-last_activity: 2026-04-21 -- Milestone v0.5 roadmap created (9 phases, 31 requirements)
+milestone: v0.40
+milestone_name: Pre-Beta Refactoring
+status: executing
+stopped_at: Phase 28 complete — human UAT pending
+last_updated: "2026-04-22T01:24:00.000Z"
+last_activity: 2026-04-22 -- Phase 28 execution complete (3/3 plans, human UAT pending)
 progress:
-  total_phases: 9
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 26
+  completed_phases: 11
+  total_plans: 29
+  completed_plans: 35
+  percent: 100
 ---
 
 # Project State
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Milestone v0.5 — The Dungeon (Pathfinder 2e module)
+**Current focus:** Phase 29 — NPC CRUD + Obsidian Persistence
 
 ## Current Position
 
-Phase: 28 (pf2e-module Skeleton + CORS) — not started
-Plan: —
+Phase: 28 — COMPLETE (human UAT pending)
+Next Phase: 29 — NPC CRUD + Obsidian Persistence
 Milestone: v0.5 The Dungeon — IN PROGRESS
-Status: Roadmap defined; ready for Phase 28
-Last activity: 2026-04-21 — v0.5 roadmap created (Phases 28–36, 31 requirements)
+Status: Phase 28 complete, advancing to Phase 29
+Last activity: 2026-04-22 -- Phase 28 execution complete (3/3 plans)
 
 ## Milestone Progress
 
@@ -54,7 +54,7 @@ Progress (v0.5): [          ] 0% (0/9 phases)
 
 | Phase | Name | Requirements | Depends on | Status |
 |-------|------|--------------|------------|--------|
-| 28 | pf2e-module Skeleton + CORS | MOD-01, MOD-02 | Phase 26 | Not started |
+| 28 | pf2e-module Skeleton + CORS | MOD-01, MOD-02 | Phase 26 | ✅ COMPLETE (2026-04-22) |
 | 29 | NPC CRUD + Obsidian Persistence | NPC-01..05 | Phase 28 | Not started |
 | 30 | NPC Outputs | OUT-01..04 | Phase 29 | Not started |
 | 31 | Dialogue Engine | DLG-01..03 | Phase 29 | Not started |
@@ -137,8 +137,10 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-21T00:00:00.000Z
-Stopped at: v0.5 roadmap created — ready to begin Phase 28
-Resume file: None
+Last session: --stopped-at
+Stopped at: Phase 28 context gathered
+Resume file: --resume-file
 
 **Next Phase:** 28 (pf2e-module Skeleton + CORS) — MOD-01, MOD-02
+
+**Planned Phase:** 28 (pf2e-module Skeleton + CORS) — 3 plans — 2026-04-22T00:58:53.796Z
