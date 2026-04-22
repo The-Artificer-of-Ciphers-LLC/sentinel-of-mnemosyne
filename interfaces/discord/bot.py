@@ -499,6 +499,10 @@ class SentinelBot(discord.Client):
                         if line.isdigit():
                             SENTINEL_THREAD_IDS.add(int(line))
                     logger.info(f"Loaded {len(SENTINEL_THREAD_IDS)} persisted thread IDs")
+                elif resp.status_code == 404:
+                    logger.info("No discord-threads.md yet — starting fresh")
+                else:
+                    logger.warning("Unexpected status %d loading thread IDs", resp.status_code)
         except Exception as exc:
             logger.warning(f"Could not load thread IDs from vault: {exc}")
 
