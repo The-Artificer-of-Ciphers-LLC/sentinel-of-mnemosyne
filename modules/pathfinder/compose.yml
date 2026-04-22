@@ -1,0 +1,36 @@
+# modules/pathfinder/compose.yml
+# pf2e-module: Pathfinder 2e DM co-pilot module (Phase 28 Path B reference implementation)
+#
+# Profile: pf2e  (D-10) — activate with: ./sentinel.sh --pf2e up
+# Service name: pf2e-module  (D-17) — must match base_url in REGISTRATION_PAYLOAD
+# Registry name: pathfinder  (D-11) — logical name in sentinel-core module registry
+#
+# D-12: Docker profile "pf2e" != module registry name "pathfinder" — two different identifiers.
+# D-14: Module directory is modules/pathfinder/ (logical name) not modules/pf2e/.
+services:
+  pf2e-module:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - pf2e
+    env_file:
+      - ../../.env
+    secrets:
+      - sentinel_api_key
+    environment:
+      - SENTINEL_CORE_URL=http://sentinel-core:8000
+    depends_on:
+      sentinel-core:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+secrets:
+  sentinel_api_key:
+    file: ../../secrets/sentinel_api_key
