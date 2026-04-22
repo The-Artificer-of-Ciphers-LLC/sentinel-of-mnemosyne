@@ -16,6 +16,7 @@ from typing import AsyncGenerator
 
 import httpx
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
@@ -188,7 +189,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(APIKeyMiddleware)
+app.add_middleware(APIKeyMiddleware)  # call 1 — innermost, runs second
+_cors_origins = [o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_origin_regex=settings.cors_allow_origin_regex,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)  # call 2 — outermost, runs first (intercepts OPTIONS before auth)
+# CORSMiddleware added AFTER APIKeyMiddleware in source order.
+# FastAPI add_middleware() is LIFO — last added = outermost = runs FIRST on requests.
+# Outermost means OPTIONS preflight hits CORSMiddleware before APIKeyMiddleware can 401 it.
+# DO NOT move this block above app.add_middleware(APIKeyMiddleware).
 app.include_router(message_router)
 app.include_router(status_router)
 app.include_router(modules_router)
