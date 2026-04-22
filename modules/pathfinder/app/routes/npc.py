@@ -197,7 +197,11 @@ async def create_npc(req: NPCCreateRequest) -> JSONResponse:
     fields["imported_from"] = None
 
     content = build_npc_markdown(fields, stats=None)
-    await obsidian.put_note(path, content)
+    try:
+        await obsidian.put_note(path, content)
+    except Exception as exc:
+        logger.error("Obsidian write failed for NPC %s: %s", req.name, exc)
+        raise HTTPException(status_code=503, detail={"error": "Obsidian write failed", "detail": str(exc)})
 
     logger.info("NPC created: %s at %s", req.name, path)
     return JSONResponse({
@@ -243,7 +247,11 @@ async def update_npc(req: NPCUpdateRequest) -> JSONResponse:
 
     # Rebuild and PUT full note
     content = build_npc_markdown(current_fields, stats=current_stats if current_stats else None)
-    await obsidian.put_note(path, content)
+    try:
+        await obsidian.put_note(path, content)
+    except Exception as exc:
+        logger.error("Obsidian write failed for NPC %s: %s", req.name, exc)
+        raise HTTPException(status_code=503, detail={"error": "Obsidian write failed", "detail": str(exc)})
 
     logger.info("NPC updated: %s, changed: %s", req.name, list(changed.keys()))
     return JSONResponse({
