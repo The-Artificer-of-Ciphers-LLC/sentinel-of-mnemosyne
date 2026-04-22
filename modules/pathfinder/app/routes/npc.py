@@ -78,6 +78,7 @@ class NPCUpdateRequest(BaseModel):
 
 class NPCShowRequest(BaseModel):
     name: str
+    user_id: str = ""  # Optional for backward compat; used for audit logging (WR-05)
 
 
 class NPCRelateRequest(BaseModel):

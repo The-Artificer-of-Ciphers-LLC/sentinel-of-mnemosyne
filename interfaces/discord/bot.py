@@ -234,7 +234,7 @@ async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None)
                 if not npc_name:
                     return "Usage: `:pf npc show <name>`"
                 result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/npc/show", {"name": npc_name}, http_client
+                    "modules/pathfinder/npc/show", {"name": npc_name, "user_id": user_id}, http_client
                 )
                 # Build a simple text embed (Discord embed objects not possible in text response)
                 lines = [
