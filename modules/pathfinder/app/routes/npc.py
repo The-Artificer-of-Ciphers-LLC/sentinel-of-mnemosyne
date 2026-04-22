@@ -254,3 +254,64 @@ async def show_npc(req: NPCShowRequest) -> JSONResponse:
         **fields,
         "stats": stats if stats else {},
     })
+
+
+@router.post("/relate")
+async def relate_npc(req: NPCRelateRequest) -> JSONResponse:
+    """Add a relationship entry to an NPC's relationships list (NPC-04, D-12 through D-14).
+
+    Uses GET-then-PATCH:
+    1. Validate relation type against VALID_RELATIONS (D-13) before any I/O
+    2. GET current note — NPC must exist (404 if missing)
+    3. Parse frontmatter → read existing relationships list
+    4. Append new entry → PATCH /vault/{slug}.md Target: relationships (Pattern 2)
+
+    PATCH targets the single `relationships` field per Obsidian v3 API semantics.
+    The body is the complete updated list (Operation: replace), not an append (D-29).
+    """
+    slug = slugify(req.name)
+    path = f"{_NPC_PATH_PREFIX}/{slug}.md"
+
+    # Validate relation type — closed enum (D-13); fail fast before any Obsidian I/O
+    if req.relation not in VALID_RELATIONS:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": f"Invalid relation type: {req.relation!r}",
+                "valid_options": sorted(VALID_RELATIONS),
+            },
+        )
+
+    # Read current note — NPC must exist
+    note_text = await obsidian.get_note(path)
+    if note_text is None:
+        raise HTTPException(status_code=404, detail={"error": "NPC not found", "slug": slug})
+
+    # Parse existing relationships list from frontmatter
+    fields = _parse_frontmatter(note_text)
+    relationships = fields.get("relationships") or []
+    if not isinstance(relationships, list):
+        relationships = []
+
+    # Append new relationship entry (D-14 format)
+    relationships.append({"target": req.target, "relation": req.relation})
+
+    # PATCH single field — replace entire relationships list
+    try:
+        await obsidian.patch_frontmatter_field(path, "relationships", relationships)
+    except Exception as exc:
+        logger.error("PATCH relationships failed for %s: %s", req.name, exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Failed to update relationships", "detail": str(exc)},
+        )
+
+    logger.info("NPC relate: %s %s %s", req.name, req.relation, req.target)
+    return JSONResponse({
+        "status": "related",
+        "slug": slug,
+        "path": path,
+        "relation": req.relation,
+        "target": req.target,
+        "relationships": relationships,
+    })
