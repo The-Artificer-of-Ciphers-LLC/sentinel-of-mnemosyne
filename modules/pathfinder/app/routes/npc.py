@@ -114,8 +114,10 @@ def _parse_frontmatter(note_text: str) -> dict:
     try:
         if not note_text.startswith("---"):
             return {}
-        # Find the closing --- delimiter
-        end = note_text.index("---", 3)
+        # Find the closing --- delimiter (use find to avoid ValueError on malformed notes)
+        end = note_text.find("---", 3)
+        if end == -1:
+            return {}
         frontmatter_text = note_text[3:end].strip()
         return yaml.safe_load(frontmatter_text) or {}
     except Exception as exc:
