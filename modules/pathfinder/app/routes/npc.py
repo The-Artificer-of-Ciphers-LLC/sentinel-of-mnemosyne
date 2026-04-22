@@ -12,6 +12,7 @@ Schema: D-15 through D-20 — split schema (frontmatter + ## Stats fenced block)
 
 Module-level `obsidian` variable is set by main.py lifespan so tests can patch it directly.
 """
+import json
 import logging
 import re
 
@@ -314,4 +315,132 @@ async def relate_npc(req: NPCRelateRequest) -> JSONResponse:
         "relation": req.relation,
         "target": req.target,
         "relationships": relationships,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Foundry bulk import helpers (NPC-05, D-23 through D-26)
+# ---------------------------------------------------------------------------
+
+
+def parse_foundry_actor(actor: dict) -> dict | None:
+    """Extract identity fields from a Foundry VTT actor dict (D-24, D-25).
+
+    Returns None if actor has no name — that actor is silently skipped by import_npcs.
+    Defensively ignores unknown JSON keys — PF2e Foundry schema changes are non-breaking.
+    The 'system.details.*' path follows Foundry PF2e system data structure (assumed; low
+    confidence). Phase 30 derives the canonical schema from a live export; this is identity-only.
+    """
+    name = actor.get("name") or actor.get("data", {}).get("name")
+    if not name:
+        logger.debug("Skipping actor with no name: keys=%s", list(actor.keys()))
+        return None
+
+    # Log unrecognized top-level keys for Phase 30 schema derivation (CONTEXT.md specifics)
+    recognized_keys = {"name", "type", "system", "data", "flags", "_id", "img", "items", "prototypeToken"}
+    unknown_keys = set(actor.keys()) - recognized_keys
+    if unknown_keys:
+        logger.info("Foundry actor %r has unrecognized keys: %s", name, sorted(unknown_keys))
+
+    system = actor.get("system", {})
+    details = system.get("details", {})
+
+    level_raw = details.get("level", 1)
+    level = level_raw.get("value", 1) if isinstance(level_raw, dict) else level_raw
+
+    ancestry_raw = details.get("ancestry", "")
+    ancestry = ancestry_raw.get("value", "") if isinstance(ancestry_raw, dict) else ancestry_raw
+
+    class_raw = details.get("class", "")
+    class_val = class_raw.get("value", "") if isinstance(class_raw, dict) else class_raw
+
+    traits_raw = system.get("traits", {})
+    traits = traits_raw.get("value", []) if isinstance(traits_raw, dict) else []
+
+    return {
+        "name": name,
+        "level": level,
+        "ancestry": ancestry,
+        "class": class_val,
+        "traits": traits,
+        "imported_from": "foundry",  # flag for Phase 30 enrichment (CONTEXT.md specifics)
+    }
+
+
+@router.post("/import")
+async def import_npcs(req: NPCImportRequest) -> JSONResponse:
+    """Bulk import NPCs from a Foundry VTT actor list JSON string (NPC-05, D-23 through D-26).
+
+    actors_json: JSON string of a Foundry actor list array (fetched from Discord attachment
+                 by bot.py _pf_dispatch before this endpoint is called).
+    No LLM call — identity fields only (name, level, ancestry, class, traits).
+    Stats block is left empty (Phase 30 derives canonical PF2e Foundry schema).
+    """
+    # Parse actors JSON — size-check before parsing to prevent memory exhaustion (T-29-04)
+    if len(req.actors_json) > 10_000_000:
+        raise HTTPException(status_code=413, detail={"error": "actors_json too large (>10MB)"})
+
+    try:
+        actors = json.loads(req.actors_json)
+        if not isinstance(actors, list):
+            raise HTTPException(status_code=400, detail={"error": "actors_json must be a JSON array"})
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail={"error": "Invalid JSON", "detail": str(exc)})
+
+    imported: list[str] = []
+    skipped: list[str] = []
+
+    for actor in actors:
+        if not isinstance(actor, dict):
+            continue  # skip non-object entries
+
+        parsed = parse_foundry_actor(actor)
+        if parsed is None:
+            continue  # skip actors with no name
+
+        name = parsed["name"]
+        slug = slugify(name)
+        path = f"{_NPC_PATH_PREFIX}/{slug}.md"
+
+        # Collision check — D-19 (same check as create)
+        existing = await obsidian.get_note(path)
+        if existing is not None:
+            logger.info("Import skip (collision): %s at %s", name, path)
+            skipped.append(name)
+            continue
+
+        # Build identity-only note — no stats block (D-24)
+        fields = {
+            "name": parsed["name"],
+            "level": parsed.get("level", 1),
+            "ancestry": parsed.get("ancestry", ""),
+            "class": parsed.get("class", ""),
+            "traits": parsed.get("traits", []),
+            "personality": "",
+            "backstory": "",
+            "mood": "neutral",
+            "relationships": [],
+            "imported_from": "foundry",
+        }
+        content = build_npc_markdown(fields, stats=None)
+
+        try:
+            await obsidian.put_note(path, content)
+            imported.append(name)
+            logger.info("Import created: %s at %s", name, path)
+        except Exception as exc:
+            logger.error("Import failed for %s: %s", name, exc)
+            skipped.append(name)
+
+    logger.info(
+        "Import complete: %d created, %d skipped (req user_id=%s)",
+        len(imported),
+        len(skipped),
+        req.user_id,
+    )
+    return JSONResponse({
+        "status": "imported",
+        "imported_count": len(imported),
+        "imported": imported,
+        "skipped": skipped,
     })
