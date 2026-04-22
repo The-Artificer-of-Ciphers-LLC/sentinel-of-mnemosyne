@@ -22,6 +22,8 @@ def setup_app_state():
     app.state.ai_provider_name = "lmstudio"
     app.state.settings = MagicMock()
     app.state.settings.pi_harness_url = "http://pi-harness:3000"
+    app.state.injection_filter = MagicMock()
+    app.state.output_scanner = MagicMock()
 
 
 async def test_cors_preflight_returns_200():

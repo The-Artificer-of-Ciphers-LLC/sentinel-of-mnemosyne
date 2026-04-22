@@ -63,10 +63,9 @@ async def test_registration_exits_after_all_failures():
     assert mock_client.post.call_count == 5
 
 
-async def test_registration_payload_correct():
+async def test_registration_payload_correct(monkeypatch):
     """Registration POST sends correct payload and X-Sentinel-Key header (D-17)."""
-    import os
-    os.environ["SENTINEL_API_KEY"] = "test-sentinel-key"
+    monkeypatch.setenv("SENTINEL_API_KEY", "test-sentinel-key")
     from app.main import _register_with_retry, REGISTRATION_PAYLOAD
 
     success_resp = MagicMock()

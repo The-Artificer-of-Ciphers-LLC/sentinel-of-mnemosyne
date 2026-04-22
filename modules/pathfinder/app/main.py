@@ -24,7 +24,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 SENTINEL_CORE_URL = os.getenv("SENTINEL_CORE_URL", "http://sentinel-core:8000")
-SENTINEL_API_KEY = os.getenv("SENTINEL_API_KEY", "")
 
 # Registration payload per D-17.
 # name: "pathfinder" — module registry name (D-11). Different from Docker profile name "pf2e" (D-12).

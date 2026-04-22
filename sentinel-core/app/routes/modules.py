@@ -75,10 +75,10 @@ async def get_proxy_module(name: str, path: str, request: Request) -> JSONRespon
         )
         try:
             content = resp.json()
-        except Exception:
+        except ValueError:
             content = {"body": resp.text}
         return JSONResponse(content=content, status_code=resp.status_code)
-    except httpx.ConnectError:
+    except httpx.TransportError:
         raise HTTPException(status_code=503, detail={"error": "module unavailable"})
 
 
@@ -110,8 +110,8 @@ async def proxy_module(name: str, path: str, request: Request) -> JSONResponse:
         )
         try:
             content = resp.json()
-        except Exception:
+        except ValueError:
             content = {"body": resp.text}
         return JSONResponse(content=content, status_code=resp.status_code)
-    except httpx.ConnectError:
+    except httpx.TransportError:
         raise HTTPException(status_code=503, detail={"error": "module unavailable"})
