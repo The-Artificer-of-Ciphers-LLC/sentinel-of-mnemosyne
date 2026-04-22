@@ -19,7 +19,7 @@ import re
 import yaml
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.llm import extract_npc_fields, update_npc_fields
 from app.config import settings
@@ -42,16 +42,38 @@ VALID_RELATIONS = frozenset({"knows", "trusts", "hostile-to", "allied-with", "fe
 # Pydantic request models
 # ---------------------------------------------------------------------------
 
+def _validate_npc_name(v: str) -> str:
+    """Reject control characters in NPC name to prevent log injection and prompt injection (CR-02)."""
+    v = v.strip()
+    if not v:
+        raise ValueError("name cannot be empty")
+    if len(v) > 100:
+        raise ValueError("name too long (max 100 chars)")
+    if re.search(r"[\x00-\x1f\x7f]", v):
+        raise ValueError("name contains invalid control characters")
+    return v
+
+
 class NPCCreateRequest(BaseModel):
     name: str
     description: str = ""
     user_id: str
+
+    @field_validator("name")
+    @classmethod
+    def sanitize_name(cls, v: str) -> str:
+        return _validate_npc_name(v)
 
 
 class NPCUpdateRequest(BaseModel):
     name: str
     correction: str
     user_id: str
+
+    @field_validator("name")
+    @classmethod
+    def sanitize_name(cls, v: str) -> str:
+        return _validate_npc_name(v)
 
 
 class NPCShowRequest(BaseModel):
