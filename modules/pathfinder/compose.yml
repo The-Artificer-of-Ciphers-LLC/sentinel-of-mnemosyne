@@ -20,10 +20,9 @@ services:
       - sentinel_api_key
     environment:
       - SENTINEL_CORE_URL=http://sentinel-core:8000
-      - OBSIDIAN_BASE_URL=http://host.docker.internal:27123
-      - OBSIDIAN_API_KEY=
-      - LITELLM_MODEL=openai/local-model
-      - LITELLM_API_BASE=http://host.docker.internal:1234/v1
+      # OBSIDIAN_BASE_URL, OBSIDIAN_API_KEY, LITELLM_MODEL, LITELLM_API_BASE
+      # are loaded from ../../.env via env_file above — do not set here or they
+      # override the user-configured values silently (WR-03 fix)
     depends_on:
       sentinel-core:
         condition: service_healthy
