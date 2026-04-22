@@ -27,6 +27,7 @@ def mock_http_client():
     mock_resp.status_code = 200
     mock_resp.json = MagicMock(return_value={"result": "ok"})
     m.post = AsyncMock(return_value=mock_resp)
+    m.get = AsyncMock(return_value=mock_resp)
     return m
 
 
@@ -108,3 +109,58 @@ async def test_register_requires_auth():
         resp = await client.post("/modules/register", json=_VALID_REGISTRATION)
 
     assert resp.status_code in (401, 403)
+
+
+async def test_get_modules_list():
+    """GET /modules returns list of all registered modules."""
+    from app.routes.modules import ModuleRegistration, ModuleRoute
+
+    app.state.module_registry["pathfinder"] = ModuleRegistration(
+        name="pathfinder",
+        base_url="http://pf2e-module:8000",
+        routes=[ModuleRoute(path="healthz", description="pf2e module health check")],
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/modules", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    modules = resp.json()
+    assert isinstance(modules, list)
+    names = [m["name"] for m in modules]
+    assert "pathfinder" in names
+
+
+async def test_get_modules_list_empty():
+    """GET /modules with empty registry returns empty list."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/modules", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_get_proxy_module():
+    """GET /modules/{name}/{path} proxies to registered module base_url."""
+    app.state.module_registry["test-module"] = ModuleRegistration(**_VALID_REGISTRATION)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/modules/test-module/run", headers=AUTH_HEADERS)
+    assert resp.status_code == 200
+    assert resp.json() == {"result": "ok"}
+    call_kwargs = app.state.http_client.get.call_args
+    forwarded_headers = call_kwargs.kwargs.get("headers", {})
+    assert forwarded_headers.get("X-Sentinel-Key") == AUTH_HEADERS["X-Sentinel-Key"]
+
+
+async def test_get_proxy_module_unavailable():
+    """GET /modules/{name}/{path} returns 503 when module unreachable."""
+    app.state.module_registry["test-module"] = ModuleRegistration(**_VALID_REGISTRATION)
+    app.state.http_client.get = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/modules/test-module/run", headers=AUTH_HEADERS)
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == {"error": "module unavailable"}
+
+
+async def test_get_proxy_unknown_module():
+    """GET /modules/{name}/{path} returns 404 when module not registered."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/modules/nonexistent/healthz", headers=AUTH_HEADERS)
+    assert resp.status_code == 404

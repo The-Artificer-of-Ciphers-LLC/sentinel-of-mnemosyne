@@ -80,6 +80,10 @@ class Settings(BaseSettings):
                 values[field] = file_val
         return values
 
+    # CORS — Foundry VTT / browser interface (Phase 28, MOD-02)
+    cors_allow_origins: str = "http://localhost:30000"
+    cors_allow_origin_regex: str = r"https://.*\.forge-vtt\.com"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
