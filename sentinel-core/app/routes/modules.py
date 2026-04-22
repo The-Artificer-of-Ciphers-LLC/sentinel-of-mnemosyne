@@ -37,6 +37,51 @@ async def register_module(registration: ModuleRegistration, request: Request) ->
     return JSONResponse({"status": "registered"})
 
 
+@router.get("/modules")
+async def list_modules(request: Request) -> JSONResponse:
+    """List all registered modules with their metadata (D-09).
+
+    Returns the module registry as a JSON list. Used by GET /modules to satisfy SC-2.
+    """
+    registry = request.app.state.module_registry
+    result = [
+        {
+            "name": reg.name,
+            "base_url": reg.base_url,
+            "routes": [{"path": r.path, "description": r.description} for r in reg.routes],
+        }
+        for reg in registry.values()
+    ]
+    return JSONResponse(result)
+
+
+@router.get("/modules/{name}/{path:path}")
+async def get_proxy_module(name: str, path: str, request: Request) -> JSONResponse:
+    """Proxy a GET request to a registered module endpoint (D-08).
+
+    Mirror of proxy_module() using http_client.get(). No request body forwarded.
+    Returns 404 if module not registered, 503 if module unreachable.
+    """
+    registry = request.app.state.module_registry
+    if name not in registry:
+        raise HTTPException(status_code=404, detail=f"Module '{name}' not registered")
+    module = registry[name]
+    target_url = f"{module.base_url.rstrip('/')}/{path}"
+    sentinel_key = request.headers.get("X-Sentinel-Key", "")
+    try:
+        resp = await request.app.state.http_client.get(
+            target_url,
+            headers={"X-Sentinel-Key": sentinel_key},
+        )
+        try:
+            content = resp.json()
+        except Exception:
+            content = {"body": resp.text}
+        return JSONResponse(content=content, status_code=resp.status_code)
+    except httpx.ConnectError:
+        raise HTTPException(status_code=503, detail={"error": "module unavailable"})
+
+
 @router.post("/modules/{name}/{path:path}")
 async def proxy_module(name: str, path: str, request: Request) -> JSONResponse:
     """Proxy a request to a registered module endpoint.
