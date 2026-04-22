@@ -41,3 +41,32 @@ class SentinelCoreClient:
         except Exception as exc:
             logger.exception("Unexpected error calling Core: %s", exc)
             return "An unexpected error occurred."
+
+    async def post_to_module(self, path: str, payload: dict, client: httpx.AsyncClient) -> dict:
+        """POST to a sentinel-core module proxy path.
+
+        Unlike send_message(), this method raises on error so callers can
+        format domain-specific error messages (e.g., 409 NPC collision).
+
+        Args:
+            path: Module proxy path, e.g. 'modules/pathfinder/npc/create'.
+                  Leading slash is stripped automatically.
+            payload: JSON-serializable request body.
+            client: Caller-owned httpx.AsyncClient (same pattern as send_message).
+
+        Returns:
+            Parsed JSON response dict.
+
+        Raises:
+            httpx.HTTPStatusError: On 4xx/5xx responses.
+            httpx.ConnectError: If sentinel-core is unreachable.
+            httpx.TimeoutException: If request exceeds self._timeout.
+        """
+        resp = await client.post(
+            f"{self._base_url}/{path.lstrip('/')}",
+            json=payload,
+            headers={"X-Sentinel-Key": self._api_key},
+            timeout=self._timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()

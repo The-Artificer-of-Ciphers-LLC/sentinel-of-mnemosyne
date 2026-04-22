@@ -175,10 +175,166 @@ async def _call_core(user_id: str, message: str) -> str:
         return await _sentinel_client.send_message(user_id, message, http_client)
 
 
+# Relation types valid for :pf npc relate (D-13 — closed enum)
+_VALID_RELATIONS = frozenset({"knows", "trusts", "hostile-to", "allied-with", "fears", "owes-debt"})
+
+
+async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None) -> str:
+    """Route ':pf <noun> <verb> <rest>' to pathfinder module endpoints.
+
+    Called from handle_sentask_subcommand when subcmd == 'pf' (D-04).
+    Uses post_to_module() on SentinelCoreClient — NOT _call_core() (D-03).
+    """
+    parts = args.strip().split(" ", 2)
+    if len(parts) < 2:
+        return "Usage: `:pf npc <create|update|show|relate|import> ...`"
+    noun, verb = parts[0].lower(), parts[1].lower()
+    rest = parts[2] if len(parts) > 2 else ""
+
+    if noun != "npc":
+        return f"Unknown pf category `{noun}`. Currently supported: `npc`."
+
+    try:
+        async with httpx.AsyncClient() as http_client:
+            if verb == "create":
+                # Split name | description on first pipe (D-05, Pitfall 5: maxsplit=1)
+                name, _, description = rest.partition("|")
+                if not name.strip():
+                    return "Usage: `:pf npc create <name> | <description>`"
+                payload = {
+                    "name": name.strip(),
+                    "description": description.strip(),
+                    "user_id": user_id,
+                }
+                result = await _sentinel_client.post_to_module(
+                    "modules/pathfinder/npc/create", payload, http_client
+                )
+                return (
+                    f"NPC **{result.get('name', name.strip())}** created.\n"
+                    f"Path: `{result.get('path', '?')}`\n"
+                    f"Ancestry: {result.get('ancestry', '?')} | Class: {result.get('class', '?')} | Level: {result.get('level', '?')}"
+                )
+
+            elif verb == "update":
+                name, _, correction = rest.partition("|")
+                if not name.strip() or not correction.strip():
+                    return "Usage: `:pf npc update <name> | <correction>`"
+                payload = {
+                    "name": name.strip(),
+                    "correction": correction.strip(),
+                    "user_id": user_id,
+                }
+                result = await _sentinel_client.post_to_module(
+                    "modules/pathfinder/npc/update", payload, http_client
+                )
+                return f"NPC **{name.strip()}** updated. Fields changed: {', '.join(result.get('changed_fields', []))}"
+
+            elif verb == "show":
+                npc_name = rest.strip()
+                if not npc_name:
+                    return "Usage: `:pf npc show <name>`"
+                result = await _sentinel_client.post_to_module(
+                    "modules/pathfinder/npc/show", {"name": npc_name}, http_client
+                )
+                # Build a simple text embed (Discord embed objects not possible in text response)
+                lines = [
+                    f"**{result.get('name', npc_name)}** "
+                    f"(Level {result.get('level', '?')} {result.get('ancestry', '?')} {result.get('class', '?')})",
+                    f"*{result.get('personality', '')}*",
+                    result.get('backstory', '')[:200],
+                ]
+                stats = result.get("stats") or {}
+                if stats:
+                    lines.append(
+                        f"AC {stats.get('ac', '—')} | HP {stats.get('hp', '—')} | "
+                        f"Fort {stats.get('fortitude', '—')} Ref {stats.get('reflex', '—')} Will {stats.get('will', '—')}"
+                    )
+                rels = result.get("relationships") or []
+                if rels:
+                    rel_text = ", ".join(f"{r.get('target')} ({r.get('relation')})" for r in rels)
+                    lines.append(f"Relationships: {rel_text}")
+                lines.append(f"*Mood: {result.get('mood', 'neutral')} | {result.get('path', '')}*")
+                return "\n".join(lines)
+
+            elif verb == "relate":
+                # Format: :pf npc relate <name> <relation> <target>
+                relate_parts = rest.strip().split(" ", 2)
+                if len(relate_parts) < 3:
+                    return (
+                        "Usage: `:pf npc relate <npc-name> <relation> <target-npc-name>`\n"
+                        f"Valid relations: {', '.join(sorted(_VALID_RELATIONS))}"
+                    )
+                npc_name, relation, target = relate_parts[0], relate_parts[1], relate_parts[2]
+                # Bot-layer validation (D-13) — fail fast, don't call module
+                if relation not in _VALID_RELATIONS:
+                    return (
+                        f"`{relation}` is not a valid relation type.\n"
+                        f"Valid options: {', '.join(sorted(_VALID_RELATIONS))}"
+                    )
+                result = await _sentinel_client.post_to_module(
+                    "modules/pathfinder/npc/relate",
+                    {"name": npc_name, "relation": relation, "target": target},
+                    http_client,
+                )
+                return f"Relationship added: **{npc_name}** {relation} **{target}**."
+
+            elif verb == "import":
+                # Attachment-based import (D-23, Pattern 6)
+                # Attachments come from on_message thread reply — not slash command
+                if not attachments:
+                    return (
+                        "Usage: `:pf npc import` — attach a Foundry actor list JSON file "
+                        "as a reply in this thread."
+                    )
+                attachment = attachments[0]
+                fetch_resp = await http_client.get(str(attachment.url), timeout=10.0)
+                fetch_resp.raise_for_status()
+                actors_json = fetch_resp.text
+                result = await _sentinel_client.post_to_module(
+                    "modules/pathfinder/npc/import",
+                    {"actors_json": actors_json, "user_id": user_id},
+                    http_client,
+                )
+                imported = result.get("imported_count", 0)
+                skipped = result.get("skipped", [])
+                lines = [f"Imported **{imported}** NPC(s)."]
+                if skipped:
+                    lines.append(f"Skipped (already exist): {', '.join(skipped)}")
+                return "\n".join(lines)
+
+            else:
+                return (
+                    f"Unknown npc command `{verb}`. "
+                    "Available: `create`, `update`, `show`, `relate`, `import`."
+                )
+
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        try:
+            detail = exc.response.json().get("detail", exc.response.text)
+        except Exception:
+            detail = exc.response.text
+        if status == 409:
+            return f"NPC already exists: {detail}"
+        if status == 404:
+            return "NPC not found."
+        logger.error("Module returned HTTP %d: %s", status, detail)
+        return f"Pathfinder module error (HTTP {status}): {detail}"
+    except httpx.ConnectError:
+        logger.error("Cannot reach sentinel-core for pf dispatch")
+        return "Cannot reach the Sentinel. Is sentinel-core running?"
+    except httpx.TimeoutException:
+        logger.error("pf dispatch timed out")
+        return "The pathfinder module took too long to respond. Try again."
+    except Exception as exc:
+        logger.exception("Unexpected error in _pf_dispatch: %s", exc)
+        return "An unexpected error occurred in pathfinder dispatch."
+
+
 _HELP_KEYWORDS = frozenset({"commands", "help", "what can you do", "what do you do", "how do i use"})
 
 
-async def _route_message(user_id: str, message: str) -> str:
+async def _route_message(user_id: str, message: str, attachments: list | None = None) -> str:
     """
     Unified message router used by both /sentask and on_message thread replies.
 
@@ -191,7 +347,7 @@ async def _route_message(user_id: str, message: str) -> str:
         parts = message[1:].split(" ", 1)
         subcmd = parts[0].lower()
         args = parts[1] if len(parts) > 1 else ""
-        return await handle_sentask_subcommand(subcmd, args, user_id)
+        return await handle_sentask_subcommand(subcmd, args, user_id, attachments=attachments)
 
     # Intercept natural-language help queries locally — never send to AI.
     # Prevents Obsidian session context from producing leaked/irrelevant responses
@@ -203,11 +359,14 @@ async def _route_message(user_id: str, message: str) -> str:
     return await _call_core(user_id, message)
 
 
-async def handle_sentask_subcommand(subcmd: str, args: str, user_id: str) -> str:
+async def handle_sentask_subcommand(subcmd: str, args: str, user_id: str, attachments: list | None = None) -> str:
     """
     Route `:subcommand` prefixed messages to the correct handler.
     Returns a response string in all cases — never raises.
     """
+    if subcmd == "pf":
+        return await _pf_dispatch(args, user_id, attachments=attachments)
+
     if subcmd == "help":
         return SUBCOMMAND_HELP
 
@@ -379,7 +538,7 @@ class SentinelBot(discord.Client):
         logger.info(f"Thread reply from {user_id} in thread {message.channel.id}: {message.content[:60]}")
 
         async with message.channel.typing():
-            ai_response = await _route_message(user_id, message.content)
+            ai_response = await _route_message(user_id, message.content, attachments=list(message.attachments))
 
         await message.channel.send(ai_response)
 
