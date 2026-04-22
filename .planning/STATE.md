@@ -4,7 +4,7 @@ milestone: v0.40
 milestone_name: Pre-Beta Refactoring
 status: completed
 stopped_at: Phase 29 context gathered
-last_updated: "2026-04-22T01:48:17.817Z"
+last_updated: "2026-04-22T02:37:19.862Z"
 last_activity: 2026-04-22 -- Phase 28 execution complete (3/3 plans)
 progress:
   total_phases: 26
@@ -143,4 +143,4 @@ Resume file: --resume-file
 
 **Next Phase:** 28 (pf2e-module Skeleton + CORS) — MOD-01, MOD-02
 
-**Planned Phase:** 28 (pf2e-module Skeleton + CORS) — 3 plans — 2026-04-22T00:58:53.796Z
+**Planned Phase:** 29 (NPC CRUD + Obsidian Persistence) — 5 plans — 2026-04-22T02:37:19.848Z
