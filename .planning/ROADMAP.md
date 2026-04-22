@@ -385,3 +385,121 @@ Plans:
 - [x] 26-01-PLAN.md — Discord test suite expansion (4 unit tests + 1 integration stub, conftest fixture)
 - [x] 26-02-PLAN.md — Repair 07-VALIDATION.md and 10-VALIDATION.md (Nyquist compliance)
 - [x] 26-03-PLAN.md — Create 04-VALIDATION.md and 06-VALIDATION.md from scratch
+
+---
+
+## Milestone v0.5 — The Dungeon
+
+### Phase 28: pf2e-module Skeleton + CORS
+**Goal:** Stand up the pf2e-module FastAPI container, register it with Sentinel Core's module gateway, and add CORS middleware to Core — proving the Path B module pattern with a health check and unlocking all downstream phases.
+**Depends on:** Phase 26 / Phase 27
+**Requirements:** MOD-01, MOD-02
+**Success Criteria** (what must be TRUE):
+  1. `docker compose --profile pf2e up` starts pf2e-module container without errors
+  2. `POST /modules/register` from pf2e-module succeeds at startup; `GET /modules` returns `pathfinder` in the list
+  3. `GET /modules/pathfinder/healthz` returns 200 via Core proxy
+  4. Foundry browser `fetch()` to Sentinel Core with `X-Sentinel-Key` does not fail with a CORS error
+  5. `allow_origins` in CORSMiddleware uses an explicit LAN IP list (not wildcard — wildcard blocks credential headers)
+**Status:** Not started
+**Plans:** 0 plans
+
+### Phase 29: NPC CRUD + Obsidian Persistence
+**Goal:** Create, update, query, relate, and bulk-import NPCs via Discord commands, with all NPC data persisted as structured YAML-frontmatter notes under `mnemosyne/pf2e/npcs/`.
+**Depends on:** Phase 28
+**Requirements:** NPC-01, NPC-02, NPC-03, NPC-04, NPC-05
+**Success Criteria** (what must be TRUE):
+  1. `/pf npc create` creates an Obsidian note at `mnemosyne/pf2e/npcs/{slug}.md` with YAML frontmatter
+  2. `/pf npc update` surgically PATCHes the note frontmatter without overwriting prose sections
+  3. `/pf npc show` returns a Discord embed with NPC summary
+  4. NPC note includes a `relationships:` frontmatter block after `/pf npc relate`
+  5. Bulk import from a Foundry actor list JSON creates corresponding Obsidian notes for each actor
+**Status:** Not started
+**Plans:** 0 plans
+
+### Phase 30: NPC Outputs
+**Goal:** Produce all four NPC output formats from a stored Obsidian NPC profile: Foundry VTT PF2e actor JSON, Midjourney token prompt text, formatted stat block, and PDF stat card.
+**Depends on:** Phase 29
+**Requirements:** OUT-01, OUT-02, OUT-03, OUT-04
+**Success Criteria** (what must be TRUE):
+  1. `/pf npc export foundry [name]` attaches a `.json` file; imported into Foundry VTT without errors
+  2. Exported JSON passes Foundry PF2e actor schema validation (schema derived from live actor export)
+  3. `/pf npc token [name]` returns a copyable `/imagine` prompt string in Discord
+  4. `/pf npc stat [name]` returns a formatted stat block as a Discord embed
+  5. `/pf npc pdf [name]` attaches a printable PDF stat card
+**Status:** Not started
+**Plans:** 0 plans
+
+### Phase 31: Dialogue Engine
+**Goal:** Enable in-character NPC dialogue grounded in Obsidian profiles, with persistent mood state and support for multi-NPC scenes.
+**Depends on:** Phase 29
+**Requirements:** DLG-01, DLG-02, DLG-03
+**Success Criteria** (what must be TRUE):
+  1. `/pf say [npc] party says [X]` returns an in-character reply that reflects the NPC's documented personality
+  2. Mood state is stored in NPC frontmatter and updated after significant interactions
+  3. An aggressive encounter shifts mood toward hostile; a successful persuasion shifts toward friendly
+  4. `/pf scene [npc1] [npc2] party says [X]` returns distinct replies from each NPC in their own voice
+**Status:** Not started
+**Plans:** 0 plans
+
+### Phase 32: Monster Harvesting
+**Goal:** Given a killed monster, produce a complete harvest report: components, Medicine DCs, craftable items with Crafting DCs, and PF2e vendor values — with batch support for multi-monster encounters.
+**Depends on:** Phase 28
+**Requirements:** HRV-01, HRV-02, HRV-03, HRV-04, HRV-05, HRV-06
+**Success Criteria** (what must be TRUE):
+  1. `/pf harvest [monster]` returns at least one harvestable component with a Medicine DC
+  2. Each component lists craftable outputs (potion/poison/armor) with item level and gp/sp/cp value
+  3. Each craftable item includes a Crafting skill DC
+  4. For monsters not in the harvest tables, AI-generated components are marked `[GENERATED — verify]`
+  5. `/pf harvest [m1] [m2] [m3]` returns an aggregated report covering all monsters
+**Status:** Not started
+**Plans:** 0 plans
+
+### Phase 33: Rules Engine
+**Goal:** Answer PF2e Remaster rules questions with sourced citations, reason from rules when no direct source exists, persist every ruling to Obsidian, and decline pre-Remaster or PF1 queries.
+**Depends on:** Phase 28
+**Requirements:** RUL-01, RUL-02, RUL-03, RUL-04
+**Success Criteria** (what must be TRUE):
+  1. `/pf rules [question]` returns a ruling with a `[SOURCED: ...]` citation for a documented mechanic
+  2. An edge-case question returns a ruling marked `[GENERATED — verify]` with reasoning shown
+  3. The ruling is saved to `mnemosyne/pf2e/rulings/` with `verified: false` frontmatter
+  4. A second identical question returns the cached ruling from Obsidian, not a new LLM call
+  5. A PF1 or pre-Remaster query returns a clear decline message explaining the scope constraint
+**Status:** Not started
+**Plans:** 0 plans
+
+### Phase 34: Session Notes
+**Goal:** Capture structured session notes to Obsidian at session end, with auto-tagging of NPC and location links and a real-time event log with timestamps.
+**Depends on:** Phase 29
+**Requirements:** SES-01, SES-02, SES-03
+**Success Criteria** (what must be TRUE):
+  1. `/pf session end` writes a note to `mnemosyne/pf2e/sessions/YYYY-MM-DD.md` with recap, NPCs, decisions
+  2. NPC names in the session note are wiki-linked to their `mnemosyne/pf2e/npcs/` pages
+  3. `/pf session log [event]` appends a timestamped entry to the active session log
+  4. Session notes use a consistent template structure across multiple sessions
+**Status:** Not started
+**Plans:** 0 plans
+
+### Phase 35: Foundry VTT Event Ingest
+**Goal:** A Foundry VTT JavaScript module hooks into chat messages and dice rolls, POSTs events to Sentinel Core, and receives Discord responses with roll interpretations.
+**Depends on:** Phase 28
+**Requirements:** FVT-01, FVT-02, FVT-03
+**Success Criteria** (what must be TRUE):
+  1. Foundry module installs from a zip and activates without console errors in Foundry v14+
+  2. A chat message with the trigger prefix POSTs to `POST /modules/pathfinder/foundry/event` successfully
+  3. A dice roll result in Foundry chat produces a hit/miss/DC interpretation in the DM's Discord channel
+  4. `X-Sentinel-Key` is stored in Foundry world settings (GM-only) and sent on every POST
+  5. Module declares explicit `compatibility.verified` for the installed Foundry version
+**Status:** Not started
+**Plans:** 0 plans
+
+### Phase 36: Foundry NPC Pull Import
+**Goal:** Enable the Foundry VTT module to pull NPC actor JSON directly from Sentinel — one click imports the actor into the world with no file attachment or copy-paste.
+**Depends on:** Phase 30, Phase 35
+**Requirements:** FVT-04
+**Success Criteria** (what must be TRUE):
+  1. `GET /modules/pathfinder/npcs/{slug}/foundry-actor` returns valid PF2e actor JSON
+  2. The Foundry module presents an "Import from Sentinel" button in the actor directory
+  3. Clicking the button imports the NPC actor directly into the Foundry world without errors
+  4. The imported actor is identical in content to the Phase 30 file-attachment export
+**Status:** Not started
+**Plans:** 0 plans

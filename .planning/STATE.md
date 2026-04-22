@@ -5,9 +5,9 @@ milestone_name: The Dungeon
 status: active
 stopped_at: ~
 last_updated: "2026-04-21T00:00:00.000Z"
-last_activity: 2026-04-21 -- Milestone v0.5 started
+last_activity: 2026-04-21 -- Milestone v0.5 roadmap created (9 phases, 31 requirements)
 progress:
-  total_phases: 0
+  total_phases: 9
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 28 (pf2e-module Skeleton + CORS) — not started
 Plan: —
 Milestone: v0.5 The Dungeon — IN PROGRESS
-Status: Defining requirements
-Last activity: 2026-04-21 — Milestone v0.5 started
+Status: Roadmap defined; ready for Phase 28
+Last activity: 2026-04-21 — v0.5 roadmap created (Phases 28–36, 31 requirements)
 
 ## Milestone Progress
 
@@ -39,7 +39,8 @@ Last activity: 2026-04-21 — Milestone v0.5 started
 | v0.2 | The Memory | 02 | ✅ COMPLETE |
 | v0.3 | The Voice | 03 | ✅ COMPLETE |
 | v0.4 | Functional Alpha | 04–10 | ✅ COMPLETE |
-| v0.5 | The Dungeon | TBD | 🔜 NEXT |
+| v0.40 | Pre-Beta Refactoring | 21–26 | ✅ COMPLETE |
+| v0.5 | The Dungeon | 28–36 | 🔜 IN PROGRESS |
 | v0.6 | The Practice Room | TBD | — |
 | v0.7 | The Workshop | TBD | — |
 | v0.8 | The Ledger | TBD | — |
@@ -47,7 +48,21 @@ Last activity: 2026-04-21 — Milestone v0.5 started
 | v0.10 | The Trader Goes Live | TBD | — |
 | v1.0 | Community Release | TBD | — |
 
-Progress (v0.4): [██████████] 100%
+Progress (v0.5): [          ] 0% (0/9 phases)
+
+## v0.5 Phase Map
+
+| Phase | Name | Requirements | Depends on | Status |
+|-------|------|--------------|------------|--------|
+| 28 | pf2e-module Skeleton + CORS | MOD-01, MOD-02 | Phase 26 | Not started |
+| 29 | NPC CRUD + Obsidian Persistence | NPC-01..05 | Phase 28 | Not started |
+| 30 | NPC Outputs | OUT-01..04 | Phase 29 | Not started |
+| 31 | Dialogue Engine | DLG-01..03 | Phase 29 | Not started |
+| 32 | Monster Harvesting | HRV-01..06 | Phase 28 | Not started |
+| 33 | Rules Engine | RUL-01..04 | Phase 28 | Not started |
+| 34 | Session Notes | SES-01..03 | Phase 29 | Not started |
+| 35 | Foundry VTT Event Ingest | FVT-01..03 | Phase 28 | Not started |
+| 36 | Foundry NPC Pull Import | FVT-04 | Phase 30, Phase 35 | Not started |
 
 ## Performance Metrics
 
@@ -78,6 +93,7 @@ Progress (v0.4): [██████████] 100%
 ### Roadmap Evolution
 
 - Phase 25 added: V0.40 pre-beta refactoring — eliminate duplicates (DUP-01–05), complete stubs (STUB-01–08), fix architecture contradictions (CONTRA-01–04), implement RD-01 through RD-10
+- v0.5 Phases 28–36 added: 9-phase Pathfinder 2e module roadmap (31 requirements)
 
 ### Decisions
 
@@ -93,14 +109,18 @@ Recent decisions affecting current work:
 - [Phase 02-memory-layer]: BackgroundTasks (not asyncio.create_task) for session write — FastAPI-idiomatic, response sent before write begins
 - [Phase 23-pi-harness-reset-route]: buildApp() factory pattern for Fastify bridge — separates construction from startup, enables vitest app.inject() testing without port binding
 - [Phase 23-pi-harness-reset-route]: vitest.config.ts passWithNoTests: true added — vitest 2.x exits code 1 with no test files (plan assumption was incorrect)
+- [v0.5 ADR]: Midjourney bot-to-bot DM is architecturally impossible (Discord API hard block). OUT-02 implements prompt-text-only output (Option A). No Midjourney automation code will be written.
+- [v0.5 ADR]: CORS must use explicit allow_origins (Foundry LAN IP + localhost:30000); allow_origins=["*"] breaks X-Sentinel-Key credential header delivery.
+- [v0.5 ADR]: PF2e NPC JSON schema must be derived from a live Foundry export on Phase 30 day one — documentation lags PF2e system releases; system.details.alignment removed in 2023 Remaster.
 
 ### Pending Todos
 
-None.
+- Apply v0.5 phase checklist entries and Phase Detail sections to .planning/ROADMAP.md (blocked by uchg flag; human must run `chflags nouchg .planning/ROADMAP.md` first)
 
 ### Blockers/Concerns
 
 - Pi-mono releases breaking changes every 2-4 days -- adapter pattern in Phase 1 is the mitigation
+- ROADMAP.md has macOS uchg flag; v0.5 phase content was produced as text output for manual apply
 
 ### Quick Tasks Completed
 
@@ -117,8 +137,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-21T21:16:31.741Z
-Stopped at: Completed quick task 260421-nm2: update all documentation for 0.40 release
+Last session: 2026-04-21T00:00:00.000Z
+Stopped at: v0.5 roadmap created — ready to begin Phase 28
 Resume file: None
 
-**Planned Phase:** 27 (Architecture Pivot) — 10 plans — 2026-04-21T03:18:38.251Z
+**Next Phase:** 28 (pf2e-module Skeleton + CORS) — MOD-01, MOD-02
