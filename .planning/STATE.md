@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.40
 milestone_name: Pre-Beta Refactoring
 status: completed
-stopped_at: Phase 29 context gathered
-last_updated: "2026-04-22T02:37:19.862Z"
-last_activity: 2026-04-22 -- Phase 28 execution complete (3/3 plans)
+stopped_at: Phase 29 complete
+last_updated: "2026-04-22T04:00:00.000Z"
+last_activity: 2026-04-22 -- Phase 29 execution complete (5/5 plans)
 progress:
   total_phases: 26
   completed_phases: 11
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 29 — NPC CRUD + Obsidian Persistence
+**Current focus:** Phase 29 complete — advancing to Phase 30
 
 ## Current Position
 
-Phase: 28 — COMPLETE (human UAT pending)
-Next Phase: 29 — NPC CRUD + Obsidian Persistence
+Phase: 29 (NPC CRUD + Obsidian Persistence) — COMPLETE
+Next Phase: 30 — NPC Outputs
 Milestone: v0.5 The Dungeon — IN PROGRESS
-Status: Phase 28 complete, advancing to Phase 29
-Last activity: 2026-04-22 -- Phase 28 execution complete (3/3 plans)
+Status: Phase 29 complete (5/5 plans), advancing to Phase 30
+Last activity: 2026-04-22 -- Phase 29 execution complete (5/5 plans)
 
 ## Milestone Progress
 
@@ -55,7 +55,7 @@ Progress (v0.5): [          ] 0% (0/9 phases)
 | Phase | Name | Requirements | Depends on | Status |
 |-------|------|--------------|------------|--------|
 | 28 | pf2e-module Skeleton + CORS | MOD-01, MOD-02 | Phase 26 | ✅ COMPLETE (2026-04-22) |
-| 29 | NPC CRUD + Obsidian Persistence | NPC-01..05 | Phase 28 | Not started |
+| 29 | NPC CRUD + Obsidian Persistence | NPC-01..05 | Phase 28 | ✅ COMPLETE (2026-04-22) |
 | 30 | NPC Outputs | OUT-01..04 | Phase 29 | Not started |
 | 31 | Dialogue Engine | DLG-01..03 | Phase 29 | Not started |
 | 32 | Monster Harvesting | HRV-01..06 | Phase 28 | Not started |
