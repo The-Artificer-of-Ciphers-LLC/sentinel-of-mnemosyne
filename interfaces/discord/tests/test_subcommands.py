@@ -226,9 +226,9 @@ async def test_pf_dispatch_create():
 
 
 async def test_pf_dispatch_relate_invalid():
-    """_pf_dispatch('npc relate Varek enemies-with baron', user_id) rejects invalid relation type."""
+    """_pf_dispatch with invalid relation type rejects before calling module."""
     with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock()) as mock_ptm:
-        result = await bot._pf_dispatch("npc relate Varek enemies-with baron", "user123")
+        result = await bot._pf_dispatch("npc relate Varek | enemies-with | baron", "user123")
 
     # post_to_module must NOT be called — validation happens in bot before module call
     mock_ptm.assert_not_called()
@@ -236,10 +236,10 @@ async def test_pf_dispatch_relate_invalid():
 
 
 async def test_pf_dispatch_relate_valid():
-    """_pf_dispatch('npc relate Varek trusts baron-aldric', user_id) calls post_to_module relate path."""
+    """_pf_dispatch with pipe-separated relate args calls post_to_module relate path."""
     mock_result = {"status": "added"}
     with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)) as mock_ptm:
-        result = await bot._pf_dispatch("npc relate Varek trusts baron-aldric", "user123")
+        result = await bot._pf_dispatch("npc relate Varek | trusts | baron-aldric", "user123")
 
     mock_ptm.assert_called_once()
     call_args = mock_ptm.call_args

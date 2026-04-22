@@ -257,11 +257,12 @@ async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None)
                 return "\n".join(lines)
 
             elif verb == "relate":
-                # Format: :pf npc relate <name> <relation> <target>
-                relate_parts = rest.strip().split(" ", 2)
-                if len(relate_parts) < 3:
+                # Format: :pf npc relate <name> | <relation> | <target>
+                # Pipe separator allows multi-word NPC names and targets (CR-01 fix)
+                relate_parts = [p.strip() for p in rest.split("|")]
+                if len(relate_parts) < 3 or not all(relate_parts[:3]):
                     return (
-                        "Usage: `:pf npc relate <npc-name> <relation> <target-npc-name>`\n"
+                        "Usage: `:pf npc relate <npc-name> | <relation> | <target-npc-name>`\n"
                         f"Valid relations: {', '.join(sorted(_VALID_RELATIONS))}"
                     )
                 npc_name, relation, target = relate_parts[0], relate_parts[1], relate_parts[2]
