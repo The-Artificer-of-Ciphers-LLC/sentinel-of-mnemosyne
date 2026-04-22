@@ -1,4 +1,4 @@
-"""Tests for pf2e-module NPC CRUD endpoints — Wave 0 stubs (RED)."""
+"""Tests for pf2e-module NPC CRUD endpoints."""
 import os
 os.environ.setdefault("SENTINEL_API_KEY", "test-key-for-pytest")
 os.environ.setdefault("SENTINEL_CORE_URL", "http://sentinel-core:8000")
@@ -8,7 +8,6 @@ os.environ.setdefault("LITELLM_MODEL", "openai/local-model")
 os.environ.setdefault("LITELLM_API_BASE", "http://localhost:1234/v1")
 
 import json
-import pytest
 from httpx import ASGITransport, AsyncClient
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,7 +17,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="Wave 2 not yet implemented")
 async def test_npc_create_success():
     """POST /npc/create returns 200 + slug when NPC does not exist (NPC-01)."""
     mock_obs = MagicMock()
@@ -41,7 +39,6 @@ async def test_npc_create_success():
     assert resp.json()["slug"] == "varek"
 
 
-@pytest.mark.xfail(reason="Wave 2 not yet implemented")
 async def test_npc_create_collision():
     """POST /npc/create returns 409 when NPC already exists in Obsidian (NPC-01)."""
     mock_obs = MagicMock()
@@ -68,7 +65,6 @@ async def test_npc_create_collision():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="Wave 2 not yet implemented")
 async def test_npc_update_identity_fields():
     """POST /npc/update reads note, calls LLM, PUTs updated note; returns 200 (NPC-02)."""
     mock_obs = MagicMock()
@@ -91,7 +87,6 @@ async def test_npc_update_identity_fields():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="Wave 2 not yet implemented")
 async def test_npc_show_returns_fields():
     """POST /npc/show returns 200 with expected keys (NPC-03)."""
     mock_obs = MagicMock()
@@ -125,7 +120,6 @@ async def test_npc_show_returns_fields():
     assert "class" in data
 
 
-@pytest.mark.xfail(reason="Wave 2 not yet implemented")
 async def test_npc_show_not_found():
     """POST /npc/show returns 404 when NPC not in Obsidian (NPC-03)."""
     mock_obs = MagicMock()
@@ -143,7 +137,6 @@ async def test_npc_show_not_found():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="Wave 2 not yet implemented")
 async def test_npc_relate_valid():
     """POST /npc/relate with valid relation type returns 200 (NPC-04)."""
     mock_obs = MagicMock()
@@ -159,7 +152,6 @@ async def test_npc_relate_valid():
     assert resp.status_code == 200
 
 
-@pytest.mark.xfail(reason="Wave 2 not yet implemented")
 async def test_npc_relate_invalid_type():
     """POST /npc/relate with invalid relation type returns 422 (NPC-04)."""
     mock_obs = MagicMock()
@@ -180,7 +172,6 @@ async def test_npc_relate_invalid_type():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="Wave 2 not yet implemented")
 async def test_npc_import_basic():
     """POST /npc/import with 2 actors returns 200 with imported_count=2 (NPC-05)."""
     actors = [
@@ -221,7 +212,6 @@ async def test_npc_import_basic():
     assert resp.json()["imported_count"] == 2
 
 
-@pytest.mark.xfail(reason="Wave 2 not yet implemented")
 async def test_npc_import_collision_skipped():
     """POST /npc/import where first actor collides returns skipped list (NPC-05)."""
     actors = [
