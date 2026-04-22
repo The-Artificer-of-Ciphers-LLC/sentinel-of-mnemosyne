@@ -159,3 +159,132 @@ async def test_pipeline_subcommand_calls_core():
     assert call_args[0][0] == "user123"
     assert isinstance(call_args[0][1], str) and len(call_args[0][1]) > 0
     assert result == "Pipeline running."
+
+
+# ---------------------------------------------------------------------------
+# Phase 29 — :pf npc dispatch tests (29-03)
+# ---------------------------------------------------------------------------
+
+
+async def test_pf_dispatch_exists():
+    """bot module has a _pf_dispatch function."""
+    assert hasattr(bot, "_pf_dispatch"), "_pf_dispatch not found in bot module"
+    import inspect
+    assert inspect.iscoroutinefunction(bot._pf_dispatch), "_pf_dispatch must be async"
+
+
+async def test_valid_relations_constant_exists():
+    """bot module has a _VALID_RELATIONS frozenset with the closed enum."""
+    assert hasattr(bot, "_VALID_RELATIONS"), "_VALID_RELATIONS not found in bot module"
+    assert isinstance(bot._VALID_RELATIONS, frozenset)
+    for expected in {"knows", "trusts", "hostile-to", "allied-with", "fears", "owes-debt"}:
+        assert expected in bot._VALID_RELATIONS, f"{expected!r} missing from _VALID_RELATIONS"
+
+
+async def test_handle_sentask_subcommand_accepts_attachments_kwarg():
+    """handle_sentask_subcommand signature accepts attachments keyword argument."""
+    import inspect
+    sig = inspect.signature(bot.handle_sentask_subcommand)
+    assert "attachments" in sig.parameters, (
+        "handle_sentask_subcommand must accept 'attachments' keyword argument"
+    )
+    param = sig.parameters["attachments"]
+    assert param.default is None, "attachments default must be None"
+
+
+async def test_pf_subcommand_routes_to_pf_dispatch():
+    """handle_sentask_subcommand('pf', ...) routes to _pf_dispatch, not _call_core."""
+    with patch("bot._pf_dispatch", new=AsyncMock(return_value="pf response")) as mock_dispatch, \
+         patch("bot._call_core", new=AsyncMock(return_value="core response")) as mock_core:
+        result = await bot.handle_sentask_subcommand("pf", "npc show Varek", "user123")
+
+    mock_dispatch.assert_called_once()
+    mock_core.assert_not_called()
+    assert result == "pf response"
+
+
+async def test_pf_dispatch_create():
+    """_pf_dispatch('npc create Varek | gnome rogue', user_id) calls post_to_module create path."""
+    mock_result = {
+        "name": "Varek",
+        "slug": "varek",
+        "path": "mnemosyne/pf2e/npcs/varek.md",
+        "ancestry": "Gnome",
+        "class": "Rogue",
+        "level": 1,
+    }
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch("npc create Varek | gnome rogue", "user123")
+
+    mock_ptm.assert_called_once()
+    call_args = mock_ptm.call_args
+    assert call_args[0][0] == "modules/pathfinder/npc/create"
+    payload = call_args[0][1]
+    assert payload["name"] == "Varek"
+    assert "gnome rogue" in payload["description"]
+    assert "Varek" in result
+
+
+async def test_pf_dispatch_relate_invalid():
+    """_pf_dispatch('npc relate Varek enemies-with baron', user_id) rejects invalid relation type."""
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock()) as mock_ptm:
+        result = await bot._pf_dispatch("npc relate Varek enemies-with baron", "user123")
+
+    # post_to_module must NOT be called — validation happens in bot before module call
+    mock_ptm.assert_not_called()
+    assert "enemies-with" in result or "not a valid" in result.lower() or "valid" in result.lower()
+
+
+async def test_pf_dispatch_relate_valid():
+    """_pf_dispatch('npc relate Varek trusts baron-aldric', user_id) calls post_to_module relate path."""
+    mock_result = {"status": "added"}
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch("npc relate Varek trusts baron-aldric", "user123")
+
+    mock_ptm.assert_called_once()
+    call_args = mock_ptm.call_args
+    assert call_args[0][0] == "modules/pathfinder/npc/relate"
+    payload = call_args[0][1]
+    assert payload["name"] == "Varek"
+    assert payload["relation"] == "trusts"
+    assert payload["target"] == "baron-aldric"
+
+
+async def test_pf_dispatch_show():
+    """_pf_dispatch('npc show Varek', user_id) calls post_to_module show path."""
+    mock_result = {
+        "name": "Varek",
+        "level": 5,
+        "ancestry": "Gnome",
+        "class": "Rogue",
+        "personality": "Nervous",
+        "backstory": "Fled the guild",
+        "mood": "neutral",
+        "path": "mnemosyne/pf2e/npcs/varek.md",
+    }
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch("npc show Varek", "user123")
+
+    mock_ptm.assert_called_once()
+    call_args = mock_ptm.call_args
+    assert call_args[0][0] == "modules/pathfinder/npc/show"
+    assert call_args[0][1]["name"] == "Varek"
+    assert "Varek" in result
+
+
+async def test_pf_dispatch_unknown_noun():
+    """_pf_dispatch with unknown noun returns error without calling module."""
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock()) as mock_ptm:
+        result = await bot._pf_dispatch("monster create Goblin", "user123")
+
+    mock_ptm.assert_not_called()
+    assert "monster" in result or "Unknown" in result
+
+
+async def test_pf_dispatch_import_no_attachment():
+    """_pf_dispatch('npc import', user_id, attachments=None) returns usage string."""
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock()) as mock_ptm:
+        result = await bot._pf_dispatch("npc import", "user123", attachments=None)
+
+    mock_ptm.assert_not_called()
+    assert "attach" in result.lower() or "import" in result.lower()
