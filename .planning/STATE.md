@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: The Dungeon
 status: in_progress
-stopped_at: Phase 31 planned (5 plans, 4 waves) — ready to execute
-last_updated: "2026-04-23T19:30:00.000Z"
-last_activity: 2026-04-23 -- Phase 31 (Dialogue Engine) planning complete — 5 plans across 4 waves, 26 tests scaffolded, plan-checker PASS on iteration 1/3
+stopped_at: Phase 31 complete (Dialogue Engine) — verifier passed 12/12, 8/8 review findings fixed
+last_updated: "2026-04-23T21:30:00.000Z"
+last_activity: 2026-04-23 -- Phase 31 (Dialogue Engine) complete — 5 plans executed across 4 waves, 26/26 RED→GREEN, all 8 review findings fixed (5 warnings + 3 info), DLG-01..03 shipped
 progress:
   total_phases: 26
-  completed_phases: 12
-  total_plans: 32
-  completed_plans: 38
+  completed_phases: 13
+  total_plans: 37
+  completed_plans: 43
   percent: 100
 ---
 
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 29 complete — advancing to Phase 30
+**Current focus:** Phase 31 complete — v0.5 The Dungeon 4/9 phases done, next candidates: 32/33/34/35
 
 ## Current Position
 
-Phase: 31 (Dialogue Engine) — PLANNED (5 plans, 4 waves), ready to execute
-Next Phase: 31 — Dialogue Engine (execute)
+Phase: 31 (Dialogue Engine) — COMPLETE (5 plans, 4 waves, 26/26 tests GREEN)
+Next Phase: 32 — Monster Harvesting (HRV-01..06) OR 33 — Rules Engine OR 34 — Session Notes
 Milestone: v0.5 The Dungeon — IN PROGRESS
-Status: Phase 31 planning complete — 5 plans across 4 waves, 26 tests scaffolded (16 module + 8 bot + 2 integration), plan-checker PASS on iteration 1/3
-Last activity: 2026-04-23 -- Phase 31 planning complete; ready for /gsd-execute-phase 31
+Status: Phase 31 shipped — verifier passed 12/12 must_haves, code-review produced 8 findings (0 blocker + 5 warning + 3 info), all fixed in commits 01aabd9..3beeaf6; thread-history plumb-through (WR-01) now active in production dispatch
+Last activity: 2026-04-23 -- Phase 31 complete; run /gsd-discuss-phase 32 or 33 or 34 to continue v0.5
 
 ## Milestone Progress
 
@@ -48,7 +48,7 @@ Last activity: 2026-04-23 -- Phase 31 planning complete; ready for /gsd-execute-
 | v0.10 | The Trader Goes Live | TBD | — |
 | v1.0 | Community Release | TBD | — |
 
-Progress (v0.5): [███       ] 33% (3/9 phases — 28, 29, 30 complete)
+Progress (v0.5): [████      ] 44% (4/9 phases — 28, 29, 30, 31 complete)
 
 ## v0.5 Phase Map
 
@@ -57,7 +57,7 @@ Progress (v0.5): [███       ] 33% (3/9 phases — 28, 29, 30 complete)
 | 28 | pf2e-module Skeleton + CORS | MOD-01, MOD-02 | Phase 26 | ✅ COMPLETE (2026-04-22) |
 | 29 | NPC CRUD + Obsidian Persistence | NPC-01..05 | Phase 28 | ✅ COMPLETE (2026-04-22) |
 | 30 | NPC Outputs | OUT-01..04 | Phase 29 | ✅ COMPLETE (2026-04-23) |
-| 31 | Dialogue Engine | DLG-01..03 | Phase 29 | Not started |
+| 31 | Dialogue Engine | DLG-01..03 | Phase 29 | ✅ COMPLETE (2026-04-23) |
 | 32 | Monster Harvesting | HRV-01..06 | Phase 28 | Not started |
 | 33 | Rules Engine | RUL-01..04 | Phase 28 | Not started |
 | 34 | Session Notes | SES-01..03 | Phase 29 | Not started |
@@ -140,9 +140,9 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-04-23
-Stopped at: Phase 31 planned — ready to execute
-Resume file: .planning/phases/31-dialogue-engine/31-01-red-test-stubs-PLAN.md
+Stopped at: Phase 31 complete — 26/26 tests GREEN, 8/8 review findings fixed
+Resume file: .planning/phases/31-dialogue-engine/31-VERIFICATION.md (for audit) or pick next v0.5 phase
 
-**Next Phase:** 31 (Dialogue Engine) — DLG-01, DLG-02, DLG-03 — planned, ready for /gsd-execute-phase 31
+**Next Phase:** 32 (Monster Harvesting, HRV-01..06) — depends on Phase 28 — or 33 Rules Engine / 34 Session Notes (user picks)
 
-**Planned Phase:** 31 (Dialogue Engine) — 5 plans — 2026-04-23T19:30:00.000Z
+**Completed Phase:** 31 (Dialogue Engine) — 5 plans / 4 waves — 2026-04-23T21:30:00.000Z — DLG-01..03 shipped
