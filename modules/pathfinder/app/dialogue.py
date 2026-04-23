@@ -146,7 +146,7 @@ def build_user_prompt(
     if history:
         lines = ["--- Earlier in the conversation ---"]
         for turn in history:
-            lines.append(f"Party: {turn.get('party_line', '')!r}")
+            lines.append(f'Party: "{turn.get("party_line", "")}"')
             for r in turn.get("replies", []) or []:
                 lines.append(f"{r.get('npc', '?')}: {r.get('reply', '')}")
         sections.append("\n".join(lines))
@@ -154,7 +154,7 @@ def build_user_prompt(
     if this_turn_replies:
         lines = ["--- This turn so far ---"]
         if party_line:
-            lines.append(f"Party: {party_line!r}")
+            lines.append(f'Party: "{party_line}"')
         else:
             lines.append("Party: (silent)")
         for r in this_turn_replies:
@@ -181,7 +181,7 @@ def _render_history_for_token_count(turns: list[dict]) -> str:
     """Render turns as a single string for tiktoken counting (matches build_user_prompt format)."""
     out = []
     for turn in turns:
-        out.append(f"Party: {turn.get('party_line', '')!r}")
+        out.append(f'Party: "{turn.get("party_line", "")}"')
         for r in turn.get("replies", []) or []:
             out.append(f"{r.get('npc', '?')}: {r.get('reply', '')}")
     return "\n".join(out)
