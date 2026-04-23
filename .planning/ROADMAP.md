@@ -421,13 +421,14 @@ Plans:
 **Depends on:** Phase 29
 **Requirements:** OUT-01, OUT-02, OUT-03, OUT-04
 **Success Criteria** (what must be TRUE):
-  1. `/pf npc export foundry [name]` attaches a `.json` file; imported into Foundry VTT without errors
+  1. `:pf npc export <name>` attaches a `.json` file; imported into Foundry VTT without errors
   2. Exported JSON passes Foundry PF2e actor schema validation (schema derived from live actor export)
-  3. `/pf npc token [name]` returns a copyable `/imagine` prompt string in Discord
-  4. `/pf npc stat [name]` returns a formatted stat block as a Discord embed
-  5. `/pf npc pdf [name]` attaches a printable PDF stat card
-**Status:** Not started
-**Plans:** 0 plans
+  3. `:pf npc token <name>` returns a copyable `/imagine` prompt string in Discord
+  4. `:pf npc stat <name>` returns a formatted stat block as a Discord embed
+  5. `:pf npc pdf <name>` attaches a printable PDF stat card
+**Status:** ✅ COMPLETE (2026-04-23)
+**Plans:** 3 plans (30-01 helper modules + RED tests, 30-02 endpoints + REGISTRATION_PAYLOAD, 30-03 Discord bot wiring)
+**Tests:** 23 module tests + 19 Discord subcommand tests + 12 shared client tests, all green
 
 ### Phase 31: Dialogue Engine
 **Goal:** Enable in-character NPC dialogue grounded in Obsidian profiles, with persistent mood state and support for multi-NPC scenes.

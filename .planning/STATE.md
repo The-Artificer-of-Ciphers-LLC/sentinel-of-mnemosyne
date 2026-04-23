@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: The Dungeon
 status: in_progress
-stopped_at: Phase 30 execution started
-last_updated: "2026-04-23T12:00:00.000Z"
-last_activity: 2026-04-23 -- Phase 30 (NPC Outputs) execution started
+stopped_at: Phase 30 complete
+last_updated: "2026-04-23T13:00:00.000Z"
+last_activity: 2026-04-23 -- Phase 30 (NPC Outputs) execution complete (3/3 plans)
 progress:
   total_phases: 26
-  completed_phases: 11
-  total_plans: 29
-  completed_plans: 35
+  completed_phases: 12
+  total_plans: 32
+  completed_plans: 38
   percent: 100
 ---
 
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 30 (NPC Outputs) — IN PROGRESS
+Phase: 30 (NPC Outputs) — COMPLETE
 Next Phase: 31 — Dialogue Engine
 Milestone: v0.5 The Dungeon — IN PROGRESS
-Status: Phase 30 execution started (3 plans, 6 tasks total — 2/2/2)
-Last activity: 2026-04-23 -- Phase 30 execution started (Plan 30-01 Wave 1)
+Status: Phase 30 complete (3/3 plans, 9 commits, 54 tests across 3 modules all green)
+Last activity: 2026-04-23 -- Phase 30 execution complete
 
 ## Milestone Progress
 
@@ -48,7 +48,7 @@ Last activity: 2026-04-23 -- Phase 30 execution started (Plan 30-01 Wave 1)
 | v0.10 | The Trader Goes Live | TBD | — |
 | v1.0 | Community Release | TBD | — |
 
-Progress (v0.5): [          ] 0% (0/9 phases)
+Progress (v0.5): [███       ] 33% (3/9 phases — 28, 29, 30 complete)
 
 ## v0.5 Phase Map
 
@@ -56,7 +56,7 @@ Progress (v0.5): [          ] 0% (0/9 phases)
 |-------|------|--------------|------------|--------|
 | 28 | pf2e-module Skeleton + CORS | MOD-01, MOD-02 | Phase 26 | ✅ COMPLETE (2026-04-22) |
 | 29 | NPC CRUD + Obsidian Persistence | NPC-01..05 | Phase 28 | ✅ COMPLETE (2026-04-22) |
-| 30 | NPC Outputs | OUT-01..04 | Phase 29 | 🚧 IN PROGRESS (started 2026-04-23) |
+| 30 | NPC Outputs | OUT-01..04 | Phase 29 | ✅ COMPLETE (2026-04-23) |
 | 31 | Dialogue Engine | DLG-01..03 | Phase 29 | Not started |
 | 32 | Monster Harvesting | HRV-01..06 | Phase 28 | Not started |
 | 33 | Rules Engine | RUL-01..04 | Phase 28 | Not started |
