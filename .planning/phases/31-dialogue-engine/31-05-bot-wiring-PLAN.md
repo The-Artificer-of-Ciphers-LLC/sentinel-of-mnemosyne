@@ -197,8 +197,7 @@ assert turns[1]['replies'][0]['npc'] == 'Varek'
 assert turns[1]['replies'][1]['npc'] == 'Baron'
 
 # Filter to non-overlapping name set returns 0 turns
-turns2 = asyncio.run(bot._extract_thread_history(_FakeThread(msgs), {'Miralla'}, 999, limit=50)
-                     if False else (lambda: asyncio.run(bot._extract_thread_history(_FakeThread(msgs), {'Miralla'}, 999, limit=50)))())
+turns2 = asyncio.run(bot._extract_thread_history(_FakeThread(msgs), {'Miralla'}, 999, limit=50))
 assert turns2 == [], turns2
 print('OK')
 "
@@ -243,6 +242,11 @@ print('OK')
   <name>Task 31-05-02: Add `say` verb branch to _pf_dispatch + extend _pf_dispatch signature with optional channel kwarg</name>
   <read_first>
     - interfaces/discord/bot.py (lines 229-473 for _pf_dispatch full body; lines 251-268 for create-verb pipe-parsing analog; lines 383-416 for token-image branch analog; lines 442-473 for the unknown-verb help text + error-handling stanza)
+    - interfaces/discord/bot.py line 242 — exact current top-level usage line: `return "Usage: \`:pf npc <create|update|show|relate|import> ...\`"` (verbatim — Step 5 below replaces this)
+    - interfaces/discord/bot.py line 450 — exact current Available: line: `"Available: \`create\`, \`update\`, \`show\`, \`relate\`, \`import\`, \`export\`, \`token\`, \`token-image\`, \`stat\`, \`pdf\`."` (verbatim — Step 4 below replaces this)
+    - interfaces/discord/bot.py lines 479-501 — `_route_message(user_id, message, attachments=None)` signature + body (Step 2 channel propagation: add `channel` kwarg here and forward to `handle_sentask_subcommand`)
+    - interfaces/discord/bot.py lines 504-510 — `handle_sentask_subcommand(subcmd, args, user_id, attachments=None)` + the `if subcmd == "pf": return await _pf_dispatch(args, user_id, attachments=attachments)` line (Step 2 channel propagation: add `channel` kwarg here and forward to `_pf_dispatch`)
+    - interfaces/discord/bot.py — every call site of `_route_message(...)` (use `grep -n "_route_message(" interfaces/discord/bot.py` to enumerate; canonical caller is `on_message` and the `/sen` slash handler around line 713; both pass `message.channel` / `interaction.channel` as the new `channel` kwarg)
     - .planning/phases/31-dialogue-engine/31-PATTERNS.md §7 (Analog A + B + signature-change recommendation + Gotchas 1-3)
     - .planning/phases/31-dialogue-engine/31-RESEARCH.md lines 630-666 (full say-branch reference impl)
     - .planning/phases/31-dialogue-engine/31-CONTEXT.md decisions D-01 (syntax), D-02 (empty-payload scene-advance), D-03 (rendering), D-04 (help text), D-25 (bot owns Discord side)
@@ -258,19 +262,49 @@ async def _pf_dispatch(args: str, user_id: str, attachments=None, channel=None) 
 
 (Backward-compatible — every existing call site that does not pass `channel` continues to work; tests stub `channel=None`.)
 
-**Step 2 — Extend `on_message` and any `/sen` slash-command handler to pass the channel.** Find the calls to `_pf_dispatch(...)` in the file (likely in `on_message` around lines 654-706 and possibly in a slash-command handler near line 738). Update them to pass `channel=message.channel` when the channel is a discord.Thread:
+**Step 2 — Plumb `channel` through the 3-layer call chain.** The existing dispatch chain is `on_message`/`sen` → `_route_message` (line 479) → `handle_sentask_subcommand` (line 504) → `_pf_dispatch` (line 229). The channel reference (`message.channel` from `on_message` / `interaction.channel` from `sen`) must flow through all three layers as a backward-compatible optional kwarg. Apply the following surgical edits:
 
+**(a) `_route_message` signature + forward (line 479-492):**
 ```python
-# Existing call (likely):
-ai_response = await _route_message(user_id, message.content, attachments=list(message.attachments))
-# OR
-result = await _pf_dispatch(args_after_prefix, user_id, attachments=...)
+# BEFORE:
+async def _route_message(user_id: str, message: str, attachments: list | None = None) -> str:
+    ...
+    if message.startswith(":"):
+        parts = message[1:].split(" ", 1)
+        subcmd = parts[0].lower()
+        args = parts[1] if len(parts) > 1 else ""
+        return await handle_sentask_subcommand(subcmd, args, user_id, attachments=attachments)
 
-# New call:
-result = await _pf_dispatch(args_after_prefix, user_id, attachments=..., channel=message.channel)
+# AFTER:
+async def _route_message(user_id: str, message: str, attachments: list | None = None, channel=None) -> str:
+    ...
+    if message.startswith(":"):
+        parts = message[1:].split(" ", 1)
+        subcmd = parts[0].lower()
+        args = parts[1] if len(parts) > 1 else ""
+        return await handle_sentask_subcommand(subcmd, args, user_id, attachments=attachments, channel=channel)
 ```
 
-If `_route_message` is the indirection path (not direct `_pf_dispatch`), trace the call chain and add the `channel` parameter through the layer. Do NOT change semantics — channel is just propagated.
+**(b) `handle_sentask_subcommand` signature + forward (line 504-510):**
+```python
+# BEFORE:
+async def handle_sentask_subcommand(subcmd: str, args: str, user_id: str, attachments: list | None = None) -> str:
+    ...
+    if subcmd == "pf":
+        return await _pf_dispatch(args, user_id, attachments=attachments)
+
+# AFTER:
+async def handle_sentask_subcommand(subcmd: str, args: str, user_id: str, attachments: list | None = None, channel=None) -> str:
+    ...
+    if subcmd == "pf":
+        return await _pf_dispatch(args, user_id, attachments=attachments, channel=channel)
+```
+
+**(c) Every `_route_message(...)` call site (enumerated via `grep -n "_route_message(" interfaces/discord/bot.py`):**
+- In `on_message`: append `, channel=message.channel`
+- In the `/sen` slash command handler (`async def sen(interaction, message)` around line 713): append `, channel=interaction.channel`
+
+(Backward-compatible — every call site that omits `channel` continues to work; the kwarg defaults to `None` at every layer. Do NOT change any other semantics — channel is a pure pass-through. Tests stub `channel=None`.)
 
 **Step 3 — Add the `say` branch.** Insert this branch into the verb dispatch chain in `_pf_dispatch` AFTER the existing `pdf` branch and BEFORE the unknown-verb fallback. The existing chain looks like `if verb == "create": ... elif verb == "update": ... elif verb == "show": ... elif verb == "relate": ... elif verb == "import": ... elif verb == "export": ... elif verb == "token": ... elif verb == "token-image": ... elif verb == "stat": ... elif verb == "pdf": ... else: <unknown verb>`. Insert AFTER `elif verb == "pdf"` block:
 
@@ -318,26 +352,33 @@ elif verb == "say":
     return _render_say_response(result)
 ```
 
-**Step 4 — Update unknown-verb help text** (around line 450 per PATTERNS.md §7). The existing line reads something like:
+**Step 4 — Update unknown-verb help text (line 450, verbatim).** The current text is exactly:
 ```python
-return (
-    f"Unknown npc command `{verb}`. "
-    "Available: `create`, `update`, `show`, `relate`, `import`, `export`, `token`, `token-image`, `stat`, `pdf`."
-)
+            else:
+                return (
+                    f"Unknown npc command `{verb}`. "
+                    "Available: `create`, `update`, `show`, `relate`, `import`, `export`, `token`, `token-image`, `stat`, `pdf`."
+                )
 ```
-Change the Available list to include `say`:
+Replace by appending `, \`say\`` to the inside-quotes verb list (preserve every existing verb — order matters, formatting matters):
 ```python
-return (
-    f"Unknown npc command `{verb}`. "
-    "Available: `create`, `update`, `show`, `relate`, `import`, `export`, `token`, `token-image`, `stat`, `pdf`, `say`."
-)
+            else:
+                return (
+                    f"Unknown npc command `{verb}`. "
+                    "Available: `create`, `update`, `show`, `relate`, `import`, `export`, `token`, `token-image`, `stat`, `pdf`, `say`."
+                )
 ```
 
-**Step 5 — Update top-level usage line** (around line 242 per PATTERNS.md). Find the existing line that lists the verb prefixes for `npc` (e.g., `"Usage: \`:pf npc <create|update|show|relate|import> ...\`"`) and add `|say` to the verb list. The new line:
+**Step 5 — Update top-level usage line (line 242, verbatim).** The current text is exactly:
 ```python
-return "Usage: `:pf npc <create|update|show|relate|import|say> ...`"
+    if len(parts) < 2:
+        return "Usage: `:pf npc <create|update|show|relate|import> ...`"
 ```
-(Keep the rest of the existing usage string intact — only add the `|say` token.)
+Replace by appending `|say` after `import` (do not invent additional verbs into this line — it is intentionally short):
+```python
+    if len(parts) < 2:
+        return "Usage: `:pf npc <create|update|show|relate|import|say> ...`"
+```
 
 **Step 6 — Verify all 8 bot-layer tests pass:**
 ```bash
@@ -359,7 +400,8 @@ cd interfaces/discord && python -m pytest tests/ -q
     - grep -F 'channel=None' interfaces/discord/bot.py matches (signature change)
     - grep -F 'rest.partition("|")' interfaces/discord/bot.py occurs ≥ 2 times (existing create + new say branch)
     - grep -E "Available:.*\`say\`" interfaces/discord/bot.py matches (D-04 — help text includes say)
-    - grep -E "Usage: \`:pf npc.*\|say" interfaces/discord/bot.py matches (top-level usage updated)
+    - grep -F "Available: \`create\`, \`update\`, \`show\`, \`relate\`, \`import\`, \`export\`, \`token\`, \`token-image\`, \`stat\`, \`pdf\`, \`say\`." interfaces/discord/bot.py matches (full Available list intact + say appended — guards against accidental truncation)
+    - grep -F 'Usage: `:pf npc <create|update|show|relate|import|say> ...`' interfaces/discord/bot.py matches (top-level usage updated; no other verb invented)
     - All 8 bot tests pass: `cd interfaces/discord && python -m pytest tests/test_subcommands.py -k 'say or thread_history or unknown_verb_help_includes_say' -q` exit 0
     - No regression: `cd interfaces/discord && python -m pytest tests/ -q` exit code 0
     - grep -vE '^\s*#' interfaces/discord/bot.py | grep -E '(TODO|FIXME|NotImplementedError|raise NotImplementedError)' returns 0 NEW matches in lines added by this task (existing pre-Phase-31 markers, if any, are out of scope)

@@ -286,6 +286,11 @@ async def say_npc(req: NPCSayRequest) -> JSONResponse:
     scene_roster = [n["name"] for n in npcs_data]
     scene_name_set_lower = {n.lower() for n in scene_roster}
 
+    # Step 3b: Debug-only scene_id (RESEARCH.md Recommended Defaults — logged only, not user-visible).
+    scene_id = "-".join(sorted(slugify(n) for n in scene_roster))
+    logger.info("npc/say scene_id=%s names=%s party_line_len=%d history_turns=%d",
+                scene_id, scene_roster, len(req.party_line), len(capped_history))
+
     # Step 4: Resolve chat-tier model (D-27). Single call up front; same model used per turn.
     model = await resolve_model("chat")
     api_base = settings.litellm_api_base or None
@@ -377,6 +382,7 @@ cd modules/pathfinder && python -m pytest tests/ -q
     - grep -F 'build_npc_markdown' modules/pathfinder/app/routes/npc.py occurs ≥ 2 times (existing update_npc + new say handler)
     - grep -c 'patch_frontmatter_field' modules/pathfinder/app/routes/npc.py — must NOT increase from baseline (mood write uses PUT not PATCH per D-09; this verifies no regression to PATCH for the new handler)
     - grep -F 'this_turn_replies' modules/pathfinder/app/routes/npc.py matches (scene context awareness)
+    - grep -F 'scene_id' modules/pathfinder/app/routes/npc.py matches (debug log per RESEARCH.md Recommended Defaults)
     - All 16 npc_say tests pass: `cd modules/pathfinder && python -m pytest tests/test_npc.py -k npc_say -q` exit code 0
     - Both integration tests pass: `cd modules/pathfinder && python -m pytest tests/test_npc_say_integration.py -q` exit code 0
     - No Phase 29/30 regressions: `cd modules/pathfinder && python -m pytest tests/ -q -k "not npc_say"` exit code 0

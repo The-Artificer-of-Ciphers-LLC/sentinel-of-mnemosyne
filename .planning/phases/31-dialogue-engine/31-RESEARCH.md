@@ -1057,22 +1057,22 @@ async def say_npc(req: NPCSayRequest) -> JSONResponse:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-**1. Should scene mood writes be ordered or parallel-committed?**
+**1. Should scene mood writes be ordered or parallel-committed? — RESOLVED**
 - What we know: D-19 locks serial LLM calls. But the vault writes (one per NPC with delta≠0) could happen at the end in parallel.
 - What's unclear: Whether to write-as-you-go (simpler, each NPC's mood is committed before next NPC's call) or write-all-at-end (atomic-feeling batch).
-- Recommendation: Write-as-you-go. (1) Consistent with existing update_npc semantics. (2) Next NPC's prompt doesn't read mood from other NPCs, so no ordering dependency. (3) Partial success on failure is acceptable.
+- RESOLVED: Write-as-you-go. Implemented in Plan 31-04 task 31-04-02 (mood `put_note` happens inside the per-NPC for-loop, before `this_turn_replies.append`). (1) Consistent with existing update_npc semantics. (2) Next NPC's prompt doesn't read mood from other NPCs, so no ordering dependency. (3) Partial success on failure is acceptable.
 
-**2. Should `scene_roster` pass slugs or display names to the system prompt?**
+**2. Should `scene_roster` pass slugs or display names to the system prompt? — RESOLVED**
 - What we know: LLM reads names; users see names. Slugs are internal.
 - What's unclear: Whether "Others present: baron-aldric" vs "Others present: Baron Aldric" changes model behavior.
-- Recommendation: Display names everywhere. Slugs only for vault paths and log keys.
+- RESOLVED: Display names everywhere. Implemented in Plan 31-04 (`scene_roster = [n["name"] for n in npcs_data]`). Slugs only for vault paths and log keys.
 
-**3. If `message_content` intent isn't granted by Discord, does the history walker degrade to "empty memory"?**
+**3. If `message_content` intent isn't granted by Discord, does the history walker degrade to "empty memory"? — RESOLVED**
 - What we know: Intent is privileged; current deployment has it enabled (`bot.py:610`). If it's revoked, `.content` becomes empty string.
 - What's unclear: Whether the walker should fail-loud or fail-quiet.
-- Recommendation: If all walked messages have empty `.content`, log a warning with the actionable message "Enable the Message Content Intent in the Developer Portal" and return empty history. Dialogue works with zero history — just no memory. Not a plan-gate blocker.
+- RESOLVED: Fail-quiet with actionable warning. Implemented in Plan 31-05 task 31-05-02 — history walk wrapped in try/except returning empty list on failure; warning log emits "Enable the Message Content Intent in the Developer Portal" when all walked messages have empty `.content`. Dialogue works with zero history — just no memory.
 
 **None of these require user input before planning begins — all are Claude-discretion calls in service of the locked decisions.**
 
