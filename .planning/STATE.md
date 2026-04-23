@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: The Dungeon
 status: in_progress
-stopped_at: Phase 31 context gathered
-last_updated: "2026-04-23T17:00:00.000Z"
-last_activity: 2026-04-23 -- Phase 31 (Dialogue Engine) context captured — 4/4 gray areas resolved, ready for planning
+stopped_at: Phase 31 planned (5 plans, 4 waves) — ready to execute
+last_updated: "2026-04-23T19:30:00.000Z"
+last_activity: 2026-04-23 -- Phase 31 (Dialogue Engine) planning complete — 5 plans across 4 waves, 26 tests scaffolded, plan-checker PASS on iteration 1/3
 progress:
   total_phases: 26
   completed_phases: 12
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 30 (NPC Outputs) — COMPLETE
-Next Phase: 31 — Dialogue Engine
+Phase: 31 (Dialogue Engine) — PLANNED (5 plans, 4 waves), ready to execute
+Next Phase: 31 — Dialogue Engine (execute)
 Milestone: v0.5 The Dungeon — IN PROGRESS
-Status: Phase 30 complete (3/3 plans, 9 commits, 54 tests across 3 modules all green)
-Last activity: 2026-04-23 -- Phase 30 execution complete
+Status: Phase 31 planning complete — 5 plans across 4 waves, 26 tests scaffolded (16 module + 8 bot + 2 integration), plan-checker PASS on iteration 1/3
+Last activity: 2026-04-23 -- Phase 31 planning complete; ready for /gsd-execute-phase 31
 
 ## Milestone Progress
 
@@ -140,9 +140,9 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-04-23
-Stopped at: Phase 31 context gathered
-Resume file: .planning/phases/31-dialogue-engine/31-CONTEXT.md
+Stopped at: Phase 31 planned — ready to execute
+Resume file: .planning/phases/31-dialogue-engine/31-01-red-test-stubs-PLAN.md
 
-**Next Phase:** 31 (Dialogue Engine) — DLG-01, DLG-02, DLG-03 — context ready, needs planning
+**Next Phase:** 31 (Dialogue Engine) — DLG-01, DLG-02, DLG-03 — planned, ready for /gsd-execute-phase 31
 
-**Planned Phase:** 29 (NPC CRUD + Obsidian Persistence) — 5 plans — 2026-04-22T02:37:19.848Z
+**Planned Phase:** 31 (Dialogue Engine) — 5 plans — 2026-04-23T19:30:00.000Z
