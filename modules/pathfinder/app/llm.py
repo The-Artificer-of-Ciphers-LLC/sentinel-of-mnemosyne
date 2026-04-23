@@ -69,6 +69,52 @@ async def extract_npc_fields(
     return json.loads(_strip_code_fences(content))
 
 
+async def generate_npc_reply(
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+    api_base: str | None = None,
+) -> dict:
+    """LLM dialogue call — returns {reply: str, mood_delta: int} for one NPC turn (DLG-01, DLG-02).
+
+    Single chat call extracts both the in-character reply and the mood shift signal.
+    Graceful degradation on JSON parse failure (T-31-SEC-03):
+    - Returns {reply: <salvaged prose>, mood_delta: 0}; does NOT raise.
+    - Logs WARNING with raw[:200] for diagnosis.
+
+    Caller is responsible for selecting the model (D-27 — chat tier from resolve_model("chat")).
+    """
+    kwargs: dict = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "timeout": 60.0,
+    }
+    if api_base:
+        kwargs["api_base"] = api_base
+
+    response = await litellm.acompletion(**kwargs)
+    raw = response.choices[0].message.content or ""
+    stripped = _strip_code_fences(raw).strip()
+
+    try:
+        parsed = json.loads(stripped)
+        reply = str(parsed.get("reply", stripped)).strip()[:1500]
+        delta = parsed.get("mood_delta", 0)
+        if not isinstance(delta, int) or delta not in (-1, 0, 1):
+            delta = 0
+        return {"reply": reply, "mood_delta": delta}
+    except json.JSONDecodeError:
+        logger.warning(
+            "generate_npc_reply: JSON parse failed, salvaging reply text. raw_head=%r",
+            raw[:200],
+        )
+        salvaged = (stripped or "...")[:1500]
+        return {"reply": salvaged, "mood_delta": 0}
+
+
 async def generate_mj_description(
     fields: dict,
     model: str,
