@@ -932,10 +932,18 @@ async def say_npc(req: NPCSayRequest) -> JSONResponse:
         )
 
         # Mood math (D-07): zero or clamped no-op skips the vault write.
-        current_mood = normalize_mood(npc["fields"].get("mood") or "neutral")
+        # WR-04: if the stored mood value is invalid (hand-edited or corrupted),
+        # normalize_mood silently promotes it to 'neutral'. On a delta=0 turn
+        # new_mood == current_mood == 'neutral', so the existing write-elision
+        # would leave the invalid value in the vault indefinitely. Track the raw
+        # stored value: if it differs from the normalised one, force a self-
+        # healing write even when no delta write is otherwise queued.
+        raw_mood = npc["fields"].get("mood") or "neutral"
+        current_mood = normalize_mood(raw_mood)
         new_mood = apply_mood_delta(current_mood, llm_result["mood_delta"])
+        needs_normalization_repair = raw_mood != current_mood and new_mood == current_mood
 
-        if new_mood != current_mood:
+        if new_mood != current_mood or needs_normalization_repair:
             updated_fields = dict(npc["fields"])
             updated_fields["mood"] = new_mood
             new_content = build_npc_markdown(
@@ -944,7 +952,16 @@ async def say_npc(req: NPCSayRequest) -> JSONResponse:
             )
             try:
                 await obsidian.put_note(npc["path"], new_content)
-                logger.info("NPC mood updated: %s %s -> %s", npc["name"], current_mood, new_mood)
+                if needs_normalization_repair:
+                    logger.info(
+                        "NPC mood self-healed: %s invalid=%r -> %s",
+                        npc["name"], raw_mood, new_mood,
+                    )
+                else:
+                    logger.info(
+                        "NPC mood updated: %s %s -> %s",
+                        npc["name"], current_mood, new_mood,
+                    )
             except Exception as exc:
                 logger.error("Mood write failed for %s: %s", npc["name"], exc)
                 # Degrade per RESEARCH.md lines 1007-1012: keep reply, revert reported mood.
