@@ -56,6 +56,11 @@ MOOD_TONE_GUIDANCE: dict[str, str] = {
 HISTORY_MAX_TURNS: int = 10
 HISTORY_MAX_TOKENS: int = 2000
 
+# Module-scope tiktoken encoder (IN-01): get_encoding is internally cached by
+# tiktoken but hoisting matches the idiomatic pattern used in
+# sentinel-core/app/services/token_guard.py and avoids a lookup on every call.
+_ENC = tiktoken.get_encoding("cl100k_base")
+
 
 # --- Mood state machine (D-06, D-07) ---
 
@@ -197,11 +202,10 @@ def cap_history_turns(turns: list[dict]) -> list[dict]:
         return []
     # Primary cap: keep last N turns
     capped = list(turns[-HISTORY_MAX_TURNS:])
-    # Guardrail: token cap drops oldest until under budget
-    enc = tiktoken.get_encoding("cl100k_base")
+    # Guardrail: token cap drops oldest until under budget (uses module-scope _ENC).
     while capped:
         rendered = _render_history_for_token_count(capped)
-        if len(enc.encode(rendered)) <= HISTORY_MAX_TOKENS:
+        if len(_ENC.encode(rendered)) <= HISTORY_MAX_TOKENS:
             break
         capped = capped[1:]  # drop oldest first
     return capped
