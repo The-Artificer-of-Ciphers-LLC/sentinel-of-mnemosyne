@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: The Dungeon
 status: in_progress
-stopped_at: Phase 30 complete
-last_updated: "2026-04-23T13:00:00.000Z"
-last_activity: 2026-04-23 -- Phase 30 (NPC Outputs) execution complete (3/3 plans)
+stopped_at: Phase 31 context gathered
+last_updated: "2026-04-23T17:00:00.000Z"
+last_activity: 2026-04-23 -- Phase 31 (Dialogue Engine) context captured — 4/4 gray areas resolved, ready for planning
 progress:
   total_phases: 26
   completed_phases: 12
@@ -139,10 +139,10 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: --stopped-at
-Stopped at: Phase 30 context gathered
-Resume file: --resume-file
+Last session: 2026-04-23
+Stopped at: Phase 31 context gathered
+Resume file: .planning/phases/31-dialogue-engine/31-CONTEXT.md
 
-**Next Phase:** 28 (pf2e-module Skeleton + CORS) — MOD-01, MOD-02
+**Next Phase:** 31 (Dialogue Engine) — DLG-01, DLG-02, DLG-03 — context ready, needs planning
 
 **Planned Phase:** 29 (NPC CRUD + Obsidian Persistence) — 5 plans — 2026-04-22T02:37:19.848Z
