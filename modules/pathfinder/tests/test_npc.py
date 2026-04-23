@@ -252,3 +252,180 @@ async def test_npc_import_collision_skipped():
     assert resp.status_code == 200
     assert resp.json()["skipped"] == ["Varek"]
     assert resp.json()["imported_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Fixtures for NPC output tests (OUT-01 through OUT-04)
+# ---------------------------------------------------------------------------
+
+NOTE_WITH_STATS = (
+    "---\n"
+    "name: Varek\nlevel: 1\nancestry: Gnome\nclass: Rogue\n"
+    "traits:\n- sneaky\npersonality: Nervous.\nbackstory: Fled the guild.\n"
+    "mood: neutral\nrelationships: []\nimported_from: null\n"
+    "---\n"
+    "\n## Stats\n```yaml\nac: 18\nhp: 32\nfortitude: 8\nreflex: 12\nwill: 6\nspeed: 25\n```\n"
+)
+
+NOTE_NO_STATS = (
+    "---\n"
+    "name: Varek\nlevel: 1\nancestry: Gnome\nclass: Rogue\n"
+    "traits:\n- sneaky\npersonality: Nervous.\nbackstory: Fled the guild.\n"
+    "mood: neutral\nrelationships: []\nimported_from: null\n"
+    "---\n"
+)
+
+
+# ---------------------------------------------------------------------------
+# NPC export-foundry tests (OUT-01)
+# ---------------------------------------------------------------------------
+
+
+async def test_npc_export_foundry_success():
+    """POST /npc/export-foundry returns 200 with actor dict and filename (OUT-01)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_WITH_STATS)
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/export-foundry", json={"name": "Varek"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "actor" in data
+    assert data["actor"]["type"] == "npc"
+    assert data["actor"]["name"] == "Varek"
+    assert data["filename"] == "varek.json"
+
+
+async def test_npc_export_foundry_not_found():
+    """POST /npc/export-foundry returns 404 for unknown NPC (OUT-01)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=None)
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/export-foundry", json={"name": "Unknown"})
+    assert resp.status_code == 404
+
+
+async def test_npc_export_foundry_no_stats():
+    """POST /npc/export-foundry with no stats block returns actor with 0-value defaults (D-05, OUT-01)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_NO_STATS)
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/export-foundry", json={"name": "Varek"})
+    assert resp.status_code == 200
+    actor = resp.json()["actor"]
+    assert actor["system"]["attributes"]["ac"]["value"] == 0
+    assert actor["system"]["attributes"]["hp"]["value"] == 0
+
+
+# ---------------------------------------------------------------------------
+# NPC token tests (OUT-02)
+# ---------------------------------------------------------------------------
+
+
+async def test_npc_token_success():
+    """POST /npc/token returns 200 with prompt string containing MJ params (OUT-02)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_WITH_STATS)
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_mj_description", new=AsyncMock(return_value="nervous eyes, disheveled clothing")):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/token", json={"name": "Varek"})
+    assert resp.status_code == 200
+    assert "prompt" in resp.json()
+
+
+async def test_npc_token_template_structure():
+    """Token prompt contains --ar 1:1 suffix from fixed template (D-09, OUT-02)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_WITH_STATS)
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_mj_description", new=AsyncMock(return_value="nervous eyes, disheveled clothing")):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/token", json={"name": "Varek"})
+    assert "--ar 1:1" in resp.json()["prompt"]
+    assert "--no text" in resp.json()["prompt"]
+
+
+# ---------------------------------------------------------------------------
+# NPC stat tests (OUT-03)
+# ---------------------------------------------------------------------------
+
+
+async def test_npc_stat_success():
+    """POST /npc/stat returns 200 with fields and stats keys (OUT-03)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_WITH_STATS)
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/stat", json={"name": "Varek"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "fields" in data
+    assert "stats" in data
+    assert data["stats"]["ac"] == 18
+
+
+async def test_npc_stat_no_stats():
+    """POST /npc/stat with no stats block returns empty stats dict (D-16, OUT-03)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_NO_STATS)
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/stat", json={"name": "Varek"})
+    assert resp.status_code == 200
+    assert resp.json()["stats"] == {}
+
+
+# ---------------------------------------------------------------------------
+# NPC pdf tests (OUT-04)
+# ---------------------------------------------------------------------------
+
+
+async def test_npc_pdf_success():
+    """POST /npc/pdf returns 200 with data_b64; decodes to valid PDF bytes (OUT-04)."""
+    import base64
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_WITH_STATS)
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/pdf", json={"name": "Varek"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "data_b64" in data
+    assert data["filename"] == "varek-stat-card.pdf"
+    pdf_bytes = base64.b64decode(data["data_b64"])
+    assert pdf_bytes[:4] == b"%PDF"
+
+
+async def test_npc_pdf_no_stats():
+    """POST /npc/pdf with no stats block returns PDF with header only (D-20, OUT-04)."""
+    import base64
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_NO_STATS)
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/pdf", json={"name": "Varek"})
+    assert resp.status_code == 200
+    data = resp.json()
+    pdf_bytes = base64.b64decode(data["data_b64"])
+    assert pdf_bytes[:4] == b"%PDF"

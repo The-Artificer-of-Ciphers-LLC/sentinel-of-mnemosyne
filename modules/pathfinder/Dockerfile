@@ -9,7 +9,8 @@ COPY pyproject.toml ./
 RUN pip install --no-cache-dir \
     "fastapi>=0.135.0" \
     "uvicorn[standard]>=0.44.0" \
-    "httpx>=0.28.1"
+    "httpx>=0.28.1" \
+    "reportlab>=4.4.0"
 
 COPY . .
 
