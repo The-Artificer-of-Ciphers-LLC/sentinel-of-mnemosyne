@@ -11,12 +11,12 @@ updated: 2026-04-23T13:00:00Z
 
 ## Current Test
 
-number: 4
-name: OUT-03 — `:pf npc stat Jareth`
+number: 5
+name: OUT-04 — `:pf npc pdf Jareth`
 expected: |
-  Bot replies with a Discord Embed: title "Jareth (Level 1 ...)",
-  AC/HP inline, Fort/Ref/Will inline, Speed, "Mood: neutral" footer.
-  Mechanical fields may be 0/absent if no ## Stats block yet.
+  Bot attaches jareth-stat-card.pdf. One-page card with Jareth's name
+  as title, level/ancestry/class subtitle. If no ## Stats block,
+  header-only PDF is correct per D-20.
 awaiting: user response
 
 ## Tests
@@ -39,7 +39,14 @@ result: pass
 
 ### 4. OUT-03 — :pf npc stat Jareth
 expected: Bot replies with a formatted Discord Embed showing title like "Jareth (Level 1 Halfling Rogue)", AC/HP inline, Fort/Ref/Will inline, Speed, and a "Mood: neutral" footer. Mechanical stat fields (AC/HP/saves) may be 0 or absent if the NPC has no `## Stats` block yet.
-result: pending
+result: pass
+reported: "does not have any fields but everything else was there"
+note: |
+  Embed-without-mechanical-fields is correct per D-16: Jareth was created
+  via :pf npc create which writes frontmatter only (no ## Stats block yet).
+  build_stat_embed's `if stats:` guard (bot.py) intentionally omits AC/HP/
+  Fort/Ref/Will/Speed/Skills/Perception when stats == {}. Title, description,
+  and Mood footer render from frontmatter and appeared as expected.
 
 ### 5. OUT-04 — :pf npc pdf Jareth
 expected: Bot attaches a `jareth-stat-card.pdf` file. Opening the PDF shows a one-page stat card with Jareth's name as title, level/ancestry/class subtitle, and (if stats are present) an AC/HP/saves table. If no stats block, header-only PDF is correct.
@@ -48,9 +55,9 @@ result: pending
 ## Summary
 
 total: 5
-passed: 3
+passed: 4
 issues: 0
-pending: 2
+pending: 1
 skipped: 0
 blocked: 0
 
