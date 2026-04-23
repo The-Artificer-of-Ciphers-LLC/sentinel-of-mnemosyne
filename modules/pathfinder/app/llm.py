@@ -13,6 +13,10 @@ logger = logging.getLogger(__name__)
 # Suppress litellm's verbose startup logs
 litellm.suppress_debug_info = True
 
+# Cap per-NPC reply length so multi-NPC scenes rendered as stacked "> " quote
+# markdown stay under Discord's 2000-char message limit (IN-03).
+_MAX_REPLY_CHARS = 1500  # leaves headroom under Discord's 2000-char limit once wrapped in "> " quote markdown across multi-NPC scenes
+
 
 def _strip_code_fences(text: str) -> str:
     """Strip markdown code fences that LLMs wrap JSON responses in."""
@@ -101,7 +105,7 @@ async def generate_npc_reply(
 
     try:
         parsed = json.loads(stripped)
-        reply = str(parsed.get("reply", stripped)).strip()[:1500]
+        reply = str(parsed.get("reply", stripped)).strip()[:_MAX_REPLY_CHARS]
         delta = parsed.get("mood_delta", 0)
         if not isinstance(delta, int) or delta not in (-1, 0, 1):
             delta = 0
@@ -111,7 +115,7 @@ async def generate_npc_reply(
             "generate_npc_reply: JSON parse failed, salvaging reply text. raw_head=%r",
             raw[:200],
         )
-        salvaged = (stripped or "...")[:1500]
+        salvaged = (stripped or "...")[:_MAX_REPLY_CHARS]
         return {"reply": salvaged, "mood_delta": 0}
 
 
