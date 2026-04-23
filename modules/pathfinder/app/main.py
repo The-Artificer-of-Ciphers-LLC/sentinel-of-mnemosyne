@@ -10,8 +10,9 @@ Endpoints:
   POST /npc/import         — bulk import from Foundry JSON (NPC-05)
   POST /npc/export-foundry — export Foundry VTT actor JSON (OUT-01)
   POST /npc/token          — generate Midjourney /imagine prompt (OUT-02)
+  POST /npc/token-image    — upload Midjourney token image to vault (OUT-02 ext)
   POST /npc/stat           — return structured stat block data (OUT-03)
-  POST /npc/pdf            — generate PDF stat card (OUT-04)
+  POST /npc/pdf            — generate PDF stat card (OUT-04, embeds token image)
 
 Startup:
   lifespan calls POST /modules/register on sentinel-core with exponential backoff retry.
@@ -55,6 +56,7 @@ REGISTRATION_PAYLOAD = {
         {"path": "npc/import", "description": "Bulk import NPCs from Foundry JSON (NPC-05)"},
         {"path": "npc/export-foundry", "description": "Export NPC as Foundry VTT actor JSON (OUT-01)"},
         {"path": "npc/token", "description": "Generate Midjourney token prompt (OUT-02)"},
+        {"path": "npc/token-image", "description": "Upload NPC token image to vault (OUT-02 extension)"},
         {"path": "npc/stat", "description": "Return structured stat block data (OUT-03)"},
         {"path": "npc/pdf", "description": "Generate PDF stat card (OUT-04)"},
     ],

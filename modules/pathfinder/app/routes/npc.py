@@ -43,6 +43,16 @@ obsidian = None
 # NPC vault path prefix (D-16)
 _NPC_PATH_PREFIX = "mnemosyne/pf2e/npcs"
 
+# Token image vault path prefix — same parent as _NPC_PATH_PREFIX.
+# Token images live at mnemosyne/pf2e/tokens/<slug>.png and are referenced
+# from the NPC note's frontmatter `token_image:` field (token-image ext, PLAN.md).
+_TOKEN_PATH_PREFIX = "mnemosyne/pf2e/tokens"
+
+# Hard cap on uploaded image size — prevents memory exhaustion from a malicious
+# or accidental huge attachment. Midjourney exports are ~1-3 MB, so 10 MB is
+# generous. Matches the size check in /npc/import for consistency (T-29-04).
+_MAX_IMAGE_BYTES = 10_000_000
+
 # Valid relation types — closed enum (D-13)
 VALID_RELATIONS = frozenset({"knows", "trusts", "hostile-to", "allied-with", "fears", "owes-debt"})
 
@@ -104,6 +114,21 @@ class NPCImportRequest(BaseModel):
 class NPCOutputRequest(BaseModel):
     """Request model for /npc/{export-foundry,token,stat,pdf} (OUT-01..OUT-04)."""
     name: str
+
+    @field_validator("name")
+    @classmethod
+    def sanitize_name(cls, v: str) -> str:
+        return _validate_npc_name(v)
+
+
+class NPCTokenImageRequest(BaseModel):
+    """Request model for /npc/token-image (PLAN.md token-image extension).
+
+    image_b64: base64-encoded PNG bytes fetched from Discord attachment by bot layer.
+    Content type is fixed to image/png per convention (Midjourney exports PNG).
+    """
+    name: str
+    image_b64: str
 
     @field_validator("name")
     @classmethod
@@ -651,6 +676,10 @@ async def pdf_export(req: NPCOutputRequest) -> JSONResponse:
     sentinel-core proxy always calls resp.json() (binary transport constraint,
     RESEARCH.md Pattern 1). Bot decodes data_b64 and wraps in discord.File.
     Returns {"data_b64": "...", "filename": "{slug}-stat-card.pdf", "slug": slug}.
+
+    If the NPC has a `token_image:` frontmatter field pointing to a vault path,
+    the referenced image is fetched and embedded in the PDF header (token-image
+    extension, PLAN.md). Missing/unreadable images fall back to header-only PDF.
     """
     slug = slugify(req.name)
     path = f"{_NPC_PATH_PREFIX}/{slug}.md"
@@ -659,9 +688,87 @@ async def pdf_export(req: NPCOutputRequest) -> JSONResponse:
         raise HTTPException(status_code=404, detail={"error": "NPC not found", "slug": slug})
     fields = _parse_frontmatter(note_text)
     stats = _parse_stats_block(note_text)
-    pdf_bytes = build_npc_pdf(fields, stats)
+
+    # Fetch token image if frontmatter references one — get_binary returns None
+    # on 404 or any error, so PDF falls back to header-only rendering.
+    token_image_bytes: bytes | None = None
+    token_path = fields.get("token_image")
+    if isinstance(token_path, str) and token_path:
+        token_image_bytes = await obsidian.get_binary(token_path)
+
+    pdf_bytes = build_npc_pdf(fields, stats, token_image_bytes=token_image_bytes)
     return JSONResponse({
         "data_b64": base64.b64encode(pdf_bytes).decode("ascii"),
         "filename": f"{slug}-stat-card.pdf",
         "slug": slug,
+    })
+
+
+@router.post("/token-image")
+async def upload_token_image(req: NPCTokenImageRequest) -> JSONResponse:
+    """Upload Midjourney-generated token image for an NPC (PLAN.md token-image ext).
+
+    Closes the Midjourney loop: user runs :pf npc token → Midjourney → downloads
+    PNG → :pf npc token-image <name> with attachment. Bot base64-encodes the
+    attachment bytes and POSTs here. We:
+      1. Verify the NPC note exists (404 if not).
+      2. Decode base64 (400 if malformed).
+      3. PUT the binary to {_TOKEN_PATH_PREFIX}/{slug}.png.
+      4. PATCH the note's frontmatter `token_image` field so /npc/pdf picks it up.
+    Subsequent /npc/pdf calls embed the image in the PDF header.
+    """
+    slug = slugify(req.name)
+    note_path = f"{_NPC_PATH_PREFIX}/{slug}.md"
+    token_path = f"{_TOKEN_PATH_PREFIX}/{slug}.png"
+
+    # NPC must exist — 404 before any vault writes (mirrors update/show/relate)
+    note_text = await obsidian.get_note(note_path)
+    if note_text is None:
+        raise HTTPException(status_code=404, detail={"error": "NPC not found", "slug": slug})
+
+    # Decode image bytes — 400 on malformed base64 (client contract violation)
+    try:
+        image_bytes = base64.b64decode(req.image_b64, validate=True)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Invalid base64 image data", "detail": str(exc)},
+        )
+
+    # Size check AFTER decode — the base64 string is ~4/3 the size of decoded bytes,
+    # but the bot enforces a soft cap on the wire side. Server is the source of truth.
+    if len(image_bytes) > _MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail={"error": f"Image too large (max {_MAX_IMAGE_BYTES // 1_000_000} MB)"},
+        )
+
+    # Write binary to vault
+    try:
+        await obsidian.put_binary(token_path, image_bytes, "image/png")
+    except Exception as exc:
+        logger.error("put_binary failed for %s: %s", token_path, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "Obsidian binary write failed", "detail": str(exc)},
+        )
+
+    # Record path in frontmatter so /npc/pdf can pick it up. PATCH replace creates
+    # the field if absent (Obsidian REST API v3 semantics).
+    try:
+        await obsidian.patch_frontmatter_field(note_path, "token_image", token_path)
+    except Exception as exc:
+        logger.error("PATCH token_image failed for %s: %s", note_path, exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "Failed to update token_image frontmatter", "detail": str(exc)},
+        )
+
+    logger.info("Token image saved: %s -> %s (%d bytes)", req.name, token_path, len(image_bytes))
+    return JSONResponse({
+        "status": "saved",
+        "slug": slug,
+        "note_path": note_path,
+        "token_path": token_path,
+        "size_bytes": len(image_bytes),
     })

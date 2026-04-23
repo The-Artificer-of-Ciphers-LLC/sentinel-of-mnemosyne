@@ -380,6 +380,41 @@ async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None)
                 )
                 return result.get("prompt", "No prompt generated.")
 
+            elif verb == "token-image":
+                # Close the Midjourney loop (PLAN.md token-image extension).
+                # User replies in a thread with a PNG attached; bot fetches bytes,
+                # base64-encodes, POSTs to /npc/token-image which stores under
+                # mnemosyne/pf2e/tokens/<slug>.png and updates note frontmatter.
+                npc_name = rest.strip()
+                if not npc_name:
+                    return "Usage: `:pf npc token-image <name>` — attach a PNG as a reply in this thread."
+                if not attachments:
+                    return (
+                        f"Usage: `:pf npc token-image {npc_name}` — attach the Midjourney-"
+                        "generated PNG as a reply in this thread."
+                    )
+                attachment = attachments[0]
+                content_type = getattr(attachment, "content_type", "") or ""
+                if not content_type.startswith("image/"):
+                    return (
+                        f"Expected an image attachment (got `{content_type or 'unknown'}`). "
+                        "Midjourney exports PNG — re-attach the PNG and try again."
+                    )
+                fetch_resp = await http_client.get(str(attachment.url), timeout=30.0)
+                fetch_resp.raise_for_status()
+                image_bytes = fetch_resp.content
+                image_b64 = base64.b64encode(image_bytes).decode("ascii")
+                result = await _sentinel_client.post_to_module(
+                    "modules/pathfinder/npc/token-image",
+                    {"name": npc_name, "image_b64": image_b64},
+                    http_client,
+                )
+                return (
+                    f"Token image saved for **{npc_name}** "
+                    f"({result.get('size_bytes', len(image_bytes))} bytes) → `{result.get('token_path', '?')}`.\n"
+                    f"Run `:pf npc pdf {npc_name}` to see it embedded in the stat card."
+                )
+
             elif verb == "stat":
                 npc_name = rest.strip()
                 if not npc_name:
@@ -412,7 +447,7 @@ async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None)
             else:
                 return (
                     f"Unknown npc command `{verb}`. "
-                    "Available: `create`, `update`, `show`, `relate`, `import`, `export`, `token`, `stat`, `pdf`."
+                    "Available: `create`, `update`, `show`, `relate`, `import`, `export`, `token`, `token-image`, `stat`, `pdf`."
                 )
 
     except httpx.HTTPStatusError as exc:

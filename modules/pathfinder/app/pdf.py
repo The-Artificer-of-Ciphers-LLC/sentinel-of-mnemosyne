@@ -6,17 +6,20 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 logger = logging.getLogger(__name__)
 
 
-def build_npc_pdf(fields: dict, stats: dict) -> bytes:
+def build_npc_pdf(fields: dict, stats: dict, token_image_bytes: bytes | None = None) -> bytes:
     """Build a one-page PF2e NPC stat card PDF (OUT-04, D-18, D-19, D-20).
 
     Returns raw PDF bytes via buffer.getvalue() — never buffer.read() (Pitfall 6).
     Stats grid is omitted when stats is falsy (D-20: header-only PDF for stub NPCs).
     Skills accept dict OR string (Pitfall 7).
+    If token_image_bytes is provided (from vault via ObsidianClient.get_binary),
+    a 1.5"×1.5" image is embedded before the Title. Bad image bytes raise at
+    doc.build() time — ReportLab's own validation (plan non-goal #2).
     """
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -35,6 +38,10 @@ def build_npc_pdf(fields: dict, stats: dict) -> bytes:
     )
 
     story = []
+
+    if token_image_bytes:
+        story.append(Image(io.BytesIO(token_image_bytes), width=1.5 * inch, height=1.5 * inch))
+        story.append(Spacer(1, 0.1 * inch))
 
     story.append(Paragraph(fields.get("name", "Unknown"), styles["Title"]))
     subtitle = (

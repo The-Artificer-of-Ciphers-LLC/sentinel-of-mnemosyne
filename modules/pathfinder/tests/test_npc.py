@@ -429,3 +429,101 @@ async def test_npc_pdf_no_stats():
     data = resp.json()
     pdf_bytes = base64.b64decode(data["data_b64"])
     assert pdf_bytes[:4] == b"%PDF"
+
+
+# ---------------------------------------------------------------------------
+# NPC token-image tests (PLAN.md token-image extension)
+# ---------------------------------------------------------------------------
+
+# A minimal valid 1×1 PNG (8-byte signature + IHDR + IDAT + IEND), base64-encoded.
+# Used as the test payload for binary upload + PDF embedding tests.
+_PNG_1X1_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+)
+
+
+async def test_npc_token_image_saves_binary_and_frontmatter():
+    """POST /npc/token-image stores image bytes and updates token_image frontmatter."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_NO_STATS)
+    mock_obs.put_binary = AsyncMock(return_value=None)
+    mock_obs.patch_frontmatter_field = AsyncMock(return_value=None)
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/npc/token-image",
+                json={"name": "Varek", "image_b64": _PNG_1X1_B64},
+            )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["slug"] == "varek"
+    assert data["token_path"] == "mnemosyne/pf2e/tokens/varek.png"
+
+    # put_binary called with (path, decoded_bytes, "image/png")
+    assert mock_obs.put_binary.await_count == 1
+    args, kwargs = mock_obs.put_binary.call_args
+    path_arg, bytes_arg, ct_arg = args
+    assert path_arg == "mnemosyne/pf2e/tokens/varek.png"
+    assert bytes_arg[:8] == b"\x89PNG\r\n\x1a\n"  # PNG signature
+    assert ct_arg == "image/png"
+
+    # Frontmatter patch writes token_image field pointing at the stored path
+    mock_obs.patch_frontmatter_field.assert_awaited_once_with(
+        "mnemosyne/pf2e/npcs/varek.md",
+        "token_image",
+        "mnemosyne/pf2e/tokens/varek.png",
+    )
+
+
+async def test_npc_token_image_rejects_unknown_npc():
+    """POST /npc/token-image returns 404 when the NPC note doesn't exist."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=None)
+    mock_obs.put_binary = AsyncMock(return_value=None)
+    mock_obs.patch_frontmatter_field = AsyncMock(return_value=None)
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/npc/token-image",
+                json={"name": "UnknownNPC", "image_b64": _PNG_1X1_B64},
+            )
+    assert resp.status_code == 404
+    # No vault writes occurred — 404 fails before put_binary / patch
+    assert mock_obs.put_binary.await_count == 0
+    assert mock_obs.patch_frontmatter_field.await_count == 0
+
+
+async def test_npc_pdf_with_token_image_embeds():
+    """POST /npc/pdf fetches token image via get_binary when frontmatter has token_image."""
+    import base64
+    note_with_token = (
+        "---\n"
+        "name: Varek\nlevel: 1\nancestry: Gnome\nclass: Rogue\n"
+        "traits:\n- sneaky\npersonality: Nervous.\nbackstory: Fled the guild.\n"
+        "mood: neutral\nrelationships: []\nimported_from: null\n"
+        "token_image: mnemosyne/pf2e/tokens/varek.png\n"
+        "---\n"
+    )
+    png_bytes = base64.b64decode(_PNG_1X1_B64)
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=note_with_token)
+    mock_obs.get_binary = AsyncMock(return_value=png_bytes)
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/pdf", json={"name": "Varek"})
+    assert resp.status_code == 200
+
+    # get_binary was asked for the path recorded in the note's frontmatter
+    mock_obs.get_binary.assert_awaited_once_with("mnemosyne/pf2e/tokens/varek.png")
+
+    # PDF bytes decode cleanly and include the image's FlateDecode stream marker —
+    # ReportLab wraps embedded raster data in /FlateDecode by default.
+    pdf_bytes = base64.b64decode(resp.json()["data_b64"])
+    assert pdf_bytes[:4] == b"%PDF"
+    assert b"/FlateDecode" in pdf_bytes
