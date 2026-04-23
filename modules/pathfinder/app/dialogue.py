@@ -74,3 +74,101 @@ def apply_mood_delta(current: str, delta: int) -> str:
     idx = MOOD_ORDER.index(normalize_mood(current))
     new_idx = max(0, min(len(MOOD_ORDER) - 1, idx + delta))
     return MOOD_ORDER[new_idx]
+
+
+# --- Prompt builders (D-21, D-22, RESEARCH Finding 4) ---
+
+def build_system_prompt(
+    npc_fields: dict,
+    scene_roster: list[str],
+    scene_relationships: list[dict],
+) -> str:
+    """Per-NPC system prompt: persona + tone + scene context + JSON output contract.
+
+    Truncates backstory to 400 chars, personality to 200 chars (D-22, defence in depth).
+    """
+    name = npc_fields.get("name", "?")
+    level = npc_fields.get("level", "?")
+    ancestry = npc_fields.get("ancestry", "")
+    npc_class = npc_fields.get("class", "")
+    personality = (npc_fields.get("personality") or "")[:200].replace("\n", " ")
+    backstory = (npc_fields.get("backstory") or "")[:400].replace("\n", " ")
+    traits = ", ".join(npc_fields.get("traits") or [])
+    mood = normalize_mood(npc_fields.get("mood") or "neutral")
+    tone = MOOD_TONE_GUIDANCE[mood]
+
+    other_npcs = [n for n in scene_roster if n != name]
+    rel_lines = []
+    for rel in scene_relationships:
+        if isinstance(rel, dict) and rel.get("target") and rel.get("relation"):
+            rel_lines.append(f"You {rel['relation']} {rel['target']}.")
+    rel_block = (
+        "\n".join(rel_lines)
+        if rel_lines
+        else "(no known relationships with others in this scene)"
+    )
+
+    scene_block = (
+        f"Others present in this scene: {', '.join(other_npcs)}."
+        if other_npcs
+        else "You are alone with the party."
+    )
+
+    return (
+        f"You are {name}, a level-{level} {ancestry} {npc_class}.\n"
+        f"Personality: {personality}\n"
+        f"Backstory: {backstory}\n"
+        f"Traits: {traits}\n"
+        f"\n{scene_block}\n"
+        f"Relationships with others in this scene:\n{rel_block}\n"
+        f"\nTone guidance for your current mood ({mood}):\n{tone}\n"
+        f"\nOutput format: Return ONLY a JSON object — no markdown, no code fences, no prose outside JSON — "
+        f"with these exact keys:\n"
+        f'  "reply": string. Your in-character response, 1-4 sentences. '
+        f'Format: *{{brief action or expression}}.* "{{spoken line}}"\n'
+        f'  "mood_delta": integer, exactly one of -1, 0, +1. '
+        f"Use -1 if the party just threatened, insulted, or betrayed you. "
+        f"Use +1 if they were genuinely persuasive, kind, or helpful. "
+        f"Use 0 for normal chatter or ambiguous turns (this is the default)."
+    )
+
+
+def build_user_prompt(
+    history: list[dict],
+    this_turn_replies: list[dict],
+    party_line: str,
+    npc_name: str,
+) -> str:
+    """Per-NPC user message: thread history + this-turn replies + current party line OR scene-advance framing."""
+    sections: list[str] = []
+
+    if history:
+        lines = ["--- Earlier in the conversation ---"]
+        for turn in history:
+            lines.append(f"Party: {turn.get('party_line', '')!r}")
+            for r in turn.get("replies", []) or []:
+                lines.append(f"{r.get('npc', '?')}: {r.get('reply', '')}")
+        sections.append("\n".join(lines))
+
+    if this_turn_replies:
+        lines = ["--- This turn so far ---"]
+        if party_line:
+            lines.append(f"Party: {party_line!r}")
+        else:
+            lines.append("Party: (silent)")
+        for r in this_turn_replies:
+            lines.append(f"{r.get('npc', '?')}: {r.get('reply', '')}")
+        sections.append("\n".join(lines))
+
+    if party_line:
+        sections.append(
+            f'The party has just said: "{party_line}". Respond as {npc_name}.'
+        )
+    else:
+        sections.append(
+            "The party is silent. Continue the scene naturally — react to what was just "
+            f"said, or advance the situation based on your character and the conversation "
+            f"so far. Respond as {npc_name}."
+        )
+
+    return "\n\n".join(sections)
