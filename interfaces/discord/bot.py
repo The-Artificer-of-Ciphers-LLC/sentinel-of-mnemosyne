@@ -247,8 +247,21 @@ async def _extract_thread_history(
         if not quote_lines:
             i += 2
             continue
+        # WR-05: if the bot reply contained a different number of quote lines
+        # than the user named NPCs (e.g. an embedded newline-then-`>` inside
+        # an NPC reply inflated _QUOTE_PATTERN.findall), skip the turn rather
+        # than mis-attributing quotes to `?` placeholder NPCs. Memory is
+        # best-effort — dropping a malformed pairing is safer than half-
+        # attributing it and misrouting scene-membership filtering downstream.
+        if len(quote_lines) != len(name_list):
+            logger.debug(
+                "thread-history pair mismatch: %d names vs %d quote lines; skipping turn",
+                len(name_list), len(quote_lines),
+            )
+            i += 2
+            continue
         replies = [
-            {"npc": name_list[idx] if idx < len(name_list) else "?", "reply": line}
+            {"npc": name_list[idx], "reply": line}
             for idx, line in enumerate(quote_lines)
         ]
         turns.append({"party_line": party_line, "replies": replies})
