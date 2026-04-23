@@ -180,6 +180,76 @@ async def _call_core(user_id: str, message: str) -> str:
 # Relation types valid for :pf npc relate (D-13 — closed enum)
 _VALID_RELATIONS = frozenset({"knows", "trusts", "hostile-to", "allied-with", "fears", "owes-debt"})
 
+# Phase 31 dialogue: pair `:pf npc say ...` user messages with their bot quote-block replies
+# in a thread. Capture group 1 = names, group 2 = everything after pipe (may be empty).
+_SAY_PATTERN = re.compile(r"^:pf\s+npc\s+say\s+(.+?)\s*\|(.*)$", re.IGNORECASE | re.DOTALL)
+_QUOTE_PATTERN = re.compile(r"^>\s+(.+)$", re.MULTILINE)
+
+
+def _render_say_response(result: dict) -> str:
+    """Format /npc/say response as stacked markdown quote blocks (D-03, D-18).
+
+    - Each reply prefixed with `> ` (Discord quote markdown).
+    - If `warning` is set (≥5 NPCs), prepend it with a blank-line separator.
+    """
+    replies = result.get("replies") or []
+    warning = result.get("warning")
+    lines: list[str] = []
+    if warning:
+        lines.append(warning)
+        lines.append("")
+    for r in replies:
+        lines.append(f"> {r.get('reply', '')}")
+    return "\n".join(lines) if lines else "_(no reply generated)_"
+
+
+async def _extract_thread_history(
+    thread,
+    current_npc_names: set,
+    bot_user_id: int,
+    limit: int = 50,
+) -> list:
+    """Walk thread oldest→newest; pair `:pf npc say ...` user messages with the immediate
+    bot quote-block reply. Filter to turns where any currently-named NPC appeared (D-13).
+
+    `thread` is duck-typed: any object with an async `history(limit, oldest_first)` method.
+    Filters on `bot_user_id` (not generic `.author.bot`) to avoid picking up other bots.
+    """
+    msgs = [m async for m in thread.history(limit=limit, oldest_first=True)]
+    turns: list = []
+    normalized_current = {n.lower() for n in current_npc_names}
+    i = 0
+    while i < len(msgs) - 1:
+        m = msgs[i]
+        if getattr(m.author, "bot", False) or not getattr(m, "content", None):
+            i += 1
+            continue
+        match = _SAY_PATTERN.match(m.content.strip())
+        if not match:
+            i += 1
+            continue
+        name_list = [n.strip() for n in match.group(1).split(",") if n.strip()]
+        name_list_lower = {n.lower() for n in name_list}
+        party_line = match.group(2).strip()
+        if not (name_list_lower & normalized_current):
+            i += 1
+            continue
+        next_msg = msgs[i + 1]
+        if getattr(next_msg.author, "id", None) != bot_user_id:
+            i += 1
+            continue
+        quote_lines = _QUOTE_PATTERN.findall(getattr(next_msg, "content", "") or "")
+        if not quote_lines:
+            i += 2
+            continue
+        replies = [
+            {"npc": name_list[idx] if idx < len(name_list) else "?", "reply": line}
+            for idx, line in enumerate(quote_lines)
+        ]
+        turns.append({"party_line": party_line, "replies": replies})
+        i += 2
+    return turns
+
 
 def build_stat_embed(data: dict) -> "discord.Embed":
     """Build a Discord Embed from /npc/stat module response (OUT-03, D-13 through D-17).
