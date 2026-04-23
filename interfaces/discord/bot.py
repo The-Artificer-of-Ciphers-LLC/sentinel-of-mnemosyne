@@ -182,8 +182,12 @@ async def _call_core(user_id: str, message: str) -> str:
 _VALID_RELATIONS = frozenset({"knows", "trusts", "hostile-to", "allied-with", "fears", "owes-debt"})
 
 # Phase 31 dialogue: pair `:pf npc say ...` user messages with their bot quote-block replies
-# in a thread. Capture group 1 = names, group 2 = everything after pipe (may be empty).
-_SAY_PATTERN = re.compile(r"^:pf\s+npc\s+say\s+(.+?)\s*\|(.*)$", re.IGNORECASE | re.DOTALL)
+# in a thread. Capture group 1 = names (must NOT contain newlines or pipes — they delimit the
+# NPC list from the party line). Group 2 = everything after pipe; DOTALL lets it span newlines
+# so a multi-line party_line is tolerated. Anchoring group 1 with [^\n|]+? prevents a crafted
+# `:pf npc say Varek\nextra | text` from leaking newlines into the parsed NPC name list
+# (WR-02 defence-in-depth; server-side _validate_npc_name already rejects control chars).
+_SAY_PATTERN = re.compile(r"^:pf\s+npc\s+say\s+([^\n|]+?)\s*\|(.*)$", re.IGNORECASE | re.DOTALL)
 _QUOTE_PATTERN = re.compile(r"^>\s+(.+)$", re.MULTILINE)
 
 
