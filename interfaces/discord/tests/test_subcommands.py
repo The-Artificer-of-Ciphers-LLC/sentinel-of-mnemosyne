@@ -288,3 +288,219 @@ async def test_pf_dispatch_import_no_attachment():
 
     mock_ptm.assert_not_called()
     assert "attach" in result.lower() or "import" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# Phase 31 — :pf npc say dispatch + thread history tests (DLG-01..03)
+# Wave 0 RED scaffolding — implementation lands in Wave 3.
+# Stubs reference bot._extract_thread_history and the `say` verb branch which
+# Wave 3 will add. Tests collect cleanly; failures are honest RED signals.
+# ---------------------------------------------------------------------------
+
+
+async def test_pf_say_solo_dispatch():
+    """_pf_dispatch('npc say Varek | hello there') calls post_to_module with say payload (DLG-01)."""
+    mock_result = {
+        "replies": [
+            {"npc": "Varek", "reply": "> *nods.* \"Aye.\"", "mood_delta": 0, "new_mood": "neutral"}
+        ],
+        "warning": None,
+    }
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch("npc say Varek | hello there", "user123")
+
+    mock_ptm.assert_called_once()
+    assert mock_ptm.call_args[0][0] == "modules/pathfinder/npc/say"
+    payload = mock_ptm.call_args[0][1]
+    assert payload["names"] == ["Varek"]
+    assert payload["party_line"] == "hello there"
+    assert payload["user_id"] == "user123"
+    assert payload["history"] == []  # no channel passed → empty history
+
+
+async def test_pf_say_scene_dispatch():
+    """_pf_dispatch with 2 comma-separated names dispatches as scene (DLG-03)."""
+    mock_result = {
+        "replies": [
+            {"npc": "Varek", "reply": "> *shrugs.*", "mood_delta": 0, "new_mood": "neutral"},
+            {"npc": "Baron", "reply": "> *sneers.*", "mood_delta": 0, "new_mood": "hostile"},
+        ],
+        "warning": None,
+    }
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch("npc say Varek,Baron | what do you want?", "user123")
+
+    mock_ptm.assert_called_once()
+    payload = mock_ptm.call_args[0][1]
+    assert payload["names"] == ["Varek", "Baron"]
+    assert payload["party_line"] == "what do you want?"
+
+
+async def test_pf_say_scene_advance_dispatch():
+    """Empty party_line is valid (scene-advance, D-02) — NOT a usage error (DLG-03)."""
+    mock_result = {
+        "replies": [
+            {"npc": "Varek", "reply": "> *waits.*", "mood_delta": 0, "new_mood": "neutral"},
+            {"npc": "Baron", "reply": "> *paces.*", "mood_delta": 0, "new_mood": "hostile"},
+        ],
+        "warning": None,
+    }
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch("npc say Varek,Baron |", "user123")
+
+    mock_ptm.assert_called_once()
+    payload = mock_ptm.call_args[0][1]
+    assert payload["party_line"] == ""
+
+
+async def test_pf_unknown_verb_help_includes_say():
+    """Unknown-verb help text lists `say` in the Available: verb catalog (DLG-01, D-04)."""
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock()) as mock_ptm:
+        result = await bot._pf_dispatch("npc bogus", "user123")
+
+    mock_ptm.assert_not_called()
+    assert "say" in result
+    assert "Available:" in result
+
+
+async def test_pf_say_render_two_quote_blocks():
+    """Scene response renders as two stacked quote blocks in the order given (DLG-03)."""
+    mock_result = {
+        "replies": [
+            {"npc": "Varek", "reply": "*shrinks.* \"P-please...\"", "mood_delta": 0, "new_mood": "neutral"},
+            {"npc": "Baron", "reply": "*sneers.* \"He's lying.\"", "mood_delta": 0, "new_mood": "hostile"},
+        ],
+        "warning": None,
+    }
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch("npc say Varek,Baron | we mean no harm", "user123")
+
+    assert result.count("> ") == 2
+    assert "shrinks" in result
+    assert "sneers" in result
+
+
+async def test_pf_say_render_warning_preamble():
+    """≥5-NPC warning is rendered as a preamble line before the quote blocks (DLG-03, D-18)."""
+    mock_result = {
+        "replies": [
+            {"npc": "A", "reply": "*a*", "mood_delta": 0, "new_mood": "neutral"},
+            {"npc": "B", "reply": "*b*", "mood_delta": 0, "new_mood": "neutral"},
+            {"npc": "C", "reply": "*c*", "mood_delta": 0, "new_mood": "neutral"},
+            {"npc": "D", "reply": "*d*", "mood_delta": 0, "new_mood": "neutral"},
+            {"npc": "E", "reply": "*e*", "mood_delta": 0, "new_mood": "neutral"},
+        ],
+        "warning": "⚠ 5 NPCs in scene — consider splitting for clarity.",
+    }
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch("npc say A,B,C,D,E | crowd", "user123")
+
+    assert result.startswith("⚠")
+    assert "5 NPCs" in result
+    assert result.count("> ") == 5
+
+
+async def test_thread_history_pairing():
+    """_extract_thread_history pairs user `:pf npc say` messages with bot quote-block replies (DLG-01/03, D-11)."""
+    import types as _types
+
+    def _user(content: str) -> _types.SimpleNamespace:
+        return _types.SimpleNamespace(
+            author=_types.SimpleNamespace(id=42, bot=False),
+            content=content,
+        )
+
+    def _botmsg(content: str, author_id: int = 999) -> _types.SimpleNamespace:
+        return _types.SimpleNamespace(
+            author=_types.SimpleNamespace(id=author_id, bot=True),
+            content=content,
+        )
+
+    msgs = [
+        _user(":pf npc say Varek | hi"),
+        _botmsg("> *nods.* \"Aye.\""),
+        _user("random other text"),
+        _user(":pf npc say Varek | hi again"),
+        _botmsg("> *grunts.* \"Mm.\""),
+    ]
+
+    class _FakeThread:
+        def __init__(self, messages):
+            self._msgs = messages
+
+        def history(self, *, limit: int = 50, oldest_first: bool = False):
+            async def _gen():
+                for m in self._msgs:
+                    yield m
+            return _gen()
+
+    thread = _FakeThread(msgs)
+    turns = await bot._extract_thread_history(
+        thread=thread,
+        current_npc_names={"Varek"},
+        bot_user_id=999,
+        limit=50,
+    )
+
+    assert len(turns) == 2
+    for turn in turns:
+        assert "party_line" in turn
+        assert "replies" in turn
+
+
+async def test_thread_history_filter_scene():
+    """_extract_thread_history filters turns by current scene membership (DLG-03, D-13)."""
+    import types as _types
+
+    def _user(content: str) -> _types.SimpleNamespace:
+        return _types.SimpleNamespace(
+            author=_types.SimpleNamespace(id=42, bot=False),
+            content=content,
+        )
+
+    def _botmsg(content: str, author_id: int = 999) -> _types.SimpleNamespace:
+        return _types.SimpleNamespace(
+            author=_types.SimpleNamespace(id=author_id, bot=True),
+            content=content,
+        )
+
+    # 3 turns: Varek solo, Baron solo, Varek+Baron scene
+    msgs = [
+        _user(":pf npc say Varek | turn 1"),
+        _botmsg("> *Varek reply 1*"),
+        _user(":pf npc say Baron | turn 2"),
+        _botmsg("> *Baron reply 2*"),
+        _user(":pf npc say Varek,Baron | turn 3"),
+        _botmsg("> *Varek reply 3*\n> *Baron reply 3*"),
+    ]
+
+    class _FakeThread:
+        def __init__(self, messages):
+            self._msgs = messages
+
+        def history(self, *, limit: int = 50, oldest_first: bool = False):
+            async def _gen():
+                for m in self._msgs:
+                    yield m
+            return _gen()
+
+    thread = _FakeThread(msgs)
+
+    # With Varek+Baron in the current scene, all 3 prior turns share at least
+    # one NPC with the scene → all kept.
+    turns_both = await bot._extract_thread_history(
+        thread=thread,
+        current_npc_names={"Varek", "Baron"},
+        bot_user_id=999,
+        limit=50,
+    )
+    assert len(turns_both) == 3
+
+    # With Miralla in the current scene (no overlap with any prior turn) → 0.
+    turns_none = await bot._extract_thread_history(
+        thread=_FakeThread(msgs),
+        current_npc_names={"Miralla"},
+        bot_user_id=999,
+        limit=50,
+    )
+    assert len(turns_none) == 0
