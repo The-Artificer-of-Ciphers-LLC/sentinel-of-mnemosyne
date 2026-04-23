@@ -16,6 +16,7 @@ Per CLAUDE.md AI Deferral Ban: every helper completes its job; no deferral marke
 
 import logging
 
+import tiktoken
 
 logger = logging.getLogger(__name__)
 
@@ -172,3 +173,35 @@ def build_user_prompt(
         )
 
     return "\n\n".join(sections)
+
+
+# --- History budget (D-14, RESEARCH Finding 3) ---
+
+def _render_history_for_token_count(turns: list[dict]) -> str:
+    """Render turns as a single string for tiktoken counting (matches build_user_prompt format)."""
+    out = []
+    for turn in turns:
+        out.append(f"Party: {turn.get('party_line', '')!r}")
+        for r in turn.get("replies", []) or []:
+            out.append(f"{r.get('npc', '?')}: {r.get('reply', '')}")
+    return "\n".join(out)
+
+
+def cap_history_turns(turns: list[dict]) -> list[dict]:
+    """Drop oldest turns first until under HISTORY_MAX_TURNS AND HISTORY_MAX_TOKENS (D-14).
+
+    Token count uses tiktoken cl100k_base — same encoding as
+    sentinel-core/app/services/token_guard.py for consistency.
+    """
+    if not turns:
+        return []
+    # Primary cap: keep last N turns
+    capped = list(turns[-HISTORY_MAX_TURNS:])
+    # Guardrail: token cap drops oldest until under budget
+    enc = tiktoken.get_encoding("cl100k_base")
+    while capped:
+        rendered = _render_history_for_token_count(capped)
+        if len(enc.encode(rendered)) <= HISTORY_MAX_TOKENS:
+            break
+        capped = capped[1:]  # drop oldest first
+    return capped
