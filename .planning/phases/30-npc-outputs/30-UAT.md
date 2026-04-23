@@ -11,12 +11,12 @@ updated: 2026-04-23T13:00:00Z
 
 ## Current Test
 
-number: 3
-name: OUT-02 — `:pf npc token Jareth`
+number: 4
+name: OUT-03 — `:pf npc stat Jareth`
 expected: |
-  Bot replies with plain-text Midjourney prompt string containing
-  --ar 1:1 and --no text. Describes Jareth visually (ancestry, class,
-  traits, personality) as comma-separated phrases.
+  Bot replies with a Discord Embed: title "Jareth (Level 1 ...)",
+  AC/HP inline, Fort/Ref/Will inline, Speed, "Mood: neutral" footer.
+  Mechanical fields may be 0/absent if no ## Stats block yet.
 awaiting: user response
 
 ## Tests
@@ -35,7 +35,7 @@ result: pass
 
 ### 3. OUT-02 — :pf npc token Jareth
 expected: Bot replies with a plain-text Midjourney prompt string containing `--ar 1:1` and `--no text`. The prompt should describe Jareth's visual features (ancestry, class, traits, personality) in comma-separated phrases.
-result: pending
+result: pass
 
 ### 4. OUT-03 — :pf npc stat Jareth
 expected: Bot replies with a formatted Discord Embed showing title like "Jareth (Level 1 Halfling Rogue)", AC/HP inline, Fort/Ref/Will inline, Speed, and a "Mood: neutral" footer. Mechanical stat fields (AC/HP/saves) may be 0 or absent if the NPC has no `## Stats` block yet.
@@ -48,9 +48,9 @@ result: pending
 ## Summary
 
 total: 5
-passed: 2
+passed: 3
 issues: 0
-pending: 3
+pending: 2
 skipped: 0
 blocked: 0
 
