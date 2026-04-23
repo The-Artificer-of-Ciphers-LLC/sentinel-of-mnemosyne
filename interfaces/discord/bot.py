@@ -297,7 +297,12 @@ def build_stat_embed(data: dict) -> "discord.Embed":
     return embed
 
 
-async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None) -> "str | dict":
+async def _pf_dispatch(
+    args: str,
+    user_id: str,
+    attachments: list | None = None,
+    channel=None,
+) -> "str | dict":
     """Route ':pf <noun> <verb> <rest>' to pathfinder module endpoints.
 
     Called from handle_sentask_subcommand when subcmd == 'pf' (D-04).
@@ -307,6 +312,11 @@ async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None)
     import/token) return str; rich-response verbs (export/stat/pdf) return a typed
     dict {"type": "file"|"embed", ...} that the on_message and /sen handlers
     dispatch to discord.File / discord.Embed.
+
+    `channel` (Phase 31, WR-01 fix): the Discord channel the command came from.
+    When it is a `discord.Thread`, the `say` branch walks it for DLG-03 memory
+    (D-11..D-14). Callers that do not pass a channel (tests, slash path without a
+    thread) get empty history — the branch degrades gracefully.
     """
     parts = args.strip().split(" ", 2)
     if len(parts) < 2:
@@ -525,11 +535,34 @@ async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None)
                 names = [n.strip() for n in names_raw.split(",") if n.strip()]
                 if not names:
                     return "Usage: `:pf npc say <Name>[,<Name>...] | <party line>`"
+
+                # D-11..D-14: walk thread history when channel is a discord.Thread.
+                # In unit tests the discord stub sets discord.Thread = object, so the
+                # isinstance check is False for test SimpleNamespace channels; tests
+                # pass channel=None and get history=[]. In production, channel is the
+                # live Thread and the walker pairs user says with bot quote replies.
+                history: list = []
+                if channel is not None and isinstance(channel, discord.Thread):
+                    try:
+                        bot_user = bot.user
+                        bot_user_id = bot_user.id if bot_user is not None else 0
+                        history = await _extract_thread_history(
+                            thread=channel,
+                            current_npc_names=set(names),
+                            bot_user_id=bot_user_id,
+                            limit=50,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "Thread history walk failed (degrading to empty): %s", exc
+                        )
+                        history = []
+
                 payload = {
                     "names": names,
                     "party_line": party_line.strip(),
                     "user_id": user_id,
-                    "history": [],
+                    "history": history,
                 }
                 result = await _sentinel_client.post_to_module(
                     "modules/pathfinder/npc/say", payload, http_client
@@ -568,7 +601,12 @@ async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None)
 _HELP_KEYWORDS = frozenset({"commands", "help", "what can you do", "what do you do", "how do i use"})
 
 
-async def _route_message(user_id: str, message: str, attachments: list | None = None) -> str:
+async def _route_message(
+    user_id: str,
+    message: str,
+    attachments: list | None = None,
+    channel=None,
+) -> str:
     """
     Unified message router used by both /sentask and on_message thread replies.
 
@@ -576,12 +614,17 @@ async def _route_message(user_id: str, message: str, attachments: list | None = 
     1. Colon-prefixed subcommands (`:help`, `:capture`, etc.)
     2. Natural-language help intent (short message containing help/commands keywords)
     3. Everything else → AI via _call_core
+
+    `channel` (Phase 31, WR-01 fix) is forwarded to handle_sentask_subcommand
+    so the `:pf npc say` branch can walk thread history (DLG-03, D-11..D-14).
     """
     if message.startswith(":"):
         parts = message[1:].split(" ", 1)
         subcmd = parts[0].lower()
         args = parts[1] if len(parts) > 1 else ""
-        return await handle_sentask_subcommand(subcmd, args, user_id, attachments=attachments)
+        return await handle_sentask_subcommand(
+            subcmd, args, user_id, attachments=attachments, channel=channel
+        )
 
     # Intercept natural-language help queries locally — never send to AI.
     # Prevents Obsidian session context from producing leaked/irrelevant responses
@@ -593,13 +636,23 @@ async def _route_message(user_id: str, message: str, attachments: list | None = 
     return await _call_core(user_id, message)
 
 
-async def handle_sentask_subcommand(subcmd: str, args: str, user_id: str, attachments: list | None = None) -> str:
+async def handle_sentask_subcommand(
+    subcmd: str,
+    args: str,
+    user_id: str,
+    attachments: list | None = None,
+    channel=None,
+) -> str:
     """
     Route `:subcommand` prefixed messages to the correct handler.
     Returns a response string in all cases — never raises.
+
+    `channel` (Phase 31, WR-01 fix) is forwarded to `_pf_dispatch` for the
+    `say` verb's thread-history walk (DLG-03, D-11..D-14). Other subcommands
+    ignore it — backward-compatible for every existing call site.
     """
     if subcmd == "pf":
-        return await _pf_dispatch(args, user_id, attachments=attachments)
+        return await _pf_dispatch(args, user_id, attachments=attachments, channel=channel)
 
     if subcmd == "help":
         return SUBCOMMAND_HELP
@@ -776,7 +829,12 @@ class SentinelBot(discord.Client):
         logger.info(f"Thread reply from {user_id} in thread {message.channel.id}: {message.content[:60]}")
 
         async with message.channel.typing():
-            ai_response = await _route_message(user_id, message.content, attachments=list(message.attachments))
+            ai_response = await _route_message(
+                user_id,
+                message.content,
+                attachments=list(message.attachments),
+                channel=message.channel,
+            )
 
         if isinstance(ai_response, str):
             await message.channel.send(ai_response)
@@ -840,9 +898,14 @@ async def sen(interaction: discord.Interaction, message: str) -> None:
     except discord.HTTPException as exc:
         logger.error(f"Failed to create thread (HTTP {exc.status}, code {exc.code}): {exc}")
 
-    # 3. Route message — subcommand, help-intent, or AI
+    # 3. Route message — subcommand, help-intent, or AI.
+    # Phase 31 (WR-01): forward the thread we just created as the channel so the
+    # `:pf npc say` branch can walk its history. First turn in a fresh thread has
+    # no prior messages, so history ends up empty — still correct.
     user_id = str(interaction.user.id)
-    ai_response = await _route_message(user_id, message)
+    ai_response = await _route_message(
+        user_id, message, channel=thread if thread is not None else interaction.channel
+    )
 
     # 4. Send AI response — into thread if created, fallback to channel
     if thread:
