@@ -12,17 +12,25 @@ Schema: D-15 through D-20 — split schema (frontmatter + ## Stats fenced block)
 
 Module-level `obsidian` variable is set by main.py lifespan so tests can patch it directly.
 """
+import base64
 import json
 import logging
 import re
+import uuid
 
 import yaml
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
-from app.llm import extract_npc_fields, update_npc_fields
 from app.config import settings
+from app.llm import (
+    build_mj_prompt,
+    extract_npc_fields,
+    generate_mj_description,
+    update_npc_fields,
+)
+from app.pdf import build_npc_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +100,16 @@ class NPCImportRequest(BaseModel):
     user_id: str
 
 
+class NPCOutputRequest(BaseModel):
+    """Request model for /npc/{export-foundry,token,stat,pdf} (OUT-01..OUT-04)."""
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def sanitize_name(cls, v: str) -> str:
+        return _validate_npc_name(v)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -156,6 +174,74 @@ def build_npc_markdown(fields: dict, stats: dict | None = None) -> str:
         stats_yaml = yaml.dump(stats, default_flow_style=False, allow_unicode=True)
         body += f"\n## Stats\n```yaml\n{stats_yaml}```\n"
     return body
+
+
+def _build_foundry_actor(fields: dict, stats: dict) -> dict:
+    """Build a PF2e Remaster-compatible Foundry VTT actor dict (OUT-01, D-04).
+
+    Uses uuid.uuid4().hex[:16] for _id (16 hex chars per Foundry convention, Pitfall 4).
+    Does NOT include system.details.alignment — removed in 2023 Remaster.
+    NPCs with no stats block default all numeric fields to 0 (D-05).
+    """
+    actor_id = uuid.uuid4().hex[:16]
+    return {
+        "_id": actor_id,
+        "name": fields.get("name", "Unknown"),
+        "type": "npc",
+        "img": "icons/svg/mystery-man.svg",
+        "items": [],
+        "effects": [],
+        "folder": None,
+        "flags": {},
+        "ownership": {"default": 0},
+        "prototypeToken": {
+            "name": fields.get("name", "Unknown"),
+            "texture": {"src": "icons/svg/mystery-man.svg"},
+        },
+        "system": {
+            "traits": {
+                "value": fields.get("traits") or [],
+                "rarity": "common",
+                "size": {"value": "med"},
+            },
+            "abilities": {
+                "str": {"mod": 0}, "dex": {"mod": 0}, "con": {"mod": 0},
+                "int": {"mod": 0}, "wis": {"mod": 0}, "cha": {"mod": 0},
+            },
+            "attributes": {
+                "ac": {"value": stats.get("ac", 0), "details": ""},
+                "adjustment": None,
+                "hp": {
+                    "value": stats.get("hp", 0),
+                    "max": stats.get("hp", 0),
+                    "temp": 0,
+                    "details": "",
+                },
+                "speed": {
+                    "value": stats.get("speed", 25),
+                    "otherSpeeds": [],
+                    "details": "",
+                },
+                "allSaves": {"value": ""},
+            },
+            "perception": {"mod": stats.get("perception", 0)},
+            "skills": {},
+            "initiative": {"statistic": "perception"},
+            "details": {
+                "level": {"value": fields.get("level", 1)},
+                "blurb": (fields.get("personality") or "")[:100],
+                "publicNotes": fields.get("backstory") or "",
+                "privateNotes": "",
+                "publication": {"title": "", "authors": "", "license": "ORC"},
+            },
+            "saves": {
+                "fortitude": {"value": stats.get("fortitude", 0), "saveDetail": ""},
+                "reflex": {"value": stats.get("reflex", 0), "saveDetail": ""},
+                "will": {"value": stats.get("will", 0), "saveDetail": ""},
+            },
+            "resources": {"focus": {"value": 0, "max": 0}},
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -476,4 +562,102 @@ async def import_npcs(req: NPCImportRequest) -> JSONResponse:
         "imported_count": len(imported),
         "imported": imported,
         "skipped": skipped,
+    })
+
+
+# ---------------------------------------------------------------------------
+# NPC output endpoints (OUT-01 through OUT-04, Plan 30-02)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/export-foundry")
+async def export_foundry(req: NPCOutputRequest) -> JSONResponse:
+    """Export NPC as Foundry VTT PF2e actor JSON (OUT-01).
+
+    Returns {"actor": {...}, "filename": "{slug}.json", "slug": slug}.
+    Bot layer serializes actor dict to JSON bytes and wraps in discord.File (D-03).
+    NPCs with no stats block export with all numeric fields defaulting to 0 (D-05).
+    """
+    slug = slugify(req.name)
+    path = f"{_NPC_PATH_PREFIX}/{slug}.md"
+    note_text = await obsidian.get_note(path)
+    if note_text is None:
+        raise HTTPException(status_code=404, detail={"error": "NPC not found", "slug": slug})
+    fields = _parse_frontmatter(note_text)
+    stats = _parse_stats_block(note_text)
+    actor = _build_foundry_actor(fields, stats)
+    return JSONResponse({
+        "actor": actor,
+        "filename": f"{slug}.json",
+        "slug": slug,
+    })
+
+
+@router.post("/token")
+async def token_prompt(req: NPCOutputRequest) -> JSONResponse:
+    """Generate Midjourney /imagine prompt for NPC token art (OUT-02).
+
+    Hybrid composition: constrained LLM call fills visual description slot;
+    fixed template anchors style/framing/MJ params (D-08, D-09).
+    Returns plain text prompt in {"prompt": "..."} — bot returns as-is (D-12).
+    """
+    slug = slugify(req.name)
+    path = f"{_NPC_PATH_PREFIX}/{slug}.md"
+    note_text = await obsidian.get_note(path)
+    if note_text is None:
+        raise HTTPException(status_code=404, detail={"error": "NPC not found", "slug": slug})
+    fields = _parse_frontmatter(note_text)
+    description = await generate_mj_description(
+        fields=fields,
+        model=settings.litellm_model,
+        api_base=settings.litellm_api_base or None,
+    )
+    prompt = build_mj_prompt(fields, description)
+    return JSONResponse({"prompt": prompt, "slug": slug})
+
+
+@router.post("/stat")
+async def stat_block(req: NPCOutputRequest) -> JSONResponse:
+    """Return structured stat block data for Discord embed rendering (OUT-03).
+
+    Bot layer constructs discord.Embed from the returned dict (D-13 through D-17).
+    Returns {"fields": frontmatter_dict, "stats": stats_dict_or_empty, "slug": slug, "path": path}.
+    stats is {} if no ## Stats block present (D-16).
+    """
+    slug = slugify(req.name)
+    path = f"{_NPC_PATH_PREFIX}/{slug}.md"
+    note_text = await obsidian.get_note(path)
+    if note_text is None:
+        raise HTTPException(status_code=404, detail={"error": "NPC not found", "slug": slug})
+    fields = _parse_frontmatter(note_text)
+    stats = _parse_stats_block(note_text)
+    return JSONResponse({
+        "fields": fields,
+        "stats": stats if stats else {},
+        "slug": slug,
+        "path": path,
+    })
+
+
+@router.post("/pdf")
+async def pdf_export(req: NPCOutputRequest) -> JSONResponse:
+    """Generate PDF stat card for NPC (OUT-04).
+
+    Binary bytes encoded as base64 inside JSON wrapper — required because
+    sentinel-core proxy always calls resp.json() (binary transport constraint,
+    RESEARCH.md Pattern 1). Bot decodes data_b64 and wraps in discord.File.
+    Returns {"data_b64": "...", "filename": "{slug}-stat-card.pdf", "slug": slug}.
+    """
+    slug = slugify(req.name)
+    path = f"{_NPC_PATH_PREFIX}/{slug}.md"
+    note_text = await obsidian.get_note(path)
+    if note_text is None:
+        raise HTTPException(status_code=404, detail={"error": "NPC not found", "slug": slug})
+    fields = _parse_frontmatter(note_text)
+    stats = _parse_stats_block(note_text)
+    pdf_bytes = build_npc_pdf(fields, stats)
+    return JSONResponse({
+        "data_b64": base64.b64encode(pdf_bytes).decode("ascii"),
+        "filename": f"{slug}-stat-card.pdf",
+        "slug": slug,
     })
