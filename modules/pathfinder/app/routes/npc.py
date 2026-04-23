@@ -24,10 +24,18 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
 from app.config import settings
+from app.dialogue import (
+    apply_mood_delta,
+    build_system_prompt,
+    build_user_prompt,
+    cap_history_turns,
+    normalize_mood,
+)
 from app.llm import (
     build_mj_prompt,
     extract_npc_fields,
     generate_mj_description,
+    generate_npc_reply,
     update_npc_fields,
 )
 from app.pdf import build_npc_pdf
@@ -134,6 +142,65 @@ class NPCTokenImageRequest(BaseModel):
     @classmethod
     def sanitize_name(cls, v: str) -> str:
         return _validate_npc_name(v)
+
+
+# ---------------------------------------------------------------------------
+# Phase 31 — dialogue request/response models (D-24, DLG-01..03)
+# ---------------------------------------------------------------------------
+
+
+class TurnHistory(BaseModel):
+    """One prior dialogue turn (D-11): user :pf npc say + bot's quote-block reply.
+
+    Bot-sourced from thread.history walk; no field validation here (names already
+    sanitised when the original message was issued).
+    """
+    party_line: str = ""
+    replies: list[dict] = []  # [{npc: str, reply: str}, ...]
+
+
+class NPCSayRequest(BaseModel):
+    """Request shape for POST /npc/say (D-24).
+
+    party_line == "" is the SCENE ADVANCE signal (D-02).
+    history is bot-assembled from Discord thread (D-11..D-14); empty when first turn.
+    """
+    names: list[str]
+    party_line: str = ""
+    history: list[TurnHistory] = []
+    user_id: str
+
+    @field_validator("names")
+    @classmethod
+    def sanitize_names(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("at least one NPC name required")
+        return [_validate_npc_name(n) for n in v]
+
+    @field_validator("party_line")
+    @classmethod
+    def check_party_length(cls, v: str) -> str:
+        if len(v) > 2000:
+            raise ValueError("party_line too long (max 2000 chars)")
+        return v
+
+
+class NPCReply(BaseModel):
+    """One NPC's response within a /npc/say turn (D-24)."""
+    npc: str
+    reply: str
+    mood_delta: int
+    new_mood: str
+
+
+class NPCSayResponse(BaseModel):
+    """Response shape for POST /npc/say (D-24).
+
+    Per Patterns S6, the route returns JSONResponse({...}) directly rather than
+    setting response_model — kept for documentation/typing consistency.
+    """
+    replies: list[NPCReply]
+    warning: str | None = None
 
 
 # ---------------------------------------------------------------------------
