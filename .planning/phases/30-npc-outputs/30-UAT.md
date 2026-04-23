@@ -1,5 +1,5 @@
 ---
-status: testing
+status: complete
 phase: 30-npc-outputs
 source:
   - 30-01-SUMMARY.md
@@ -11,13 +11,7 @@ updated: 2026-04-23T13:00:00Z
 
 ## Current Test
 
-number: 5
-name: OUT-04 — `:pf npc pdf Jareth`
-expected: |
-  Bot attaches jareth-stat-card.pdf. One-page card with Jareth's name
-  as title, level/ancestry/class subtitle. If no ## Stats block,
-  header-only PDF is correct per D-20.
-awaiting: user response
+(all tests complete)
 
 ## Tests
 
@@ -50,14 +44,36 @@ note: |
 
 ### 5. OUT-04 — :pf npc pdf Jareth
 expected: Bot attaches a `jareth-stat-card.pdf` file. Opening the PDF shows a one-page stat card with Jareth's name as title, level/ancestry/class subtitle, and (if stats are present) an AC/HP/saves table. If no stats block, header-only PDF is correct.
-result: pending
+result: pass
+reported: "made a pretty plain pdf file"
+note: |
+  Header-only PDF (name title + level/ancestry/class subtitle, no stats table)
+  is correct per D-20 — same ## Stats absence as Test 4 OUT-03.
 
 ## Summary
 
 total: 5
-passed: 4
+passed: 5
 issues: 0
-pending: 1
+pending: 0
+
+## Follow-Ups (not gaps — out of Phase 30 scope)
+
+- **Midjourney image embedding in PDF**: User asked during Test 5 whether
+  generated MJ art can be dropped into the PDF stat card. Current design
+  treats MJ as a manual step (bot returns prompt text only; user runs
+  /imagine, downloads image) because Midjourney bot-to-bot DM is
+  architecturally impossible (Discord API block; documented ADR).
+  A `:pf npc token-image <name>` command that accepts an attached image,
+  saves to `mnemosyne/pf2e/tokens/<slug>.png`, and adds a
+  `token_image:` frontmatter field would close the loop. `build_npc_pdf`
+  would read that field and insert a `reportlab.platypus.Image` in the
+  header block. Good candidate for /gsd-quick.
+- **Stats block population**: Jareth has frontmatter only (no ## Stats).
+  Creating an NPC via :pf npc create doesn't write stats — that happens
+  later via a separate path (not yet implemented for Phase 30, likely
+  Phase 31 or 32). Both OUT-03 and OUT-04 correctly degraded to
+  header-only / description-only output per D-16 / D-20.
 skipped: 0
 blocked: 0
 
