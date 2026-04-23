@@ -275,6 +275,38 @@ NOTE_NO_STATS = (
     "---\n"
 )
 
+# ---------------------------------------------------------------------------
+# Phase 31 — NPC say fixtures (DLG-01..03)
+# Wave 0 RED scaffolding — implementation lands in Wave 1
+# Stubs reference app.dialogue and app.llm.generate_npc_reply which do not yet exist.
+# Tests are expected to FAIL on run (RED), but MUST collect cleanly.
+# ---------------------------------------------------------------------------
+
+NOTE_VAREK_NEUTRAL = (
+    "---\n"
+    "name: Varek\nlevel: 1\nancestry: Gnome\nclass: Rogue\n"
+    "traits:\n- sneaky\npersonality: Nervous and twitchy.\n"
+    "backstory: Fled the thieves' guild after stealing a ledger.\n"
+    "mood: neutral\nrelationships: []\nimported_from: null\n"
+    "---\n"
+)
+NOTE_VAREK_HOSTILE = NOTE_VAREK_NEUTRAL.replace("mood: neutral", "mood: hostile")
+NOTE_VAREK_WARY = NOTE_VAREK_NEUTRAL.replace("mood: neutral", "mood: wary")
+NOTE_VAREK_ALLIED = NOTE_VAREK_NEUTRAL.replace("mood: neutral", "mood: allied")
+NOTE_VAREK_INVALID_MOOD = NOTE_VAREK_NEUTRAL.replace("mood: neutral", "mood: grumpy")
+NOTE_BARON_HOSTILE = (
+    "---\n"
+    "name: Baron Aldric\nlevel: 5\nancestry: Human\nclass: Fighter\n"
+    "traits:\n- arrogant\npersonality: Cold and calculating.\n"
+    "backstory: A noble who seized the keep through betrayal.\n"
+    "mood: hostile\nrelationships: []\nimported_from: null\n"
+    "---\n"
+)
+NOTE_VAREK_FEARS_BARON = NOTE_VAREK_NEUTRAL.replace(
+    "relationships: []",
+    "relationships:\n- target: Baron Aldric\n  relation: fears",
+)
+
 
 # ---------------------------------------------------------------------------
 # NPC export-foundry tests (OUT-01)
@@ -534,3 +566,414 @@ async def test_npc_pdf_with_token_image_embeds():
     pdf_bytes = base64.b64decode(resp.json()["data_b64"])
     assert pdf_bytes[:4] == b"%PDF"
     assert b"/FlateDecode" in pdf_bytes
+
+
+# ---------------------------------------------------------------------------
+# Phase 31 — NPC say unit tests (DLG-01..03)
+# Wave 0 RED scaffolding — implementation lands in Waves 1-2.
+# These tests reference `app.routes.npc.generate_npc_reply` and related symbols
+# that do NOT yet exist. Collection succeeds because no top-level import of the
+# missing symbols is performed; runtime `patch()` of a not-yet-bound attribute
+# raises AttributeError, which is the RED failure signal (not an ImportError).
+# ---------------------------------------------------------------------------
+
+
+async def test_npc_say_solo_happy():
+    """POST /npc/say with single NPC returns 200; no mood write when delta=0 (DLG-01)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_VAREK_NEUTRAL)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(return_value={"reply": "*nods.* \"Aye.\"", "mood_delta": 0})
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek"],
+                "party_line": "hello",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 200
+    result = resp.json()
+    assert result["replies"][0]["npc"] == "Varek"
+    assert result["replies"][0]["new_mood"] == "neutral"
+    assert mock_obs.put_note.await_count == 0
+    assert result["warning"] is None
+
+
+async def test_npc_say_unknown():
+    """POST /npc/say with a missing NPC returns 404, detail names the missing NPC (DLG-01)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=None)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(return_value={"reply": "", "mood_delta": 0})
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Ghost"],
+                "party_line": "hello",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 404
+    detail = resp.json()["detail"]
+    # Accept either dict or string detail shape; inspect both for slug and name.
+    detail_str = str(detail)
+    assert "ghost" in detail_str.lower()
+    assert "Ghost" in detail_str
+
+
+async def test_npc_say_system_prompt_has_personality():
+    """System prompt passed to generate_npc_reply includes NPC personality text (DLG-01)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_VAREK_NEUTRAL)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(return_value={"reply": "*nods.*", "mood_delta": 0})
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek"],
+                "party_line": "hello",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 200
+    # Inspect the system_prompt passed to the LLM — accept either kw or positional.
+    call = mock_gen.call_args
+    sys_prompt = call.kwargs.get("system_prompt")
+    if sys_prompt is None and call.args:
+        sys_prompt = call.args[0]
+    assert sys_prompt is not None, "generate_npc_reply called without a system_prompt"
+    assert "Nervous and twitchy" in sys_prompt
+
+
+async def test_npc_say_mood_increment():
+    """mood_delta=+1 on neutral NPC writes `mood: friendly` via put_note (DLG-02)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_VAREK_NEUTRAL)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(return_value={"reply": "*smiles.*", "mood_delta": 1})
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek"],
+                "party_line": "thank you",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 200
+    assert mock_obs.put_note.await_count == 1
+    put_path, put_content = mock_obs.put_note.call_args.args
+    assert "mood: friendly" in put_content
+    assert resp.json()["replies"][0]["new_mood"] == "friendly"
+
+
+async def test_npc_say_mood_decrement():
+    """mood_delta=-1 on wary NPC writes `mood: hostile` (DLG-02)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_VAREK_WARY)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(return_value={"reply": "*scowls.*", "mood_delta": -1})
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek"],
+                "party_line": "threat",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 200
+    assert mock_obs.put_note.await_count == 1
+    put_path, put_content = mock_obs.put_note.call_args.args
+    assert "mood: hostile" in put_content
+    assert resp.json()["replies"][0]["new_mood"] == "hostile"
+
+
+async def test_npc_say_mood_zero_no_write():
+    """mood_delta=0 on neutral NPC triggers no put_note call (DLG-02)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_VAREK_NEUTRAL)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(return_value={"reply": "*shrugs.*", "mood_delta": 0})
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek"],
+                "party_line": "small talk",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 200
+    assert mock_obs.put_note.await_count == 0
+    assert resp.json()["replies"][0]["new_mood"] == "neutral"
+
+
+async def test_npc_say_mood_clamp_hostile():
+    """mood_delta=-1 on hostile NPC does NOT write (clamp floor, DLG-02)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_VAREK_HOSTILE)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(return_value={"reply": "*snarls.*", "mood_delta": -1})
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek"],
+                "party_line": "more threats",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 200
+    assert mock_obs.put_note.await_count == 0
+    assert resp.json()["replies"][0]["new_mood"] == "hostile"
+
+
+async def test_npc_say_mood_clamp_allied():
+    """mood_delta=+1 on allied NPC does NOT write (clamp ceiling, DLG-02)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_VAREK_ALLIED)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(return_value={"reply": "*beams.*", "mood_delta": 1})
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek"],
+                "party_line": "more praise",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 200
+    assert mock_obs.put_note.await_count == 0
+    assert resp.json()["replies"][0]["new_mood"] == "allied"
+
+
+async def test_npc_say_invalid_mood_normalized(caplog):
+    """NOTE with `mood: grumpy` is treated as neutral; warning logged (DLG-02, T-31-SEC-02)."""
+    import logging
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_VAREK_INVALID_MOOD)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(return_value={"reply": "*nods.*", "mood_delta": 1})
+    with caplog.at_level(logging.WARNING):
+        with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+             patch("app.routes.npc.obsidian", mock_obs), \
+             patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+            from app.main import app
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.post("/npc/say", json={
+                    "names": ["Varek"],
+                    "party_line": "hello",
+                    "history": [],
+                    "user_id": "u1",
+                })
+    assert resp.status_code == 200
+    log_text = caplog.text.lower()
+    assert "invalid" in log_text or "treating as 'neutral'" in log_text or "neutral" in log_text
+    # Invalid mood normalizes to neutral, +1 → friendly
+    assert resp.json()["replies"][0]["new_mood"] == "friendly"
+
+
+async def test_npc_say_scene_order():
+    """Two-NPC scene: replies come back in the order the names were given (DLG-03)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(side_effect=[NOTE_VAREK_NEUTRAL, NOTE_BARON_HOSTILE])
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(side_effect=[
+        {"reply": "V says", "mood_delta": 0},
+        {"reply": "B says", "mood_delta": 0},
+    ])
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek", "Baron Aldric"],
+                "party_line": "we mean no harm",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 200
+    replies = resp.json()["replies"]
+    assert replies[0]["npc"] == "Varek"
+    assert replies[1]["npc"] == "Baron Aldric"
+
+
+async def test_npc_say_scene_context_awareness():
+    """Second NPC's user_prompt includes the first NPC's reply text (DLG-03)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(side_effect=[NOTE_VAREK_NEUTRAL, NOTE_BARON_HOSTILE])
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(side_effect=[
+        {"reply": "V says", "mood_delta": 0},
+        {"reply": "B says", "mood_delta": 0},
+    ])
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek", "Baron Aldric"],
+                "party_line": "we mean no harm",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 200
+    # Second call is index 1. Extract user_prompt from kwargs or args[1].
+    call_1 = mock_gen.call_args_list[1]
+    user_prompt = call_1.kwargs.get("user_prompt")
+    if user_prompt is None and len(call_1.args) >= 2:
+        user_prompt = call_1.args[1]
+    assert user_prompt is not None, "generate_npc_reply second call missing user_prompt"
+    assert "V says" in user_prompt
+
+
+async def test_npc_say_scene_advance():
+    """Empty party_line triggers scene-advance framing: 'silent' + 'Continue the scene' (DLG-03)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(side_effect=[NOTE_VAREK_NEUTRAL, NOTE_BARON_HOSTILE])
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(side_effect=[
+        {"reply": "V says", "mood_delta": 0},
+        {"reply": "B says", "mood_delta": 0},
+    ])
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek", "Baron Aldric"],
+                "party_line": "",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 200
+    call_0 = mock_gen.call_args_list[0]
+    user_prompt = call_0.kwargs.get("user_prompt")
+    if user_prompt is None and len(call_0.args) >= 2:
+        user_prompt = call_0.args[1]
+    assert user_prompt is not None, "generate_npc_reply first call missing user_prompt"
+    assert "silent" in user_prompt
+    assert "Continue the scene" in user_prompt
+
+
+async def test_npc_say_five_npc_warning():
+    """5-NPC scene surfaces the soft-cap warning string (DLG-03, D-18)."""
+    five_notes = [
+        NOTE_VAREK_NEUTRAL.replace("name: Varek", f"name: {n}")
+        for n in ("Varek", "Baron Aldric", "Miralla", "Drenn", "Kalla")
+    ]
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(side_effect=five_notes)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(side_effect=[
+        {"reply": f"reply {i}", "mood_delta": 0} for i in range(5)
+    ])
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek", "Baron Aldric", "Miralla", "Drenn", "Kalla"],
+                "party_line": "crowd scene",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 200
+    assert resp.json()["warning"] == "⚠ 5 NPCs in scene — consider splitting for clarity."
+
+
+async def test_npc_say_scene_missing_fails_fast():
+    """Missing NPC in a scene → 404 before any LLM call (DLG-03, D-29)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(side_effect=[NOTE_VAREK_NEUTRAL, None])
+    mock_obs.put_note = AsyncMock(return_value=None)
+    mock_gen = AsyncMock(return_value={"reply": "", "mood_delta": 0})
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.routes.npc.generate_npc_reply", new=mock_gen):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek", "Ghost"],
+                "party_line": "hello",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 404
+    assert mock_gen.await_count == 0
+    detail_str = str(resp.json()["detail"])
+    assert "Ghost" in detail_str
+
+
+async def test_npc_say_json_parse_salvage():
+    """Plain-prose LLM output (no JSON) degrades gracefully: mood_delta=0, reply salvaged (DLG-01, T-31-SEC-03)."""
+    from types import SimpleNamespace
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_VAREK_NEUTRAL)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    # Mock the low-level litellm call: returns a response whose choices[0].message.content
+    # is plain prose (no JSON) — the real generate_npc_reply salvage path must kick in.
+    fake_response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(
+            content="this is plain prose, no JSON at all"
+        ))]
+    )
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs), \
+         patch("app.llm.litellm.acompletion", new=AsyncMock(return_value=fake_response)):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek"],
+                "party_line": "hello",
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 200
+    reply = resp.json()["replies"][0]
+    assert reply["reply"]  # non-empty salvaged prose
+    assert reply["mood_delta"] == 0
+
+
+async def test_npc_say_party_line_too_long():
+    """party_line > 2000 chars returns 422 (DLG-01, T-31-SEC-04)."""
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=NOTE_VAREK_NEUTRAL)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.npc.obsidian", mock_obs):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/npc/say", json={
+                "names": ["Varek"],
+                "party_line": "x" * 2001,
+                "history": [],
+                "user_id": "u1",
+            })
+    assert resp.status_code == 422
