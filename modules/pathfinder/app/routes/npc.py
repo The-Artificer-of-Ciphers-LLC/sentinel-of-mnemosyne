@@ -31,6 +31,7 @@ from app.llm import (
     update_npc_fields,
 )
 from app.pdf import build_npc_pdf
+from app.resolve_model import resolve_model
 
 logger = logging.getLogger(__name__)
 
@@ -267,11 +268,12 @@ async def create_npc(req: NPCCreateRequest) -> JSONResponse:
         )
 
     # LLM field extraction — D-06, D-07
+    # Task kind "structured" — requires function-calling-capable model for reliable JSON
     try:
         fields = await extract_npc_fields(
             name=req.name,
             description=req.description,
-            model=settings.litellm_model,
+            model=await resolve_model("structured"),
             api_base=settings.litellm_api_base or None,
         )
     except Exception as exc:
@@ -318,11 +320,12 @@ async def update_npc(req: NPCUpdateRequest) -> JSONResponse:
         raise HTTPException(status_code=404, detail={"error": "NPC not found", "slug": slug})
 
     # LLM extracts changed fields from correction string (D-10)
+    # Task kind "structured" — same JSON-extraction profile as /create
     try:
         changed = await update_npc_fields(
             current_note=note_text,
             correction=req.correction,
-            model=settings.litellm_model,
+            model=await resolve_model("structured"),
             api_base=settings.litellm_api_base or None,
         )
     except Exception as exc:
@@ -607,9 +610,10 @@ async def token_prompt(req: NPCOutputRequest) -> JSONResponse:
     if note_text is None:
         raise HTTPException(status_code=404, detail={"error": "NPC not found", "slug": slug})
     fields = _parse_frontmatter(note_text)
+    # Task kind "fast" — max_tokens=40, prefers smaller/cheaper model above 4K ctx
     description = await generate_mj_description(
         fields=fields,
-        model=settings.litellm_model,
+        model=await resolve_model("fast"),
         api_base=settings.litellm_api_base or None,
     )
     prompt = build_mj_prompt(fields, description)

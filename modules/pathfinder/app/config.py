@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     litellm_model: str = "openai/local-model"
     litellm_api_base: str = "http://host.docker.internal:1234/v1"
 
+    # Task-kind preferences (optional) — used by app.resolve_model to pick the best
+    # loaded model for each task. If unset, the scorer falls back to litellm_model.
+    litellm_model_chat: str | None = None
+    litellm_model_structured: str | None = None
+    litellm_model_fast: str | None = None
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
