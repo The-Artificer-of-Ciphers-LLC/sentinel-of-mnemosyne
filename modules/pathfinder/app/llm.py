@@ -69,6 +69,68 @@ async def extract_npc_fields(
     return json.loads(_strip_code_fences(content))
 
 
+async def generate_mj_description(
+    fields: dict,
+    model: str,
+    api_base: str | None = None,
+) -> str:
+    """Generate a comma-separated visual description for a Midjourney token prompt (OUT-02).
+
+    Constrained LLM call: max_tokens=40 limits output to 15-30 tokens (D-10).
+    Inputs sanitized (D-11): personality and backstory truncated to 200 chars and
+    newlines replaced with spaces before LLM interpolation, blocking prompt injection.
+    Returns plain string — NOT JSON-parsed.
+    """
+    personality = (fields.get("personality") or "")[:200].replace("\n", " ")
+    backstory = (fields.get("backstory") or "")[:200].replace("\n", " ")
+    traits = ", ".join(fields.get("traits") or [])
+    system_prompt = (
+        "You are a visual description generator for tabletop RPG character tokens. "
+        "Output ONLY a comma-separated list of visual description phrases, 15-30 tokens total. "
+        "Describe physical appearance only: features, clothing, expression, posture. "
+        "No Midjourney parameters. No prose. No punctuation except commas. "
+        "Example output: nervous eyes, disheveled dark clothing, scarred knuckles, hunched posture"
+    )
+    kwargs: dict = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": (
+                    f"Ancestry: {fields.get('ancestry', '')}\n"
+                    f"Class: {fields.get('class', '')}\n"
+                    f"Traits: {traits}\n"
+                    f"Personality: {personality}\n"
+                    f"Backstory: {backstory}"
+                ),
+            },
+        ],
+        "max_tokens": 40,
+        "timeout": 30.0,
+    }
+    if api_base:
+        kwargs["api_base"] = api_base
+
+    response = await litellm.acompletion(**kwargs)
+    return response.choices[0].message.content.strip()
+
+
+def build_mj_prompt(fields: dict, description: str) -> str:
+    """Assemble the full Midjourney /imagine prompt from description + fixed template (D-09).
+
+    Fixed suffix enforces --ar 1:1 (token aspect) and --no text (no captions).
+    """
+    ancestry = fields.get("ancestry", "")
+    npc_class = fields.get("class", "")
+    return (
+        f"{description}, {ancestry} {npc_class}, "
+        "tabletop RPG portrait token, circular frame, "
+        "parchment border, oil painting style, dramatic lighting "
+        "--ar 1:1 --q 2 --s 180 --no text"
+    )
+
+
 async def update_npc_fields(
     current_note: str,
     correction: str,
