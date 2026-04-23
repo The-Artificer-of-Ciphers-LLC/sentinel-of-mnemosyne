@@ -21,7 +21,7 @@ import uuid
 import yaml
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.config import settings
 from app.dialogue import (
@@ -156,7 +156,7 @@ class TurnHistory(BaseModel):
     sanitised when the original message was issued).
     """
     party_line: str = ""
-    replies: list[dict] = []  # [{npc: str, reply: str}, ...]
+    replies: list[dict] = Field(default_factory=list)  # [{npc: str, reply: str}, ...]
 
 
 class NPCSayRequest(BaseModel):
@@ -167,7 +167,7 @@ class NPCSayRequest(BaseModel):
     """
     names: list[str]
     party_line: str = ""
-    history: list[TurnHistory] = []
+    history: list[TurnHistory] = Field(default_factory=list)
     user_id: str
 
     @field_validator("names")
