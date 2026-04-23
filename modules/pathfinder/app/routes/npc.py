@@ -753,12 +753,21 @@ async def upload_token_image(req: NPCTokenImageRequest) -> JSONResponse:
             detail={"error": "Obsidian binary write failed", "detail": str(exc)},
         )
 
-    # Record path in frontmatter so /npc/pdf can pick it up. PATCH replace creates
-    # the field if absent (Obsidian REST API v3 semantics).
+    # Record path in frontmatter so /npc/pdf can pick it up.
+    # GET-then-PUT (not PATCH): Obsidian REST API v3 PATCH with Operation=replace
+    # returns 400 when the target frontmatter key doesn't already exist, and
+    # NPCs created before this feature lack a `token_image` field. Rebuilding
+    # the full note via build_npc_markdown is the proven pattern (see update_npc).
+    current_fields = _parse_frontmatter(note_text)
+    current_stats = _parse_stats_block(note_text)
+    current_fields["token_image"] = token_path
+    updated_note = build_npc_markdown(
+        current_fields, stats=current_stats if current_stats else None
+    )
     try:
-        await obsidian.patch_frontmatter_field(note_path, "token_image", token_path)
+        await obsidian.put_note(note_path, updated_note)
     except Exception as exc:
-        logger.error("PATCH token_image failed for %s: %s", note_path, exc)
+        logger.error("put_note for token_image failed for %s: %s", note_path, exc)
         raise HTTPException(
             status_code=500,
             detail={"error": "Failed to update token_image frontmatter", "detail": str(exc)},

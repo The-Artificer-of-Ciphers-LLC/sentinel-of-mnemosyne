@@ -443,11 +443,16 @@ _PNG_1X1_B64 = (
 
 
 async def test_npc_token_image_saves_binary_and_frontmatter():
-    """POST /npc/token-image stores image bytes and updates token_image frontmatter."""
+    """POST /npc/token-image stores image bytes and updates token_image frontmatter.
+
+    Uses GET-then-PUT (not PATCH) because Obsidian REST API PATCH with
+    Operation=replace returns 400 when the target frontmatter key doesn't
+    already exist (NPCs created before this feature lack token_image).
+    """
     mock_obs = MagicMock()
     mock_obs.get_note = AsyncMock(return_value=NOTE_NO_STATS)
     mock_obs.put_binary = AsyncMock(return_value=None)
-    mock_obs.patch_frontmatter_field = AsyncMock(return_value=None)
+    mock_obs.put_note = AsyncMock(return_value=None)
     with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
          patch("app.routes.npc.obsidian", mock_obs):
         from app.main import app
@@ -469,12 +474,14 @@ async def test_npc_token_image_saves_binary_and_frontmatter():
     assert bytes_arg[:8] == b"\x89PNG\r\n\x1a\n"  # PNG signature
     assert ct_arg == "image/png"
 
-    # Frontmatter patch writes token_image field pointing at the stored path
-    mock_obs.patch_frontmatter_field.assert_awaited_once_with(
-        "mnemosyne/pf2e/npcs/varek.md",
-        "token_image",
-        "mnemosyne/pf2e/tokens/varek.png",
-    )
+    # put_note rewrites the note with token_image added to frontmatter
+    assert mock_obs.put_note.await_count == 1
+    put_path, put_content = mock_obs.put_note.call_args.args
+    assert put_path == "mnemosyne/pf2e/npcs/varek.md"
+    assert "token_image: mnemosyne/pf2e/tokens/varek.png" in put_content
+    # Frontmatter delimiters preserved
+    assert put_content.startswith("---\n")
+    assert "\n---\n" in put_content
 
 
 async def test_npc_token_image_rejects_unknown_npc():
@@ -482,7 +489,7 @@ async def test_npc_token_image_rejects_unknown_npc():
     mock_obs = MagicMock()
     mock_obs.get_note = AsyncMock(return_value=None)
     mock_obs.put_binary = AsyncMock(return_value=None)
-    mock_obs.patch_frontmatter_field = AsyncMock(return_value=None)
+    mock_obs.put_note = AsyncMock(return_value=None)
     with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
          patch("app.routes.npc.obsidian", mock_obs):
         from app.main import app
@@ -492,9 +499,9 @@ async def test_npc_token_image_rejects_unknown_npc():
                 json={"name": "UnknownNPC", "image_b64": _PNG_1X1_B64},
             )
     assert resp.status_code == 404
-    # No vault writes occurred — 404 fails before put_binary / patch
+    # No vault writes occurred — 404 fails before put_binary / put_note
     assert mock_obs.put_binary.await_count == 0
-    assert mock_obs.patch_frontmatter_field.await_count == 0
+    assert mock_obs.put_note.await_count == 0
 
 
 async def test_npc_pdf_with_token_image_embeds():
