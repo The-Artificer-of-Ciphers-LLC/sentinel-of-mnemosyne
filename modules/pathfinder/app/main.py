@@ -13,6 +13,7 @@ Endpoints:
   POST /npc/token-image    — upload Midjourney token image to vault (OUT-02 ext)
   POST /npc/stat           — return structured stat block data (OUT-03)
   POST /npc/pdf            — generate PDF stat card (OUT-04, embeds token image)
+  POST /npc/say            — in-character NPC dialogue with mood tracking (DLG-01..03)
 
 Startup:
   lifespan calls POST /modules/register on sentinel-core with exponential backoff retry.
@@ -59,6 +60,7 @@ REGISTRATION_PAYLOAD = {
         {"path": "npc/token-image", "description": "Upload NPC token image to vault (OUT-02 extension)"},
         {"path": "npc/stat", "description": "Return structured stat block data (OUT-03)"},
         {"path": "npc/pdf", "description": "Generate PDF stat card (OUT-04)"},
+        {"path": "npc/say", "description": "In-character NPC dialogue with mood tracking (DLG-01..03)"},
     ],
 }
 
