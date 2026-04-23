@@ -44,6 +44,7 @@ import base64
 import io
 import logging
 import os
+import re
 
 import discord
 import httpx
@@ -309,7 +310,7 @@ async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None)
     """
     parts = args.strip().split(" ", 2)
     if len(parts) < 2:
-        return "Usage: `:pf npc <create|update|show|relate|import> ...`"
+        return "Usage: `:pf npc <create|update|show|relate|import|say> ...`"
     noun, verb = parts[0].lower(), parts[1].lower()
     rest = parts[2] if len(parts) > 2 else ""
 
@@ -514,10 +515,31 @@ async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None)
                     "filename": result["filename"],
                 }
 
+            elif verb == "say":
+                # DLG-01..03: in-character NPC dialogue with mood tracking.
+                # Format: `:pf npc say <Name>[,<Name>...] | <party_line>` (D-01).
+                # Empty party_line after pipe = scene-advance (D-02) — still valid.
+                if "|" not in rest:
+                    return "Usage: `:pf npc say <Name>[,<Name>...] | <party line>`"
+                names_raw, _, party_line = rest.partition("|")
+                names = [n.strip() for n in names_raw.split(",") if n.strip()]
+                if not names:
+                    return "Usage: `:pf npc say <Name>[,<Name>...] | <party line>`"
+                payload = {
+                    "names": names,
+                    "party_line": party_line.strip(),
+                    "user_id": user_id,
+                    "history": [],
+                }
+                result = await _sentinel_client.post_to_module(
+                    "modules/pathfinder/npc/say", payload, http_client
+                )
+                return _render_say_response(result)
+
             else:
                 return (
                     f"Unknown npc command `{verb}`. "
-                    "Available: `create`, `update`, `show`, `relate`, `import`, `export`, `token`, `token-image`, `stat`, `pdf`."
+                    "Available: `create`, `update`, `show`, `relate`, `import`, `export`, `token`, `token-image`, `stat`, `pdf`, `say`."
                 )
 
     except httpx.HTTPStatusError as exc:
