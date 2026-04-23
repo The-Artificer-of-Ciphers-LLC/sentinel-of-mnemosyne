@@ -3,18 +3,23 @@ pf2e-module — Pathfinder 2e FastAPI service.
 
 Endpoints:
   GET /healthz — module health check (proxied by sentinel-core at GET /modules/pathfinder/healthz)
-  POST /npc/create — create NPC in Obsidian (NPC-01)
-  POST /npc/update — update NPC fields (NPC-02)
-  POST /npc/show   — show NPC summary (NPC-03)
-  POST /npc/relate — add NPC relationship (NPC-04, Plan 05)
-  POST /npc/import — bulk import from Foundry JSON (NPC-05, Plan 05)
+  POST /npc/create         — create NPC in Obsidian (NPC-01)
+  POST /npc/update         — update NPC fields (NPC-02)
+  POST /npc/show           — show NPC summary (NPC-03)
+  POST /npc/relate         — add NPC relationship (NPC-04)
+  POST /npc/import         — bulk import from Foundry JSON (NPC-05)
+  POST /npc/export-foundry — export Foundry VTT actor JSON (OUT-01)
+  POST /npc/token          — generate Midjourney /imagine prompt (OUT-02)
+  POST /npc/stat           — return structured stat block data (OUT-03)
+  POST /npc/pdf            — generate PDF stat card (OUT-04)
 
 Startup:
   lifespan calls POST /modules/register on sentinel-core with exponential backoff retry.
   If all 5 attempts fail, module exits with code 1 (Docker restart policy brings it back).
   lifespan also creates a persistent ObsidianClient on app.state for NPC CRUD endpoints (D-27).
 
-Per D-15 through D-18 in Phase 28 CONTEXT.md; updated in Phase 29 for NPC CRUD.
+Per D-15 through D-18 in Phase 28 CONTEXT.md; updated in Phase 29 for NPC CRUD,
+extended in Phase 30 for NPC outputs (OUT-01..OUT-04).
 """
 import asyncio
 import logging
@@ -48,6 +53,10 @@ REGISTRATION_PAYLOAD = {
         {"path": "npc/show", "description": "Show NPC summary (NPC-03)"},
         {"path": "npc/relate", "description": "Add NPC relationship (NPC-04)"},
         {"path": "npc/import", "description": "Bulk import NPCs from Foundry JSON (NPC-05)"},
+        {"path": "npc/export-foundry", "description": "Export NPC as Foundry VTT actor JSON (OUT-01)"},
+        {"path": "npc/token", "description": "Generate Midjourney token prompt (OUT-02)"},
+        {"path": "npc/stat", "description": "Return structured stat block data (OUT-03)"},
+        {"path": "npc/pdf", "description": "Generate PDF stat card (OUT-04)"},
     ],
 }
 
