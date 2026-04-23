@@ -848,3 +848,119 @@ async def upload_token_image(req: NPCTokenImageRequest) -> JSONResponse:
         "token_path": token_path,
         "size_bytes": len(image_bytes),
     })
+
+
+# ---------------------------------------------------------------------------
+# Phase 31 — NPC dialogue endpoint (DLG-01..03, D-07, D-09, D-18, D-19, D-27, D-29)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/say")
+async def say_npc(req: NPCSayRequest) -> JSONResponse:
+    """In-character NPC dialogue with mood tracking and multi-NPC scenes (DLG-01..03).
+
+    - Solo or scene mode (>=2 names) determined by len(req.names).
+    - Empty req.party_line == "" triggers SCENE ADVANCE framing (D-02).
+    - First missing NPC fails fast with 404 (D-29) before any LLM call.
+    - Mood writes use GET-then-PUT via build_npc_markdown (D-09) — only when mood changes.
+    - Soft warning when >=5 NPCs (D-18).
+    """
+    # Step 1: Load each NPC in order; fail fast on first missing (D-29).
+    npcs_data: list[dict] = []
+    for name in req.names:
+        slug = slugify(name)
+        path = f"{_NPC_PATH_PREFIX}/{slug}.md"
+        note_text = await obsidian.get_note(path)
+        if note_text is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "NPC not found", "slug": slug, "name": name},
+            )
+        fields = _parse_frontmatter(note_text)
+        stats = _parse_stats_block(note_text)
+        npcs_data.append({
+            "name": name,
+            "slug": slug,
+            "path": path,
+            "fields": fields,
+            "stats": stats,
+        })
+
+    # Step 2: Cap thread-scoped history (D-14).
+    capped_history = cap_history_turns([h.model_dump() for h in req.history])
+
+    # Step 3: Scene roster in canonical order.
+    scene_roster = [n["name"] for n in npcs_data]
+    scene_name_set_lower = {n.lower() for n in scene_roster}
+
+    # Step 3b: Debug-only scene_id (RESEARCH.md Recommended Defaults — logged only, not user-visible).
+    scene_id = "-".join(sorted(slugify(n) for n in scene_roster))
+    logger.info(
+        "npc/say scene_id=%s names=%s party_line_len=%d history_turns=%d",
+        scene_id, scene_roster, len(req.party_line), len(capped_history),
+    )
+
+    # Step 4: Resolve chat-tier model (D-27). Single call up front; same model used per turn.
+    model = await resolve_model("chat")
+    api_base = settings.litellm_api_base or None
+
+    # Step 5: Serial round-robin (D-19) — each NPC sees prior NPCs' replies in this turn.
+    this_turn_replies: list[dict] = []
+    response_replies: list[dict] = []
+    for npc in npcs_data:
+        # Filter relationship edges to scene members only (Pitfall 7 / RESEARCH Finding 7).
+        all_rels = npc["fields"].get("relationships") or []
+        scene_rels = [
+            r for r in all_rels
+            if isinstance(r, dict)
+            and str(r.get("target", "")).lower() in scene_name_set_lower
+        ]
+
+        sys_prompt = build_system_prompt(npc["fields"], scene_roster, scene_rels)
+        usr_prompt = build_user_prompt(
+            history=capped_history,
+            this_turn_replies=this_turn_replies,
+            party_line=req.party_line,
+            npc_name=npc["name"],
+        )
+
+        llm_result = await generate_npc_reply(
+            system_prompt=sys_prompt,
+            user_prompt=usr_prompt,
+            model=model,
+            api_base=api_base,
+        )
+
+        # Mood math (D-07): zero or clamped no-op skips the vault write.
+        current_mood = normalize_mood(npc["fields"].get("mood") or "neutral")
+        new_mood = apply_mood_delta(current_mood, llm_result["mood_delta"])
+
+        if new_mood != current_mood:
+            updated_fields = dict(npc["fields"])
+            updated_fields["mood"] = new_mood
+            new_content = build_npc_markdown(
+                updated_fields,
+                stats=npc["stats"] if npc["stats"] else None,
+            )
+            try:
+                await obsidian.put_note(npc["path"], new_content)
+                logger.info("NPC mood updated: %s %s -> %s", npc["name"], current_mood, new_mood)
+            except Exception as exc:
+                logger.error("Mood write failed for %s: %s", npc["name"], exc)
+                # Degrade per RESEARCH.md lines 1007-1012: keep reply, revert reported mood.
+                new_mood = current_mood
+
+        this_turn_replies.append({"npc": npc["name"], "reply": llm_result["reply"]})
+        response_replies.append({
+            "npc": npc["name"],
+            "reply": llm_result["reply"],
+            "mood_delta": llm_result["mood_delta"],
+            "new_mood": new_mood,
+        })
+
+    # Step 6: Soft cap warning (D-18) — exact string per CONTEXT.md D-18.
+    warning = None
+    if len(scene_roster) >= 5:
+        warning = f"⚠ {len(scene_roster)} NPCs in scene — consider splitting for clarity."
+
+    return JSONResponse({"replies": response_replies, "warning": warning})
