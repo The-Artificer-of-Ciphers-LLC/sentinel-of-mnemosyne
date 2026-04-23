@@ -23,6 +23,12 @@ services:
       # OBSIDIAN_BASE_URL, OBSIDIAN_API_KEY, LITELLM_MODEL, LITELLM_API_BASE
       # are loaded from ../../.env via env_file above — do not set here or they
       # override the user-configured values silently (WR-03 fix)
+      #
+      # LiteLLM's openai/ provider requires an api_key. LM Studio ignores the
+      # key (self-hosted OpenAI-compatible server) but LiteLLM refuses to call
+      # without one. Any non-empty string works. Mirrors sentinel-core's
+      # LiteLLMProvider(api_key="lmstudio") convention (main.py:91).
+      - OPENAI_API_KEY=lmstudio
     depends_on:
       sentinel-core:
         condition: service_healthy
