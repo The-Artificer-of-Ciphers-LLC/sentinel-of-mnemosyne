@@ -40,6 +40,8 @@ User identity: str(interaction.user.id) — Discord snowflake as string.
 Thread per invocation: each /sentask creates a fresh thread (never reuses).
 """
 import asyncio
+import base64
+import io
 import logging
 import os
 
@@ -179,11 +181,61 @@ async def _call_core(user_id: str, message: str) -> str:
 _VALID_RELATIONS = frozenset({"knows", "trusts", "hostile-to", "allied-with", "fears", "owes-debt"})
 
 
-async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None) -> str:
+def build_stat_embed(data: dict) -> "discord.Embed":
+    """Build a Discord Embed from /npc/stat module response (OUT-03, D-13 through D-17).
+
+    data: {"fields": {...frontmatter...}, "stats": {...stats block or {}...}, "slug": ..., "path": ...}
+    Layout: AC+HP inline, Fort+Ref+Will inline, Speed non-inline, Skills non-inline, Perception inline.
+    Absent stats block: mechanical fields omitted (D-16).
+    """
+    fields = data.get("fields", {})
+    stats = data.get("stats") or {}
+    embed = discord.Embed(
+        title=(
+            f"{fields.get('name', '?')} "
+            f"(Level {fields.get('level', '?')} "
+            f"{fields.get('ancestry', '')} {fields.get('class', '')})"
+        ),
+        description=fields.get("personality", ""),
+        color=discord.Color.dark_gold(),
+    )
+    if stats:
+        embed.add_field(name="AC", value=str(stats.get("ac", "—")), inline=True)
+        embed.add_field(name="HP", value=str(stats.get("hp", "—")), inline=True)
+        embed.add_field(name="​", value="​", inline=True)
+        embed.add_field(name="Fort", value=str(stats.get("fortitude", "—")), inline=True)
+        embed.add_field(name="Ref", value=str(stats.get("reflex", "—")), inline=True)
+        embed.add_field(name="Will", value=str(stats.get("will", "—")), inline=True)
+        embed.add_field(name="Speed", value=f"{stats.get('speed', '—')} ft.", inline=False)
+        skills = stats.get("skills") or {}
+        if skills:
+            if isinstance(skills, dict):
+                skill_text = ", ".join(
+                    f"{k.capitalize()} +{v}" for k, v in skills.items()
+                )
+            else:
+                skill_text = str(skills)
+            embed.add_field(
+                name="Skills",
+                value=skill_text[:900] + ("..." if len(skill_text) > 900 else ""),
+                inline=False,
+            )
+        if stats.get("perception") is not None:
+            embed.add_field(name="Perception", value=f"+{stats['perception']}", inline=True)
+    embed.set_footer(text=f"Mood: {fields.get('mood', 'neutral')}")
+    return embed
+
+
+async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None) -> "str | dict":
     """Route ':pf <noun> <verb> <rest>' to pathfinder module endpoints.
 
     Called from handle_sentask_subcommand when subcmd == 'pf' (D-04).
     Uses post_to_module() on SentinelCoreClient — NOT _call_core() (D-03).
+
+    Return type widened in Phase 30: text-only verbs (create/update/show/relate/
+    import/token) return str; rich-response verbs (export/stat/pdf) return a typed
+    dict {"type": "file"|"embed", ...} that the on_message and /sen handlers
+    dispatch to discord.File / discord.Embed.
     """
     parts = args.strip().split(" ", 2)
     if len(parts) < 2:
@@ -303,10 +355,64 @@ async def _pf_dispatch(args: str, user_id: str, attachments: list | None = None)
                     lines.append(f"Skipped (already exist): {', '.join(skipped)}")
                 return "\n".join(lines)
 
+            elif verb == "export":
+                npc_name = rest.strip()
+                if not npc_name:
+                    return "Usage: `:pf npc export <name>`"
+                result = await _sentinel_client.post_to_module(
+                    "modules/pathfinder/npc/export-foundry", {"name": npc_name}, http_client
+                )
+                import json as _json
+                json_bytes = _json.dumps(result["actor"], indent=2).encode("utf-8")
+                return {
+                    "type": "file",
+                    "content": f"Foundry actor JSON for **{npc_name}**:",
+                    "file_bytes": json_bytes,
+                    "filename": result["filename"],
+                }
+
+            elif verb == "token":
+                npc_name = rest.strip()
+                if not npc_name:
+                    return "Usage: `:pf npc token <name>`"
+                result = await _sentinel_client.post_to_module(
+                    "modules/pathfinder/npc/token", {"name": npc_name}, http_client
+                )
+                return result.get("prompt", "No prompt generated.")
+
+            elif verb == "stat":
+                npc_name = rest.strip()
+                if not npc_name:
+                    return "Usage: `:pf npc stat <name>`"
+                result = await _sentinel_client.post_to_module(
+                    "modules/pathfinder/npc/stat", {"name": npc_name}, http_client
+                )
+                embed = build_stat_embed(result)
+                return {
+                    "type": "embed",
+                    "content": "",
+                    "embed": embed,
+                }
+
+            elif verb == "pdf":
+                npc_name = rest.strip()
+                if not npc_name:
+                    return "Usage: `:pf npc pdf <name>`"
+                result = await _sentinel_client.post_to_module(
+                    "modules/pathfinder/npc/pdf", {"name": npc_name}, http_client
+                )
+                pdf_bytes = base64.b64decode(result["data_b64"])
+                return {
+                    "type": "file",
+                    "content": f"PDF stat card for **{npc_name}**:",
+                    "file_bytes": pdf_bytes,
+                    "filename": result["filename"],
+                }
+
             else:
                 return (
                     f"Unknown npc command `{verb}`. "
-                    "Available: `create`, `update`, `show`, `relate`, `import`."
+                    "Available: `create`, `update`, `show`, `relate`, `import`, `export`, `token`, `stat`, `pdf`."
                 )
 
     except httpx.HTTPStatusError as exc:
@@ -545,7 +651,23 @@ class SentinelBot(discord.Client):
         async with message.channel.typing():
             ai_response = await _route_message(user_id, message.content, attachments=list(message.attachments))
 
-        await message.channel.send(ai_response)
+        if isinstance(ai_response, str):
+            await message.channel.send(ai_response)
+        elif isinstance(ai_response, dict):
+            rtype = ai_response.get("type")
+            if rtype == "file":
+                df = discord.File(
+                    io.BytesIO(ai_response["file_bytes"]),
+                    filename=ai_response["filename"],
+                )
+                await message.channel.send(content=ai_response.get("content", ""), file=df)
+            elif rtype == "embed":
+                await message.channel.send(
+                    content=ai_response.get("content", ""),
+                    embed=ai_response["embed"],
+                )
+            else:
+                await message.channel.send(ai_response.get("content", str(ai_response)))
 
 
 bot = SentinelBot()
@@ -597,10 +719,42 @@ async def sen(interaction: discord.Interaction, message: str) -> None:
 
     # 4. Send AI response — into thread if created, fallback to channel
     if thread:
-        await thread.send(ai_response)
+        if isinstance(ai_response, str):
+            await thread.send(ai_response)
+        elif isinstance(ai_response, dict):
+            rtype = ai_response.get("type")
+            if rtype == "file":
+                df = discord.File(
+                    io.BytesIO(ai_response["file_bytes"]),
+                    filename=ai_response["filename"],
+                )
+                await thread.send(content=ai_response.get("content", ""), file=df)
+            elif rtype == "embed":
+                await thread.send(
+                    content=ai_response.get("content", ""),
+                    embed=ai_response["embed"],
+                )
+            else:
+                await thread.send(ai_response.get("content", str(ai_response)))
         await interaction.followup.send(f"Response ready in {thread.mention}", ephemeral=True)
     else:
-        await interaction.followup.send(ai_response)
+        if isinstance(ai_response, str):
+            await interaction.followup.send(ai_response)
+        elif isinstance(ai_response, dict):
+            rtype = ai_response.get("type")
+            if rtype == "file":
+                df = discord.File(
+                    io.BytesIO(ai_response["file_bytes"]),
+                    filename=ai_response["filename"],
+                )
+                await interaction.followup.send(content=ai_response.get("content", ""), file=df)
+            elif rtype == "embed":
+                await interaction.followup.send(
+                    content=ai_response.get("content", ""),
+                    embed=ai_response["embed"],
+                )
+            else:
+                await interaction.followup.send(ai_response.get("content", str(ai_response)))
 
 
 def main() -> None:
