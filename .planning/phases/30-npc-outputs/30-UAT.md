@@ -11,12 +11,12 @@ updated: 2026-04-23T13:00:00Z
 
 ## Current Test
 
-number: 2
-name: OUT-01 — `:pf npc export Jareth`
+number: 3
+name: OUT-02 — `:pf npc token Jareth`
 expected: |
-  Bot replies "Foundry actor JSON for **Jareth**:" with an attached
-  `jareth.json` file. Opening the JSON shows a valid PF2e actor dict
-  with type: "npc", name: "Jareth", and system.attributes populated.
+  Bot replies with plain-text Midjourney prompt string containing
+  --ar 1:1 and --no text. Describes Jareth visually (ancestry, class,
+  traits, personality) as comma-separated phrases.
 awaiting: user response
 
 ## Tests
@@ -31,7 +31,7 @@ note: |
 
 ### 2. OUT-01 — :pf npc export Jareth
 expected: Bot replies "Foundry actor JSON for **Jareth**:" with an attached `jareth.json` file. Downloading and opening the JSON shows a valid PF2e actor dict with `type: "npc"`, `name: "Jareth"`, and `system.attributes` populated.
-result: pending
+result: pass
 
 ### 3. OUT-02 — :pf npc token Jareth
 expected: Bot replies with a plain-text Midjourney prompt string containing `--ar 1:1` and `--no text`. The prompt should describe Jareth's visual features (ancestry, class, traits, personality) in comma-separated phrases.
@@ -48,9 +48,9 @@ result: pending
 ## Summary
 
 total: 5
-passed: 1
+passed: 2
 issues: 0
-pending: 4
+pending: 3
 skipped: 0
 blocked: 0
 
