@@ -400,19 +400,128 @@ async def rule_query(req: RuleQueryRequest) -> JSONResponse:
     return JSONResponse(_strip_internal_fields(result))
 
 
+# --- Enumeration endpoints — no LLM, no embedding, pure Obsidian directory walks ---
+
+
+def _build_ruling_index_entry(path: str, parsed: dict, topic: str | None = None) -> dict:
+    """Extract the summary fields a UI / bot would list from a cached ruling."""
+    # hash is the last path component without .md.
+    hash_part = path.rsplit("/", 1)[-1].removesuffix(".md")
+    return {
+        "hash": hash_part,
+        "topic": topic or parsed.get("topic"),
+        "question": parsed.get("question", ""),
+        "composed_at": parsed.get("composed_at", ""),
+        "last_reused_at": parsed.get("last_reused_at", parsed.get("composed_at", "")),
+        "marker": parsed.get("marker", ""),
+        "source": parsed.get("source"),
+    }
+
+
+async def _collect_rulings_under(prefix: str) -> list[tuple[str, dict]]:
+    """Walk a topic-prefix (or root rulings prefix), return list of (path, parsed_frontmatter)."""
+    if obsidian is None:
+        return []
+    try:
+        paths = await obsidian.list_directory(prefix)
+    except Exception as exc:
+        logger.warning("_collect_rulings_under: list_directory %s failed: %s", prefix, exc)
+        return []
+    out: list[tuple[str, dict]] = []
+    for p in paths:
+        if not p.endswith(".md"):
+            continue
+        text = await obsidian.get_note(p)
+        if not text:
+            continue
+        parsed = _parse_ruling_cache(text)
+        if parsed is None:
+            logger.warning("_collect_rulings_under: malformed cache at %s — skipping", p)
+            continue
+        out.append((p, parsed))
+    return out
+
+
 @router.post("/show")
 async def rule_show(req: RuleShowRequest) -> JSONResponse:
-    """List rulings under a given topic folder (see 33-04-03)."""
-    raise HTTPException(status_code=501, detail={"error": "rule_show not yet implemented — 33-04-03"})
+    """List rulings under a given topic folder. Sorted by last_reused_at desc."""
+    if obsidian is None:
+        raise HTTPException(
+            status_code=503, detail={"error": "rule subsystem not initialised"}
+        )
+    topic = coerce_topic(req.topic)
+    prefix = f"{RULING_CACHE_PATH_PREFIX}/{topic}/"
+    collected = await _collect_rulings_under(prefix)
+    entries = [_build_ruling_index_entry(p, parsed, topic=topic) for p, parsed in collected]
+    entries.sort(key=lambda e: e.get("last_reused_at", ""), reverse=True)
+    return JSONResponse({"topic": topic, "count": len(entries), "rulings": entries})
 
 
 @router.post("/history")
 async def rule_history(req: RuleHistoryRequest) -> JSONResponse:
-    """Top-N most-recent rulings across all topics by last_reused_at (see 33-04-04)."""
-    raise HTTPException(status_code=501, detail={"error": "rule_history not yet implemented — 33-04-04"})
+    """Top-N most-recent rulings across ALL topics by last_reused_at (D-14)."""
+    if obsidian is None:
+        raise HTTPException(
+            status_code=503, detail={"error": "rule subsystem not initialised"}
+        )
+    n = req.n  # already clamped to [1, 100] by field_validator
+    root_prefix = f"{RULING_CACHE_PATH_PREFIX}/"
+    try:
+        all_paths = await obsidian.list_directory(root_prefix)
+    except Exception as exc:
+        logger.warning("rule_history: root list_directory failed: %s", exc)
+        all_paths = []
+    all_entries: list[dict] = []
+    for p in all_paths:
+        if not p.endswith(".md"):
+            continue
+        text = await obsidian.get_note(p)
+        if not text:
+            continue
+        parsed = _parse_ruling_cache(text)
+        if parsed is None:
+            continue
+        # topic = path segment between the root prefix and the final filename.
+        stripped = p.removeprefix(root_prefix)
+        topic = stripped.split("/", 1)[0] if "/" in stripped else "misc"
+        all_entries.append(_build_ruling_index_entry(p, parsed, topic=topic))
+    all_entries.sort(key=lambda e: e.get("last_reused_at", ""), reverse=True)
+    return JSONResponse({"n": n, "rulings": all_entries[:n]})
 
 
 @router.post("/list")
 async def rule_list() -> JSONResponse:
-    """Enumerate topic folders currently under RULING_CACHE_PATH_PREFIX (see 33-04-05)."""
-    raise HTTPException(status_code=501, detail={"error": "rule_list not yet implemented — 33-04-05"})
+    """Enumerate topic folders and their activity. Sorted by last_activity desc."""
+    if obsidian is None:
+        raise HTTPException(
+            status_code=503, detail={"error": "rule subsystem not initialised"}
+        )
+    root_prefix = f"{RULING_CACHE_PATH_PREFIX}/"
+    try:
+        all_paths = await obsidian.list_directory(root_prefix)
+    except Exception as exc:
+        logger.warning("rule_list: root list_directory failed: %s", exc)
+        all_paths = []
+    # Group by topic slug (first segment after root_prefix).
+    per_topic: dict[str, dict] = {}
+    for p in all_paths:
+        if not p.endswith(".md"):
+            continue
+        stripped = p.removeprefix(root_prefix)
+        if "/" not in stripped:
+            continue
+        topic = stripped.split("/", 1)[0]
+        text = await obsidian.get_note(p)
+        if not text:
+            continue
+        parsed = _parse_ruling_cache(text)
+        if parsed is None:
+            continue
+        bucket = per_topic.setdefault(topic, {"slug": topic, "count": 0, "last_activity": ""})
+        bucket["count"] += 1
+        last_act = parsed.get("last_reused_at", parsed.get("composed_at", ""))
+        if last_act > bucket["last_activity"]:
+            bucket["last_activity"] = last_act
+    topics = list(per_topic.values())
+    topics.sort(key=lambda t: t.get("last_activity", ""), reverse=True)
+    return JSONResponse({"topics": topics})
