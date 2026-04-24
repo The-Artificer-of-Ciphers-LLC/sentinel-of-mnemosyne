@@ -417,6 +417,35 @@ async def test_harvest_invalid_name_control_char():
     assert resp.status_code == 422
 
 
+async def test_harvest_unicode_only_name_rejected():
+    """Name that slugifies to empty string → 422 (CR-01 cache collision fix).
+
+    Names like "测试龙" (Unicode-only) or "!@#$%" (punctuation-only) slug to
+    "" and would otherwise collide at mnemosyne/pf2e/harvest/.md, returning
+    the cached data from any prior empty-slug request. Reject at validation.
+    """
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=None)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    stub_tables = _make_stub_tables()
+    mock_llm = AsyncMock()
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.harvest.obsidian", mock_obs), \
+         patch("app.routes.harvest.harvest_tables", stub_tables), \
+         patch("app.routes.harvest.generate_harvest_fallback", new=mock_llm):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            # Unicode-only name
+            resp1 = await client.post("/harvest", json={"names": ["测试龙"], "user_id": "u"})
+            assert resp1.status_code == 422
+            # Punctuation-only name
+            resp2 = await client.post("/harvest", json={"names": ["!@#$%"], "user_id": "u"})
+            assert resp2.status_code == 422
+            # Path-traversal-only name (also slugifies to "")
+            resp3 = await client.post("/harvest", json={"names": ["..//"], "user_id": "u"})
+            assert resp3.status_code == 422
+
+
 async def test_harvest_batch_cap_enforced():
     """21 names → 422 (MAX_BATCH_NAMES=20, T-32-SEC DoS)."""
     mock_obs = MagicMock()

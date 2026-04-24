@@ -56,6 +56,13 @@ def _validate_monster_name(v: str) -> str:
         raise ValueError("monster name too long (max 100 chars)")
     if re.search(r"[\x00-\x1f\x7f]", v):
         raise ValueError("monster name contains invalid control characters")
+    # CR-01: slug must be non-empty so cache keys don't collide. Names like
+    # "测试龙", "🐺", "...", "!@#$%" all slugify to "" and would otherwise share
+    # the same cache path mnemosyne/pf2e/harvest/.md, cross-contaminating data.
+    if not slugify(v):
+        raise ValueError(
+            "monster name must contain at least one ASCII alphanumeric character"
+        )
     return v
 
 
