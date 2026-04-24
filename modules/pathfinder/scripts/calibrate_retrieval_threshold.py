@@ -5,7 +5,7 @@ at modules/pathfinder/tests/fixtures/rules_threshold_calibration.json and
 picks the threshold that maximizes classification accuracy on hit/miss.
 
 Procedure:
-  1. Load the 149-chunk Player-Core corpus (data/rules-corpus.json).
+  1. Load the 148-chunk Player-Core corpus (data/rules-corpus.json).
   2. Embed every chunk once via LM Studio's
      text-embedding-nomic-embed-text-v1.5 (768-dim).
   3. Load the 20-query fixture (hit / miss / decline labels).

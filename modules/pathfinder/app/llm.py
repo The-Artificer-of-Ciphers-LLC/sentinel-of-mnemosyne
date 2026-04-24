@@ -407,7 +407,7 @@ async def embed_texts(
 ) -> list[list[float]]:
     """Return a list of embedding vectors (one per input) via litellm.aembedding.
 
-    Used at module startup to embed the 149-chunk Player-Core corpus, and
+    Used at module startup to embed the 148-chunk Player-Core corpus, and
     per-query to embed user questions before RAG retrieval (D-02 step 3).
     A single batch call is cheaper than N sequential calls; LiteLLM passes
     the list through to the /v1/embeddings endpoint unchanged.

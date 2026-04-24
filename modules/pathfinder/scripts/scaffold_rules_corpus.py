@@ -145,10 +145,19 @@ def ingest_journal(journal_path: Path, url_map: dict) -> list[dict]:
         if not text:
             continue
         m_book = BOOK_REGEX.search(content)
-        if m_book:
-            book = _normalize_book_label(m_book.group(1))
-        else:
-            book = "Pathfinder Player Core"
+        if not m_book:
+            # D-15 scope lock: no 'Pathfinder X pg.' footer means we cannot prove
+            # the text lives in Player Core. The previous default-to-Player-Core
+            # behaviour silently mis-attributed supplement-book pages (e.g.
+            # War of Immortals "Mythic Characters") as Player Core — a D-09
+            # fabrication. Skip + WARN so the human can inspect coverage.
+            logger.warning(
+                "Skipping journal page with no 'Pathfinder X pg.' footer: %s "
+                "(D-15 scope-lock requires explicit Player Core attribution)",
+                name,
+            )
+            continue
+        book = _normalize_book_label(m_book.group(1))
         # D-15 scope lock: skip anything that isn't Player Core.
         if "Player Core" not in book:
             logger.warning("Skipping non-Player-Core journal page: %s (book=%s)", name, book)
