@@ -177,7 +177,7 @@ async def harvest(req: HarvestRequest) -> JSONResponse:
         slug = slugify(name)
         cache_path = f"{HARVEST_CACHE_PATH_PREFIX}/{slug}.md"
 
-        # 1. Cache hit
+        # 1. Cache hit (query-slug path — fast path for exact and LLM-fallback repeats).
         cached_text = await obsidian.get_note(cache_path)
         if cached_text is not None:
             parsed = _parse_harvest_cache(cached_text, name)
@@ -190,9 +190,28 @@ async def harvest(req: HarvestRequest) -> JSONResponse:
         # 2. Seed lookup
         seed_entry, seed_note = lookup_seed(name, harvest_tables)
         if seed_entry is not None:
+            # WR-05: canonicalise fuzzy-match cache path to the seed's slug so
+            # every variant that resolves to the same seed (Alpha Wolf, Wolves,
+            # wolfe) shares a single cache file. DM hand-edits to the canonical
+            # file then propagate to every future alias lookup. Exact-match
+            # queries also cache under the seed slug — idempotent.
+            canonical_slug = slugify(seed_entry.name)
+            canonical_cache_path = f"{HARVEST_CACHE_PATH_PREFIX}/{canonical_slug}.md"
+            # Re-check cache at canonical path when it differs from the query
+            # slug — a prior fuzzy/exact hit may have already seeded it.
+            if canonical_cache_path != cache_path:
+                canonical_cached = await obsidian.get_note(canonical_cache_path)
+                if canonical_cached is not None:
+                    parsed = _parse_harvest_cache(canonical_cached, name)
+                    if parsed is not None:
+                        per_monster_results.append(parsed)
+                        continue
             result = _build_from_seed(seed_entry, name, seed_note)
+            cache_path = canonical_cache_path
         else:
             # 3. LLM fallback — failure MUST NOT write cache (RESEARCH §Anti-Patterns).
+            # LLM-fallback continues to cache under the query slug (there is no
+            # canonical entity to canonicalise against).
             try:
                 result = await generate_harvest_fallback(
                     monster_name=name,
