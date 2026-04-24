@@ -1,0 +1,160 @@
+Air Scamp	1
+Arbiter	1
+Boggard Scout	1
+Cacodaemon	1
+Caligni Dancer	1
+Cassisian	1
+Catfolk Pouncer	1
+Cythnigot	1
+Dwarf Warrior	1
+Earth Scamp	1
+Electric Eel	1
+Elf Ranger	1
+Fire Scamp	1
+Ghoul Stalker	1
+Giant Gecko	1
+Gnome Bard	1
+Goblin Commando	1
+Goblin Dog	1
+Goblin Pyro	1
+Goblin War Chanter	1
+Gourd Leshy	1
+Halfling Troublemaker	1
+Hippocampus	1
+Hobgoblin Soldier	1
+Hryngar Bombardier	1
+Hunting Spider	1
+Hyena	1
+Imp	1
+Jinkin	1
+Kobold Scout	1
+Lizardfolk Defender	1
+Lizardfolk Scout	1
+Lyrakien	1
+Merfolk Warrior	1
+Naiad	1
+Nosoi	1
+Orc Veteran	1
+Plague Zombie	1
+Python	1
+Raktavarna	1
+Rat Swarm	1
+Reefclaw	1
+Riding Dog	1
+Riding Horse	1
+Sewer Ooze	1
+Umbral Gnome Scout	1
+Vampire Bat Swarm	1
+Velociraptor	1
+Voidworm	1
+War Pony	1
+Water Scamp	1
+Wolf	1
+Xulgath Warrior	1
+Zoaem	1
+Aiuvarin Elementalist	2
+Animated Armor	2
+Boar	2
+Boggard Warrior	2
+Bugbear Prowler	2
+Caligni Skulker	2
+Crocodile	2
+Deinonychus	2
+Dero Stalker	2
+Dhampir Wizard	2
+Dromaar Mountaineer	2
+Envyspawn	2
+Fey Dragonet	2
+Fungus Leshy	2
+Ghoul Soldier	2
+Giant Ant	2
+Giant Bat	2
+Giant Monitor Lizard	2
+Giant Viper	2
+Gluttonyspawn	2
+Greedspawn	2
+Herexen	2
+Hippogriff	2
+Hryngar Taskmaster	2
+Kholo Hunter	2
+Kobold Cavern Mage	2
+Leopard	2
+Lizardfolk Stargazer	2
+Lustspawn	2
+Merfolk Wavecaller	2
+Orc Commander	2
+Pipefox	2
+Pridespawn	2
+Pteranodon	2
+Pusk	2
+Sedacthy Scout	2
+Skeletal Champion	2
+Skeletal Horse	2
+Slothspawn	2
+Slurk	2
+Soulbound Doll (Brave)	2
+Soulbound Doll (Calm)	2
+Soulbound Doll (Careful)	2
+Soulbound Doll (Cruel)	2
+Soulbound Doll (Gentle)	2
+Soulbound Doll (Impish)	2
+Soulbound Doll (Jolly)	2
+Soulbound Doll (Kind)	2
+Soulbound Doll (Rash)	2
+Soulbound Doll (Sassy)	2
+Soulbound Doll (Timid)	2
+Tengu Sneak	2
+Umbral Gnome Warrior	2
+War Horse	2
+Warg	2
+Wererat	2
+Wrathspawn	2
+Xulgath Skulker	2
+Zombie Brute	2
+Zyss Serpentfolk	2
+Aapoph Serpentfolk	3
+Animated Statue	3
+Ankhrav	3
+Athamaru Hunter	3
+Boggard Swampseer	3
+Brine Shark	3
+Bugbear Tormentor	3
+Centaur Herbalist	3
+Centipede Swarm	3
+Changeling Exile	3
+Chupacabra	3
+Cinder Rat	3
+Cockatrice	3
+Dero Strangler	3
+Dire Wolf	3
+Draxie	3
+Dryad	3
+Giant Eagle	3
+Giant Mantis	3
+Giant Scorpion	3
+Giant Wasp	3
+Gorilla	3
+Grizzly Bear	3
+Grothlut	3
+Hell Hound	3
+Hyaenodon	3
+Kholo Bonekeeper	3
+Lion	3
+Ogre Warrior	3
+Pachycephalosaurus	3
+Pegasus	3
+Pitborn Adept	3
+River Drake	3
+Sea Hag	3
+Skeletal Giant	3
+Snapping Flytrap	3
+Sod Hound	3
+String Slime	3
+Tooth Fairy Swarm	3
+Twigjack	3
+Unicorn	3
+Werewolf	3
+Wight	3
+Winged Chupacabra	3
+Xulgath Leader	3
+Zephyr Hawk	3

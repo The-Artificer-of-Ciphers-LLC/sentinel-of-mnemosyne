@@ -27,14 +27,24 @@ import sys
 
 import httpx
 
-REPO_API = "https://api.github.com/repos/foundryvtt/pf2e/contents/packs/pathfinder-monster-core"
-RAW_BASE = "https://raw.githubusercontent.com/foundryvtt/pf2e/master/packs/pathfinder-monster-core"
+# The foundryvtt/pf2e repo restructured packs in 2024: bestiary packs live at
+# packs/pf2e/<pack-name>/. Default branch is v14-dev (not master); using the
+# Contents API and following each entry's `download_url` insulates the script
+# from future branch renames.
+#   https://github.com/foundryvtt/pf2e/tree/v14-dev/packs/pf2e/pathfinder-monster-core
+REPO_API = "https://api.github.com/repos/foundryvtt/pf2e/contents/packs/pf2e/pathfinder-monster-core"
 
 
 def fetch_level_1_to_3_monsters() -> list[dict]:
     """Return [{name, level, slug}] for all L1-L3 monsters in pathfinder-monster-core."""
     with httpx.Client(timeout=30.0, follow_redirects=True) as client:
-        listing = client.get(REPO_API).json()
+        listing_resp = client.get(REPO_API)
+        listing_resp.raise_for_status()
+        listing = listing_resp.json()
+        if not isinstance(listing, list):
+            raise RuntimeError(
+                f"GitHub Contents API returned non-list at {REPO_API}: {listing!r}"
+            )
         out: list[dict] = []
         for entry in listing:
             if entry.get("type") != "file":
@@ -43,7 +53,10 @@ def fetch_level_1_to_3_monsters() -> list[dict]:
             if not name.endswith(".json"):
                 continue
             slug = name[:-5]
-            raw_url = f"{RAW_BASE}/{name}"
+            raw_url = entry.get("download_url")
+            if not raw_url:
+                print(f"# skipped {slug}: no download_url", file=sys.stderr)
+                continue
             try:
                 doc = client.get(raw_url).json()
             except Exception as exc:  # noqa: BLE001 — best-effort scaffolder
