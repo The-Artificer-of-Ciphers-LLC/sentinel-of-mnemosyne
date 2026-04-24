@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: The Dungeon
 status: in_progress
-stopped_at: Phase 32 Plan 05 (bot wiring — :pf harvest dispatch + build_harvest_embed) COMPLETE — interfaces/discord/bot.py has new build_harvest_embed helper (pure dict→Embed, D-03a+D-04), _pf_dispatch noun-check widened to {npc, harvest}, harvest branch re-parses args for multi-word names (Pitfall 5), top-level usage + unknown-noun error now list both nouns; 7/7 test_pf_harvest_* flipped GREEN; 38/38 interfaces/discord tests + 84/84 pathfinder tests green; Phase 32 complete pending /gsd-verify-work
-last_updated: "2026-04-24T02:35:00Z"
-last_activity: 2026-04-24 -- Phase 32-05 executed: 1 atomic commit (d8f419b); Rule 3 fix — consolidated discord stub into conftest.py to eliminate sys.modules.setdefault collection-order race that hid missing Embed/Color; Rule 1 fix — defensive leading-whitespace strip before harvest slice; 38/38 discord tests + 84/84 pathfinder tests green; Phase 32 ready for /gsd-verify-work
+stopped_at: Phase 32 (Monster Harvesting) COMPLETE — 5 plans, 5 serial waves, 17 implementation + 13 review-fix + 2 gap-close commits; 22/22 must-haves verified; 89/89 pathfinder + 38/38 discord unit tests GREEN; 17/17 live-stack UAT PASS (scripts/uat_phase32.sh); 2 live gaps closed (G-1 Dockerfile missing rapidfuzz, G-2 clamp fill-when-missing)
+last_updated: "2026-04-24T04:45:00Z"
+last_activity: 2026-04-24 -- Phase 32 verification + live UAT complete. Post-code-review fixes (13/13 findings) + 2 live-stack gaps closed. 17/17 automated UAT against running stack (sentinel-core + pf2e-module + Obsidian + LM Studio). Ready for next v0.5 phase (33/34/35/36).
 progress:
   total_phases: 26
   completed_phases: 13
@@ -21,15 +21,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 31 complete — v0.5 The Dungeon 4/9 phases done, next candidates: 32/33/34/35
+**Current focus:** Phase 32 complete — v0.5 The Dungeon 5/9 phases done, next candidates: 33/34/35/36
 
 ## Current Position
 
-Phase: 32 (Monster Harvesting) — COMPLETE (5/5 plans shipped) — awaiting /gsd-verify-work
-Next Plan: /gsd-verify-work 32 (final phase acceptance gate) → then advance to Phase 33 / 34 / 35 / 36 in v0.5
-Milestone: v0.5 The Dungeon — IN PROGRESS (5/9 phases complete after Phase 32 verification)
+Phase: 32 (Monster Harvesting) — ✅ COMPLETE + VERIFIED (5/5 plans shipped, 22/22 must-haves, 89/89 pathfinder + 38/38 discord tests, 17/17 live UAT)
+Next Phase: 33 / 34 / 35 / 36 in v0.5 (pick via /gsd-discuss-phase or /gsd-plan-phase)
+Milestone: v0.5 The Dungeon — IN PROGRESS (5/9 phases complete)
 Status: Phase 32-05 (Wave 4 bot wiring) shipped: interfaces/discord/bot.py gained build_harvest_embed (pure dict→discord.Embed, D-03a single-monster + D-04 batch-aggregated, 1024-char field cap), _pf_dispatch noun-check widened to {npc, harvest}, harvest dispatch branch re-parses args for multi-word monster names (Pitfall 5) + comma-separated batch with whitespace trim, top-level usage string + unknown-noun error updated to list both nouns. interfaces/discord/tests/conftest.py consolidates the discord stub (Client/Intents/Embed/Color/Thread/etc) so per-file setdefault races no longer hide missing attributes. All 7 test_pf_harvest_* flipped GREEN (solo, batch, multi-word, trimmed commas, empty→usage, embed-dict shape, noun-recognised). 38/38 interfaces/discord tests pass + 84/84 pathfinder tests pass + zero Phase 29/30/31 regressions. HRV-01..06 satisfied end-to-end.
-Last activity: 2026-04-24 -- Phase 32-05 executed: 1 atomic commit (d8f419b); Rule 3 conftest consolidation to fix collection-order stub race; Rule 1 defensive leading-whitespace strip; Phase 32 complete pending /gsd-verify-work.
+Last activity: 2026-04-24 -- Phase 32 fully complete: 5 plans shipped, 22/22 verified, 13/13 code-review fixes applied, 2 live-gap fixes (Dockerfile rapidfuzz, LLM DC fill-when-missing), 17/17 live-stack UAT PASS. 89 pathfinder + 38 discord tests green. Ready for next v0.5 phase.
 
 ## Milestone Progress
 
@@ -48,7 +48,7 @@ Last activity: 2026-04-24 -- Phase 32-05 executed: 1 atomic commit (d8f419b); Ru
 | v0.10 | The Trader Goes Live | TBD | — |
 | v1.0 | Community Release | TBD | — |
 
-Progress (v0.5): [█████     ] 56% (5/9 phases — 28, 29, 30, 31, 32 complete; Phase 32 pending /gsd-verify-work)
+Progress (v0.5): [█████     ] 56% (5/9 phases — 28, 29, 30, 31, 32 complete)
 
 ## v0.5 Phase Map
 
@@ -58,7 +58,7 @@ Progress (v0.5): [█████     ] 56% (5/9 phases — 28, 29, 30, 31, 32 c
 | 29 | NPC CRUD + Obsidian Persistence | NPC-01..05 | Phase 28 | ✅ COMPLETE (2026-04-22) |
 | 30 | NPC Outputs | OUT-01..04 | Phase 29 | ✅ COMPLETE (2026-04-23) |
 | 31 | Dialogue Engine | DLG-01..03 | Phase 29 | ✅ COMPLETE (2026-04-23) |
-| 32 | Monster Harvesting | HRV-01..06 | Phase 28 | ✅ COMPLETE (2026-04-24) — pending /gsd-verify-work |
+| 32 | Monster Harvesting | HRV-01..06 | Phase 28 | ✅ COMPLETE (2026-04-24) |
 | 33 | Rules Engine | RUL-01..04 | Phase 28 | Not started |
 | 34 | Session Notes | SES-01..03 | Phase 29 | Not started |
 | 35 | Foundry VTT Event Ingest | FVT-01..03 | Phase 28 | Not started |

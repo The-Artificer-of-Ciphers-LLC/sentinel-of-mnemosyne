@@ -1,8 +1,9 @@
 ---
 phase: 32-monster-harvesting
 verified: 2026-04-24T03:00:00Z
-status: human_needed
+status: passed
 score: 22/22 must-haves verified
+human_uat: 8/8 items passed via automated live-stack UAT (scripts/uat_phase32.sh) 2026-04-24T04:45:00Z
 overrides_applied: 0
 human_verification:
   - test: "Run `:pf harvest Boar` in live Discord server with LM Studio running and Obsidian REST API up"
@@ -207,7 +208,19 @@ After initial verification, `/gsd-code-review` was run against all 12 source fil
 
 Post-fix test counts: **pathfinder 88/88 passed** (up from 84), **discord 38/38 passed** (unchanged). Full report: `.planning/phases/32-monster-harvesting/32-REVIEW-FIX.md`. One deviation from REVIEW suggestions: CR-02's suggested `HarvestComponent.model_validate` was substituted with an inline validator because `HarvestComponent` requires `name` while the LLM contract returns `type` — using model_validate would have broken every valid LLM response.
 
+### Live-Stack UAT
+
+After code review fixes, the 8 HUMAN-UAT items were exercised against the running Docker stack via `scripts/uat_phase32.sh` — container rebuild → wait for healthy + registration → `scripts/uat_harvest.py` (17 assertions). Initial run exposed two real gaps:
+
+- **G-1**: pf2e-module Dockerfile hardcoded pip deps inline, missed `rapidfuzz` added by Phase 32 → first container rebuild restart-looped with `ModuleNotFoundError`. Fixed in c3a18d2.
+- **G-2**: DC sanity clamp only overwrote int-but-wrong `medicine_dc`, not missing entirely. Small LLMs (qwen2.5-coder-14b) intermittently omit the field → CR-02 validator rejected otherwise-usable responses with 500. Extended clamp to fill from DC_BY_LEVEL[level] when missing; fixed in d4c9e8a with two new unit tests.
+
+Final UAT run (2026-04-24T04:45:00Z): **17/17 PASS** against live stack (sentinel-core + pf2e-module + Obsidian Local REST API + LM Studio). All 8 HUMAN-UAT items verified. See `32-HUMAN-UAT.md` for full result table.
+
+**Status resolution:** `human_needed` → `passed`. The live-stack UAT is the authoritative confirmation that `status: human_needed` was waiting on.
+
 ---
 *Verified: 2026-04-24T03:00:00Z*
 *Verifier: Claude (gsd-verifier)*
 *Code review: 2026-04-24T03:30:00Z — 13/13 findings fixed*
+*Live UAT: 2026-04-24T04:45:00Z — 17/17 PASS (automated)*
