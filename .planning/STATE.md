@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: The Dungeon
 status: in_progress
-stopped_at: Phase 32 Plan 01 (RED test stubs) COMPLETE — 31 stubs collected + RED; Plan 02 (rapidfuzz + seed YAML) up next
-last_updated: "2026-04-24T01:45:21Z"
-last_activity: 2026-04-24 -- Phase 32-01 executed: 21 unit stubs + 3 integration stubs + 7 bot dispatch stubs = 31 RED, all collect cleanly; Waves 1-3 implement against this contract
+stopped_at: Phase 32 Plan 02 (rapidfuzz + seed YAML) COMPLETE — rapidfuzz 3.14.5 installed, 160-monster L1-3 seed committed bound 1:1 to roster, test_rapidfuzz_importable flipped GREEN; Plan 03 (app.harvest helpers) up next
+last_updated: "2026-04-24T01:58:53Z"
+last_activity: 2026-04-24 -- Phase 32-02 executed: rapidfuzz dep added to pyproject.toml, scaffolder script shipped, 160-monster roster scraped from Foundry pf2e (pack restructured; default branch is v14-dev), harvest-tables.yaml hand-curated with ORC attribution and Table 10-5 DCs (L1=15/L2=16/L3=18)
 progress:
   total_phases: 26
   completed_phases: 13
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 32 (Monster Harvesting) — IN PROGRESS (Plan 01/05 complete)
-Next Plan: 32-02 (rapidfuzz dep + seed YAML scaffold)
+Phase: 32 (Monster Harvesting) — IN PROGRESS (Plan 02/05 complete)
+Next Plan: 32-03 (app.harvest helpers — YAML loader, fuzzy match, format_price)
 Milestone: v0.5 The Dungeon — IN PROGRESS
-Status: Phase 32-01 (Wave 0) shipped 31 RED test stubs (21 unit + 3 integration + 7 bot dispatch) against app.harvest.*, app.routes.harvest.*, app.llm.generate_harvest_fallback, bot.build_harvest_embed — Waves 1-4 implement against this contract.
-Last activity: 2026-04-24 -- Phase 32-01 executed: 3 atomic test commits (e62d56c, 563f191, 8b38a25); all 31 stubs collect cleanly and fail on run for expected reason (ModuleNotFoundError/AttributeError/unknown-noun).
+Status: Phase 32-02 (Wave 1 data layer) shipped rapidfuzz 3.14.5 + 160-monster L1-3 seed YAML bound 1:1 to Foundry pf2e roster. test_rapidfuzz_importable flipped GREEN (1/31 Wave-0 stubs resolved). Plan 32-03 will flip format_price + fuzzy + invalid_yaml stubs (5 more).
+Last activity: 2026-04-24 -- Phase 32-02 executed: 4 atomic commits (c2cbe16, e126a89, 1050a3c, 7def746); data layer complete, app code lands in Plan 32-03.
 
 ## Milestone Progress
 
@@ -140,10 +140,10 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-04-24
-Stopped at: Phase 32-01 complete — 31/31 RED stubs collected; next plan is 32-02 (rapidfuzz + seed YAML)
-Resume file: .planning/phases/32-monster-harvesting/32-01-red-test-stubs-SUMMARY.md
+Stopped at: Phase 32-02 complete — rapidfuzz 3.14.5 installed + 160-monster seed YAML committed; test_rapidfuzz_importable GREEN; next plan is 32-03 (app.harvest helpers)
+Resume file: .planning/phases/32-monster-harvesting/32-02-seed-yaml-SUMMARY.md
 
-**In-Progress Phase:** 32 (Monster Harvesting) — 1/5 plans complete — Plan 32-02 next (rapidfuzz dep + seed YAML scaffold)
+**In-Progress Phase:** 32 (Monster Harvesting) — 2/5 plans complete — Plan 32-03 next (app.harvest YAML loader + fuzzy match + format_price helpers)
 
 **Completed Phase:** 31 (Dialogue Engine) — 5 plans / 4 waves — 2026-04-23T21:30:00.000Z — DLG-01..03 shipped
 
