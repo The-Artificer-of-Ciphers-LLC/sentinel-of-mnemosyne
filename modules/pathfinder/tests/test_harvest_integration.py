@@ -157,6 +157,52 @@ async def test_seed_hit_writes_cache_with_source_seed():
     assert body["monsters"][0]["source"] == "seed"
 
 
+async def test_fuzzy_match_note_survives_cache_roundtrip():
+    """Fuzzy-match note persists across cache round-trip (CR-03).
+
+    Call 1: 'Alpha Wolf' head-noun matches Wolf seed; lookup_seed returns a
+    'Matched to closest entry: Wolf...' note; the route writes the cache
+    with that note serialised into frontmatter.
+    Call 2: same query; cache hit; _parse_harvest_cache reads `note` back
+    out of frontmatter. Both responses must carry the same non-empty note.
+
+    Before CR-03, call 2 hard-coded note=None and silently stripped the
+    fuzzy-match warning — the DM saw different answers to the same query.
+    """
+    vault = StatefulMockVault({})
+    stub_tables = _make_stub_tables()
+    # LLM must NOT be called — 'Alpha Wolf' head-noun resolves to the Wolf
+    # seed in the stub tables, so this is a seed-fuzzy path, never LLM.
+    mock_llm = AsyncMock(side_effect=AssertionError("LLM must not be called for fuzzy match"))
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.harvest.obsidian", vault), \
+         patch("app.routes.harvest.harvest_tables", stub_tables), \
+         patch("app.routes.harvest.generate_harvest_fallback", new=mock_llm):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            # Call 1: fuzzy match writes cache with note in frontmatter.
+            resp1 = await client.post(
+                "/harvest", json={"names": ["Alpha Wolf"], "user_id": "u1"}
+            )
+            assert resp1.status_code == 200
+            body1 = resp1.json()
+            note1 = body1["monsters"][0]["note"]
+            assert note1 and "Matched to closest" in note1
+
+            # Call 2: cache hit; note must be parsed back from frontmatter.
+            resp2 = await client.post(
+                "/harvest", json={"names": ["Alpha Wolf"], "user_id": "u1"}
+            )
+            assert resp2.status_code == 200
+            body2 = resp2.json()
+            note2 = body2["monsters"][0]["note"]
+            assert note2, (
+                f"note dropped by cache round-trip (CR-03 regression): "
+                f"call1 note={note1!r}, call2 note={note2!r}"
+            )
+            assert note1 == note2
+
+
 async def test_batch_mixed_sources_footer():
     """Batch with Wolf (seed) + Unicorn (LLM) → footer mentions mixed sources (D-04)."""
     vault = StatefulMockVault({})

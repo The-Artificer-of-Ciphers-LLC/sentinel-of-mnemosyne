@@ -223,6 +223,14 @@ def build_harvest_markdown(result: dict) -> str:
         "source": result.get("source", "llm-generated"),
         "harvested_at": datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z"),
     }
+    # CR-03: persist fuzzy-match note across cache round-trips. lookup_seed
+    # returns a "Matched to closest entry: <Wolf>..." warning on head-noun
+    # and fuzz.ratio hits; this note MUST survive the cache hit so the DM
+    # sees the same "did you mean" warning on every repeat query. Only write
+    # when non-empty to keep exact-hit notes clean.
+    note_val = result.get("note")
+    if note_val:
+        frontmatter["note"] = note_val
     fm_yaml = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True, sort_keys=False)
     body_lines: list[str] = [f"# {result['monster']}"]
     for c in result.get("components", []) or []:
@@ -339,7 +347,11 @@ def _parse_harvest_cache(note_text: str, name: str) -> dict | None:
             "verified": bool(fm.get("verified", False)),
             "source": fm.get("source", "cache"),
             "components": components,
-            "note": None,
+            # CR-03: read `note` back out of the cache frontmatter so the
+            # fuzzy-match "did you mean" warning survives a cache hit. Falls
+            # back to None for exact-match notes written before CR-03 (and
+            # for any cache file whose frontmatter legitimately has no note).
+            "note": fm.get("note"),
         }
     except Exception as exc:
         logger.warning("Harvest cache parse failed for %s: %s", name, exc)
