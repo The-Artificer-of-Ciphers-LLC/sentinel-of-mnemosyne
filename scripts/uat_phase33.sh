@@ -108,9 +108,14 @@ echo "── Step 4: Confirm LM Studio embeddings reachable from inside pf2e-mod
 if ! docker exec pf2e-module python -c "
 import asyncio, sys
 from app.llm import embed_texts
+from app.config import settings
 async def main():
     try:
-        v = await embed_texts(['healthy?'])
+        v = await embed_texts(
+            ['healthy?'],
+            model=settings.rules_embedding_model,
+            api_base=settings.litellm_api_base or None,
+        )
         print(f'OK — embed returned {len(v)} vector(s) of dim {len(v[0])}')
     except Exception as e:
         print(f'FAIL: {e}', file=sys.stderr)
