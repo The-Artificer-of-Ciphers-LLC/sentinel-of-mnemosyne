@@ -66,10 +66,10 @@ fi
 
 echo ""
 echo "── Step 3: Confirm pf2e-module registered with sentinel-core ──"
-REG_RETRIES=10
+REG_RETRIES=15
 while [ $REG_RETRIES -gt 0 ]; do
   if curl -sf -H "X-Sentinel-Key: $SENTINEL_API_KEY" \
-     "${UAT_SENTINEL_URL:-http://localhost:8000}/status" 2>/dev/null | grep -q '"pathfinder"'; then
+     "${UAT_SENTINEL_URL:-http://localhost:8000}/modules" 2>/dev/null | grep -q '"pathfinder"'; then
     echo "✓ pf2e-module registered"
     break
   fi
@@ -83,12 +83,17 @@ fi
 echo ""
 echo "── Step 4: Run harvest UAT against live stack ──"
 
-# Run inside interfaces/discord venv (has httpx + discord.py)
+# Run inside interfaces/discord venv (has httpx + discord.py).
+# OBSIDIAN_API_URL in .env is `host.docker.internal:27123` (container perspective);
+# the host must use localhost:27123 instead — host.docker.internal doesn't resolve
+# from macOS shells.
+HOST_OBSIDIAN_URL="${OBSIDIAN_API_URL//host.docker.internal/localhost}"
+
 cd "$PROJECT_ROOT/interfaces/discord"
 LIVE_TEST=1 \
   UAT_SENTINEL_URL="${UAT_SENTINEL_URL:-http://localhost:8000}" \
   UAT_SENTINEL_KEY="$SENTINEL_API_KEY" \
-  UAT_OBSIDIAN_URL="${OBSIDIAN_API_URL:-http://localhost:27123}" \
+  UAT_OBSIDIAN_URL="${HOST_OBSIDIAN_URL:-http://localhost:27123}" \
   UAT_OBSIDIAN_KEY="$OBSIDIAN_API_KEY" \
   uv run --no-sync python "$PROJECT_ROOT/scripts/uat_harvest.py"
 

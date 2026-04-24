@@ -461,30 +461,30 @@ async def test_harvest_invalid_name_control_char():
     assert resp.status_code == 422
 
 
-async def test_harvest_llm_malformed_output_graceful_500():
-    """LLM returns valid JSON with missing medicine_dc → 500 via route handler (CR-02).
+async def test_harvest_llm_missing_medicine_dc_filled_from_level():
+    """LLM omits medicine_dc but emits valid level → clamp fills from DC_BY_LEVEL.
 
-    Before CR-02, the malformed output slipped past the LLM-success catch and
-    crashed build_harvest_markdown/_aggregate_by_component with a KeyError
-    outside any try/except — unhandled 500. After CR-02 the LLM-shape
-    validator raises ValueError inside generate_harvest_fallback, which the
-    route's LLM-failure handler catches and returns as a clean 500 WITHOUT
-    writing cache.
+    Live small-model behavior (observed during Phase 32 UAT): LM Studio at
+    qwen2.5-coder-14b-instruct sometimes emits a valid-JSON harvest shape that
+    omits medicine_dc entirely, even when the system prompt lists the DC table
+    explicitly. The DC sanity clamp treats this as the "trust-the-table"
+    philosophy's missing-field variant: fill medicine_dc from DC_BY_LEVEL[level]
+    rather than rejecting the whole response. CR-02 still catches truly
+    unrepairable shapes (see test_harvest_llm_truly_malformed_500 below).
     """
-    # We import here so patching works against the module where the fn lives.
     import json as _json
 
-    # Simulate a real LLM response that returns valid JSON with the wrong shape:
-    # component is missing medicine_dc (the blast radius point).
-    # We patch litellm.acompletion directly so the real generate_harvest_fallback
-    # runs its validator.
     class _FakeResp:
         class _Choice:
             class _Msg:
                 content = _json.dumps({
                     "monster": "Bogeyman",
-                    "level": 5,
-                    "components": [{"type": "Hide", "craftable": []}],  # no medicine_dc
+                    "level": 5,  # DC_BY_LEVEL[5] == 20
+                    "components": [
+                        {"type": "Hide", "craftable": [
+                            {"name": "Leather armor", "crafting_dc": 15, "value": "2 gp"}
+                        ]}  # no medicine_dc — must be filled from level
+                    ],
                 })
             message = _Msg()
         choices = [_Choice()]
@@ -506,7 +506,50 @@ async def test_harvest_llm_malformed_output_graceful_500():
                 "/harvest",
                 json={"names": ["Bogeyman"], "user_id": "u"},
             )
-    # 500 (not 200, not unhandled server crash) and NO cache write.
+    assert resp.status_code == 200
+    body = resp.json()
+    comp = body["monsters"][0]["components"][0]
+    assert comp["medicine_dc"] == 20  # filled from DC_BY_LEVEL[5]
+    assert mock_obs.put_note.await_count == 1  # cache IS written
+
+
+async def test_harvest_llm_truly_malformed_500():
+    """LLM returns unrepairable shape (components not a list) → 500 without cache write (CR-02).
+
+    The clamp can fill missing medicine_dc from DC_BY_LEVEL, but cannot invent
+    a components list. This case exercises the CR-02 validator proper — the
+    last defense against shapes the clamp can't repair.
+    """
+    import json as _json
+
+    class _FakeResp:
+        class _Choice:
+            class _Msg:
+                content = _json.dumps({
+                    "monster": "Bogeyman",
+                    "level": 5,
+                    "components": "not-a-list",  # unrepairable
+                })
+            message = _Msg()
+        choices = [_Choice()]
+
+    async def _fake_acompletion(**_kwargs):
+        return _FakeResp()
+
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=None)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    stub_tables = _make_stub_tables()
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.harvest.obsidian", mock_obs), \
+         patch("app.routes.harvest.harvest_tables", stub_tables), \
+         patch("app.llm.litellm.acompletion", new=_fake_acompletion):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/harvest",
+                json={"names": ["Bogeyman"], "user_id": "u"},
+            )
     assert resp.status_code == 500
     assert mock_obs.put_note.await_count == 0
 

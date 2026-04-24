@@ -302,17 +302,29 @@ async def generate_harvest_fallback(
     parsed["source"] = "llm-generated"
     parsed["verified"] = False
 
-    # DC sanity clamp (Pitfall 4) — trust the table, not the LLM.
+    # DC sanity clamp (Pitfall 4) — trust the table, not the LLM. Handles three
+    # LLM-output cases: (1) correct integer → keep; (2) integer but wrong →
+    # overwrite with warning; (3) missing or non-int → inject from DC_BY_LEVEL
+    # (some smaller models omit the field even when the system prompt requires
+    # it). Case 3 prevents CR-02 validation from rejecting an otherwise-usable
+    # payload when the monster's level is present and canonical.
     level = parsed.get("level")
     if isinstance(level, int) and level in DC_BY_LEVEL:
         expected_dc = DC_BY_LEVEL[level]
         for comp in parsed.get("components", []) or []:
             if isinstance(comp, dict):
                 observed = comp.get("medicine_dc")
-                if isinstance(observed, int) and observed != expected_dc:
+                if isinstance(observed, int):
+                    if observed != expected_dc:
+                        logger.warning(
+                            "LLM harvest DC mismatch for %s: level=%d observed_dc=%d expected=%d (overwriting)",
+                            monster_name, level, observed, expected_dc,
+                        )
+                        comp["medicine_dc"] = expected_dc
+                else:
                     logger.warning(
-                        "LLM harvest DC mismatch for %s: level=%d observed_dc=%d expected=%d (overwriting)",
-                        monster_name, level, observed, expected_dc,
+                        "LLM omitted medicine_dc for %s (level=%d); injecting %d from DC_BY_LEVEL",
+                        monster_name, level, expected_dc,
                     )
                     comp["medicine_dc"] = expected_dc
 

@@ -77,9 +77,11 @@ class _EmbedStub:
 _discord_stub.Embed = _EmbedStub
 _discord_stub.Color = type("Color", (), {
     "green": classmethod(lambda cls: cls()),
+    "dark_green": classmethod(lambda cls: cls()),
     "orange": classmethod(lambda cls: cls()),
     "red": classmethod(lambda cls: cls()),
     "gold": classmethod(lambda cls: cls()),
+    "dark_gold": classmethod(lambda cls: cls()),
     "blue": classmethod(lambda cls: cls()),
 })
 _discord_stub.app_commands = _app_commands_stub
@@ -123,9 +125,10 @@ async def test_http_harvest_flows(
     async with httpx.AsyncClient(timeout=120.0) as client:
 
         async def post_harvest(names: list[str], user: str = "uat-harvest") -> httpx.Response:
+            # sentinel-core proxy route: POST /modules/{name}/{path}
             return await client.post(
-                f"{sentinel_url}/modules/pathfinder/run",
-                json={"path": "harvest", "payload": {"names": names, "user_id": user}},
+                f"{sentinel_url}/modules/pathfinder/harvest",
+                json={"names": names, "user_id": user},
                 headers=auth,
             )
 
@@ -355,13 +358,13 @@ async def test_container_smoke(sentinel_url: str, sentinel_key: str) -> None:
         except Exception as exc:
             record("UAT-8 sentinel-core /health", False, str(exc))
 
-        # Module registry lists pathfinder with 13 routes
+        # Module registry lists pathfinder with 13 routes — GET /modules returns
+        # the in-memory registry list (Phase 27 module proxy pattern).
         try:
-            r = await client.get(f"{sentinel_url}/status", headers=auth)
+            r = await client.get(f"{sentinel_url}/modules", headers=auth)
             if r.status_code == 200:
-                data = r.json()
-                modules = data.get("modules") or {}
-                pf = modules.get("pathfinder") or {}
+                modules = r.json() or []
+                pf = next((m for m in modules if m.get("name") == "pathfinder"), None) or {}
                 routes = pf.get("routes") or []
                 has_harvest = any(
                     (route.get("path") if isinstance(route, dict) else route) == "harvest"
@@ -371,9 +374,9 @@ async def test_container_smoke(sentinel_url: str, sentinel_key: str) -> None:
                        len(routes) == 13 and has_harvest,
                        f"routes={len(routes)}, harvest_present={has_harvest}")
             else:
-                record("UAT-8 /status returned", False, f"status={r.status_code}")
+                record("UAT-8 GET /modules returned", False, f"status={r.status_code}")
         except Exception as exc:
-            record("UAT-8 /status registry check", False, str(exc))
+            record("UAT-8 /modules registry check", False, str(exc))
 
 
 # ── Teardown — clean harvest UAT artifacts ──
