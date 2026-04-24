@@ -706,7 +706,7 @@ async def _route_message(
     message: str,
     attachments: list | None = None,
     channel=None,
-) -> str:
+) -> "str | dict":
     """
     Unified message router used by both /sentask and on_message thread replies.
 
@@ -742,7 +742,7 @@ async def handle_sentask_subcommand(
     user_id: str,
     attachments: list | None = None,
     channel=None,
-) -> str:
+) -> "str | dict":
     """
     Route `:subcommand` prefixed messages to the correct handler.
     Returns a response string in all cases — never raises.
