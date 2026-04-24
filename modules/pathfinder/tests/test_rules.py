@@ -246,12 +246,12 @@ def test_chunker_html_uuid_refs_resolved():
 
 
 # ---------------------------------------------------------------------------
-# RAG retrieval — RESEARCH §Threshold Calibration (0.55 retrieval / 0.80 reuse)
+# RAG retrieval — thresholds (Wave-2 calibrated retrieval=0.65 / D-05 reuse=0.80)
 # ---------------------------------------------------------------------------
 
 
 def test_retrieve_above_threshold_returns_chunk():
-    """Query vector aligned with a chunk row returns that chunk above 0.55 threshold."""
+    """Query vector aligned with a chunk row returns that chunk (threshold arg=0.55 for math)."""
     import numpy as np
 
     from app.rules import RuleChunk, RulesIndex, retrieve
@@ -284,7 +284,7 @@ def test_retrieve_above_threshold_returns_chunk():
 
 
 def test_retrieve_below_threshold_returns_empty():
-    """Query orthogonal to all corpus vectors returns empty list (below 0.55)."""
+    """Query orthogonal to all corpus vectors returns empty list (below threshold arg=0.55)."""
     import numpy as np
 
     from app.rules import RuleChunk, RulesIndex, retrieve
@@ -652,16 +652,25 @@ def test_coerce_topic_rejects_unknown_returns_misc():
 
 
 # ---------------------------------------------------------------------------
-# D-05 threshold constants — 0.55 retrieval / 0.80 reuse
+# Threshold constants — RETRIEVAL (0.65 Wave-2 calibrated) + REUSE (D-05 0.80)
 # ---------------------------------------------------------------------------
 
 
 def test_retrieval_threshold_constants_present():
-    """D-05: REUSE_SIMILARITY_THRESHOLD == 0.80 and RETRIEVAL_SIMILARITY_THRESHOLD == 0.55."""
+    """Thresholds: RETRIEVAL (Wave-2 calibrated) + REUSE (D-05 user-locked).
+
+    RETRIEVAL_SIMILARITY_THRESHOLD was calibrated in Wave 2 against the 20-query
+    fixture (tests/fixtures/rules_threshold_calibration.json) using LM Studio's
+    text-embedding-nomic-embed-text-v1.5 — the F1-maximizer is 0.65 (see the
+    Plan 33-03 SUMMARY §Threshold Calibration for the full sweep table).
+
+    REUSE_SIMILARITY_THRESHOLD=0.80 is D-05 user-locked (CONTEXT.md) and must
+    never drift without a new user decision.
+    """
     from app.rules import (
         RETRIEVAL_SIMILARITY_THRESHOLD,
         REUSE_SIMILARITY_THRESHOLD,
     )
 
-    assert RETRIEVAL_SIMILARITY_THRESHOLD == 0.55
+    assert RETRIEVAL_SIMILARITY_THRESHOLD == 0.65
     assert REUSE_SIMILARITY_THRESHOLD == 0.80

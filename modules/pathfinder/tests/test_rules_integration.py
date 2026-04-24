@@ -172,7 +172,7 @@ async def test_first_query_writes_cache_second_reads_cache():
 
 
 async def test_corpus_hit_writes_cache_with_marker_source():
-    """RUL-01 full path: retrieval ≥ 0.55 → LLM composes source ruling."""
+    """RUL-01 full path: retrieval ≥ RETRIEVAL_SIMILARITY_THRESHOLD → LLM composes source ruling."""
 
     vault = StatefulMockVault({})
     stub_index = _make_stub_index()
