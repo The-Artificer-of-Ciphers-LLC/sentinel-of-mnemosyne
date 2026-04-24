@@ -14,19 +14,23 @@ Endpoints:
   POST /npc/stat           — return structured stat block data (OUT-03)
   POST /npc/pdf            — generate PDF stat card (OUT-04, embeds token image)
   POST /npc/say            — in-character NPC dialogue with mood tracking (DLG-01..03)
+  POST /harvest            — monster harvest report with Medicine/Crafting DCs and vendor values (HRV-01..06)
 
 Startup:
   lifespan calls POST /modules/register on sentinel-core with exponential backoff retry.
   If all 5 attempts fail, module exits with code 1 (Docker restart policy brings it back).
-  lifespan also creates a persistent ObsidianClient on app.state for NPC CRUD endpoints (D-27).
+  lifespan also creates a persistent ObsidianClient on app.state for NPC CRUD endpoints (D-27),
+  and loads the harvest-tables.yaml seed into the harvest route's module-level singleton.
 
 Per D-15 through D-18 in Phase 28 CONTEXT.md; updated in Phase 29 for NPC CRUD,
-extended in Phase 30 for NPC outputs (OUT-01..OUT-04).
+extended in Phase 30 for NPC outputs (OUT-01..OUT-04), Phase 31 for dialogue,
+and Phase 32 for monster harvesting (HRV-01..06).
 """
 import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
 
 import httpx
@@ -34,8 +38,11 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app.harvest import load_harvest_tables
 from app.obsidian import ObsidianClient
+from app.routes.harvest import router as harvest_router
 from app.routes.npc import router as npc_router
+import app.routes.harvest as _harvest_module
 import app.routes.npc as _npc_module
 
 logging.basicConfig(level=logging.INFO)
@@ -44,7 +51,7 @@ logger = logging.getLogger(__name__)
 # Registration payload per D-17.
 # name: "pathfinder" — module registry name (D-11). Different from Docker profile name "pf2e" (D-12).
 # base_url: "http://pf2e-module:8000" — Docker service name must match (D-17, Pitfall 3).
-# All 5 NPC routes registered upfront (Pitfall 7 — all routes must appear at startup).
+# All routes registered upfront (Pitfall 7 — all routes must appear at startup).
 REGISTRATION_PAYLOAD = {
     "name": "pathfinder",
     "base_url": "http://pf2e-module:8000",
@@ -61,6 +68,7 @@ REGISTRATION_PAYLOAD = {
         {"path": "npc/stat", "description": "Return structured stat block data (OUT-03)"},
         {"path": "npc/pdf", "description": "Generate PDF stat card (OUT-04)"},
         {"path": "npc/say", "description": "In-character NPC dialogue with mood tracking (DLG-01..03)"},
+        {"path": "harvest", "description": "Monster harvest report with Medicine/Crafting DCs and vendor values (HRV-01..06)"},
     ],
 }
 
@@ -92,7 +100,7 @@ async def _register_with_retry(client: httpx.AsyncClient) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Startup: register with Sentinel Core + create persistent ObsidianClient."""
+    """Startup: register with Sentinel Core + create persistent ObsidianClient + load harvest seed."""
     # Registration uses a short-lived client (registration is a one-shot op)
     async with httpx.AsyncClient() as client:
         await _register_with_retry(client)
@@ -108,9 +116,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
         app.state.obsidian_client = obsidian_client
         _npc_module.obsidian = obsidian_client
+        # Phase 32: wire the harvest route's module-level singletons (PATTERNS.md §3 Analog D).
+        # load_harvest_tables raises fail-fast on missing or malformed YAML — Docker restart
+        # policy surfaces the problem at startup rather than at first /harvest request.
+        _harvest_module.obsidian = obsidian_client
+        _harvest_module.harvest_tables = load_harvest_tables(
+            Path(__file__).parent.parent / "data" / "harvest-tables.yaml"
+        )
         yield
     # obsidian_http_client closes when the async with block exits (on shutdown)
     _npc_module.obsidian = None
+    _harvest_module.obsidian = None
+    _harvest_module.harvest_tables = None
 
 
 app = FastAPI(
@@ -121,6 +138,7 @@ app = FastAPI(
 )
 
 app.include_router(npc_router)
+app.include_router(harvest_router)
 
 
 @app.get("/healthz")
