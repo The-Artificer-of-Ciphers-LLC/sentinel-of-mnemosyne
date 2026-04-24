@@ -98,7 +98,13 @@ class ObsidianClient:
 
         return await self._safe_request(_inner(), None, f"get_binary({path})")
 
-    async def list_directory(self, prefix: str) -> list[str]:
+    async def list_directory(
+        self,
+        prefix: str,
+        *,
+        _depth: int = 0,
+        _max_depth: int = 8,
+    ) -> list[str]:
         """Recursively list full paths of files under a vault directory prefix.
 
         Used by the rules-engine reuse-match scan (D-05) and the /rule/show,
@@ -112,7 +118,19 @@ class ObsidianClient:
 
         Returns empty list on 404 or any error (silent fallback, mirrors
         get_note's degrade-gracefully shape).
+
+        WR-06: max recursion depth bounded at 8 to prevent stack overflow on
+        pathological vault structures (symlink loops, plugin-mounted dynamic
+        directories). Emits a WARN log on overrun rather than silent return.
+        Depth 8 is generous for mnemosyne/pf2e/rulings/{topic}/... —
+        normal usage fits in depth 2-3.
         """
+        if _depth > _max_depth:
+            logger.warning(
+                "list_directory(%s) hit max recursion depth %d — truncating",
+                prefix, _max_depth,
+            )
+            return []
         # Ensure trailing slash — Obsidian REST distinguishes dir vs file by slash.
         dir_path = prefix if prefix.endswith("/") else f"{prefix}/"
 
@@ -139,7 +157,9 @@ class ObsidianClient:
                 full = f"{dir_path}{child}"
                 if child.endswith("/"):
                     # Recurse into subdirectory; strip inner trailing slash on the join.
-                    sub = await self.list_directory(full)
+                    sub = await self.list_directory(
+                        full, _depth=_depth + 1, _max_depth=_max_depth
+                    )
                     out.extend(sub)
                 else:
                     out.append(full)
