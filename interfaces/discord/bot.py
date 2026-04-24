@@ -185,7 +185,7 @@ _VALID_RELATIONS = frozenset({"knows", "trusts", "hostile-to", "allied-with", "f
 # the noun guard in _pf_dispatch and the usage/unknown-noun error strings
 # so adding a new noun (e.g. `spell`) is a one-line change rather than a
 # scavenger hunt through two mirrored literals.
-_PF_NOUNS = frozenset({"npc", "harvest"})
+_PF_NOUNS = frozenset({"npc", "harvest", "rule"})
 
 # Phase 31 dialogue: pair `:pf npc say ...` user messages with their bot quote-block replies
 # in a thread. Capture group 1 = names (must NOT contain newlines or pipes — they delimit the
@@ -373,6 +373,84 @@ def build_harvest_embed(data: dict) -> "discord.Embed":
     return embed
 
 
+def build_ruling_embed(data: dict) -> "discord.Embed":
+    """Build a Discord Embed from POST /modules/pathfinder/rule/query response (D-08, D-09).
+
+    Input shape (D-08):
+      {
+        "question": str, "answer": str, "why": str,
+        "source": str | None, "citations": list[dict],
+        "marker": "source" | "generated" | "declined",
+        "topic": str | None,
+        "reused": bool (optional), "reuse_note": str (optional),
+      }
+
+    Renders four logical fields:
+      * title = question (truncated to 250 chars)
+      * description = (reuse_note italic if reused) + banner + answer
+      * Why field (always, inline=False)
+      * Source field (inline=False, only when source non-null)
+      * Citations field (inline=False, only when citations non-empty)
+      * footer = "topic: <topic> | ORC license (Paizo) — Foundry pf2e"
+
+    Color:
+      * dark_green — marker="source"
+      * dark_gold  — marker="generated"
+      * red        — marker="declined"
+
+    L-5: Colors rely on discord.Color.{dark_green, dark_gold, red} — all three
+    are available in interfaces/discord/tests/conftest.py's Color stub (Wave 0
+    added dark_gold + red). This function does NOT stub or shim colors itself.
+    """
+    marker = data.get("marker", "generated")
+    question = data.get("question", "") or ""
+    answer = data.get("answer", "") or ""
+    why = data.get("why", "") or ""
+    source_str = data.get("source")
+    citations = data.get("citations", []) or []
+    reused = bool(data.get("reused", False))
+    reuse_note = data.get("reuse_note", "") or ""
+    topic = data.get("topic") or "?"
+
+    title = question[:250] if question else "Rules Ruling"
+
+    description_parts: list[str] = []
+    if reused and reuse_note:
+        description_parts.append(f"_{reuse_note}_")
+    if marker == "generated":
+        description_parts.append("⚠ **[GENERATED — verify]**")
+    elif marker == "declined":
+        description_parts.append("🚫 PF1/pre-Remaster query declined")
+    if answer:
+        description_parts.append(answer)
+    description = "\n\n".join(description_parts)[:4000]
+
+    color = {
+        "source": discord.Color.dark_green(),
+        "generated": discord.Color.dark_gold(),
+        "declined": discord.Color.red(),
+    }.get(marker, discord.Color.dark_gold())
+
+    embed = discord.Embed(title=title, description=description, color=color)
+    if why:
+        embed.add_field(name="Why", value=why[:1024], inline=False)
+    if source_str:
+        embed.add_field(name="Source", value=source_str[:1024], inline=False)
+    if citations:
+        cite_lines: list[str] = []
+        for c in citations[:3]:  # cap at 3 for embed space
+            line = f"• {c.get('book', '?')}"
+            if c.get("page"):
+                line += f" p. {c['page']}"
+            line += f" — {c.get('section', '?')}"
+            if c.get("url"):
+                line += f" | {c['url']}"
+            cite_lines.append(line)
+        embed.add_field(name="Citations", value="\n".join(cite_lines)[:1024], inline=False)
+    embed.set_footer(text=f"topic: {topic} | ORC license (Paizo) — Foundry pf2e")
+    return embed
+
+
 async def _pf_dispatch(
     args: str,
     user_id: str,
@@ -401,7 +479,8 @@ async def _pf_dispatch(
         # multi-verb noun in the current surface.
         return (
             "Usage: `:pf npc <create|update|show|relate|import|say> ...` "
-            "or `:pf harvest <Name>[,<Name>...]`"
+            "or `:pf harvest <Name>[,<Name>...]` "
+            "or `:pf rule <question>|show <topic>|history [N]|list`"
         )
     noun, verb = parts[0].lower(), parts[1].lower()
     rest = parts[2] if len(parts) > 2 else ""
@@ -441,6 +520,120 @@ async def _pf_dispatch(
                     "content": "",
                     "embed": build_harvest_embed(result),
                 }
+
+            if noun == "rule":
+                # D-10 sub-verbs: <free text> (default) | show <topic> | history [N] | list.
+                # `verb` here is the second whitespace-token after `rule`. If it
+                # matches a reserved sub-verb token we route to that endpoint;
+                # otherwise the entire post-noun string is the free-text query.
+                reserved = {"show", "history", "list"}
+                if verb in reserved:
+                    sub_verb = verb
+                    sub_arg = rest.strip()
+                else:
+                    sub_verb = "query"
+                    # Entire post-noun string is the query (verb + rest re-joined).
+                    full_tail = " ".join(parts[1:]).strip()
+                    sub_arg = full_tail
+
+                if sub_verb == "query" and not sub_arg:
+                    return (
+                        "Usage: `:pf rule <question>` | "
+                        "`:pf rule show <topic>` | "
+                        "`:pf rule history [N]` | "
+                        "`:pf rule list`"
+                    )
+
+                if sub_verb == "list":
+                    result = await _sentinel_client.post_to_module(
+                        "modules/pathfinder/rule/list", {}, http_client,
+                    )
+                    topics = result.get("topics", []) or [] if isinstance(result, dict) else []
+                    if not topics:
+                        return "_No rulings cached yet._"
+                    lines = [
+                        f"• `{t.get('slug', '?')}` ({t.get('count', 0)} rulings, last active {str(t.get('last_activity', 'never'))[:19]})"
+                        for t in topics
+                    ]
+                    return "**Rule topics with cached rulings:**\n" + "\n".join(lines)
+
+                if sub_verb == "show":
+                    if not sub_arg:
+                        return "Usage: `:pf rule show <topic>`"
+                    result = await _sentinel_client.post_to_module(
+                        "modules/pathfinder/rule/show",
+                        {"topic": sub_arg},
+                        http_client,
+                    )
+                    rulings = result.get("rulings", []) or [] if isinstance(result, dict) else []
+                    if not rulings:
+                        return f"_No rulings under `{sub_arg}`._"
+                    lines = [
+                        f"• `{r.get('hash', '?')}` — {(r.get('question', '') or '')[:80]} [{r.get('marker', '?')}]"
+                        for r in rulings
+                    ]
+                    return f"**Rulings under `{sub_arg}`** ({len(rulings)}):\n" + "\n".join(lines)
+
+                if sub_verb == "history":
+                    n = 10
+                    if sub_arg:
+                        try:
+                            n = max(1, min(100, int(sub_arg)))
+                        except ValueError:
+                            pass
+                    result = await _sentinel_client.post_to_module(
+                        "modules/pathfinder/rule/history",
+                        {"n": n},
+                        http_client,
+                    )
+                    rulings = result.get("rulings", []) or [] if isinstance(result, dict) else []
+                    if not rulings:
+                        return "_No rulings yet._"
+                    lines = [
+                        f"• {str(r.get('last_reused_at', ''))[:19]} — `{r.get('topic', '?')}/{(r.get('question', '') or '')[:60]}` → {r.get('marker', '?')}"
+                        for r in rulings
+                    ]
+                    return f"**Recent rulings (N={n}):**\n" + "\n".join(lines)
+
+                # sub_verb == "query" — D-11 slow path with placeholder+edit UX.
+                # L-9: the bot's httpx.AsyncClient inherits the default 5s connect
+                # timeout — a fresh embed + retrieve + LLM compose can take 5-15s
+                # so the placeholder hides the latency from the DM. The sentinel-core
+                # proxy's own timeout (configured upstream) is the real per-call ceiling.
+                placeholder = None
+                if channel is not None and hasattr(channel, "send"):
+                    try:
+                        placeholder = await channel.send(
+                            f"🤔 _Thinking on PF2e rules: {sub_arg[:80]}..._"
+                        )
+                    except Exception:
+                        placeholder = None
+                try:
+                    result = await _sentinel_client.post_to_module(
+                        "modules/pathfinder/rule/query",
+                        {"query": sub_arg, "user_id": user_id},
+                        http_client,
+                    )
+                    embed = build_ruling_embed(result)
+                    if placeholder is not None and hasattr(placeholder, "edit"):
+                        try:
+                            await placeholder.edit(content="", embed=embed)
+                            # Suppressed — outer handler does NOT re-send.
+                            return {"type": "suppressed", "content": "", "embed": embed}
+                        except Exception:
+                            pass
+                    return {"type": "embed", "content": "", "embed": embed}
+                except Exception as exc:
+                    if placeholder is not None and hasattr(placeholder, "edit"):
+                        try:
+                            await placeholder.edit(
+                                content=f"⚠ Rules query failed — {exc}",
+                                embed=None,
+                            )
+                            return {"type": "suppressed", "content": "", "embed": None}
+                        except Exception:
+                            pass
+                    raise
 
             if verb == "create":
                 # Split name | description on first pipe (D-05, Pitfall 5: maxsplit=1)
