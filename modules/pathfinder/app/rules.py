@@ -71,7 +71,7 @@ __all__ = [
 
 # --- Module constants ---
 
-RETRIEVAL_SIMILARITY_THRESHOLD: float = 0.55   # RESEARCH §Retrieval Threshold
+RETRIEVAL_SIMILARITY_THRESHOLD: float = 0.65   # Calibrated Wave 2 (see 33-03-SUMMARY §Threshold Calibration)
 REUSE_SIMILARITY_THRESHOLD: float = 0.80       # D-05 — user-locked
 RULING_CACHE_PATH_PREFIX: str = "mnemosyne/pf2e/rulings"  # D-04
 MAX_QUERY_CHARS: int = 500
