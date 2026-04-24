@@ -36,8 +36,22 @@ REPO_API = "https://api.github.com/repos/foundryvtt/pf2e/contents/packs/pf2e/pat
 
 
 def fetch_level_1_to_3_monsters() -> list[dict]:
-    """Return [{name, level, slug}] for all L1-L3 monsters in pathfinder-monster-core."""
-    with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+    """Return [{name, level, slug}] for all L1-L3 monsters in pathfinder-monster-core.
+
+    IN-04: when GITHUB_TOKEN is set in the environment, send it as an
+    Authorization header. Anonymous GitHub Contents API traffic is capped at
+    60 req/hr per IP; a run hitting ~200 files blows the quota and the except
+    branch below swallows the HTTPError, silently producing a partial roster.
+    An authenticated token raises the cap to 5000/hr. Also emits a WARNING
+    to stderr if the final count is below 50 — a signal the quota was hit
+    even without the token path.
+    """
+    headers: dict[str, str] = {}
+    gh_token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if gh_token:
+        headers["Authorization"] = f"token {gh_token}"
+
+    with httpx.Client(timeout=30.0, follow_redirects=True, headers=headers) as client:
         listing_resp = client.get(REPO_API)
         listing_resp.raise_for_status()
         listing = listing_resp.json()
@@ -72,6 +86,15 @@ def fetch_level_1_to_3_monsters() -> list[dict]:
                 continue
             out.append({"name": doc.get("name", slug), "level": level, "slug": slug})
     out.sort(key=lambda m: (m["level"], m["name"]))
+    # IN-04: low-count warning. The known-good run produces 160 monsters; anything
+    # below 50 almost certainly means the anonymous rate-limit was hit mid-walk
+    # and the DM ended up with a truncated roster without noticing.
+    if len(out) < 50:
+        print(
+            f"# WARNING: only {len(out)} monsters fetched — likely hit GitHub API "
+            f"rate limit. Set GITHUB_TOKEN to raise the cap to 5000/hr.",
+            file=sys.stderr,
+        )
     return out
 
 
