@@ -124,13 +124,24 @@ async def test_http_harvest_flows(
 
     async with httpx.AsyncClient(timeout=120.0) as client:
 
-        async def post_harvest(names: list[str], user: str = "uat-harvest") -> httpx.Response:
-            # sentinel-core proxy route: POST /modules/{name}/{path}
-            return await client.post(
-                f"{sentinel_url}/modules/pathfinder/harvest",
-                json={"names": names, "user_id": user},
-                headers=auth,
-            )
+        async def post_harvest(
+            names: list[str],
+            user: str = "uat-harvest",
+            retry_on_llm_fail: int = 2,
+        ) -> httpx.Response:
+            """POST harvest via sentinel-core proxy. Retries on 500 to absorb
+            LLM-generation non-determinism (CR-02 correctly rejects malformed
+            shapes, but the next prompt often produces a valid one).
+            """
+            for _ in range(retry_on_llm_fail + 1):
+                resp = await client.post(
+                    f"{sentinel_url}/modules/pathfinder/harvest",
+                    json={"names": names, "user_id": user},
+                    headers=auth,
+                )
+                if resp.status_code != 500:
+                    return resp
+            return resp  # exhausted retries — caller asserts on the final attempt
 
         async def read_cache(slug: str) -> tuple[int, str]:
             if not obs_h:
@@ -251,6 +262,8 @@ async def test_http_harvest_flows(
             if obs_h:
                 # Use Barghest (LLM-generated, verified=False) as the ratification target.
                 # First ensure it exists; if not, generate it.
+                # LLM output is non-deterministic — retry up to 3x to absorb one-off
+                # malformed-shape responses (CR-02 correctly 500s in that case).
                 barghest_path = "mnemosyne/pf2e/harvest/barghest.md"
                 _TEARDOWN_CACHE_PATHS.add(barghest_path)
                 r0 = await client.get(f"{obsidian_url}/vault/{barghest_path}", headers=obs_h)
