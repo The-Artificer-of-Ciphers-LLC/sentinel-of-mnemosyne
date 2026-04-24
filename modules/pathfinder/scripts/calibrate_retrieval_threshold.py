@@ -42,12 +42,16 @@ import numpy as np
 _MODULE_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_MODULE_ROOT))
 
+from app.config import settings  # noqa: E402
 from app.llm import embed_texts  # noqa: E402
 from app.rules import (  # noqa: E402
     RuleChunk,
     cosine_similarity,
     load_rules_corpus,
 )
+
+# IN-04: use the same model id production uses (no "openai/" prefix).
+_DEFAULT_EMBED_MODEL = settings.rules_embedding_model
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
 
@@ -84,8 +88,11 @@ async def main() -> int:
     )
     parser.add_argument(
         "--model",
-        default="openai/text-embedding-nomic-embed-text-v1.5",
-        help="Embedding model id (with provider prefix)",
+        default=_DEFAULT_EMBED_MODEL,
+        help=(
+            "Embedding model id (defaults to settings.rules_embedding_model, "
+            "matching production by construction — IN-04)"
+        ),
     )
     parser.add_argument(
         "--api-base",
