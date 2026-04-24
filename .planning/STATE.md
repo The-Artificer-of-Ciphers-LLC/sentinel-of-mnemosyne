@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: The Dungeon
 status: in_progress
-stopped_at: Phase 31 complete (Dialogue Engine) — verifier passed 12/12, 8/8 review findings fixed
-last_updated: "2026-04-23T21:30:00.000Z"
-last_activity: 2026-04-23 -- Phase 31 (Dialogue Engine) complete — 5 plans executed across 4 waves, 26/26 RED→GREEN, all 8 review findings fixed (5 warnings + 3 info), DLG-01..03 shipped
+stopped_at: Phase 32 (Monster Harvesting) PLANNED (5 plans, 5 waves serial) — ready to execute
+last_updated: "2026-04-23T23:00:00.000Z"
+last_activity: 2026-04-23 -- Phase 32 planning complete — discuss + research + plan + plan-checker PASS iter 2/3; 31 test stubs + 12 tasks across 5 waves; serial wave DAG to avoid rapidfuzz install race
 progress:
   total_phases: 26
   completed_phases: 13
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 31 (Dialogue Engine) — COMPLETE (5 plans, 4 waves, 26/26 tests GREEN)
-Next Phase: 32 — Monster Harvesting (HRV-01..06) OR 33 — Rules Engine OR 34 — Session Notes
+Phase: 32 (Monster Harvesting) — PLANNED (5 plans, 5 waves serial), ready to execute
+Next Phase: 32 — Monster Harvesting (execute)
 Milestone: v0.5 The Dungeon — IN PROGRESS
-Status: Phase 31 shipped — verifier passed 12/12 must_haves, code-review produced 8 findings (0 blocker + 5 warning + 3 info), all fixed in commits 01aabd9..3beeaf6; thread-history plumb-through (WR-01) now active in production dispatch
-Last activity: 2026-04-23 -- Phase 31 complete; run /gsd-discuss-phase 32 or 33 or 34 to continue v0.5
+Status: Phase 32 planning complete — CONTEXT.md (5 locked decisions inc. D-01 reshape after F-01 research finding), RESEARCH.md (1113 lines), PATTERNS.md (929 lines), VALIDATION.md (12 task rows), 5 PLAN.md files. Plan-checker PASS on iteration 2/3 (after fixing 3 blockers + 5 warnings + 3 info items).
+Last activity: 2026-04-23 -- Phase 32 planning complete; ready for /gsd-execute-phase 32
 
 ## Milestone Progress
 
@@ -143,6 +143,8 @@ Last session: 2026-04-23
 Stopped at: Phase 31 complete — 26/26 tests GREEN, 8/8 review findings fixed
 Resume file: .planning/phases/31-dialogue-engine/31-VERIFICATION.md (for audit) or pick next v0.5 phase
 
-**Next Phase:** 32 (Monster Harvesting, HRV-01..06) — depends on Phase 28 — or 33 Rules Engine / 34 Session Notes (user picks)
+**Next Phase:** 32 (Monster Harvesting, HRV-01..06) — PLANNED, ready for /gsd-execute-phase 32
 
 **Completed Phase:** 31 (Dialogue Engine) — 5 plans / 4 waves — 2026-04-23T21:30:00.000Z — DLG-01..03 shipped
+
+**Planned Phase:** 32 (Monster Harvesting) — 5 plans / 5 waves serial — 2026-04-23T23:00:00.000Z — plan-checker PASS iter 2/3
