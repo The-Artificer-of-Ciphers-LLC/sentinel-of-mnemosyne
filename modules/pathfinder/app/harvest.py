@@ -351,7 +351,11 @@ def _parse_harvest_cache(note_text: str, name: str) -> dict | None:
         if current is not None:
             components.append(current)
         return {
-            "monster": fm.get("monster", name),
+            # WR-02: `"monster" not in fm` guard above (line ~296) guarantees
+            # this key is present; the previous `fm.get("monster", name)`
+            # fallback was unreachable. `name` is still passed in purely for
+            # the error-log branch so diagnosability is preserved.
+            "monster": fm["monster"],
             "level": fm.get("level", 1),
             "verified": bool(fm.get("verified", False)),
             "source": fm.get("source", "cache"),
