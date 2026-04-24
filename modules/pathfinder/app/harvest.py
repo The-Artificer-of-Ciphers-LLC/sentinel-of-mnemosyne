@@ -278,10 +278,18 @@ def _aggregate_by_component(per_monster: list[dict]) -> list[dict]:
                 # cached note or malformed component no longer crashes here.
                 "medicine_dc": c.get("medicine_dc", 0),
                 "monsters": [],
+                "_seen_monsters": set(),
                 "craftable": [],
                 "_seen_craftables": set(),
             })
-            entry["monsters"].append(m["monster"])
+            # WR-01: dedupe monster names per aggregated component. Without
+            # this, `:pf harvest Boar,Boar` (or any CSV with a duplicate)
+            # renders "From: Boar, Boar" and misleads the DM about how many
+            # kills fed the harvest.
+            m_name = m.get("monster")
+            if m_name and m_name not in entry["_seen_monsters"]:
+                entry["monsters"].append(m_name)
+                entry["_seen_monsters"].add(m_name)
             for craft in c.get("craftable", []) or []:
                 if not isinstance(craft, dict):
                     continue
@@ -293,9 +301,10 @@ def _aggregate_by_component(per_monster: list[dict]) -> list[dict]:
                 if craft_key not in entry["_seen_craftables"]:
                     entry["craftable"].append(craft)
                     entry["_seen_craftables"].add(craft_key)
-    # Strip internal bookkeeping key before return
+    # Strip internal bookkeeping keys before return
     for entry in agg.values():
         entry.pop("_seen_craftables", None)
+        entry.pop("_seen_monsters", None)
     return list(agg.values())
 
 
