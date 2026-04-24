@@ -15,14 +15,25 @@ Given a killed monster, produce a complete harvest report: harvestable component
 
 ## Locked Decisions
 
-### D-01: Data source — Foundry VTT `pf2e` system JSON, seeded for levels 1–3
+### D-01 (reshaped 2026-04-23 after research F-01): Hand-curated seed YAML
 
-- **Primary data:** https://github.com/foundryvtt/pf2e — the official Foundry VTT Pathfinder 2e system repo, containing canonical Paizo-licensed monster JSON under `packs/pathfinder-bestiary*/_source/` (and equivalent for Bestiary 2/3).
-- **Seed scope (v1):** Extract harvest/crafting data for **level 1–3 monsters only**. These cover the vast majority of early-play encounters; keeps the initial curation pass bounded.
-- **Storage location:** `modules/pathfinder/data/harvest-tables.yaml` (hand-typed from the Foundry JSON source, or a small scraper/normalizer — TBD in research).
-- **LLM role:** Fills gaps for monsters outside the seed (higher-level or variant creatures). All LLM-generated entries are marked `[GENERATED — verify]` (SC-4 contract).
+**Research finding F-01 reshaped this decision.** Live inspection of `foundryvtt/pf2e` confirmed the repo contains NO harvest-specific fields (no `harvest`, `loot`, `materials`, `parts`, `butcher`, `salvage` in any monster JSON or pack). PF2e harvesting is a Battlezoo 3rd-party mechanic, not canonical Paizo. Since Battlezoo was rejected, there is no machine-extractable canonical harvest data to pull.
 
-**Why:** The Foundry pf2e system is actively maintained, is canonical Paizo data under license, and already has structured JSON. Battlezoo "Monster Parts" was considered but rejected — non-canonical (3rd-party Roll For Combat) and per-monster data is prose-in-source-book, not table-shaped.
+**Reshaped decision:**
+- **Seed format:** Hand-curated `modules/pathfinder/data/harvest-tables.yaml` — one YAML entry per monster.
+- **Seed scope (v1):** Level 1–3 monsters from the PF2e Remaster Monster Core. Researcher estimates 25–40 entries; confirm via a ~10-min scraper before curation begins.
+- **Data the DM authors per entry:**
+  - Harvestable components (thematic; the DM's call for each monster — e.g. boar → hide, tusks, meat)
+  - What each component can be crafted into (potion / poison / armor / etc.)
+- **Data pulled from canonical sources (not re-authored):**
+  - **Monster identity** (name, level, traits) → Foundry pf2e monster JSON
+  - **Medicine DC to harvest** → canonical PF2e DC-by-level table (GM Core p.52, captured in 32-RESEARCH.md)
+  - **Crafting DC** → same DC-by-level table
+  - **Vendor values** → Foundry pf2e equipment pack (`system.price.value: {gp|sp|cp: int}`) — verified real data via research on `leather-armor.json`
+- **LLM role:** Unchanged. For monsters outside the level-1–3 seed, the LLM generates harvest data grounded in the captured DC-by-level table. All LLM entries marked `[GENERATED — verify]` (SC-4 contract).
+- **License:** PF2e Monster Core is ORC-licensed → redistribution permitted with attribution. Add attribution line to `harvest-tables.yaml` header and to the Discord embed footer.
+
+**Why:** Battlezoo and Foundry harvest-fields-in-JSON both turned out to be dead ends. Hand-curation is unavoidable for the "components per monster" dimension, but the research limits it to a bounded list (25–40 entries) and pulls the numeric DCs + vendor values from canonical sources so the DM doesn't re-author those. Starts small, grows organically as the DM plays.
 
 ### D-02: Unknown-monster fallback — fuzzy-match seed first, then LLM
 
@@ -78,7 +89,7 @@ For `/pf harvest Goblin Wolf Orc`:
 - FastAPI sub-service under `modules/pathfinder/` — new route `POST /modules/pathfinder/harvest` (or similar; exact shape for research).
 - Pydantic v2 request/response models. Mirror 31-04's `NPCSayRequest`/`NPCSayResponse` structure.
 - Obsidian writes via `obsidian.put_note` (GET-then-PUT). Never `patch_frontmatter_field` for new fields.
-- Discord side: `:pf harvest <name>[ <name>...]` dispatch branch in `_pf_dispatch` (`interfaces/discord/bot.py`). Follows the Phase 31 pipe/comma-parse pattern where applicable.
+- Discord side: `:pf harvest <Name>[,<Name>...]` dispatch branch in `_pf_dispatch` (`interfaces/discord/bot.py`). Comma-separated batch (consistent with Phase 31's `:pf npc say Name1,Name2 | ...` — trim whitespace per name to allow multi-word names).
 - Unknown-verb help and top-level usage in `_pf_dispatch` updated to include `harvest`.
 - All LLM calls go through the existing `litellm.acompletion` pattern with `timeout=60.0`. Reuse `_strip_code_fences` and other existing helpers in `llm.py`.
 
@@ -106,38 +117,35 @@ For `/pf harvest Goblin Wolf Orc`:
 4. **LLM hallucinated DCs:** LLM often invents plausible-but-wrong DCs. Prompt must ground with the PF2e DC-by-level table (Core Rulebook / GM Core). Seed the prompt with the level-to-DC chart.
 5. **Cache invalidation:** If the Foundry pf2e data updates (monsters rebalanced), seed YAML goes stale. Out of scope for v1; document as a future maintenance task.
 
-## Open Questions for Research Phase
+## Open Questions for Research Phase — RESOLVED
 
-- Exact path and schema inside `foundryvtt/pf2e` where harvest-relevant fields live (may require a short spike).
-- Fuzzy-match library choice (`rapidfuzz` vs `fuzzywuzzy` vs simple SequenceMatcher).
-- Whether to generate the seed YAML via a one-time scraper script or hand-type from the JSON (research picks based on field shape).
-- Whether to add a `levels: [1,2,3]` top-level field to the YAML for future multi-level expansion.
-- Exact LLM prompt scaffold — likely 1-shot with the PF2e DC-by-level table as context.
+Research round 1 (32-RESEARCH.md) resolved all five open questions:
+
+- ~~Exact path and schema inside `foundryvtt/pf2e` where harvest-relevant fields live~~ → **F-01**: no such fields exist. D-01 reshaped to hand-curated seed (see above).
+- ~~Fuzzy-match library choice~~ → **rapidfuzz >=3.14.0** with `fuzz.token_set_ratio` and `score_cutoff=85.0` (MIT, Python-3.12 wheels).
+- ~~Whether to generate the seed YAML via scraper or hand-type~~ → Hand-type the components/craftables dimension; script-extract the level+name list from Foundry pf2e for curation scaffolding.
+- ~~Whether to add a `levels` top-level field~~ → Yes — include `level: <int>` per entry in YAML so the DC-by-level table can be consulted at lookup time.
+- ~~Exact LLM prompt scaffold~~ → **1-shot with the verbatim DC-by-level table embedded** (captured in 32-RESEARCH.md "DC-by-Level Table" section). Planner embeds this into the prompt template.
+
+## Resolved in discuss-phase round 1
+
+- **Batch separator:** comma (not whitespace). Matches Phase 31 `:pf npc say Name1,Name2 | ...` — enables multi-word monster names via `"Giant Rat, Boar"` splitting. Parse rule: `[n.strip() for n in rest.split(",") if n.strip()]`.
+- **Cache refresh verb:** None in v1. Document in help text: "To re-query an LLM-generated entry, delete `mnemosyne/pf2e/harvest/<slug>.md` in Obsidian." Revisit if DMs request an explicit `:pf harvest --refresh` later.
 
 ## Downstream Agent Briefing
 
-**For `gsd-phase-researcher`:**
-- Priority research: Foundry pf2e repo layout — confirm harvest-field schema, list level 1–3 monsters, estimate YAML entry count.
-- Secondary: PF2e Remaster DC-by-level chart for the LLM fallback prompt.
-- Tertiary: fuzzy-match library selection.
-- Do NOT research Battlezoo Monster Parts JSON — that data source is rejected (D-01).
+**Research is done** (see 32-RESEARCH.md). The planner reads it directly.
 
 **For `gsd-planner`:**
-- Seed-extraction plan is likely its own wave-0 task (may be data-only, no tests).
+- Research is in `32-RESEARCH.md`. All key sections the planner expects (`## Standard Stack`, `## Architecture Patterns`, `## Don't Hand-Roll`, `## Common Pitfalls`, `## Code Examples`) are populated.
+- **Hand-curated seed scope caveat (D-01 reshape):** The Wave-1 seed task is hand-curation of the YAML, not JSON extraction. Planner should allocate realistic effort and include a lightweight pre-curation script (pull level + name for L1-3 creatures from Foundry pf2e packs) as a distinct sub-task so the DM has a scaffolded list to fill in.
 - Module route + Pydantic models + harvest logic mirror Phase 31's 31-04 structure (route + registration + 4 Pydantic models).
-- Discord dispatch branch mirrors Phase 31's 31-05 structure.
-- Obsidian cache write uses Phase 29's NPC write pattern (GET-then-PUT via `build_npc_markdown`-style helper — but write the equivalent for harvest entries).
-- Test stubs first (TDD, like Phase 31 Wave 0 RED).
+- Discord dispatch branch mirrors Phase 31's 31-05 structure; `_extract_thread_history` does NOT apply here (harvest is stateless lookup, not conversational).
+- Obsidian cache write uses Phase 29's NPC write pattern (GET-then-PUT via a new `build_harvest_markdown` helper — cache file shape suggested in RESEARCH.md).
+- Test stubs first (TDD, like Phase 31 Wave 0 RED). Suggested wave ordering in RESEARCH.md "Plan Skeleton Suggestion" section.
 
 ## Next Steps
 
 ```
-/gsd-plan-phase 32 ${GSD_WS}     # Research + plan in one pass
-```
-
-or if research-first:
-
-```
-/gsd-research-phase 32 ${GSD_WS}
-/gsd-plan-phase 32 ${GSD_WS}
+/gsd-plan-phase 32     # CONTEXT.md + RESEARCH.md both ready → plan is cheap
 ```
