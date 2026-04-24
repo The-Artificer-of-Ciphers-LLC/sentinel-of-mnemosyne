@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     litellm_model_structured: str | None = None
     litellm_model_fast: str | None = None
 
+    # Phase 33 rules engine — embedding model loaded in LM Studio for corpus + query embeds.
+    # Must match a model identifier that LM Studio's /v1/models endpoint reports as loaded.
+    rules_embedding_model: str = "text-embedding-nomic-embed-text-v1.5"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
