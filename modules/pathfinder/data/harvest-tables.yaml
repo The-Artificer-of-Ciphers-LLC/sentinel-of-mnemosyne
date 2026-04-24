@@ -1,0 +1,2423 @@
+# modules/pathfinder/data/harvest-tables.yaml
+# Hand-curated harvest table for PF2e level 1-3 monsters.
+# Medicine DCs from Table 10-5 DCs by Level (GM Core pg. 52).
+# Craftable vendor values from Foundry VTT pf2e equipment pack (ORC license).
+# Derived from Foundry VTT pf2e system (github.com/foundryvtt/pf2e) —
+# Paizo Monster Core / Equipment content used under ORC license with attribution.
+#
+# Roster source: data/harvest-roster.txt (produced by scripts/scaffold_harvest_seed.py).
+# Every roster entry has a corresponding monsters: entry below (no substitution).
+#
+# Medicine DC convention:
+#   - Default component uses the monster's level → DC from Table 10-5.
+#   - Unusual components (venom glands, etc.) may add Hard (+2) — document inline.
+#
+# Crafting DC convention:
+#   - Uses the CRAFTABLE item's level (not the monster's level) against Table 10-5.
+#   - Level-0 common equipment → DC 14; level-1 uncommon items → DC 15 (+2 uncommon).
+#
+# Level-range scope (v1): 1-3. Level-4+ monsters fall through to LLM fallback with
+# verified: false flag per D-02.
+#
+# Humanoid entries intentionally have components: [] — standard humanoid remains
+# offer no harvestable materials in v1. DM may ratify custom components later.
+
+version: "1.0"
+source: "foundryvtt-pf2e"
+levels:
+- 1
+- 2
+- 3
+monsters:
+- name: Air Scamp
+  level: 1
+  traits:
+  - air
+  - elemental
+  components:
+  - name: Air essence shard
+    medicine_dc: 15
+    craftable:
+    - name: Air talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Arbiter
+  level: 1
+  traits:
+  - aeon
+  - monitor
+  components:
+  - name: Feather
+    medicine_dc: 15
+    craftable:
+    - name: Fletching
+      crafting_dc: 14
+      value: 1 sp
+    - name: Ornament
+      crafting_dc: 14
+      value: 5 sp
+  - name: Celestial essence
+    medicine_dc: 15
+    craftable:
+    - name: Celestial talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Boggard Scout
+  level: 1
+  traits:
+  - amphibious
+  - boggard
+  - humanoid
+  components: []
+- name: Cacodaemon
+  level: 1
+  traits:
+  - daemon
+  - fiend
+  - unholy
+  components:
+  - name: Horn
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+  - name: Infernal ichor
+    medicine_dc: 15
+    craftable:
+    - name: Infernal talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Caligni Dancer
+  level: 1
+  traits:
+  - caligni
+  - humanoid
+  components: []
+- name: Cassisian
+  level: 1
+  traits:
+  - angel
+  - celestial
+  - holy
+  components:
+  - name: Feather
+    medicine_dc: 15
+    craftable:
+    - name: Fletching
+      crafting_dc: 14
+      value: 1 sp
+    - name: Ornament
+      crafting_dc: 14
+      value: 5 sp
+  - name: Celestial essence
+    medicine_dc: 15
+    craftable:
+    - name: Celestial talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Catfolk Pouncer
+  level: 1
+  traits:
+  - catfolk
+  - humanoid
+  components: []
+- name: Cythnigot
+  level: 1
+  traits:
+  - fiend
+  - qlippoth
+  - unholy
+  components:
+  - name: Horn
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+  - name: Infernal ichor
+    medicine_dc: 15
+    craftable:
+    - name: Infernal talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Dwarf Warrior
+  level: 1
+  traits:
+  - dwarf
+  - humanoid
+  components: []
+- name: Earth Scamp
+  level: 1
+  traits:
+  - earth
+  - elemental
+  components:
+  - name: Earth essence shard
+    medicine_dc: 15
+    craftable:
+    - name: Earth talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Electric Eel
+  level: 1
+  traits:
+  - animal
+  - aquatic
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Elf Ranger
+  level: 1
+  traits:
+  - elf
+  - humanoid
+  components: []
+- name: Fire Scamp
+  level: 1
+  traits:
+  - elemental
+  - fire
+  components:
+  - name: Fire essence shard
+    medicine_dc: 15
+    craftable:
+    - name: Fire talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Ghoul Stalker
+  level: 1
+  traits:
+  - ghoul
+  - undead
+  - unholy
+  components:
+  - name: Bone
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+- name: Giant Gecko
+  level: 1
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Gnome Bard
+  level: 1
+  traits:
+  - gnome
+  - humanoid
+  components: []
+- name: Goblin Commando
+  level: 1
+  traits:
+  - goblin
+  - humanoid
+  components: []
+- name: Goblin Dog
+  level: 1
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Goblin Pyro
+  level: 1
+  traits:
+  - goblin
+  - humanoid
+  components: []
+- name: Goblin War Chanter
+  level: 1
+  traits:
+  - goblin
+  - humanoid
+  components: []
+- name: Gourd Leshy
+  level: 1
+  traits:
+  - leshy
+  - plant
+  components:
+  - name: Fibrous bark
+    medicine_dc: 15
+    craftable:
+    - name: Coarse rope
+      crafting_dc: 14
+      value: 2 sp
+  - name: Seeds
+    medicine_dc: 15
+    craftable:
+    - name: Herbal remedy
+      crafting_dc: 14
+      value: 5 sp
+- name: Halfling Troublemaker
+  level: 1
+  traits:
+  - halfling
+  - humanoid
+  components: []
+- name: Hippocampus
+  level: 1
+  traits:
+  - animal
+  - aquatic
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Hobgoblin Soldier
+  level: 1
+  traits:
+  - hobgoblin
+  - humanoid
+  components: []
+- name: Hryngar Bombardier
+  level: 1
+  traits:
+  - duergar
+  - dwarf
+  - humanoid
+  components: []
+- name: Hunting Spider
+  level: 1
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Hyena
+  level: 1
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Imp
+  level: 1
+  traits:
+  - fiend
+  - unholy
+  components:
+  - name: Horn
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+  - name: Infernal ichor
+    medicine_dc: 15
+    craftable:
+    - name: Infernal talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Jinkin
+  level: 1
+  traits:
+  - fey
+  - gremlin
+  components:
+  - name: Fey essence
+    medicine_dc: 15
+    craftable:
+    - name: Glamour talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Glamour dust
+    medicine_dc: 15
+    craftable:
+    - name: Minor illusion charm
+      crafting_dc: 15
+      value: 3 gp
+- name: Kobold Scout
+  level: 1
+  traits:
+  - humanoid
+  - kobold
+  components: []
+- name: Lizardfolk Defender
+  level: 1
+  traits:
+  - humanoid
+  - lizardfolk
+  components: []
+- name: Lizardfolk Scout
+  level: 1
+  traits:
+  - humanoid
+  - lizardfolk
+  components: []
+- name: Lyrakien
+  level: 1
+  traits:
+  - azata
+  - celestial
+  - holy
+  components:
+  - name: Feather
+    medicine_dc: 15
+    craftable:
+    - name: Fletching
+      crafting_dc: 14
+      value: 1 sp
+    - name: Ornament
+      crafting_dc: 14
+      value: 5 sp
+  - name: Celestial essence
+    medicine_dc: 15
+    craftable:
+    - name: Celestial talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Merfolk Warrior
+  level: 1
+  traits:
+  - aquatic
+  - humanoid
+  - merfolk
+  components: []
+- name: Naiad
+  level: 1
+  traits:
+  - amphibious
+  - fey
+  - nymph
+  - water
+  components:
+  - name: Fey essence
+    medicine_dc: 15
+    craftable:
+    - name: Glamour talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Glamour dust
+    medicine_dc: 15
+    craftable:
+    - name: Minor illusion charm
+      crafting_dc: 15
+      value: 3 gp
+- name: Nosoi
+  level: 1
+  traits:
+  - monitor
+  - psychopomp
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+- name: Orc Veteran
+  level: 1
+  traits:
+  - humanoid
+  - orc
+  components: []
+- name: Plague Zombie
+  level: 1
+  traits:
+  - mindless
+  - undead
+  - unholy
+  - zombie
+  components:
+  - name: Bone
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+- name: Python
+  level: 1
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Raktavarna
+  level: 1
+  traits:
+  - rakshasa
+  - spirit
+  - unholy
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+- name: Rat Swarm
+  level: 1
+  traits:
+  - animal
+  - swarm
+  components:
+  - name: Swarm bodies
+    medicine_dc: 15
+    craftable:
+    - name: Chitin powder
+      crafting_dc: 14
+      value: 2 sp
+- name: Reefclaw
+  level: 1
+  traits:
+  - aberration
+  - aquatic
+  components:
+  - name: Unusual organ
+    medicine_dc: 15
+    craftable:
+    - name: Arcane reagent
+      crafting_dc: 15
+      value: 2 gp
+- name: Riding Dog
+  level: 1
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Riding Horse
+  level: 1
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Sewer Ooze
+  level: 1
+  traits:
+  - mindless
+  - ooze
+  components:
+  - name: Ooze essence
+    medicine_dc: 15
+    craftable:
+    - name: Adhesive
+      crafting_dc: 14
+      value: 3 sp
+- name: Umbral Gnome Scout
+  level: 1
+  traits:
+  - gnome
+  - humanoid
+  components: []
+- name: Vampire Bat Swarm
+  level: 1
+  traits:
+  - animal
+  - swarm
+  components:
+  - name: Swarm bodies
+    medicine_dc: 15
+    craftable:
+    - name: Chitin powder
+      crafting_dc: 14
+      value: 2 sp
+- name: Velociraptor
+  level: 1
+  traits:
+  - animal
+  - dinosaur
+  components:
+  - name: Scaled hide
+    medicine_dc: 15
+    craftable:
+    - name: Hide armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Voidworm
+  level: 1
+  traits:
+  - monitor
+  - protean
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+- name: War Pony
+  level: 1
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Water Scamp
+  level: 1
+  traits:
+  - amphibious
+  - elemental
+  - water
+  components:
+  - name: Water essence shard
+    medicine_dc: 15
+    craftable:
+    - name: Water talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Wolf
+  level: 1
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 15
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 15
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Xulgath Warrior
+  level: 1
+  traits:
+  - humanoid
+  - xulgath
+  components: []
+- name: Zoaem
+  level: 1
+  traits:
+  - archon
+  - celestial
+  - holy
+  components:
+  - name: Feather
+    medicine_dc: 15
+    craftable:
+    - name: Fletching
+      crafting_dc: 14
+      value: 1 sp
+    - name: Ornament
+      crafting_dc: 14
+      value: 5 sp
+  - name: Celestial essence
+    medicine_dc: 15
+    craftable:
+    - name: Celestial talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Aiuvarin Elementalist
+  level: 2
+  traits:
+  - aiuvarin
+  - elf
+  - human
+  - humanoid
+  components: []
+- name: Animated Armor
+  level: 2
+  traits:
+  - construct
+  - mindless
+  components:
+  - name: Core
+    medicine_dc: 16
+    craftable:
+    - name: Animating talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Plating
+    medicine_dc: 16
+    craftable:
+    - name: Scrap plating
+      crafting_dc: 14
+      value: 2 gp
+- name: Boar
+  level: 2
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 16
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Boggard Warrior
+  level: 2
+  traits:
+  - amphibious
+  - boggard
+  - humanoid
+  components: []
+- name: Bugbear Prowler
+  level: 2
+  traits:
+  - bugbear
+  - humanoid
+  components: []
+- name: Caligni Skulker
+  level: 2
+  traits:
+  - caligni
+  - humanoid
+  components: []
+- name: Crocodile
+  level: 2
+  traits:
+  - animal
+  components:
+  - name: Scaled hide
+    medicine_dc: 16
+    craftable:
+    - name: Hide armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Deinonychus
+  level: 2
+  traits:
+  - animal
+  - dinosaur
+  components:
+  - name: Scaled hide
+    medicine_dc: 16
+    craftable:
+    - name: Hide armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Dero Stalker
+  level: 2
+  traits:
+  - dero
+  - humanoid
+  components: []
+- name: Dhampir Wizard
+  level: 2
+  traits:
+  - dhampir
+  - human
+  - humanoid
+  components: []
+- name: Dromaar Mountaineer
+  level: 2
+  traits:
+  - dromaar
+  - human
+  - humanoid
+  - orc
+  components: []
+- name: Envyspawn
+  level: 2
+  traits:
+  - aberration
+  components:
+  - name: Unusual organ
+    medicine_dc: 16
+    craftable:
+    - name: Arcane reagent
+      crafting_dc: 15
+      value: 2 gp
+- name: Fey Dragonet
+  level: 2
+  traits:
+  - dragon
+  - fey
+  components:
+  - name: Scales
+    medicine_dc: 16
+    craftable:
+    - name: Scale mail
+      crafting_dc: 15
+      value: 4 gp
+    - name: Ornament
+      crafting_dc: 14
+      value: 1 gp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Fungus Leshy
+  level: 2
+  traits:
+  - fungus
+  - leshy
+  components:
+  - name: Hide
+    medicine_dc: 16
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+- name: Ghoul Soldier
+  level: 2
+  traits:
+  - ghoul
+  - undead
+  - unholy
+  components:
+  - name: Bone
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+- name: Giant Ant
+  level: 2
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 16
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Giant Bat
+  level: 2
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 16
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Giant Monitor Lizard
+  level: 2
+  traits:
+  - animal
+  components:
+  - name: Scaled hide
+    medicine_dc: 16
+    craftable:
+    - name: Hide armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Giant Viper
+  level: 2
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 16
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Gluttonyspawn
+  level: 2
+  traits:
+  - aberration
+  components:
+  - name: Unusual organ
+    medicine_dc: 16
+    craftable:
+    - name: Arcane reagent
+      crafting_dc: 15
+      value: 2 gp
+- name: Greedspawn
+  level: 2
+  traits:
+  - aberration
+  components:
+  - name: Unusual organ
+    medicine_dc: 16
+    craftable:
+    - name: Arcane reagent
+      crafting_dc: 15
+      value: 2 gp
+- name: Herexen
+  level: 2
+  traits:
+  - undead
+  - unholy
+  components:
+  - name: Bone
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+- name: Hippogriff
+  level: 2
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 16
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Hryngar Taskmaster
+  level: 2
+  traits:
+  - duergar
+  - dwarf
+  - humanoid
+  components: []
+- name: Kholo Hunter
+  level: 2
+  traits:
+  - gnoll
+  - humanoid
+  components: []
+- name: Kobold Cavern Mage
+  level: 2
+  traits:
+  - humanoid
+  - kobold
+  components: []
+- name: Leopard
+  level: 2
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 16
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Lizardfolk Stargazer
+  level: 2
+  traits:
+  - humanoid
+  - lizardfolk
+  components: []
+- name: Lustspawn
+  level: 2
+  traits:
+  - aberration
+  components:
+  - name: Unusual organ
+    medicine_dc: 16
+    craftable:
+    - name: Arcane reagent
+      crafting_dc: 15
+      value: 2 gp
+- name: Merfolk Wavecaller
+  level: 2
+  traits:
+  - aquatic
+  - humanoid
+  - merfolk
+  components: []
+- name: Orc Commander
+  level: 2
+  traits:
+  - humanoid
+  - orc
+  components: []
+- name: Pipefox
+  level: 2
+  traits:
+  - beast
+  components:
+  - name: Hide
+    medicine_dc: 16
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Pridespawn
+  level: 2
+  traits:
+  - aberration
+  components:
+  - name: Unusual organ
+    medicine_dc: 16
+    craftable:
+    - name: Arcane reagent
+      crafting_dc: 15
+      value: 2 gp
+- name: Pteranodon
+  level: 2
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 16
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Pusk
+  level: 2
+  traits:
+  - demon
+  - fiend
+  - unholy
+  components:
+  - name: Horn
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+  - name: Infernal ichor
+    medicine_dc: 16
+    craftable:
+    - name: Infernal talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Sedacthy Scout
+  level: 2
+  traits:
+  - amphibious
+  - humanoid
+  - sedacthy
+  components: []
+- name: Skeletal Champion
+  level: 2
+  traits:
+  - skeleton
+  - undead
+  - unholy
+  components:
+  - name: Bone
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+- name: Skeletal Horse
+  level: 2
+  traits:
+  - mindless
+  - skeleton
+  - undead
+  - unholy
+  components:
+  - name: Bone
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+- name: Slothspawn
+  level: 2
+  traits:
+  - aberration
+  components:
+  - name: Unusual organ
+    medicine_dc: 16
+    craftable:
+    - name: Arcane reagent
+      crafting_dc: 15
+      value: 2 gp
+- name: Slurk
+  level: 2
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 16
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Soulbound Doll (Brave)
+  level: 2
+  traits:
+  - construct
+  - soulbound
+  components:
+  - name: Core
+    medicine_dc: 16
+    craftable:
+    - name: Animating talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Plating
+    medicine_dc: 16
+    craftable:
+    - name: Scrap plating
+      crafting_dc: 14
+      value: 2 gp
+- name: Soulbound Doll (Calm)
+  level: 2
+  traits:
+  - construct
+  - soulbound
+  components:
+  - name: Core
+    medicine_dc: 16
+    craftable:
+    - name: Animating talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Plating
+    medicine_dc: 16
+    craftable:
+    - name: Scrap plating
+      crafting_dc: 14
+      value: 2 gp
+- name: Soulbound Doll (Careful)
+  level: 2
+  traits:
+  - construct
+  - soulbound
+  components:
+  - name: Core
+    medicine_dc: 16
+    craftable:
+    - name: Animating talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Plating
+    medicine_dc: 16
+    craftable:
+    - name: Scrap plating
+      crafting_dc: 14
+      value: 2 gp
+- name: Soulbound Doll (Cruel)
+  level: 2
+  traits:
+  - construct
+  - soulbound
+  components:
+  - name: Core
+    medicine_dc: 16
+    craftable:
+    - name: Animating talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Plating
+    medicine_dc: 16
+    craftable:
+    - name: Scrap plating
+      crafting_dc: 14
+      value: 2 gp
+- name: Soulbound Doll (Gentle)
+  level: 2
+  traits:
+  - construct
+  - soulbound
+  components:
+  - name: Core
+    medicine_dc: 16
+    craftable:
+    - name: Animating talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Plating
+    medicine_dc: 16
+    craftable:
+    - name: Scrap plating
+      crafting_dc: 14
+      value: 2 gp
+- name: Soulbound Doll (Impish)
+  level: 2
+  traits:
+  - construct
+  - soulbound
+  components:
+  - name: Core
+    medicine_dc: 16
+    craftable:
+    - name: Animating talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Plating
+    medicine_dc: 16
+    craftable:
+    - name: Scrap plating
+      crafting_dc: 14
+      value: 2 gp
+- name: Soulbound Doll (Jolly)
+  level: 2
+  traits:
+  - construct
+  - soulbound
+  components:
+  - name: Core
+    medicine_dc: 16
+    craftable:
+    - name: Animating talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Plating
+    medicine_dc: 16
+    craftable:
+    - name: Scrap plating
+      crafting_dc: 14
+      value: 2 gp
+- name: Soulbound Doll (Kind)
+  level: 2
+  traits:
+  - construct
+  - soulbound
+  components:
+  - name: Core
+    medicine_dc: 16
+    craftable:
+    - name: Animating talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Plating
+    medicine_dc: 16
+    craftable:
+    - name: Scrap plating
+      crafting_dc: 14
+      value: 2 gp
+- name: Soulbound Doll (Rash)
+  level: 2
+  traits:
+  - construct
+  - soulbound
+  components:
+  - name: Core
+    medicine_dc: 16
+    craftable:
+    - name: Animating talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Plating
+    medicine_dc: 16
+    craftable:
+    - name: Scrap plating
+      crafting_dc: 14
+      value: 2 gp
+- name: Soulbound Doll (Sassy)
+  level: 2
+  traits:
+  - construct
+  - soulbound
+  components:
+  - name: Core
+    medicine_dc: 16
+    craftable:
+    - name: Animating talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Plating
+    medicine_dc: 16
+    craftable:
+    - name: Scrap plating
+      crafting_dc: 14
+      value: 2 gp
+- name: Soulbound Doll (Timid)
+  level: 2
+  traits:
+  - construct
+  - soulbound
+  components:
+  - name: Core
+    medicine_dc: 16
+    craftable:
+    - name: Animating talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Plating
+    medicine_dc: 16
+    craftable:
+    - name: Scrap plating
+      crafting_dc: 14
+      value: 2 gp
+- name: Tengu Sneak
+  level: 2
+  traits:
+  - humanoid
+  - tengu
+  components: []
+- name: Umbral Gnome Warrior
+  level: 2
+  traits:
+  - gnome
+  - humanoid
+  components: []
+- name: War Horse
+  level: 2
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 16
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Warg
+  level: 2
+  traits:
+  - beast
+  components:
+  - name: Hide
+    medicine_dc: 16
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Wererat
+  level: 2
+  traits:
+  - beast
+  - human
+  - humanoid
+  - werecreature
+  components: []
+- name: Wrathspawn
+  level: 2
+  traits:
+  - aberration
+  components:
+  - name: Unusual organ
+    medicine_dc: 16
+    craftable:
+    - name: Arcane reagent
+      crafting_dc: 15
+      value: 2 gp
+- name: Xulgath Skulker
+  level: 2
+  traits:
+  - humanoid
+  - xulgath
+  components: []
+- name: Zombie Brute
+  level: 2
+  traits:
+  - mindless
+  - undead
+  - unholy
+  - zombie
+  components:
+  - name: Bone
+    medicine_dc: 16
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+- name: Zyss Serpentfolk
+  level: 2
+  traits:
+  - humanoid
+  - serpentfolk
+  components: []
+- name: Aapoph Serpentfolk
+  level: 3
+  traits:
+  - humanoid
+  - mutant
+  - serpentfolk
+  components: []
+- name: Animated Statue
+  level: 3
+  traits:
+  - construct
+  - mindless
+  components:
+  - name: Core
+    medicine_dc: 18
+    craftable:
+    - name: Animating talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Plating
+    medicine_dc: 18
+    craftable:
+    - name: Scrap plating
+      crafting_dc: 14
+      value: 2 gp
+- name: Ankhrav
+  level: 3
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Athamaru Hunter
+  level: 3
+  traits:
+  - amphibious
+  - humanoid
+  - locathah
+  components: []
+- name: Boggard Swampseer
+  level: 3
+  traits:
+  - amphibious
+  - boggard
+  - humanoid
+  components: []
+- name: Brine Shark
+  level: 3
+  traits:
+  - aquatic
+  - elemental
+  - water
+  components:
+  - name: Water essence shard
+    medicine_dc: 18
+    craftable:
+    - name: Water talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Bugbear Tormentor
+  level: 3
+  traits:
+  - bugbear
+  - humanoid
+  components: []
+- name: Centaur Herbalist
+  level: 3
+  traits:
+  - beast
+  - centaur
+  - humanoid
+  components: []
+- name: Centipede Swarm
+  level: 3
+  traits:
+  - animal
+  - swarm
+  components:
+  - name: Swarm bodies
+    medicine_dc: 18
+    craftable:
+    - name: Chitin powder
+      crafting_dc: 14
+      value: 2 sp
+- name: Changeling Exile
+  level: 3
+  traits:
+  - changeling
+  - human
+  - humanoid
+  components: []
+- name: Chupacabra
+  level: 3
+  traits:
+  - beast
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Claws
+    medicine_dc: 18
+    craftable:
+    - name: Improvised dagger
+      crafting_dc: 14
+      value: 2 sp
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+- name: Cinder Rat
+  level: 3
+  traits:
+  - elemental
+  - fire
+  components:
+  - name: Fire essence shard
+    medicine_dc: 18
+    craftable:
+    - name: Fire talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Cockatrice
+  level: 3
+  traits:
+  - beast
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Dero Strangler
+  level: 3
+  traits:
+  - dero
+  - humanoid
+  components: []
+- name: Dire Wolf
+  level: 3
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Draxie
+  level: 3
+  traits:
+  - fey
+  - sprite
+  components:
+  - name: Fey essence
+    medicine_dc: 18
+    craftable:
+    - name: Glamour talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Glamour dust
+    medicine_dc: 18
+    craftable:
+    - name: Minor illusion charm
+      crafting_dc: 15
+      value: 3 gp
+- name: Dryad
+  level: 3
+  traits:
+  - fey
+  - nymph
+  - plant
+  - wood
+  components:
+  - name: Fey essence
+    medicine_dc: 18
+    craftable:
+    - name: Glamour talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Glamour dust
+    medicine_dc: 18
+    craftable:
+    - name: Minor illusion charm
+      crafting_dc: 15
+      value: 3 gp
+- name: Giant Eagle
+  level: 3
+  traits:
+  - beast
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Claws
+    medicine_dc: 18
+    craftable:
+    - name: Improvised dagger
+      crafting_dc: 14
+      value: 2 sp
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+- name: Giant Mantis
+  level: 3
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Giant Scorpion
+  level: 3
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Giant Wasp
+  level: 3
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Gorilla
+  level: 3
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Grizzly Bear
+  level: 3
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Claws
+    medicine_dc: 18
+    craftable:
+    - name: Improvised dagger
+      crafting_dc: 14
+      value: 2 sp
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+- name: Grothlut
+  level: 3
+  traits:
+  - aberration
+  - mindless
+  components:
+  - name: Unusual organ
+    medicine_dc: 18
+    craftable:
+    - name: Arcane reagent
+      crafting_dc: 15
+      value: 2 gp
+- name: Hell Hound
+  level: 3
+  traits:
+  - beast
+  - fiend
+  - fire
+  - unholy
+  components:
+  - name: Horn
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+  - name: Infernal ichor
+    medicine_dc: 18
+    craftable:
+    - name: Infernal talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: Hyaenodon
+  level: 3
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Kholo Bonekeeper
+  level: 3
+  traits:
+  - gnoll
+  - humanoid
+  components: []
+- name: Lion
+  level: 3
+  traits:
+  - animal
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Claws
+    medicine_dc: 18
+    craftable:
+    - name: Improvised dagger
+      crafting_dc: 14
+      value: 2 sp
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+- name: Ogre Warrior
+  level: 3
+  traits:
+  - giant
+  - humanoid
+  components: []
+- name: Pachycephalosaurus
+  level: 3
+  traits:
+  - animal
+  - dinosaur
+  components:
+  - name: Scaled hide
+    medicine_dc: 18
+    craftable:
+    - name: Hide armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Pegasus
+  level: 3
+  traits:
+  - beast
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Fangs
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Pitborn Adept
+  level: 3
+  traits:
+  - human
+  - humanoid
+  - nephilim
+  components: []
+- name: River Drake
+  level: 3
+  traits:
+  - amphibious
+  - dragon
+  - water
+  components:
+  - name: Scales
+    medicine_dc: 18
+    craftable:
+    - name: Scale mail
+      crafting_dc: 15
+      value: 4 gp
+    - name: Ornament
+      crafting_dc: 14
+      value: 1 gp
+  - name: Fangs
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Minor fetish
+      crafting_dc: 14
+      value: 3 sp
+- name: Sea Hag
+  level: 3
+  traits:
+  - amphibious
+  - hag
+  - humanoid
+  components: []
+- name: Skeletal Giant
+  level: 3
+  traits:
+  - mindless
+  - skeleton
+  - undead
+  - unholy
+  components:
+  - name: Bone
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+- name: Snapping Flytrap
+  level: 3
+  traits:
+  - mindless
+  - plant
+  components:
+  - name: Fibrous bark
+    medicine_dc: 18
+    craftable:
+    - name: Coarse rope
+      crafting_dc: 14
+      value: 2 sp
+  - name: Seeds
+    medicine_dc: 18
+    craftable:
+    - name: Herbal remedy
+      crafting_dc: 14
+      value: 5 sp
+- name: Sod Hound
+  level: 3
+  traits:
+  - earth
+  - elemental
+  components:
+  - name: Earth essence shard
+    medicine_dc: 18
+    craftable:
+    - name: Earth talisman
+      crafting_dc: 15
+      value: 3 gp
+- name: String Slime
+  level: 3
+  traits:
+  - mindless
+  - ooze
+  components:
+  - name: Ooze essence
+    medicine_dc: 18
+    craftable:
+    - name: Adhesive
+      crafting_dc: 14
+      value: 3 sp
+- name: Tooth Fairy Swarm
+  level: 3
+  traits:
+  - fey
+  - swarm
+  components:
+  - name: Fey essence
+    medicine_dc: 18
+    craftable:
+    - name: Glamour talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Glamour dust
+    medicine_dc: 18
+    craftable:
+    - name: Minor illusion charm
+      crafting_dc: 15
+      value: 3 gp
+- name: Twigjack
+  level: 3
+  traits:
+  - fey
+  - plant
+  - wood
+  components:
+  - name: Fey essence
+    medicine_dc: 18
+    craftable:
+    - name: Glamour talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Glamour dust
+    medicine_dc: 18
+    craftable:
+    - name: Minor illusion charm
+      crafting_dc: 15
+      value: 3 gp
+- name: Unicorn
+  level: 3
+  traits:
+  - beast
+  - fey
+  - holy
+  components:
+  - name: Fey essence
+    medicine_dc: 18
+    craftable:
+    - name: Glamour talisman
+      crafting_dc: 15
+      value: 3 gp
+  - name: Glamour dust
+    medicine_dc: 18
+    craftable:
+    - name: Minor illusion charm
+      crafting_dc: 15
+      value: 3 gp
+- name: Werewolf
+  level: 3
+  traits:
+  - beast
+  - human
+  - humanoid
+  - werecreature
+  components: []
+- name: Wight
+  level: 3
+  traits:
+  - undead
+  - unholy
+  - wight
+  components:
+  - name: Bone
+    medicine_dc: 18
+    craftable:
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+    - name: Grim token
+      crafting_dc: 14
+      value: 2 sp
+- name: Winged Chupacabra
+  level: 3
+  traits:
+  - beast
+  components:
+  - name: Hide
+    medicine_dc: 18
+    craftable:
+    - name: Leather armor
+      crafting_dc: 14
+      value: 2 gp
+    - name: Waterskin
+      crafting_dc: 14
+      value: 5 sp
+  - name: Claws
+    medicine_dc: 18
+    craftable:
+    - name: Improvised dagger
+      crafting_dc: 14
+      value: 2 sp
+    - name: Bone charm
+      crafting_dc: 14
+      value: 5 sp
+- name: Xulgath Leader
+  level: 3
+  traits:
+  - humanoid
+  - xulgath
+  components: []
+- name: Zephyr Hawk
+  level: 3
+  traits:
+  - air
+  - elemental
+  components:
+  - name: Air essence shard
+    medicine_dc: 18
+    craftable:
+    - name: Air talisman
+      crafting_dc: 15
+      value: 3 gp
