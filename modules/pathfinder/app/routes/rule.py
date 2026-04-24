@@ -32,9 +32,28 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
+from app.config import settings
+from app.llm import (
+    classify_rule_topic,
+    embed_texts,
+    generate_ruling_fallback,
+    generate_ruling_from_passages,
+)
+from app.resolve_model import resolve_model
 from app.rules import (
+    D_07_DECLINE_TEMPLATE,
     MAX_QUERY_CHARS,
+    RETRIEVAL_SIMILARITY_THRESHOLD,
+    REUSE_SIMILARITY_THRESHOLD,
+    RULING_CACHE_PATH_PREFIX,
     RulesIndex,
+    _parse_ruling_cache,
+    build_ruling_markdown,
+    check_pf1_scope,
+    coerce_topic,
+    normalize_query,
+    query_hash,
+    retrieve,
 )
 
 logger = logging.getLogger(__name__)
@@ -176,8 +195,209 @@ def _strip_internal_fields(result: dict) -> dict:
 
 @router.post("/query")
 async def rule_query(req: RuleQueryRequest) -> JSONResponse:
-    """RUL-01..04 core — 9-step orchestration (see 33-04-02)."""
-    raise HTTPException(status_code=501, detail={"error": "rule_query not yet implemented — 33-04-02"})
+    """RUL-01..04 core — 9-step orchestration (D-02).
+
+    Returns HTTP 200 for all non-exceptional paths (decline is a normal response,
+    not an error). HTTP 500 on embed/LLM failure; HTTP 503 when singletons not
+    initialised (lifespan hasn't run or module is shutting down).
+    """
+    if obsidian is None or rules_index is None or aon_url_map is None:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "rule subsystem not initialised (lifespan incomplete?)"},
+        )
+
+    query = req.query
+    user_id = req.user_id
+
+    # Step 2: PF1 decline runs FIRST — before any cache / embed / LLM cost (D-06, RUL-04).
+    pf1_hit = check_pf1_scope(query)
+    if pf1_hit:
+        logger.info("rule_query: PF1 decline for user=%s term=%r", user_id, pf1_hit)
+        return JSONResponse(
+            {
+                "question": query,
+                "answer": D_07_DECLINE_TEMPLATE.format(term=pf1_hit),
+                "why": "",
+                "source": None,
+                "citations": [],
+                "marker": "declined",
+                "topic": None,
+                "reused": False,
+                "reuse_note": "",
+            }
+        )
+
+    # Step 3: compute query hash + topic classification.
+    q_norm = normalize_query(query)
+    q_hash = query_hash(query)
+    model_chat = await resolve_model("chat")
+    model_structured = await resolve_model("structured")
+    api_base = settings.litellm_api_base or None
+
+    topic = await classify_rule_topic(query, model=model_structured, api_base=api_base)
+    topic = coerce_topic(topic)  # belt + suspenders — classify_rule_topic already coerces
+
+    # Step 4: exact-hash cache check.
+    cache_path = f"{RULING_CACHE_PATH_PREFIX}/{topic}/{q_hash}.md"
+    cached_text = await obsidian.get_note(cache_path)
+    if cached_text is not None:
+        parsed = _parse_ruling_cache(cached_text)
+        if parsed is not None:
+            # D-14: update last_reused_at, GET-then-PUT (NEVER the surgical PATCH — L-3).
+            parsed["last_reused_at"] = _now_iso()
+            parsed["reused"] = True
+            parsed["reuse_note"] = (
+                parsed.get("reuse_note")
+                or f"_reusing prior ruling on {topic} — confirm applicability_"
+            )
+            try:
+                await obsidian.put_note(cache_path, build_ruling_markdown(parsed))
+            except Exception as exc:
+                logger.warning("rule_query: last_reused_at PUT failed for %s: %s", cache_path, exc)
+            logger.info("rule_query: exact-hash cache hit for user=%s topic=%s", user_id, topic)
+            return JSONResponse(_strip_internal_fields(parsed))
+        logger.warning("rule_query: cache malformed at %s; re-composing", cache_path)
+
+    # Step 5: embed the query (one vector).
+    try:
+        query_vecs = await embed_texts(
+            [q_norm],
+            api_base=api_base,
+            model=settings.rules_embedding_model,
+        )
+    except Exception as exc:
+        logger.error("rule_query: embed failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "embedding failed", "detail": str(exc)},
+        )
+    query_vec = np.asarray(query_vecs[0], dtype=np.float32)
+
+    # Step 6: retrieve top-K passages above threshold, topic-filtered.
+    retrieved = retrieve(
+        rules_index,
+        query_vec,
+        topic,
+        k=3,
+        threshold=RETRIEVAL_SIMILARITY_THRESHOLD,
+    )
+
+    # Step 7: reuse-match scan — walk sibling rulings in this topic folder, cosine
+    # against the current query_vec; if any >= REUSE_SIMILARITY_THRESHOLD, return it.
+    topic_prefix = f"{RULING_CACHE_PATH_PREFIX}/{topic}/"
+    try:
+        sibling_paths = await obsidian.list_directory(topic_prefix)
+    except Exception as exc:
+        logger.warning(
+            "rule_query: list_directory %s failed: %s; skipping reuse-match scan",
+            topic_prefix, exc,
+        )
+        sibling_paths = []
+
+    best_reuse: tuple[str, dict, float] | None = None  # (path, parsed, cosine)
+    for sib_path in sibling_paths:
+        if sib_path == cache_path:
+            continue  # skip self (defensive — shouldn't happen; cache already missed)
+        sib_text = await obsidian.get_note(sib_path)
+        if not sib_text:
+            continue
+        sib_parsed = _parse_ruling_cache(sib_text)
+        if not sib_parsed or not sib_parsed.get("query_embedding"):
+            continue
+        if sib_parsed.get("embedding_model") != settings.rules_embedding_model:
+            # D-13: skip rulings from a different embedding model — staleness tolerated.
+            continue
+        try:
+            sib_vec = _decode_query_embedding(sib_parsed["query_embedding"])
+        except Exception:
+            continue
+        # Cosine similarity against the single sibling vector.
+        # Dimension mismatch (e.g. test 5-dim vs prod 768-dim) degrades to 0 via shape guard.
+        if sib_vec.shape != query_vec.shape:
+            continue
+        denom = (np.linalg.norm(sib_vec) or 1.0) * (np.linalg.norm(query_vec) or 1.0)
+        sim = float((sib_vec @ query_vec) / denom)
+        if sim >= REUSE_SIMILARITY_THRESHOLD and (best_reuse is None or sim > best_reuse[2]):
+            best_reuse = (sib_path, sib_parsed, sim)
+
+    if best_reuse is not None:
+        reuse_path, reuse_parsed, reuse_sim = best_reuse
+        reuse_parsed["last_reused_at"] = _now_iso()
+        reuse_parsed["reused"] = True
+        reuse_parsed["reuse_note"] = (
+            f"_reusing prior ruling on {topic} — confirm applicability_"
+        )
+        try:
+            await obsidian.put_note(reuse_path, build_ruling_markdown(reuse_parsed))
+        except Exception as exc:
+            logger.warning("rule_query: reuse-match last_reused_at PUT failed: %s", exc)
+        logger.info(
+            "rule_query: reuse-match hit user=%s topic=%s sim=%.3f path=%s",
+            user_id, topic, reuse_sim, reuse_path,
+        )
+        return JSONResponse(_strip_internal_fields(reuse_parsed))
+
+    # Step 8: compose — passages (RUL-01) OR fallback (RUL-02 / D-03).
+    try:
+        if retrieved:
+            # Enrich each RuleChunk's aon_url from aon_url_map when missing (D-12 honesty).
+            enriched: list = []
+            for chunk, score in retrieved:
+                if not chunk.aon_url:
+                    book_map = aon_url_map.get(chunk.book, {}) if aon_url_map else {}
+                    url = book_map.get(chunk.section)
+                    if url:
+                        chunk = chunk.model_copy(update={"aon_url": url})
+                enriched.append((chunk, score))
+            result = await generate_ruling_from_passages(
+                query=query,
+                passages=enriched,
+                topic=topic,
+                model=model_chat,
+                api_base=api_base,
+            )
+        else:
+            # D-03: corpus-miss falls through to fallback — NEVER decline for non-PF1 queries.
+            result = await generate_ruling_fallback(
+                query=query,
+                topic=topic,
+                model=model_chat,
+                api_base=api_base,
+            )
+    except Exception as exc:
+        logger.error(
+            "rule_query: LLM composition failed for user=%s topic=%s: %s",
+            user_id, topic, exc,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "LLM ruling composition failed", "detail": str(exc)},
+        )
+
+    # Step 9: enrich with D-13 frontmatter metadata + write cache.
+    now_iso = _now_iso()
+    result["composed_at"] = now_iso
+    result["last_reused_at"] = now_iso
+    result["embedding_model"] = settings.rules_embedding_model
+    result["embedding_hash"] = _embedding_hash(settings.rules_embedding_model)
+    result["query_embedding"] = _encode_query_embedding(query_vec)
+    result["reused"] = False
+    result["reuse_note"] = ""
+
+    try:
+        await obsidian.put_note(cache_path, build_ruling_markdown(result))
+        logger.info(
+            "rule_query: cached fresh ruling user=%s topic=%s marker=%s",
+            user_id, topic, result.get("marker"),
+        )
+    except Exception as exc:
+        logger.warning(
+            "rule_query: cache PUT failed for %s: %s (degrading — still returning)",
+            cache_path, exc,
+        )
+
+    return JSONResponse(_strip_internal_fields(result))
 
 
 @router.post("/show")
