@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: The Dungeon
 status: in_progress
-stopped_at: Phase 32 (Monster Harvesting) COMPLETE — 5 plans, 5 serial waves, 17 implementation + 13 review-fix + 2 gap-close commits; 22/22 must-haves verified; 89/89 pathfinder + 38/38 discord unit tests GREEN; 17/17 live-stack UAT PASS (scripts/uat_phase32.sh); 2 live gaps closed (G-1 Dockerfile missing rapidfuzz, G-2 clamp fill-when-missing)
-last_updated: "2026-04-24T04:45:00Z"
-last_activity: 2026-04-24 -- Phase 32 verification + live UAT complete. Post-code-review fixes (13/13 findings) + 2 live-stack gaps closed. 17/17 automated UAT against running stack (sentinel-core + pf2e-module + Obsidian + LM Studio). Ready for next v0.5 phase (33/34/35/36).
+stopped_at: Phase 33 (Rules Engine) context gathered — 10 decisions captured (D-01..10) across corpus / cache / scope-filter / output / dispatch; deferred overnight book ingestion + self-healing to Phase 33.x follow-up
+last_updated: "2026-04-24T05:00:00Z"
+last_activity: 2026-04-24 -- Phase 33 discuss-phase complete. 4 gray areas explored + Discord noun choice. CONTEXT.md ready for /gsd-plan-phase 33. Philosophy: gameplay-fun-first — rules are source of truth, but LLM fallback on corpus miss (never decline). 3-book seed corpus (Player Core + GM Core + Monster Core).
 progress:
   total_phases: 26
   completed_phases: 13
@@ -25,8 +25,9 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 32 (Monster Harvesting) — ✅ COMPLETE + VERIFIED (5/5 plans shipped, 22/22 must-haves, 89/89 pathfinder + 38/38 discord tests, 17/17 live UAT)
-Next Phase: 33 / 34 / 35 / 36 in v0.5 (pick via /gsd-discuss-phase or /gsd-plan-phase)
+Phase: 33 (Rules Engine) — CONTEXT gathered, ready for research + planning
+Next Plan: /gsd-plan-phase 33 (triggers research → pattern-mapping → PLAN.md → plan-checker)
+Prior Phase: 32 (Monster Harvesting) — ✅ COMPLETE + VERIFIED (5/5 plans, 22/22 must-haves, 89/89 + 38/38 unit, 17/17 live UAT)
 Milestone: v0.5 The Dungeon — IN PROGRESS (5/9 phases complete)
 Status: Phase 32-05 (Wave 4 bot wiring) shipped: interfaces/discord/bot.py gained build_harvest_embed (pure dict→discord.Embed, D-03a single-monster + D-04 batch-aggregated, 1024-char field cap), _pf_dispatch noun-check widened to {npc, harvest}, harvest dispatch branch re-parses args for multi-word monster names (Pitfall 5) + comma-separated batch with whitespace trim, top-level usage string + unknown-noun error updated to list both nouns. interfaces/discord/tests/conftest.py consolidates the discord stub (Client/Intents/Embed/Color/Thread/etc) so per-file setdefault races no longer hide missing attributes. All 7 test_pf_harvest_* flipped GREEN (solo, batch, multi-word, trimmed commas, empty→usage, embed-dict shape, noun-recognised). 38/38 interfaces/discord tests pass + 84/84 pathfinder tests pass + zero Phase 29/30/31 regressions. HRV-01..06 satisfied end-to-end.
 Last activity: 2026-04-24 -- Phase 32 fully complete: 5 plans shipped, 22/22 verified, 13/13 code-review fixes applied, 2 live-gap fixes (Dockerfile rapidfuzz, LLM DC fill-when-missing), 17/17 live-stack UAT PASS. 89 pathfinder + 38 discord tests green. Ready for next v0.5 phase.
