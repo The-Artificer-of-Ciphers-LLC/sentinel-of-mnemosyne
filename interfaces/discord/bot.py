@@ -181,6 +181,12 @@ async def _call_core(user_id: str, message: str) -> str:
 # Relation types valid for :pf npc relate (D-13 — closed enum)
 _VALID_RELATIONS = frozenset({"knows", "trusts", "hostile-to", "allied-with", "fears", "owes-debt"})
 
+# IN-01: supported `:pf <noun>` top-level categories. Referenced from both
+# the noun guard in _pf_dispatch and the usage/unknown-noun error strings
+# so adding a new noun (e.g. `spell`) is a one-line change rather than a
+# scavenger hunt through two mirrored literals.
+_PF_NOUNS = frozenset({"npc", "harvest"})
+
 # Phase 31 dialogue: pair `:pf npc say ...` user messages with their bot quote-block replies
 # in a thread. Capture group 1 = names (must NOT contain newlines or pipes — they delimit the
 # NPC list from the party line). Group 2 = everything after pipe; DOTALL lets it span newlines
@@ -390,6 +396,9 @@ async def _pf_dispatch(
     """
     parts = args.strip().split(" ", 2)
     if len(parts) < 2:
+        # IN-01: derive the usage message from _PF_NOUNS so new nouns show up
+        # automatically. `npc` retains its verb list because it's the only
+        # multi-verb noun in the current surface.
         return (
             "Usage: `:pf npc <create|update|show|relate|import|say> ...` "
             "or `:pf harvest <Name>[,<Name>...]`"
@@ -397,8 +406,9 @@ async def _pf_dispatch(
     noun, verb = parts[0].lower(), parts[1].lower()
     rest = parts[2] if len(parts) > 2 else ""
 
-    if noun not in {"npc", "harvest"}:
-        return f"Unknown pf category `{noun}`. Currently supported: `npc`, `harvest`."
+    if noun not in _PF_NOUNS:
+        supported = ", ".join(f"`{n}`" for n in sorted(_PF_NOUNS))
+        return f"Unknown pf category `{noun}`. Currently supported: {supported}."
 
     try:
         async with httpx.AsyncClient() as http_client:
