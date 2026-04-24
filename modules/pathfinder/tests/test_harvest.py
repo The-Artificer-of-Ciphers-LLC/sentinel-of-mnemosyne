@@ -315,8 +315,52 @@ async def test_harvest_cache_hit_skips_llm():
     assert resp.status_code == 200
     assert mock_llm.await_count == 0
     body = resp.json()
-    # Planner accepts either "cache" or preserved frontmatter source per PATTERNS §8 Gotcha 2.
-    assert body["monsters"][0]["source"] in {"cache", "seed"}
+    # WR-06: the CACHED_HARVEST_MD fixture has `source: seed` in frontmatter.
+    # _parse_harvest_cache preserves fm["source"] via fm.get("source", "cache").
+    # Tighten the assertion so a future regression that hardcodes "cache" on
+    # re-read (erasing the original source) breaks this test immediately.
+    assert body["monsters"][0]["source"] == "seed"
+    assert mock_obs.put_note.await_count == 0
+
+
+async def test_harvest_cache_hit_defaults_to_cache_when_source_missing():
+    """Cached note without `source` frontmatter key → source defaults to 'cache' (WR-06).
+
+    Complements test_harvest_cache_hit_skips_llm: that test asserts `source: seed`
+    in frontmatter is preserved on re-read. This test covers the fallback branch:
+    a cache file whose frontmatter lacks the `source` key altogether must parse
+    back with source='cache' (the `fm.get("source", "cache")` default).
+    """
+    # Fixture: valid cache markdown WITHOUT the `source:` frontmatter key.
+    cached_md_no_source = (
+        "---\n"
+        "monster: Boar\n"
+        "level: 2\n"
+        "verified: true\n"
+        "harvested_at: 2026-04-20T12:00:00Z\n"
+        "---\n"
+        "# Boar\n"
+        "\n## Hide\n"
+        "- Medicine DC: **16**\n"
+        "- Craftable:\n"
+        "  - Leather armor — Crafting DC 14, 2 gp\n"
+    )
+    mock_obs = MagicMock()
+    mock_obs.get_note = AsyncMock(return_value=cached_md_no_source)
+    mock_obs.put_note = AsyncMock(return_value=None)
+    stub_tables = _make_stub_tables()
+    mock_llm = AsyncMock()
+    with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
+         patch("app.routes.harvest.obsidian", mock_obs), \
+         patch("app.routes.harvest.harvest_tables", stub_tables), \
+         patch("app.routes.harvest.generate_harvest_fallback", new=mock_llm):
+        from app.main import app
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/harvest", json={"names": ["Boar"], "user_id": "u1"})
+    assert resp.status_code == 200
+    assert mock_llm.await_count == 0
+    body = resp.json()
+    assert body["monsters"][0]["source"] == "cache"
     assert mock_obs.put_note.await_count == 0
 
 
