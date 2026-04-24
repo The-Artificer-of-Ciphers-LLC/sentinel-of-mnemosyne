@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
-stopped_at: Phase 32-05 complete — interfaces/discord/bot.py wired (build_harvest_embed + noun-widen + harvest dispatch branch + updated usage strings); conftest.py consolidated discord stub; 7/7 test_pf_harvest_* flipped GREEN; 38/38 discord tests + 84/84 pathfinder tests green; Phase 32 ready for /gsd-verify-work 32
-last_updated: "2026-04-24T17:22:44.215Z"
-last_activity: 2026-04-24 -- Phase 33 execution started
+stopped_at: Phase 33-02 complete — Wave 1 pure-transform foundation shipped (app/rules.py 638 lines, app/routes/rule.py sanitiser skeleton, rules-corpus.json 149 Player-Core chunks, aon-url-map.json 138 entries, scaffold_rules_corpus.py, dual-shipped numpy+bs4); 37/40 Wave-1 unit stubs GREEN (3 RED classify_rule_topic pending Wave 2), 8 integration stubs RED-pending Wave 3 (route.obsidian); 89 prior tests GREEN — zero regressions. 5 atomic commits + merge commit on main. Ready for Plan 33-03 (Wave 2 — LLM adapter helpers + threshold calibration).
+last_updated: "2026-04-24T19:00:00.000Z"
+last_activity: 2026-04-24 -- Phase 33-02 Wave 1 pure-transform foundation complete
 progress:
   total_phases: 35
   completed_phases: 16
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 33 (Rules Engine) — EXECUTING
-Plan: 1 of 5
-Next Plan: /gsd-plan-phase 33 (triggers research → pattern-mapping → PLAN.md → plan-checker)
+Plan: 3 of 5 (Plan 33-01 Wave 0 ✅ complete; Plan 33-02 Wave 1 ✅ complete; Plan 33-03 Wave 2 NEXT — LLM adapter helpers + threshold calibration)
+Next Plan: /gsd-execute-phase 33 (continues automatically; or targeted Plan 33-03 invocation)
 Prior Phase: 32 (Monster Harvesting) — ✅ COMPLETE + VERIFIED (5/5 plans, 22/22 must-haves, 89/89 + 38/38 unit, 17/17 live UAT)
 Milestone: v0.5 The Dungeon — IN PROGRESS (5/9 phases complete)
 Status: Executing Phase 33
-Last activity: 2026-04-24 -- Phase 33 execution started
+Last activity: 2026-04-24 -- Phase 33-02 Wave 1 pure-transform foundation complete (app/rules.py + corpus + AoN map + dual-shipped deps; 5 atomic commits + merge to main)
 
 ## Milestone Progress
 
@@ -120,6 +120,11 @@ Recent decisions affecting current work:
 - [Phase 32-04]: Module-level singletons `obsidian` and `harvest_tables` in app/routes/harvest.py are set by main.py lifespan (PATTERNS.md §3 Analog D). Tests patch them directly via `patch('app.routes.harvest.{obsidian,harvest_tables,generate_harvest_fallback}')` — same pattern as the NPC routes.
 - [Phase 32-05]: Harvest dispatch branch re-parses `args` (not parts[2]/rest) so multi-word monster names survive — space-splitter would drop the second word (Pitfall 5: `:pf harvest Giant Rat` → names=['Giant Rat']). Splits only on commas, trims whitespace per name. Defensive leading-whitespace strip before the explicit-length slice (lstrip('harvest') is unsafe because it'd strip any character in {h,a,r,v,e,s,t}).
 - [Phase 32-05]: Consolidated per-file discord stubs (test_subcommands.py / test_live_integration.py / test_thread_persistence.py) into interfaces/discord/tests/conftest.py. Reason: pre-existing `sys.modules.setdefault('discord', ...)` pattern meant the first-collected file's stub won, and later files' added attributes (e.g. Embed/Color) were silently discarded. Centralising in conftest makes the stub deterministic across collection order — required for `test_pf_harvest_returns_embed_dict` to reliably pass in the full suite.
+- [Phase 33-01]: Wave 0 RED stubs use function-scope symbol imports (inside each test body) so pytest collection succeeds before Waves 1-3 land app.rules / app.llm / app.routes.rule. Pattern reused from Phase 32-01. Two smoke tests (test_numpy_importable + test_bs4_importable) are the Phase 32 G-1 Dockerfile-dep-dual-ship regression guard — they must pass inside the pf2e-module container after Wave 1's pyproject.toml + Dockerfile update.
+- [Phase 33-01]: StatefulMockVault extended with list_directory(prefix) — enables D-05 reuse-match scan tests without live Obsidian. Phase 32's class had only get_note/put_note.
+- [Phase 33-01]: Discord conftest Color shim extended centrally with red + blue classmethods (alongside pre-existing dark_green + dark_gold). L-5 prevention: never add per-file Color attribute assignments; collection-order races broke Phase 32 until consolidated.
+- [Phase 33-01]: D-15 scope lock enforced at test layer — zero Monster Core / GM Core rules-prose references in test .py files. RESEARCH §Threshold Calibration fixture preserves one "GM Core — DCs by Level" expected_source entry in the calibration data; at Phase 33 runtime this query falls through to [GENERATED — verify] per D-15 (Player-Core-only MVP). Not a scope violation — fixture is Wave 1 calibration data.
+- [Phase 33-01]: uat_phase33.sh adds a hard 14-route registration gate (Step 3) — fails fast on Phase 32 G-1 regression class (stale container images where REGISTRATION_PAYLOAD lags source changes). uat_rules.py adds an L-10 pre-check (POST LM Studio /v1/embeddings with text-embedding-nomic-embed-text-v1.5) so missing embeddings-model config is caught upfront with a clear error, not 15 cascading assertion failures.
 
 ### Pending Todos
 
