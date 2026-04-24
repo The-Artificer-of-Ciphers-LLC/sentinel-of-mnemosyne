@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir \
     "litellm>=1.83.0" \
     "pydantic-settings>=2.13.0" \
     "pyyaml>=6.0.0" \
+    "rapidfuzz>=3.14.0" \
     "reportlab>=4.4.0"
 
 COPY . .
