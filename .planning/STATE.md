@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
-stopped_at: Phase 33-02 complete — Wave 1 pure-transform foundation shipped (app/rules.py 638 lines, app/routes/rule.py sanitiser skeleton, rules-corpus.json 149 Player-Core chunks, aon-url-map.json 138 entries, scaffold_rules_corpus.py, dual-shipped numpy+bs4); 37/40 Wave-1 unit stubs GREEN (3 RED classify_rule_topic pending Wave 2), 8 integration stubs RED-pending Wave 3 (route.obsidian); 89 prior tests GREEN — zero regressions. 5 atomic commits + merge commit on main. Ready for Plan 33-03 (Wave 2 — LLM adapter helpers + threshold calibration).
-last_updated: "2026-04-24T19:00:00.000Z"
-last_activity: 2026-04-24 -- Phase 33-02 Wave 1 pure-transform foundation complete
+stopped_at: Phase 33-03 complete — Wave 2 LLM adapter layer shipped (app/llm.py 845 lines: embed_texts + classify_rule_topic + generate_ruling_from_passages + generate_ruling_fallback; calibrate_retrieval_threshold.py 203-line F1-sweep script; RETRIEVAL_SIMILARITY_THRESHOLD calibrated 0.55→0.65 via 20-query fixture); 40/40 unit stubs GREEN (3 classify_rule_topic flipped this wave), 8 integration stubs still RED-pending Wave 3 (route.obsidian); 129 total GREEN, zero regressions. L-1/L-2/L-4 lints clean. 6 atomic commits + merge commit on main. Ready for Plan 33-04 (Wave 3 — HTTP routes + lifespan wiring + 14-route REGISTRATION).
+last_updated: "2026-04-24T19:50:00.000Z"
+last_activity: 2026-04-24 -- Phase 33-03 Wave 2 LLM adapter layer + threshold calibration complete
 progress:
   total_phases: 35
   completed_phases: 16
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 33 (Rules Engine) — EXECUTING
-Plan: 3 of 5 (Plan 33-01 Wave 0 ✅ complete; Plan 33-02 Wave 1 ✅ complete; Plan 33-03 Wave 2 NEXT — LLM adapter helpers + threshold calibration)
-Next Plan: /gsd-execute-phase 33 (continues automatically; or targeted Plan 33-03 invocation)
+Plan: 4 of 5 (Plan 33-01 Wave 0 ✅; Plan 33-02 Wave 1 ✅; Plan 33-03 Wave 2 ✅; Plan 33-04 Wave 3 NEXT — HTTP routes + lifespan wiring + 14-route REGISTRATION)
+Next Plan: /gsd-execute-phase 33 (continues automatically; or targeted Plan 33-04 invocation)
 Prior Phase: 32 (Monster Harvesting) — ✅ COMPLETE + VERIFIED (5/5 plans, 22/22 must-haves, 89/89 + 38/38 unit, 17/17 live UAT)
 Milestone: v0.5 The Dungeon — IN PROGRESS (5/9 phases complete)
 Status: Executing Phase 33
-Last activity: 2026-04-24 -- Phase 33-02 Wave 1 pure-transform foundation complete (app/rules.py + corpus + AoN map + dual-shipped deps; 5 atomic commits + merge to main)
+Last activity: 2026-04-24 -- Phase 33-03 Wave 2 LLM adapter + threshold calibration complete (RETRIEVAL 0.55→0.65 calibrated; 6 atomic commits + merge to main)
 
 ## Milestone Progress
 
