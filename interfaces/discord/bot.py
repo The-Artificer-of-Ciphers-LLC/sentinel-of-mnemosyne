@@ -409,12 +409,15 @@ async def _pf_dispatch(
                 # usage string BEFORE this branch runs. So the `if not names:` fallback
                 # below is defensive (covers `:pf harvest ,` or `:pf harvest  ` where
                 # parts[1] exists but names parses empty), not redundant.
-                # Re-parse from the original args to preserve multi-word names within commas.
-                # Strip leading whitespace first so `:pf  harvest Boar` (extra spaces) still
-                # slices correctly; lstrip("harvest") is unsafe because it'd strip any leading
-                # character in the set {h,a,r,v,e,s,t}, so use explicit-length slice.
-                stripped_args = args.strip()
-                harvest_args = stripped_args[len("harvest"):].strip()
+                # WR-04: rejoin parts[1:] from the already-split noun/verb/rest tuple
+                # rather than slicing the original string by len("harvest"). The slice
+                # approach baked in a whitespace-class assumption — .strip() is the
+                # source of truth for what counts as "whitespace" when the user
+                # provides e.g. a non-breaking space before "harvest", and any
+                # mismatch between that and the fixed-width len() slice silently
+                # corrupted the name. split(" ", 2) already produced the post-noun
+                # remainder cleanly, so use that.
+                harvest_args = " ".join(parts[1:]).strip()
                 names = [n.strip() for n in harvest_args.split(",") if n.strip()]
                 if not names:
                     return "Usage: `:pf harvest <Name>[,<Name>...]`"
