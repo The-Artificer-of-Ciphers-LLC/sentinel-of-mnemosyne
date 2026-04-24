@@ -449,13 +449,19 @@ async def test_http_rule_flows(
                 f"exception: {exc}",
             )
 
-        # UAT-9: reuse match < 0.80 — dissimilar query (different topic) composes fresh
+        # UAT-9: reuse match < 0.80 — dissimilar query (different topic) composes fresh.
+        # The status==200 + marker presence guards prevent a 404 (route missing)
+        # from masquerading as "fresh compose" via body.get('reused', False) == False.
         try:
             status, body = await _http_rule_query(
                 client, sentinel_url, auth,
                 "What's the exact DC to Demoralize a level 3 foe?",
             )
-            ok = body.get("reused", False) is False
+            ok = (
+                status == 200
+                and body.get("marker") in ("source", "generated")
+                and body.get("reused", False) is False
+            )
             _track_cache_path(
                 "What's the exact DC to Demoralize a level 3 foe?",
                 body.get("topic"),
@@ -463,6 +469,7 @@ async def test_http_rule_flows(
             record(
                 "UAT-9 reuse match < 0.80 composes fresh",
                 ok,
+                f"status={status} marker={body.get('marker')} "
                 f"reused={body.get('reused')} topic={body.get('topic')}",
             )
         except Exception as exc:
@@ -582,10 +589,19 @@ async def test_bot_routing(sentinel_url: str, sentinel_key: str) -> None:
             f"exception: {exc}",
         )
 
-    # UAT-13: :pf rule history returns string of recent rulings
+    # UAT-13: :pf rule history returns string of recent rulings.
+    # Reject the "outer except handler returned 'NPC not found.' / generic
+    # error string" false-positive by requiring the response to mention
+    # rulings (or the explicit empty-list literal) — both shapes the rule
+    # history branch produces on success.
     try:
         result = await bot._pf_dispatch("rule history", "uat-rules")
-        ok = isinstance(result, str) and len(result) > 0
+        s = str(result).lower()
+        ok = isinstance(result, str) and (
+            "recent rulings" in s
+            or "no rulings yet" in s
+            or "rulings (" in s
+        )
         record(
             "UAT-13 :pf rule history returns str",
             ok,
