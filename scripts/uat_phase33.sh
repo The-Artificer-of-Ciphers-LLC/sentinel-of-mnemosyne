@@ -99,7 +99,30 @@ if [ "$ROUTES" != "14" ]; then
 fi
 
 echo ""
-echo "── Step 4: Run rules UAT against live stack ──"
+echo "── Step 4: Confirm LM Studio embeddings reachable from inside pf2e-module ──"
+# L-10 in-container smoke — proves embed_texts works from the module's own
+# Docker network namespace (host.docker.internal resolution + LM Studio
+# embeddings model loaded). Failure here = lifespan would have crashed at
+# startup; if we got past Step 2 healthy this should always pass, but the
+# explicit check makes the failure mode visible at the orchestrator level.
+if ! docker exec pf2e-module python -c "
+import asyncio, sys
+from app.llm import embed_texts
+async def main():
+    try:
+        v = await embed_texts(['healthy?'])
+        print(f'OK — embed returned {len(v)} vector(s) of dim {len(v[0])}')
+    except Exception as e:
+        print(f'FAIL: {e}', file=sys.stderr)
+        sys.exit(1)
+asyncio.run(main())
+"; then
+  echo "ERROR: embed_texts from inside pf2e-module failed — LM Studio embedding model likely not loaded"
+  exit 1
+fi
+
+echo ""
+echo "── Step 5: Run rules UAT against live stack ──"
 
 # Run inside interfaces/discord venv (has httpx + discord.py).
 # OBSIDIAN_API_URL in .env is `host.docker.internal:27123` (container perspective);
@@ -108,6 +131,10 @@ echo "── Step 4: Run rules UAT against live stack ──"
 HOST_OBSIDIAN_URL="${OBSIDIAN_API_URL//host.docker.internal/localhost}"
 
 cd "$PROJECT_ROOT/interfaces/discord"
+# `set -e` would kill the script on a non-zero uv-run exit before we could
+# capture UAT_EXIT — disable it for this single command so we can report
+# the UAT result cleanly.
+set +e
 LIVE_TEST=1 \
   UAT_SENTINEL_URL="${UAT_SENTINEL_URL:-http://localhost:8000}" \
   UAT_SENTINEL_KEY="$SENTINEL_API_KEY" \
@@ -117,6 +144,7 @@ LIVE_TEST=1 \
   uv run --no-sync python "$PROJECT_ROOT/scripts/uat_rules.py"
 
 UAT_EXIT=$?
+set -e
 
 echo ""
 if [ $UAT_EXIT -eq 0 ]; then
