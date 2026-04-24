@@ -303,4 +303,51 @@ async def generate_harvest_fallback(
                         monster_name, level, observed, expected_dc,
                     )
                     comp["medicine_dc"] = expected_dc
+
+    # CR-02: validate the LLM output shape BEFORE returning. A valid-JSON but
+    # wrong-shape payload (e.g. a component missing medicine_dc) would otherwise
+    # crash build_harvest_markdown / _aggregate_by_component with a KeyError on
+    # the aggregation path, which is outside the route's try/except and produces
+    # an unhandled 500. Raising ValueError here routes through the existing
+    # LLM-failure 500 handler in the route (which correctly skips cache write).
+    components = parsed.get("components")
+    if not isinstance(components, list):
+        raise ValueError(
+            f"LLM returned malformed harvest shape: 'components' missing or not a list ({type(components).__name__})"
+        )
+    for i, comp in enumerate(components):
+        if not isinstance(comp, dict):
+            raise ValueError(
+                f"LLM returned malformed harvest shape: components[{i}] is not an object"
+            )
+        if "medicine_dc" not in comp or not isinstance(comp.get("medicine_dc"), int):
+            raise ValueError(
+                f"LLM returned malformed harvest shape: components[{i}] missing integer medicine_dc"
+            )
+        if "type" not in comp and "name" not in comp:
+            raise ValueError(
+                f"LLM returned malformed harvest shape: components[{i}] missing 'type' or 'name'"
+            )
+        craftables = comp.get("craftable", []) or []
+        if not isinstance(craftables, list):
+            raise ValueError(
+                f"LLM returned malformed harvest shape: components[{i}].craftable not a list"
+            )
+        for j, craft in enumerate(craftables):
+            if not isinstance(craft, dict):
+                raise ValueError(
+                    f"LLM returned malformed harvest shape: components[{i}].craftable[{j}] is not an object"
+                )
+            if not isinstance(craft.get("name"), str) or not craft.get("name"):
+                raise ValueError(
+                    f"LLM returned malformed harvest shape: components[{i}].craftable[{j}] missing string name"
+                )
+            if not isinstance(craft.get("crafting_dc"), int):
+                raise ValueError(
+                    f"LLM returned malformed harvest shape: components[{i}].craftable[{j}] missing integer crafting_dc"
+                )
+            if not isinstance(craft.get("value"), str):
+                raise ValueError(
+                    f"LLM returned malformed harvest shape: components[{i}].craftable[{j}] missing string value"
+                )
     return parsed

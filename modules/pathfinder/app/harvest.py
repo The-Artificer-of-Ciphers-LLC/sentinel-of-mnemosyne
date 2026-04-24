@@ -228,12 +228,18 @@ def build_harvest_markdown(result: dict) -> str:
     for c in result.get("components", []) or []:
         ctype = c.get("type") or c.get("name") or "?"
         body_lines.append(f"\n## {ctype}")
-        body_lines.append(f"- Medicine DC: **{c['medicine_dc']}**")
+        # CR-02: defensive lookups — DM-hand-edited cache notes or a malformed
+        # cached shape degrade to "?" rather than crashing the markdown build.
+        body_lines.append(f"- Medicine DC: **{c.get('medicine_dc', '?')}**")
         if c.get("craftable"):
             body_lines.append("- Craftable:")
-            for craft in c["craftable"]:
+            for craft in c.get("craftable", []) or []:
+                if not isinstance(craft, dict):
+                    continue
                 body_lines.append(
-                    f"  - {craft['name']} — Crafting DC {craft['crafting_dc']}, {craft['value']}"
+                    f"  - {craft.get('name', '?')} — "
+                    f"Crafting DC {craft.get('crafting_dc', '?')}, "
+                    f"{craft.get('value', '?')}"
                 )
     if not verified_flag:
         body_lines.append("\n> **⚠ Generated — verify against sourcebook before finalising.**")
@@ -260,14 +266,22 @@ def _aggregate_by_component(per_monster: list[dict]) -> list[dict]:
             key = ctype.lower()
             entry = agg.setdefault(key, {
                 "type": ctype,
-                "medicine_dc": c["medicine_dc"],
+                # CR-02: defensive get() on medicine_dc — a DM-hand-edited
+                # cached note or malformed component no longer crashes here.
+                "medicine_dc": c.get("medicine_dc", 0),
                 "monsters": [],
                 "craftable": [],
                 "_seen_craftables": set(),
             })
             entry["monsters"].append(m["monster"])
             for craft in c.get("craftable", []) or []:
-                craft_key = craft["name"].lower()
+                if not isinstance(craft, dict):
+                    continue
+                # CR-02: skip craftables missing a name rather than crashing.
+                craft_name = craft.get("name")
+                if not isinstance(craft_name, str) or not craft_name:
+                    continue
+                craft_key = craft_name.lower()
                 if craft_key not in entry["_seen_craftables"]:
                     entry["craftable"].append(craft)
                     entry["_seen_craftables"].add(craft_key)
