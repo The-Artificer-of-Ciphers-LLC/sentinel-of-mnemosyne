@@ -1,0 +1,62 @@
+{
+  "version": "1.0",
+  "source": "Phase 33 test fixture — 5-chunk mini-corpus",
+  "license": "ORC",
+  "chunks": [
+    {
+      "id": "gm-screen:flanking",
+      "book": "Pathfinder Player Core",
+      "page": "416",
+      "section": "Flanking",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=1349",
+      "text": "When a creature is flanked by two opponents, it is off-guard (taking a -2 circumstance penalty to AC) against attacks from either of those enemies.",
+      "topics": ["flanking", "off-guard"],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:off-guard",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Off-Guard",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=31",
+      "text": "You're distracted or otherwise unable to focus your full attention on defense. You take a -2 circumstance penalty to AC.",
+      "topics": ["off-guard", "conditions"],
+      "source_license": "ORC"
+    },
+    {
+      "id": "actions:skill:grapple",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Grapple",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=235",
+      "text": "You attempt to grab an opponent with an Athletics check against the target's Fortitude DC. On success, the opponent is grabbed.",
+      "topics": ["grapple", "skills"],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:falling",
+      "book": "Pathfinder Player Core",
+      "page": "421",
+      "section": "Falling",
+      "chapter": "Playing the Game",
+      "aon_url": null,
+      "text": "A falling creature takes bludgeoning damage equal to half the distance in feet it fell (minimum 0).",
+      "topics": ["falling"],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:dying",
+      "book": "Pathfinder Player Core",
+      "page": "411-412",
+      "section": "Dying",
+      "chapter": "Playing the Game",
+      "aon_url": null,
+      "text": "A character reduced to 0 HP falls unconscious and gains the dying 1 condition (or increases by 1 per critical hit).",
+      "topics": ["dying", "conditions"],
+      "source_license": "ORC"
+    }
+  ]
+}

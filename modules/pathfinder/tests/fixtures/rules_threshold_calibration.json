@@ -1,0 +1,22 @@
+[
+  {"query": "How does flanking work?",                                                 "expected": "hit",     "expected_topic": "flanking",   "expected_source": "Player Core pg. 416-419"},
+  {"query": "What's the AC penalty for being off-guard?",                               "expected": "hit",     "expected_topic": "off-guard",  "expected_source": "Player Core — Off-Guard"},
+  {"query": "How does grappling work step by step?",                                    "expected": "hit",     "expected_topic": "grapple",    "expected_source": "Player Core — Grapple"},
+  {"query": "How much damage does falling 40 feet deal?",                               "expected": "hit",     "expected_topic": "falling",    "expected_source": "Player Core pg. 421"},
+  {"query": "What DC do I set for a level 5 check?",                                    "expected": "hit",     "expected_topic": "dcs",        "expected_source": "GM Core — DCs by Level"},
+  {"query": "What does the frightened condition do?",                                   "expected": "hit",     "expected_topic": "conditions", "expected_source": "Player Core — Frightened"},
+  {"query": "How do critical hits work on attack rolls?",                               "expected": "hit",     "expected_topic": "combat",     "expected_source": "Player Core — Playing the Game"},
+  {"query": "What happens when a character starts dying?",                              "expected": "hit",     "expected_topic": "dying",      "expected_source": "Player Core pg. 411-412"},
+  {"query": "How do I use the Treat Wounds action?",                                    "expected": "hit",     "expected_topic": "healing",    "expected_source": "Player Core — Treat Wounds"},
+  {"query": "What's the rule for concealed vs hidden creatures?",                       "expected": "hit",     "expected_topic": "detection",  "expected_source": "Player Core — Detecting Creatures"},
+  {"query": "Does a Gunslinger's Alchemical Shot stack with bombs?",                    "expected": "miss"},
+  {"query": "How does the Summoner's eidolon act in combat?",                           "expected": "miss"},
+  {"query": "What's the DC to forage in a desert biome specifically?",                  "expected": "miss"},
+  {"query": "Can a Kineticist's impulse crit on a save DC check?",                      "expected": "miss"},
+  {"query": "What is THAC0?",                                                           "expected": "decline"},
+  {"query": "How does a BAB of +8 translate to Remaster?",                              "expected": "decline"},
+  {"query": "Give me the flat-footed AC for my PF1 wizard",                             "expected": "decline"},
+  {"query": "Rules for spell schools in PF2",                                           "expected": "decline"},
+  {"query": "My character is flat-footed after being tripped — what's the penalty?",    "expected": "hit",     "expected_topic": "off-guard"},
+  {"query": "What prestige class options do fighters have?",                            "expected": "decline"}
+]
