@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
-stopped_at: Phase 33-05 Wave 4 code complete — Tasks 1-4 in worktree (bot.py _PF_NOUNS widened with 'rule' + build_ruling_embed marker-branched colors + D-11 placeholder-edit UX + 4 sub-verb dispatch; uat_rules.py 16 real live-stack assertions including D-15 Monster-Core-generates-not-declines; uat_phase33.sh 5-step orchestrator with LM Studio smoke; setuptools.backends pyproject fix as a side-effect bonus). All 10 RED bot-dispatch stubs flipped GREEN. Pathfinder 138/138 + Discord 48/48 (50 skipped require live Obsidian) — zero regressions. Tasks 5-6 deferred to human operator (Task 5 = `./scripts/uat_phase33.sh` live UAT; Task 6 = in-Discord visual verification). Both require live Docker + LM Studio + Obsidian stack the agent cannot run. 6 atomic commits + merge to main. Phase 33 awaiting human-verify gate.
-last_updated: "2026-04-24T21:30:00.000Z"
-last_activity: 2026-04-24 -- Phase 33-05 Wave 4 code complete; live UAT + visual verification pending human operator
+stopped_at: Phase 33 code complete + reviewed + auto-fixed — all 5 plans landed (Wave 0 RED stubs → Wave 1 pure transforms → Wave 2 LLM adapters + threshold calibration → Wave 3 HTTP routes + lifespan → Wave 4 Discord bot + UAT harness). gsd-verifier: 23/23 must-haves verified at automated layer (status: human_needed). gsd-code-reviewer: 1 BLOCKER + 6 WARNINGS + 4 INFO; all 7 fixed by gsd-code-fixer in 8 atomic commits, IN-01 and IN-02 documented as deferred-to-human in 33-REVIEW-FIX.md. Pathfinder 142/142 GREEN (138 baseline + 4 new regression tests for fixes); Discord 48/48 GREEN. uat_phase33.sh syntax clean. Two human-verify items remain: (1) `./scripts/uat_phase33.sh` live-stack UAT (Docker + LM Studio + Obsidian); (2) in-Discord visual verification of D-08 embed colors / D-11 placeholder-edit UX / D-13/D-14 Obsidian frontmatter.
+last_updated: "2026-04-24T22:00:00.000Z"
+last_activity: 2026-04-24 -- Phase 33 code shipped, reviewed, auto-fixed; awaiting human-verify (live UAT + Discord visual)
 progress:
   total_phases: 35
   completed_phases: 16
