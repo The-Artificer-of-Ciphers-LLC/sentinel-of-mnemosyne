@@ -95,7 +95,10 @@ _PF1_DECLINE_TERMS = [
     r"\bracial (HD|hit dice)\b",
     r"\bCore Rulebook 1st\b", r"\bCRB 1e\b",
     r"\b(1st|first) edition( Pathfinder)?\b",
-    r"\bPathfinder 1E?e?\b", r"\bPF1e?\b",
+    # Require an explicit E/e suffix so bare "Pathfinder 1" (as in "Pathfinder 1
+    # mythic rules compare to Remaster") doesn't false-match. Covers 1E, 1e, 1Ee,
+    # 1ee — all legitimate abbreviations for Pathfinder 1st Edition.
+    r"\bPathfinder 1[Ee]e?\b", r"\bPF1e?\b",
     r"\b3\.5e?\b", r"\b3\.5 edition\b", r"\bD&D 3\.5\b",
     r"\bd20 [Ss]ystem\b",
     r"\bOGL\b",

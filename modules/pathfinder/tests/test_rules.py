@@ -166,6 +166,33 @@ def test_pf1_soft_flanked_passes():
     assert result is None
 
 
+def test_pf1_pathfinder_1e_variants_decline():
+    """D-06 hard: explicit PF1 edition refs (1E/1e/1ee) must still decline.
+
+    Regression guard for WR-02: the previous regex `\\bPathfinder 1E?e?\\b`
+    made the E/e optional which degenerated to matching bare "Pathfinder 1"
+    (false-positive). Fixed pattern requires at least one E/e.
+    """
+    from app.rules import check_pf1_scope
+
+    assert check_pf1_scope("This uses Pathfinder 1E rules") == "Pathfinder 1E"
+    assert check_pf1_scope("Old Pathfinder 1e system") == "Pathfinder 1e"
+    assert check_pf1_scope("Pathfinder 1ee docs") == "Pathfinder 1ee"
+
+
+def test_pf1_bare_pathfinder_1_does_not_decline():
+    """WR-02 guard: bare 'Pathfinder 1' (no E suffix) MUST NOT decline.
+
+    A DM asking "how do Pathfinder 1 mythic rules compare to Remaster?" is
+    asking a legitimate pre-vs-post-Remaster comparison question — the corpus
+    path should answer it, not the PF1 decline message.
+    """
+    from app.rules import check_pf1_scope
+
+    assert check_pf1_scope("I have a Pathfinder 1 session tonight") is None
+    assert check_pf1_scope("How do Pathfinder 1 mythic rules compare to Remaster?") is None
+
+
 # ---------------------------------------------------------------------------
 # Cosine similarity math — RESEARCH §Vector Store
 # ---------------------------------------------------------------------------
