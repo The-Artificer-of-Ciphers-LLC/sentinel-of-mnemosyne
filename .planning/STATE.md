@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: The Dungeon
 status: in_progress
-stopped_at: Phase 32 Plan 04 (route handler + registration) COMPLETE — app/routes/harvest.py shipped (router + 4 Pydantic models + cache-aside handler); app/main.py lifespan extended and REGISTRATION_PAYLOAD grown to 13 routes; 17 Wave-0 RED tests flipped GREEN (14 route + 3 integration); 24/31 Wave-0 stubs GREEN total; Plan 05 (bot dispatch) up next
-last_updated: "2026-04-24T02:45:00Z"
-last_activity: 2026-04-24 -- Phase 32-04 executed: 2 atomic commits (69fd7e1, c7ed378); Rule 1 acceptance-compliance fix on `patch_frontmatter_field` docstring literal; Rule 3 single-Write to defeat ruff unused-import stripping in main.py; 84/84 pathfinder tests GREEN; zero Phase 29/30/31 regressions
+stopped_at: Phase 32 Plan 05 (bot wiring — :pf harvest dispatch + build_harvest_embed) COMPLETE — interfaces/discord/bot.py has new build_harvest_embed helper (pure dict→Embed, D-03a+D-04), _pf_dispatch noun-check widened to {npc, harvest}, harvest branch re-parses args for multi-word names (Pitfall 5), top-level usage + unknown-noun error now list both nouns; 7/7 test_pf_harvest_* flipped GREEN; 38/38 interfaces/discord tests + 84/84 pathfinder tests green; Phase 32 complete pending /gsd-verify-work
+last_updated: "2026-04-24T02:35:00Z"
+last_activity: 2026-04-24 -- Phase 32-05 executed: 1 atomic commit (d8f419b); Rule 3 fix — consolidated discord stub into conftest.py to eliminate sys.modules.setdefault collection-order race that hid missing Embed/Color; Rule 1 fix — defensive leading-whitespace strip before harvest slice; 38/38 discord tests + 84/84 pathfinder tests green; Phase 32 ready for /gsd-verify-work
 progress:
   total_phases: 26
   completed_phases: 13
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 32 (Monster Harvesting) — IN PROGRESS (Plan 04/05 complete)
-Next Plan: 32-05 (Discord bot dispatch — `:pf harvest` verb + build_harvest_embed + noun-widen regression guard)
-Milestone: v0.5 The Dungeon — IN PROGRESS
-Status: Phase 32-04 (Wave 3 route + registration) shipped app/routes/harvest.py (APIRouter, 4 Pydantic models, _validate_monster_name, cache-aside handler with LLM-failure anti-pattern guard and graceful cache-PUT degradation) and extended app/main.py (lifespan loads the 160-monster YAML seed and assigns module-level singletons; REGISTRATION_PAYLOAD grew to 13 routes with the harvest entry; docstring updated). 24/31 Wave-0 stubs GREEN (rapidfuzz + 3 format_price + 2 fuzzy + invalid_yaml + 14 route + 3 integration). Plan 32-05 will wire the Discord bot side and flip the remaining 7 `test_pf_harvest_*` stubs in interfaces/discord/tests/test_subcommands.py.
-Last activity: 2026-04-24 -- Phase 32-04 executed: 2 atomic commits (69fd7e1, c7ed378); HTTP layer complete, Discord wiring lands in Plan 32-05.
+Phase: 32 (Monster Harvesting) — COMPLETE (5/5 plans shipped) — awaiting /gsd-verify-work
+Next Plan: /gsd-verify-work 32 (final phase acceptance gate) → then advance to Phase 33 / 34 / 35 / 36 in v0.5
+Milestone: v0.5 The Dungeon — IN PROGRESS (5/9 phases complete after Phase 32 verification)
+Status: Phase 32-05 (Wave 4 bot wiring) shipped: interfaces/discord/bot.py gained build_harvest_embed (pure dict→discord.Embed, D-03a single-monster + D-04 batch-aggregated, 1024-char field cap), _pf_dispatch noun-check widened to {npc, harvest}, harvest dispatch branch re-parses args for multi-word monster names (Pitfall 5) + comma-separated batch with whitespace trim, top-level usage string + unknown-noun error updated to list both nouns. interfaces/discord/tests/conftest.py consolidates the discord stub (Client/Intents/Embed/Color/Thread/etc) so per-file setdefault races no longer hide missing attributes. All 7 test_pf_harvest_* flipped GREEN (solo, batch, multi-word, trimmed commas, empty→usage, embed-dict shape, noun-recognised). 38/38 interfaces/discord tests pass + 84/84 pathfinder tests pass + zero Phase 29/30/31 regressions. HRV-01..06 satisfied end-to-end.
+Last activity: 2026-04-24 -- Phase 32-05 executed: 1 atomic commit (d8f419b); Rule 3 conftest consolidation to fix collection-order stub race; Rule 1 defensive leading-whitespace strip; Phase 32 complete pending /gsd-verify-work.
 
 ## Milestone Progress
 
@@ -48,7 +48,7 @@ Last activity: 2026-04-24 -- Phase 32-04 executed: 2 atomic commits (69fd7e1, c7
 | v0.10 | The Trader Goes Live | TBD | — |
 | v1.0 | Community Release | TBD | — |
 
-Progress (v0.5): [████      ] 44% (4/9 phases — 28, 29, 30, 31 complete)
+Progress (v0.5): [█████     ] 56% (5/9 phases — 28, 29, 30, 31, 32 complete; Phase 32 pending /gsd-verify-work)
 
 ## v0.5 Phase Map
 
@@ -58,7 +58,7 @@ Progress (v0.5): [████      ] 44% (4/9 phases — 28, 29, 30, 31 complet
 | 29 | NPC CRUD + Obsidian Persistence | NPC-01..05 | Phase 28 | ✅ COMPLETE (2026-04-22) |
 | 30 | NPC Outputs | OUT-01..04 | Phase 29 | ✅ COMPLETE (2026-04-23) |
 | 31 | Dialogue Engine | DLG-01..03 | Phase 29 | ✅ COMPLETE (2026-04-23) |
-| 32 | Monster Harvesting | HRV-01..06 | Phase 28 | Not started |
+| 32 | Monster Harvesting | HRV-01..06 | Phase 28 | ✅ COMPLETE (2026-04-24) — pending /gsd-verify-work |
 | 33 | Rules Engine | RUL-01..04 | Phase 28 | Not started |
 | 34 | Session Notes | SES-01..03 | Phase 29 | Not started |
 | 35 | Foundry VTT Event Ingest | FVT-01..03 | Phase 28 | Not started |
@@ -116,6 +116,8 @@ Recent decisions affecting current work:
 - [Phase 32-03]: DC_BY_LEVEL imported at function-scope inside generate_harvest_fallback to break the app.llm → app.harvest → app.routes.npc → app.llm import cycle (app.routes.npc imports extract_npc_fields / build_mj_prompt from app.llm at module load).
 - [Phase 32-04]: POST /harvest handler uses per-name cache-aside with an explicit LLM-failure anti-pattern guard — cache-miss LLM exception raises 500 AND skips cache write (next call retries). Cache PUT failure degrades gracefully (WARNING logged, 200 still returned). This is the operating contract for D-03b.
 - [Phase 32-04]: Module-level singletons `obsidian` and `harvest_tables` in app/routes/harvest.py are set by main.py lifespan (PATTERNS.md §3 Analog D). Tests patch them directly via `patch('app.routes.harvest.{obsidian,harvest_tables,generate_harvest_fallback}')` — same pattern as the NPC routes.
+- [Phase 32-05]: Harvest dispatch branch re-parses `args` (not parts[2]/rest) so multi-word monster names survive — space-splitter would drop the second word (Pitfall 5: `:pf harvest Giant Rat` → names=['Giant Rat']). Splits only on commas, trims whitespace per name. Defensive leading-whitespace strip before the explicit-length slice (lstrip('harvest') is unsafe because it'd strip any character in {h,a,r,v,e,s,t}).
+- [Phase 32-05]: Consolidated per-file discord stubs (test_subcommands.py / test_live_integration.py / test_thread_persistence.py) into interfaces/discord/tests/conftest.py. Reason: pre-existing `sys.modules.setdefault('discord', ...)` pattern meant the first-collected file's stub won, and later files' added attributes (e.g. Embed/Color) were silently discarded. Centralising in conftest makes the stub deterministic across collection order — required for `test_pf_harvest_returns_embed_dict` to reliably pass in the full suite.
 
 ### Pending Todos
 
@@ -144,11 +146,11 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-04-24
-Stopped at: Phase 32-04 complete — app/routes/harvest.py shipped (router + 4 Pydantic models + cache-aside handler); app/main.py lifespan extended and REGISTRATION_PAYLOAD grown to 13 routes; 17 Wave-0 RED tests flipped GREEN (14 route + 3 integration); next plan is 32-05 (Discord bot dispatch + embed)
-Resume file: .planning/phases/32-monster-harvesting/32-04-route-and-registration-SUMMARY.md
+Stopped at: Phase 32-05 complete — interfaces/discord/bot.py wired (build_harvest_embed + noun-widen + harvest dispatch branch + updated usage strings); conftest.py consolidated discord stub; 7/7 test_pf_harvest_* flipped GREEN; 38/38 discord tests + 84/84 pathfinder tests green; Phase 32 ready for /gsd-verify-work 32
+Resume file: .planning/phases/32-monster-harvesting/32-05-bot-wiring-SUMMARY.md
 
-**In-Progress Phase:** 32 (Monster Harvesting) — 4/5 plans complete — Plan 32-05 next (Discord bot dispatch — `:pf harvest` verb + build_harvest_embed + 7 `test_pf_harvest_*` stubs in interfaces/discord/tests/test_subcommands.py)
+**In-Progress Phase:** none (Phase 32 implementation complete; awaiting `/gsd-verify-work 32` acceptance gate before formal phase close). Next candidate phases in v0.5: 33 (Rules Engine), 34 (Session Notes), 35 (Foundry VTT Event Ingest), 36 (Foundry NPC Pull Import).
 
-**Completed Phase:** 31 (Dialogue Engine) — 5 plans / 4 waves — 2026-04-23T21:30:00.000Z — DLG-01..03 shipped
+**Completed Phase:** 32 (Monster Harvesting) — 5 plans / 4 waves (Wave 0 RED, Waves 1-3 implementation, Wave 4 bot wiring) — 2026-04-24 — HRV-01..06 shipped end-to-end; previous: 31 (Dialogue Engine) — 5 plans / 4 waves — 2026-04-23T21:30:00.000Z — DLG-01..03 shipped
 
-**Planned Phase:** 32 (Monster Harvesting) — 5 plans / 5 waves serial — 2026-04-23T23:00:00.000Z — plan-checker PASS iter 2/3
+**Planned Phase:** 32 (Monster Harvesting) — 5 plans / 5 waves serial — 2026-04-23T23:00:00.000Z — plan-checker PASS iter 2/3 → implementation complete 2026-04-24
