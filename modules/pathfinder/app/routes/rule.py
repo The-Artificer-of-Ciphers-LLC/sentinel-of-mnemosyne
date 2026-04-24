@@ -143,10 +143,13 @@ class RuleHistoryRequest(BaseModel):
     @field_validator("n")
     @classmethod
     def _clamp_n(cls, v: int) -> int:
+        # IN-03: align backend cap with RESEARCH §History Count (N=50). Bot
+        # layer pre-clamps to 50; this is belt-and-suspenders for direct
+        # API callers that bypass the bot.
         if v < 1:
             return 1
-        if v > 100:
-            return 100
+        if v > 50:
+            return 50
         return v
 
 

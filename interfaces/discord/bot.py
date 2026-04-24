@@ -578,7 +578,8 @@ async def _pf_dispatch(
                     n = 10
                     if sub_arg:
                         try:
-                            n = max(1, min(100, int(sub_arg)))
+                            # IN-03 fix: RESEARCH §History Count caps N at 50.
+                            n = max(1, min(50, int(sub_arg)))
                         except ValueError:
                             pass
                     result = await _sentinel_client.post_to_module(
