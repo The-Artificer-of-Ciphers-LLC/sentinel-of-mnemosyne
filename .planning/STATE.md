@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
-stopped_at: Phase 33-04 complete — Wave 3 HTTP layer shipped (routes/rule.py 527 lines: 4 endpoints implementing D-02 9-step orchestration + D-08 response shape + D-12 URL honesty + D-14 GET-then-PUT last_reused_at; main.py lifespan loads corpus + builds index + wires 3 module-level singletons; REGISTRATION_PAYLOAD 13→14; ObsidianClient.list_directory added). 138/138 pathfinder tests GREEN — all 8 RED integration stubs from Wave 0 flipped this wave. Zero regressions. L-3/L-4/L-7/L-8/L-10 lints clean. AI Deferral Ban clean. 5 atomic commits + merge commit on main. Ready for Plan 33-05 (Wave 4 — discord bot wiring + live-stack UAT). NOTE: interfaces/discord venv has a pre-existing setuptools.backends ModuleNotFoundError unrelated to phase 33; Wave 4 may need to refresh that venv.
-last_updated: "2026-04-24T20:30:00.000Z"
-last_activity: 2026-04-24 -- Phase 33-04 Wave 3 HTTP layer + lifespan wiring complete
+stopped_at: Phase 33-05 Wave 4 code complete — Tasks 1-4 in worktree (bot.py _PF_NOUNS widened with 'rule' + build_ruling_embed marker-branched colors + D-11 placeholder-edit UX + 4 sub-verb dispatch; uat_rules.py 16 real live-stack assertions including D-15 Monster-Core-generates-not-declines; uat_phase33.sh 5-step orchestrator with LM Studio smoke; setuptools.backends pyproject fix as a side-effect bonus). All 10 RED bot-dispatch stubs flipped GREEN. Pathfinder 138/138 + Discord 48/48 (50 skipped require live Obsidian) — zero regressions. Tasks 5-6 deferred to human operator (Task 5 = `./scripts/uat_phase33.sh` live UAT; Task 6 = in-Discord visual verification). Both require live Docker + LM Studio + Obsidian stack the agent cannot run. 6 atomic commits + merge to main. Phase 33 awaiting human-verify gate.
+last_updated: "2026-04-24T21:30:00.000Z"
+last_activity: 2026-04-24 -- Phase 33-05 Wave 4 code complete; live UAT + visual verification pending human operator
 progress:
   total_phases: 35
   completed_phases: 16
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 33 (Rules Engine) — EXECUTING
-Plan: 5 of 5 (Plans 33-01..04 ✅ complete; Plan 33-05 Wave 4 NEXT — discord bot wiring + live-stack UAT)
-Next Plan: /gsd-execute-phase 33 (continues automatically; or targeted Plan 33-05 invocation)
+Plan: 5 of 5 (Plans 33-01..05 code complete; Plan 33-05 Tasks 5-6 awaiting human-run live UAT + Discord visual verification)
+Next Plan: Human runs `./scripts/uat_phase33.sh` (full live-stack UAT) + Discord visual checks per 33-05-PLAN.md `<how-to-verify>`
 Prior Phase: 32 (Monster Harvesting) — ✅ COMPLETE + VERIFIED (5/5 plans, 22/22 must-haves, 89/89 + 38/38 unit, 17/17 live UAT)
-Milestone: v0.5 The Dungeon — IN PROGRESS (5/9 phases complete)
-Status: Executing Phase 33
-Last activity: 2026-04-24 -- Phase 33-04 Wave 3 HTTP layer + lifespan wiring complete (138/138 pathfinder GREEN; 5 atomic commits + merge to main)
+Milestone: v0.5 The Dungeon — IN PROGRESS (5/9 phases — 33 awaiting human-verify)
+Status: Phase 33 code shipped, awaiting human-verify gate
+Last activity: 2026-04-24 -- Phase 33-05 Wave 4 code complete (10 bot stubs GREEN; pathfinder 138/138 + discord 48/48; 6 atomic commits + merge)
 
 ## Milestone Progress
 
