@@ -115,6 +115,27 @@ class RuleQueryRequest(BaseModel):
 class RuleShowRequest(BaseModel):
     topic: str
 
+    @field_validator("topic")
+    @classmethod
+    def _sanitize_topic(cls, v: str) -> str:
+        """Reject empty / overlong / control-char topic input (WR-03).
+
+        coerce_topic downstream collapses unknown slugs to 'misc', but that
+        happens AFTER Pydantic has copied a potentially huge / malformed
+        string through memory. Bound the input here like _validate_rule_query
+        does for query text.
+        """
+        if not isinstance(v, str):
+            raise ValueError("topic must be a string")
+        v = v.strip()
+        if not v:
+            raise ValueError("topic cannot be empty")
+        if len(v) > 64:
+            raise ValueError(f"topic too long (max 64 chars, got {len(v)})")
+        if re.search(r"[\x00-\x08\x0b-\x1f\x7f]", v):
+            raise ValueError("topic contains invalid control characters")
+        return v
+
 
 class RuleHistoryRequest(BaseModel):
     n: int = 10
