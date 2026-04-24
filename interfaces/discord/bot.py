@@ -185,7 +185,7 @@ _VALID_RELATIONS = frozenset({"knows", "trusts", "hostile-to", "allied-with", "f
 # the noun guard in _pf_dispatch and the usage/unknown-noun error strings
 # so adding a new noun (e.g. `spell`) is a one-line change rather than a
 # scavenger hunt through two mirrored literals.
-_PF_NOUNS = frozenset({"npc", "harvest"})
+_PF_NOUNS = frozenset({"npc", "harvest", "rule"})
 
 # Phase 31 dialogue: pair `:pf npc say ...` user messages with their bot quote-block replies
 # in a thread. Capture group 1 = names (must NOT contain newlines or pipes — they delimit the
@@ -373,6 +373,84 @@ def build_harvest_embed(data: dict) -> "discord.Embed":
     return embed
 
 
+def build_ruling_embed(data: dict) -> "discord.Embed":
+    """Build a Discord Embed from POST /modules/pathfinder/rule/query response (D-08, D-09).
+
+    Input shape (D-08):
+      {
+        "question": str, "answer": str, "why": str,
+        "source": str | None, "citations": list[dict],
+        "marker": "source" | "generated" | "declined",
+        "topic": str | None,
+        "reused": bool (optional), "reuse_note": str (optional),
+      }
+
+    Renders four logical fields:
+      * title = question (truncated to 250 chars)
+      * description = (reuse_note italic if reused) + banner + answer
+      * Why field (always, inline=False)
+      * Source field (inline=False, only when source non-null)
+      * Citations field (inline=False, only when citations non-empty)
+      * footer = "topic: <topic> | ORC license (Paizo) — Foundry pf2e"
+
+    Color:
+      * dark_green — marker="source"
+      * dark_gold  — marker="generated"
+      * red        — marker="declined"
+
+    L-5: Colors rely on discord.Color.{dark_green, dark_gold, red} — all three
+    are available in interfaces/discord/tests/conftest.py's Color stub (Wave 0
+    added dark_gold + red). This function does NOT stub or shim colors itself.
+    """
+    marker = data.get("marker", "generated")
+    question = data.get("question", "") or ""
+    answer = data.get("answer", "") or ""
+    why = data.get("why", "") or ""
+    source_str = data.get("source")
+    citations = data.get("citations", []) or []
+    reused = bool(data.get("reused", False))
+    reuse_note = data.get("reuse_note", "") or ""
+    topic = data.get("topic") or "?"
+
+    title = question[:250] if question else "Rules Ruling"
+
+    description_parts: list[str] = []
+    if reused and reuse_note:
+        description_parts.append(f"_{reuse_note}_")
+    if marker == "generated":
+        description_parts.append("⚠ **[GENERATED — verify]**")
+    elif marker == "declined":
+        description_parts.append("🚫 PF1/pre-Remaster query declined")
+    if answer:
+        description_parts.append(answer)
+    description = "\n\n".join(description_parts)[:4000]
+
+    color = {
+        "source": discord.Color.dark_green(),
+        "generated": discord.Color.dark_gold(),
+        "declined": discord.Color.red(),
+    }.get(marker, discord.Color.dark_gold())
+
+    embed = discord.Embed(title=title, description=description, color=color)
+    if why:
+        embed.add_field(name="Why", value=why[:1024], inline=False)
+    if source_str:
+        embed.add_field(name="Source", value=source_str[:1024], inline=False)
+    if citations:
+        cite_lines: list[str] = []
+        for c in citations[:3]:  # cap at 3 for embed space
+            line = f"• {c.get('book', '?')}"
+            if c.get("page"):
+                line += f" p. {c['page']}"
+            line += f" — {c.get('section', '?')}"
+            if c.get("url"):
+                line += f" | {c['url']}"
+            cite_lines.append(line)
+        embed.add_field(name="Citations", value="\n".join(cite_lines)[:1024], inline=False)
+    embed.set_footer(text=f"topic: {topic} | ORC license (Paizo) — Foundry pf2e")
+    return embed
+
+
 async def _pf_dispatch(
     args: str,
     user_id: str,
@@ -401,7 +479,8 @@ async def _pf_dispatch(
         # multi-verb noun in the current surface.
         return (
             "Usage: `:pf npc <create|update|show|relate|import|say> ...` "
-            "or `:pf harvest <Name>[,<Name>...]`"
+            "or `:pf harvest <Name>[,<Name>...]` "
+            "or `:pf rule <question>|show <topic>|history [N]|list`"
         )
     noun, verb = parts[0].lower(), parts[1].lower()
     rest = parts[2] if len(parts) > 2 else ""
