@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: The Dungeon
 status: in_progress
-stopped_at: Phase 32 Plan 02 (rapidfuzz + seed YAML) COMPLETE — rapidfuzz 3.14.5 installed, 160-monster L1-3 seed committed bound 1:1 to roster, test_rapidfuzz_importable flipped GREEN; Plan 03 (app.harvest helpers) up next
-last_updated: "2026-04-24T01:58:53Z"
-last_activity: 2026-04-24 -- Phase 32-02 executed: rapidfuzz dep added to pyproject.toml, scaffolder script shipped, 160-monster roster scraped from Foundry pf2e (pack restructured; default branch is v14-dev), harvest-tables.yaml hand-curated with ORC attribution and Table 10-5 DCs (L1=15/L2=16/L3=18)
+stopped_at: Phase 32 Plan 03 (harvest helpers + LLM fallback) COMPLETE — app/harvest.py shipped with 4 Pydantic models + 4 constants + 7 helpers; app/llm.py extended with generate_harvest_fallback (DC clamp + stamps); 6 Wave-0 RED tests flipped GREEN (format_price ×3, fuzzy ×2, invalid_yaml); Plan 04 (route handler) up next
+last_updated: "2026-04-24T02:15:00Z"
+last_activity: 2026-04-24 -- Phase 32-03 executed: 2 atomic commits (42d7dda, e1bde6f); Rule 1 deviation from RESEARCH on fuzz.ratio vs token_set_ratio (plan's scorer couldn't distinguish wolf-lord from alpha-wolf); Rule 3 cycle-break with function-scope DC_BY_LEVEL import; zero Phase 29/30/31 regressions
 progress:
   total_phases: 26
   completed_phases: 13
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 32 (Monster Harvesting) — IN PROGRESS (Plan 02/05 complete)
-Next Plan: 32-03 (app.harvest helpers — YAML loader, fuzzy match, format_price)
+Phase: 32 (Monster Harvesting) — IN PROGRESS (Plan 03/05 complete)
+Next Plan: 32-04 (route handler — POST /harvest + integration tests)
 Milestone: v0.5 The Dungeon — IN PROGRESS
-Status: Phase 32-02 (Wave 1 data layer) shipped rapidfuzz 3.14.5 + 160-monster L1-3 seed YAML bound 1:1 to Foundry pf2e roster. test_rapidfuzz_importable flipped GREEN (1/31 Wave-0 stubs resolved). Plan 32-03 will flip format_price + fuzzy + invalid_yaml stubs (5 more).
-Last activity: 2026-04-24 -- Phase 32-02 executed: 4 atomic commits (c2cbe16, e126a89, 1050a3c, 7def746); data layer complete, app code lands in Plan 32-03.
+Status: Phase 32-03 (Wave 2 helpers + LLM fallback) shipped app/harvest.py (4 Pydantic models + 4 constants + 7 pure-transform helpers) and app/llm.py::generate_harvest_fallback (full DC-by-level table 0-25 in system prompt + post-parse DC clamp + source/verified stamps). 7/31 Wave-0 stubs GREEN (rapidfuzz from 32-02 + format_price ×3 + fuzzy ×2 + invalid_yaml from 32-03). Plan 32-04 will wire the route handler and flip the remaining 14 route tests + 3 integration tests.
+Last activity: 2026-04-24 -- Phase 32-03 executed: 2 atomic commits (42d7dda, e1bde6f); helpers layer complete, route handler lands in Plan 32-04.
 
 ## Milestone Progress
 
@@ -112,6 +112,8 @@ Recent decisions affecting current work:
 - [v0.5 ADR]: Midjourney bot-to-bot DM is architecturally impossible (Discord API hard block). OUT-02 implements prompt-text-only output (Option A). No Midjourney automation code will be written.
 - [v0.5 ADR]: CORS must use explicit allow_origins (Foundry LAN IP + localhost:30000); allow_origins=["*"] breaks X-Sentinel-Key credential header delivery.
 - [v0.5 ADR]: PF2e NPC JSON schema must be derived from a live Foundry export on Phase 30 day one — documentation lags PF2e system releases; system.details.alignment removed in 2023 Remaster.
+- [Phase 32-03]: lookup_seed uses fuzz.ratio + head-noun anchor, NOT fuzz.token_set_ratio as RESEARCH prescribed — token_set_ratio scores 'wolf lord' vs 'wolf' at 100 because 'wolf' is a token subset, which breaks the Pitfall 2 boundary test. The two-tier policy (exact match → head-noun anchor → fuzz.ratio at cutoff 85) satisfies all three boundary tests simultaneously.
+- [Phase 32-03]: DC_BY_LEVEL imported at function-scope inside generate_harvest_fallback to break the app.llm → app.harvest → app.routes.npc → app.llm import cycle (app.routes.npc imports extract_npc_fields / build_mj_prompt from app.llm at module load).
 
 ### Pending Todos
 
@@ -140,10 +142,10 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-04-24
-Stopped at: Phase 32-02 complete — rapidfuzz 3.14.5 installed + 160-monster seed YAML committed; test_rapidfuzz_importable GREEN; next plan is 32-03 (app.harvest helpers)
-Resume file: .planning/phases/32-monster-harvesting/32-02-seed-yaml-SUMMARY.md
+Stopped at: Phase 32-03 complete — app/harvest.py + generate_harvest_fallback shipped; 6 Wave-0 RED tests flipped GREEN (format_price ×3, fuzzy ×2, invalid_yaml); next plan is 32-04 (route handler + integration tests)
+Resume file: .planning/phases/32-monster-harvesting/32-03-harvest-helpers-SUMMARY.md
 
-**In-Progress Phase:** 32 (Monster Harvesting) — 2/5 plans complete — Plan 32-03 next (app.harvest YAML loader + fuzzy match + format_price helpers)
+**In-Progress Phase:** 32 (Monster Harvesting) — 3/5 plans complete — Plan 32-04 next (POST /harvest route handler + 14 route tests + 3 integration tests)
 
 **Completed Phase:** 31 (Dialogue Engine) — 5 plans / 4 waves — 2026-04-23T21:30:00.000Z — DLG-01..03 shipped
 
