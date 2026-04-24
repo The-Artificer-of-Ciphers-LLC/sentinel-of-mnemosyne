@@ -1,9 +1,96 @@
 """pytest configuration for Discord interface tests."""
 import os
+import sys
+import types
 import uuid
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
+
+
+# ---------------------------------------------------------------------------
+# Stub out discord at session-collection time so all test files share one
+# consistent stub. Previously each test file rebuilt its own stub and used
+# `sys.modules.setdefault` — the first-to-collect won, and downstream tests
+# saw an incomplete stub (e.g. missing Embed/Color) depending on collection
+# order. Centralising here makes the stub deterministic across the whole
+# interfaces/discord test suite (Phase 32-05 Rule 3 fix).
+# ---------------------------------------------------------------------------
+
+
+class _DiscordClientStub:
+    def __init__(self, **kwargs):
+        pass
+
+
+class _IntentsStub:
+    message_content = False
+
+    @classmethod
+    def default(cls):
+        return cls()
+
+
+class _EmbedStub:
+    """Minimal discord.Embed stub — records constructor kwargs + fields so tests
+    can introspect the rendered embed without needing the real discord.py library."""
+
+    def __init__(self, **kwargs):
+        self.title = kwargs.get("title")
+        self.description = kwargs.get("description")
+        self.color = kwargs.get("color")
+        self.fields: list[dict] = []
+        self.footer_text: str | None = None
+
+    def add_field(self, *, name, value, inline=False):
+        self.fields.append({"name": name, "value": value, "inline": inline})
+        return self
+
+    def set_footer(self, *, text):
+        self.footer_text = text
+        return self
+
+
+class _ColorStub:
+    """Minimal discord.Color stub returning sentinel values for each named colour."""
+
+    @classmethod
+    def dark_gold(cls):
+        return "dark_gold"
+
+    @classmethod
+    def dark_green(cls):
+        return "dark_green"
+
+
+_app_commands_stub = types.ModuleType("discord.app_commands")
+_app_commands_stub.CommandTree = MagicMock()
+_app_commands_stub.describe = lambda **_: (lambda f: f)
+
+_discord_stub = types.ModuleType("discord")
+_discord_stub.Client = _DiscordClientStub
+_discord_stub.Intents = _IntentsStub
+_discord_stub.Message = object
+_discord_stub.Thread = object
+_discord_stub.ChannelType = MagicMock()
+_discord_stub.Forbidden = Exception
+_discord_stub.HTTPException = Exception
+_discord_stub.Interaction = object
+_discord_stub.Embed = _EmbedStub
+_discord_stub.Color = _ColorStub
+_discord_stub.app_commands = _app_commands_stub
+sys.modules.setdefault("discord", _discord_stub)
+sys.modules.setdefault("discord.app_commands", _app_commands_stub)
+
+# Conftest-level path insertion so `import bot` works in every test file.
+os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token-for-pytest")
+os.environ.setdefault("SENTINEL_API_KEY", "test-key-for-pytest")
+_discord_dir = os.path.join(os.path.dirname(__file__), "..")
+sys.path.insert(0, os.path.abspath(_discord_dir))
+_repo_root = os.path.join(os.path.dirname(__file__), "..", "..", "..")
+sys.path.insert(0, os.path.abspath(_repo_root))
+
 
 OBSIDIAN_BASE_URL = os.environ.get("OBSIDIAN_BASE_URL", "http://host.docker.internal:27124")
 OBSIDIAN_API_KEY = os.environ.get("OBSIDIAN_API_KEY", "")

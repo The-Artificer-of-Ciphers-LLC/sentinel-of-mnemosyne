@@ -314,6 +314,59 @@ def build_stat_embed(data: dict) -> "discord.Embed":
     return embed
 
 
+def build_harvest_embed(data: dict) -> "discord.Embed":
+    """Build a Discord Embed from /harvest module response (HRV-01..06, D-03a, D-04).
+
+    Single-monster: title=monster name+level, description=note/warning.
+    Batch: title='Harvest report — N monsters', description=generated-count warning.
+    Fields: one per aggregated component type (D-04) with Medicine DC + monsters tally + craftable bullets.
+    Footer: source attribution (FoundryVTT pf2e | LLM generated | Mixed sources).
+    """
+    monsters = data.get("monsters", []) or []
+    aggregated = data.get("aggregated", []) or []
+    footer_text = data.get("footer", "")
+
+    if len(monsters) == 1:
+        m = monsters[0]
+        title = f"{m.get('monster', '?')} (Level {m.get('level', '?')})"
+        description_parts: list[str] = []
+        if m.get("note"):
+            description_parts.append(f"_{m['note']}_")
+        if not m.get("verified", True):
+            description_parts.append("⚠ Generated — verify against sourcebook")
+        description = "\n".join(description_parts)
+    else:
+        title = f"Harvest report — {len(monsters)} monsters"
+        generated_count = sum(1 for m in monsters if not m.get("verified", True))
+        description = (
+            f"⚠ {generated_count}/{len(monsters)} entries include generated data — verify."
+            if generated_count
+            else ""
+        )
+
+    embed = discord.Embed(
+        title=title,
+        description=description,
+        color=discord.Color.dark_green(),
+    )
+
+    for comp in aggregated:
+        craftable_lines = [
+            f"• {c.get('name', '?')} (Crafting DC {c.get('crafting_dc', '?')}, {c.get('value', '?')})"
+            for c in comp.get("craftable", []) or []
+        ]
+        monsters_tally = ", ".join(comp.get("monsters", []) or [])
+        field_value = (
+            f"Medicine DC {comp.get('medicine_dc', '?')}\n"
+            f"From: {monsters_tally}\n"
+            + "\n".join(craftable_lines)
+        )[:1024]  # Discord field value cap
+        embed.add_field(name=comp.get("type", "?"), value=field_value, inline=False)
+
+    embed.set_footer(text=footer_text)
+    return embed
+
+
 async def _pf_dispatch(
     args: str,
     user_id: str,
@@ -337,15 +390,45 @@ async def _pf_dispatch(
     """
     parts = args.strip().split(" ", 2)
     if len(parts) < 2:
-        return "Usage: `:pf npc <create|update|show|relate|import|say> ...`"
+        return (
+            "Usage: `:pf npc <create|update|show|relate|import|say> ...` "
+            "or `:pf harvest <Name>[,<Name>...]`"
+        )
     noun, verb = parts[0].lower(), parts[1].lower()
     rest = parts[2] if len(parts) > 2 else ""
 
-    if noun != "npc":
-        return f"Unknown pf category `{noun}`. Currently supported: `npc`."
+    if noun not in {"npc", "harvest"}:
+        return f"Unknown pf category `{noun}`. Currently supported: `npc`, `harvest`."
 
     try:
         async with httpx.AsyncClient() as http_client:
+            if noun == "harvest":
+                # Format: `:pf harvest <Name>[,<Name>...]` — comma-separated batch (D-04, Pitfall 5).
+                # `:pf harvest` with zero args is caught by the generic `len(parts) < 2`
+                # early-return at the top of `_pf_dispatch` — it returns the combined
+                # usage string BEFORE this branch runs. So the `if not names:` fallback
+                # below is defensive (covers `:pf harvest ,` or `:pf harvest  ` where
+                # parts[1] exists but names parses empty), not redundant.
+                # Re-parse from the original args to preserve multi-word names within commas.
+                # Strip leading whitespace first so `:pf  harvest Boar` (extra spaces) still
+                # slices correctly; lstrip("harvest") is unsafe because it'd strip any leading
+                # character in the set {h,a,r,v,e,s,t}, so use explicit-length slice.
+                stripped_args = args.strip()
+                harvest_args = stripped_args[len("harvest"):].strip()
+                names = [n.strip() for n in harvest_args.split(",") if n.strip()]
+                if not names:
+                    return "Usage: `:pf harvest <Name>[,<Name>...]`"
+                result = await _sentinel_client.post_to_module(
+                    "modules/pathfinder/harvest",
+                    {"names": names, "user_id": user_id},
+                    http_client,
+                )
+                return {
+                    "type": "embed",
+                    "content": "",
+                    "embed": build_harvest_embed(result),
+                }
+
             if verb == "create":
                 # Split name | description on first pipe (D-05, Pitfall 5: maxsplit=1)
                 name, _, description = rest.partition("|")
