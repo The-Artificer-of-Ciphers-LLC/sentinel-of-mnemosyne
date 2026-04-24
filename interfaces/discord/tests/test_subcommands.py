@@ -650,3 +650,215 @@ async def test_pf_harvest_noun_recognised():
 
     if isinstance(result, str):
         assert not result.startswith("Unknown pf category")
+
+
+# ---------------------------------------------------------------------------
+# Phase 33 — :pf rule dispatch tests (RUL-01..04, D-10 noun+verbs, D-11 slow-query)
+# Wave 0 RED scaffolding — implementation lands in Wave 4 (Plan 33-05).
+# Stubs reference the `rule` noun branch and `build_ruling_embed` which
+# Plan 33-05 will add to bot.py. Tests collect cleanly; failures are honest RED.
+# ---------------------------------------------------------------------------
+
+
+from types import SimpleNamespace  # noqa: E402 — localised to Phase 33 block
+
+
+async def test_pf_rule_noun_recognised():
+    """D-10: `rule` joins `{npc, harvest}` in `_PF_NOUNS`."""
+    assert "rule" in bot._PF_NOUNS
+
+
+async def test_pf_rule_query_dispatch():
+    """`:pf rule <free text>` posts to modules/pathfinder/rule/query (RUL-01)."""
+    mock_result = {
+        "question": "How does flanking work?",
+        "answer": "Flanking imposes off-guard.",
+        "why": "Two allies on opposite sides.",
+        "source": "Player Core p. 416 — Flanking",
+        "citations": [{
+            "book": "Player Core", "page": "416",
+            "section": "Flanking",
+            "url": "https://2e.aonprd.com/Rules.aspx?ID=1349",
+        }],
+        "marker": "source",
+        "topic": "flanking",
+    }
+    mock_channel = SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(edit=AsyncMock())))
+    with patch.object(
+        bot._sentinel_client, "post_to_module",
+        new=AsyncMock(return_value=mock_result),
+    ) as mock_ptm:
+        result = await bot._pf_dispatch(
+            "rule How does flanking work?", "user123", channel=mock_channel
+        )
+
+    mock_ptm.assert_called_once()
+    assert mock_ptm.call_args[0][0] == "modules/pathfinder/rule/query"
+    payload = mock_ptm.call_args[0][1]
+    assert payload["query"] == "How does flanking work?"
+    assert payload["user_id"] == "user123"
+    assert result is not None
+
+
+async def test_pf_rule_show_dispatch():
+    """`:pf rule show <topic>` posts to modules/pathfinder/rule/show (D-10 sub-verb)."""
+    mock_result = "• flanking/abcd1234.md\n• flanking/deadbeef.md"
+    with patch.object(
+        bot._sentinel_client, "post_to_module",
+        new=AsyncMock(return_value=mock_result),
+    ) as mock_ptm:
+        result = await bot._pf_dispatch("rule show flanking", "u1")
+
+    mock_ptm.assert_called_once()
+    assert mock_ptm.call_args[0][0] == "modules/pathfinder/rule/show"
+    payload = mock_ptm.call_args[0][1]
+    assert payload["topic"] == "flanking"
+    assert result is not None
+
+
+async def test_pf_rule_history_dispatch():
+    """`:pf rule history` uses default N=10 (D-14)."""
+    mock_result = "• 2026-04-24 flanking — How does flanking work?"
+    with patch.object(
+        bot._sentinel_client, "post_to_module",
+        new=AsyncMock(return_value=mock_result),
+    ) as mock_ptm:
+        result = await bot._pf_dispatch("rule history", "u1")
+
+    mock_ptm.assert_called_once()
+    assert mock_ptm.call_args[0][0] == "modules/pathfinder/rule/history"
+    payload = mock_ptm.call_args[0][1]
+    assert payload.get("n") == 10
+    assert result is not None
+
+
+async def test_pf_rule_history_custom_n():
+    """`:pf rule history 25` passes n=25 (cap at 50 per RESEARCH §History Count)."""
+    mock_result = ""
+    with patch.object(
+        bot._sentinel_client, "post_to_module",
+        new=AsyncMock(return_value=mock_result),
+    ) as mock_ptm:
+        await bot._pf_dispatch("rule history 25", "u1")
+
+    mock_ptm.assert_called_once()
+    payload = mock_ptm.call_args[0][1]
+    assert payload.get("n") == 25
+
+
+async def test_pf_rule_list_dispatch():
+    """`:pf rule list` posts to modules/pathfinder/rule/list."""
+    mock_result = "• flanking\n• grapple\n• off-guard"
+    with patch.object(
+        bot._sentinel_client, "post_to_module",
+        new=AsyncMock(return_value=mock_result),
+    ) as mock_ptm:
+        result = await bot._pf_dispatch("rule list", "u1")
+
+    mock_ptm.assert_called_once()
+    assert mock_ptm.call_args[0][0] == "modules/pathfinder/rule/list"
+    payload = mock_ptm.call_args[0][1]
+    # Empty payload (or at most {user_id}) is acceptable — no positional args needed
+    assert "topic" not in payload
+    assert result is not None
+
+
+async def test_pf_rule_no_args_returns_usage():
+    """`:pf rule` (no args) returns a Usage string; post_to_module not called."""
+    with patch.object(
+        bot._sentinel_client, "post_to_module",
+        new=AsyncMock(side_effect=AssertionError("post_to_module should not be called")),
+    ) as mock_ptm:
+        result = await bot._pf_dispatch("rule", "u1")
+
+    mock_ptm.assert_not_called()
+    assert isinstance(result, str)
+    assert "Usage" in result
+    assert "rule" in result
+
+
+async def test_pf_rule_placeholder_edit_on_slow_query():
+    """D-11: slow-query UX — send "thinking…" placeholder, then edit with final embed."""
+    placeholder = SimpleNamespace(edit=AsyncMock())
+    mock_channel = SimpleNamespace(send=AsyncMock(return_value=placeholder))
+    mock_result = {
+        "question": "edge case",
+        "answer": "A generated ruling.",
+        "why": "W",
+        "source": None,
+        "citations": [],
+        "marker": "generated",
+        "topic": "misc",
+    }
+    with patch.object(
+        bot._sentinel_client, "post_to_module",
+        new=AsyncMock(return_value=mock_result),
+    ):
+        await bot._pf_dispatch(
+            "rule edge case query", "u1", channel=mock_channel
+        )
+
+    mock_channel.send.assert_awaited_once()
+    sent_msg = mock_channel.send.call_args[0][0]
+    assert isinstance(sent_msg, str)
+    assert "thinking" in sent_msg.lower()
+    placeholder.edit.assert_awaited_once()
+    # The final edit must deliver the embed (D-11 resolution — edit, don't resend)
+    edit_kwargs = placeholder.edit.call_args.kwargs
+    assert "embed" in edit_kwargs
+
+
+async def test_pf_rule_placeholder_edit_on_exception():
+    """D-11 failure path — module raises; placeholder edit delivers a 'failed' message."""
+    placeholder = SimpleNamespace(edit=AsyncMock())
+    mock_channel = SimpleNamespace(send=AsyncMock(return_value=placeholder))
+    with patch.object(
+        bot._sentinel_client, "post_to_module",
+        new=AsyncMock(side_effect=RuntimeError("module down")),
+    ):
+        await bot._pf_dispatch("rule flanking", "u1", channel=mock_channel)
+
+    placeholder.edit.assert_awaited_once()
+    edit_kwargs = placeholder.edit.call_args.kwargs
+    # Failure: content carries the error text, embed cleared to None
+    assert "failed" in edit_kwargs.get("content", "").lower()
+    assert edit_kwargs.get("embed") is None
+
+
+async def test_pf_rule_declined_renders_decline_embed():
+    """RUL-04 / D-07: PF1 decline → Discord embed with decline message."""
+    mock_result = {
+        "question": "What is THAC0?",
+        "answer": (
+            "This Sentinel only supports PF2e Remaster (2023+). "
+            "Your query references THAC0, which is a PF1/pre-Remaster concept. "
+            "For PF1 questions, try Archives of Nethys 1e (https://legacy.aonprd.com)."
+        ),
+        "why": "",
+        "source": None,
+        "citations": [],
+        "marker": "declined",
+        "topic": None,
+    }
+    with patch.object(
+        bot._sentinel_client, "post_to_module",
+        new=AsyncMock(return_value=mock_result),
+    ):
+        result = await bot._pf_dispatch(
+            "rule What is THAC0?", "u1", channel=None
+        )
+
+    # result shape mirrors the harvest pattern: {"type": "embed", ..., "embed": <Embed>}
+    assert isinstance(result, dict)
+    assert result.get("type") == "embed"
+    embed = result.get("embed")
+    assert embed is not None
+    # Description (or one of the fields) must carry the decline text.
+    desc = getattr(embed, "description", "") or ""
+    fields_text = " ".join(f.get("value", "") for f in getattr(embed, "fields", []))
+    combined = f"{desc} {fields_text}"
+    assert (
+        "PF2e Remaster" in combined
+        or "declined" in combined.lower()
+        or "PF1" in combined
+    )

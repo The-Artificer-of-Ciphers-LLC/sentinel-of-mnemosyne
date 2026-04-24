@@ -53,7 +53,15 @@ class _EmbedStub:
 
 
 class _ColorStub:
-    """Minimal discord.Color stub returning sentinel values for each named colour."""
+    """Minimal discord.Color stub returning sentinel values for each named colour.
+
+    Phase 33 adds dark_gold + red for build_ruling_embed marker branching:
+      - marker=="source"    -> Color.dark_green()
+      - marker=="generated" -> Color.dark_gold()
+      - marker=="declined"  -> Color.red()
+    Extended centrally here (L-5 prevention) — never add these per-file in
+    individual test modules or collection-order races break the stub.
+    """
 
     @classmethod
     def dark_gold(cls):
@@ -62,6 +70,14 @@ class _ColorStub:
     @classmethod
     def dark_green(cls):
         return "dark_green"
+
+    @classmethod
+    def red(cls):
+        return "red"
+
+    @classmethod
+    def blue(cls):
+        return "blue"
 
 
 _app_commands_stub = types.ModuleType("discord.app_commands")
