@@ -1,0 +1,2110 @@
+{
+  "version": "1.0",
+  "source": "Foundry pf2e snapshot pf2e",
+  "license": "ORC",
+  "chunks": [
+    {
+      "id": "gm-screen:bonuses-and-penalties",
+      "book": "Pathfinder Player Core",
+      "page": "400",
+      "section": "Bonuses and Penalties",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2283",
+      "text": "Bonuses If you have different types of bonuses that would apply to the same roll, you'll add them all. But if you have multiple bonuses of the same type, you can use only the highest bonus on a given roll—they aren't cumulative. Proficiency bonus Proficiency Rank Proficiency Bonus Untrained 0 Trained Your level + 2 Expert Your level + 4 Master Your level + 6 Legendary Your level + 8 Circumstance bonuses Involve the situation you find yourself in when attempting a check. Item bonuses Are granted by some item that you are wearing or using, either mundane or magical. Status bonuses Typically come from spells, other magical effects, or something applying a helpful, often temporary, condition to you. Penalties Penalties work very much like bonuses. You can have circumstance penalties , status penalties , and sometimes even item penalties. Like bonuses of the same type, you take only the worst all of various penalties of a given type. Section: Playing the Game Pathfinder Player Core pg. 400",
+      "topics": [
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:death-dying-and-unconscious",
+      "book": "Pathfinder Player Core",
+      "page": "411-412",
+      "section": "Death, Dying and Unconscious",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2424",
+      "text": "Death and Dying Knocked Out When reduced to 0 HP, move your initiative to directly before the creature or effect that reduced you to 0 HP. Gain dying 1, or dying 2 if the damage came from a critical hit or your critical failure on a save. A nonlethal effect makes you Unconscious at 0 HP and doesn't give you the dying condition. Dying You are Unconscious. If you ever reach dying 4, you die. Attempt a recovery check at the start of your turn to determine whether you get better or worse. If you ever have 1 HP or more, you lose the dying condition. Any time you lose the dying condition, increase your wounded value by 1. If you take damage while dying, increase the dying value by 1 (or 2 on an enemy's critical success or your critical failure). Recovery Checks At the start of your turn when you're dying, attempt a flat check (DC 10 + your dying value). Critical Success Your dying value is reduced by 2. Success Your dying value is reduced by 1. Failure Your dying value increases by 1. Critical Failure Your dying value increases by 2 Wounded If you gain the dying condition while you have the wounded condition, add your wounded value to your dying value. Wounded ends if you receive HP from Wounds, or if you're restored to full HP and rest for 10 minutes. Doomed The maximum dying value at which you die is reduced by your doomed value. If your maximum dying value is reduced to 0, you instantly die. Your doomed value decreases by 1 each time you get a full night's rest. Unconscious You can't wake up from Unconscious{Unconsciousness} while you have 0 Hit Points. If you're unconscious and have 1 or more Hit Points, you wake up in one of five ways. You take damage, provided the damage doesn't drop you to 0 HP. You receive healing, other than natural healing from resting. Someone nudges or shakes you awake with an Interact action. If there's loud noise, at the start of your turn attempt a Perception check against the noise's DC, waking up if you succeed. If creatures are attempting to stay quiet, this uses their Stealth DC. The GM decides you wake up either because you have had a restful night's sleep or something disrupted that restful sleep. Section: Playing the Game Pathfinder Player Core pg. 411-412",
+      "topics": [
+        "combat",
+        "conditions",
+        "dying",
+        "healing",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:basic-actions",
+      "book": "Pathfinder Player Core",
+      "page": "416-419",
+      "section": "Basic Actions",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2301",
+      "text": "Action Traits Description Aid R DC 15 check to give a +1 circumstance bonus to assisted skill check or attack roll (crit success: +2, +3 if master, +4 if legendary). Fall R Use Acrobatics to slow your fall while flying. Gaze 1 Get a +2 circumstance bonus against visual abilities. Burrow 1 move Move up to your burrow Speed. Crawl 1 move Move 5 feet while Prone. Delay 1 Select this when your turn begins; take your turn later. Prone 1 move Fall Prone. Dismiss 1 concentrate End an effect that states that you can dismiss it. Ends the entire effect unless noted otherwise. Fly 1 move Move up to your fly Speed. Moving upward counts as difficult terrain. You can move straight down 10 feet for every 5 feet of movement you spend. If you're airborne at the end of your turn and didn't Fly this round, you fall. Edge 1 manipulate Try to catch something to stop a fall. Interact 1 manipulate Grab an object, open a door, draw an item, or do a similar action. Leap 1 move Jump horizontally 10 feet (15 feet if your Speed is 30 feet or more), or vertically 3 feet and horizontally 5 feet. Mount 1 move Get on an allied animal bigger than you to ride it. Out 1 auditory manipulate visual Reveal unobserved creature. Shield 1 Put up a shield to get its bonus to AC. Release F manipulate Release something you're holding without triggering reactions. Seek 1 concentrate secret Scan an area for signs of creatures or objects using Perception. Motive 1 concentrate secret See if a creature is lying. Stand 1 move You stand up from Prone. Step 1 move Move 5 feet without triggering reactions. Stride 1 move Move up to your Speed. Strike 1 attack Attack with a weapon or unarmed attack. Sustain 1 concentrate Extend the duration of one effect that has a sustained duration or benefit when you sustain it. An extended duration lasts until the end of your next turn. Cover 1 Gain cover, or get greater cover if you have cover. Speaking As long as you can act, you can also speak. You don't need to spend any type of action to speak, but because a round represents 6 seconds of time, you can usually speak at most a single sentence or so per round. Special uses of speech, such as attempting a Deception skill check to Lie, require spending actions and follow their own rules. All speech has the auditory trait. If you communicate in some way other than speech, other rules might apply. For instance, using sign language is visual instead of auditory. Section: Playing the Game Pathfinder Player Core pg. 416-419",
+      "topics": [
+        "actions",
+        "combat",
+        "conditions",
+        "detection",
+        "falling",
+        "grapple",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:terrain-and-cover",
+      "book": "Pathfinder Player Core",
+      "page": "423-424",
+      "section": "Terrain and Cover",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2390",
+      "text": "Terrain Difficult Terrain Each square costs 5 extra feet of movement. Greater Difficult Terrain Each square costs 10 extra feet of movement. Hazardous Terrain Moving through hazardous terrain deals damage. Narrow Surface Off-guard and must Balance to cross. When you're hit or fail a save, succeed at a Reflex save or fall. Uneven Ground Off-guard and might need to Balance or fall prone. When you're hit or fail a save, succeed at a Reflex save or fall. Incline You need to Climb to ascend an incline. You're off-guard while Climbing. Cover Draw a line from the center of the attacker's space or burst to the center of the target's space. Type of Cover Bonus Can Hide Lesser Cover +1 circumstance bonus to AC if line passes through creatures but no objects. No Cover (Standard) +2 circumstance bonus to AC, Reflex saves against area effects, and Stealth checks to Hide or Sneak. You can use Cover to increase this to greater cover. Yes Greater Cover As cover, but a +4 bonus. Yes Section: Playing the Game Pathfinder Player Core pg. 423-424",
+      "topics": [
+        "conditions",
+        "falling",
+        "off-guard",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:size-and-reach",
+      "book": "Pathfinder Player Core",
+      "page": "421",
+      "section": "Size and Reach",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2395",
+      "text": "Size Space Reach (Tall) Reach (Long) Tiny Less than 5 feet 0 feet 0 feet Small 5 feet 5 feet 5 feet Medium 5 feet 5 feet 5 feet Large 10 feet 10 feet 5 feet Huge 15 feet 15 feet 10 feet Gargantuan 20 feet or more 20 feet 15 feet Section: Playing the Game Pathfinder Player Core pg. 421",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:falling",
+      "book": "Pathfinder Player Core",
+      "page": "421",
+      "section": "Falling",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2438",
+      "text": "When you fall more than 5 feet, take bludgeoning damage equal to half the distance you fell. If you take any damage, you land Prone. If you fall into water or a soft substance, calculate damage as though the fall were 20 feet shorter, 30 if you intentionally dove in (up to the depth of the substance). Falling on a Creature If you land on a creature, that creature must attempt a @Check[reflex|dc:15] save. Intentionally aiming yourself to land on a creature after a long fall is almost impossible. Critical Success The creature takes no damage. Success The creature takes bludgeoning damage equal to one-quarter the falling damage you took. Failure The creature takes bludgeoning damage equal to half the falling damage you took. Critical Failure The creature takes the same amount of bludgeoning damage you took from the fall. Falling Objects A dropped object takes damage just like a falling creature. If the object lands on a creature, that creature can attempt a Reflex save using the same rules as for a creature falling on a creature. Hazards and spells that involve falling objects, such as a rock slide, have their own rules about how they interact with creatures and the damage they deal. Section: Playing the Game Pathfinder Player Core pg. 421",
+      "topics": [
+        "combat",
+        "conditions",
+        "falling",
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:treat-wounds",
+      "book": "Pathfinder Player Core",
+      "page": "242",
+      "section": "Treat Wounds",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=55",
+      "text": "Proficiency DC Success Healing Critical Healing Trained 15 2d8 4d8 Expert* 20 2d8+10 4d8+10 Master* 30 2d8+30 4d8+30 Legendary* 40 2d8+50 4d8+50 * Rolling against a higher DC is optional. Section: Playing the Game Pathfinder Player Core pg. 242",
+      "topics": [
+        "combat",
+        "healing"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:conditions",
+      "book": "Pathfinder Player Core",
+      "page": "442",
+      "section": "Conditions",
+      "chapter": "Conditions Appendix",
+      "aon_url": null,
+      "text": "Blinded You can't see. All normal terrain is difficult terrain. You can't detect anything using vision. Automatically critically fail Perception checks that require you to see; if vision is your only precise sense, you take a –4 status penalty to Perception checks. You are immune to visual effects. Blinded overrides Dazzled. Broken A broken object can't be used, nor does it grant bonuses. Broken armor grants its item bonus to AC, but gives a status penalty to AC (–1 light, –2 medium, –3 heavy). An effect that makes an item broken reduces the item's HP to its Broken Threshold. Clumsy Take a status penalty equal to your clumsy value on Dexterity-based checks and DCs, including AC, Reflex saves, ranged attacks, and skill checks using Acrobatics, Stealth, and Thievery. Confused You are Off-Guard, don't treat anyone as your ally, and can't Delay, Ready, or use reactions. Use all your actions to Strike or cast offensive cantrips. The GM determines targets randomly. If you have no other option, target yourself, automatically hitting. If it's impossible for you to attack or cast spells, you babble incoherently, wasting your actions. Each time you take damage from an attack or spell, attempt a @Check[flat|dc:11] to end the condition. Controlled Your controller dictates how you act. Dazzled All creatures and objects are concealed from you. Deafened You can't hear. You automatically critically fail Perception checks that require hearing. Take a –2 status penalty to Perception checks for initiative and checks that involve sound but also rely on other senses. If you perform an action that has the auditory trait, you must succeed at a @Check[flat|dc:5] or the action is lost. You are immune to auditory effects. Drained Take a status penalty equal to your drained value on Constitution-based checks, such as Fortitude saves. Lose Hit Points equal to your level times the drained value, and your maximum Hit Points are reduced by the same amount. When you regain Hit Points by resting for 8 hours, your drained value is reduced by 1, but you don't immediately recover the lost Hit Points. Encumbered You're Clumsy{Clumsy 1} and take a –10-foot penalty to all your Speeds (minimum 5 feet). Enfeebled Take a status penalty equal to your enfeebled value to Strength-based rolls and DCs, including Strength-based melee attack rolls, Strength-based damage rolls, and Athletics checks. Fascinated Take a –2 status penalty to Perception and skill checks, and you can't use actions with the concentrate trait unless they are related to the subject of your fascination. This condition ends if a creature takes hostile actions toward you or any of your allies. Fatigued Take a –1 status penalty to AC and saving throws. During exploration, you can't choose an exploration activity. Recover from fatigue after a full night's rest. Fleeing On your turn, spend each action trying to escape the source of the condition as expediently as possible. You can't Delay or Ready. Frightened Take a status penalty equal to the value to all checks and DCs. At the end of each of your turns, the value decreases by 1. Grabbed You're Immobilized and Off-Guard. If you attempt a manipulate action, you must succeed at a @Check[flat|dc:5] or it is lost. Immobilized You can't take any action with the move trait. If you're Immobilized by something holding you in place and an external force would move you, the force must succeed at a check against the DC of the effect holding you in place you or the relevant defense (usually Fortitude DC) of the creature holding you in place. Off-Guard Take a –2 circumstance penalty to AC. Paralyzed You're Off-Guard and can't take actions except Recall Knowledge and others that require only your mind. You can't Seek Damage Instead of taking persistent damage immediately, take it at the end of each of your turns, rolling any damage dice each time. After you take persistent damage, roll a @Check[flat|dc:15] to see if you recover. If you succeed, the condition ends. You or an ally can help you recover, allowing an additional flat check. This usually takes 2 actions, and must be something that would reasonably help against the source of the damage. The GM can reduce the DC to 10, have the damage end automatically, or change the number of actions. Petrified You can't act, nor can you sense anything. You're an object with double your normal Bulk (typically 12 if Medium or 6 if Small), AC 9, Hardness 8, and the same current HP you had when alive. Prone You're Off-Guard with a –2 circumstance penalty to attack rolls. The only move actions you can take are Crawl and Stand. Standing ends the Prone condition. You can Cover while prone, gaining greater cover against ranged attacks (but remain off-guard). Quickened You gain 1 additional action at the start of your turn each round. Many effects that make you quickened specify the types of additional actions you can use. Because quickened has its effect at the start of your turn, you don't gain actions immediately if you become quickened during your turn. Restrained You're tied up and can barely move, or a creature has you pinned. You are Immobilized and Off-Guard, and you can't use any actions with the attack or manipulate traits except to attempt to Escape or Open your bonds. Restrained overrides Grabbed. Sickened Take a status penalty equal to the value on all checks and DCs. You can't willingly ingest anything. You can spend an action retching to attempt a Fortitude save against the DC of the sickening effect. On a success, reduce the value by 1 (2 on a critical success). Slowed When you regain your actions at the start of your turn, reduce the number of actions by your slowed value. You don't lose actions immediately if slowed during your turn. Stunned You can't act. A stunned value indicates how many total actions you lose. Each time you regain actions, reduce the number by your stunned value, then reduce your stunned value by the number of actions lost. If stunned has a duration, lose all your actions for the listed duration. Stunned overrides slowed. Actions lost to stunned count toward those lost to slowed. Stupefied Take a status penalty equal to the value to checks and DCs based on Intelligence, Wisdom, or Charisma, including Will saves, spell attack rolls and DCs, and appropriate skill checks. If you Cast a Spell, it's disrupted unless you succeed at a flat check (DC = 5 + value). Section: Conditions Appendix Pathfinder Player Core pg. 442",
+      "topics": [
+        "combat",
+        "conditions",
+        "detection",
+        "encumbrance",
+        "exploration",
+        "grapple",
+        "off-guard",
+        "spellcasting",
+        "terrain",
+        "trip"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:counteracting",
+      "book": "Pathfinder Player Core",
+      "page": "431",
+      "section": "Counteracting",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2490",
+      "text": "Some effects try to counteract spells, afflictions, conditions, or other effects. Counteract checks compare the power of two forces and determine which defeats the other. Successfully counteracting an effect disrupts it, preventing it from having any effect, unless noted otherwise. When attempting a counteract check, add the relevant skill modifier or other appropriate modifier to your check against the target's DC. If you're counteracting an affliction, the DC is in the affliction's stat block. If it's a spell, use the caster's DC. The GM can also calculate a DC based on the target effect's level. For spells, the counteract check modifier is your spellcasting attribute modifier plus your spellcasting proficiency bonus, plus any bonuses and penalties that specifically apply to counteract checks. What you can counteract depends on the check result and the target's counteract rank. If an effect is a spell, its rank is the counteract rank. Otherwise, halve its level and round up to determine its counteract rank (minimum counteract rank 0). If an effect's level is unclear and it came from a creature, halve and round up the creature's level. Critical Success Counteract the target if its counteract rank is no more than 3 higher than your effect's counteract rank. Success Counteract the target if its counteract rank is no more than 1 higher than your effect's counteract rank. Failure Counteract the target if its counteract rank is lower than your effect's counteract rank. Critical Failure You fail to counteract the target. Counteract Table Counteract Rank Failure Success Critical Success 0 — 1 (1 to 2) 3 (5 to 6) 1 0 (-1 to 0) 2 (3 to 4) 4 (7 to 8) 2 1 (1 to 2) 3 (5 to 6) 5 (9 to 10) 3 2 (3 to 4) 4 (7 to 8) 6 (11 to 12) 4 3 (5 to 6) 5 (9 to 10) 7 (13 to 14) 5 4 (7 to 8) 6 (11 to 12) 8 (15 to 16) 6 5 (9 to 10) 7 (13 to 14) 9 (17 to 18) 7 6 (11 to 12) 8 (15 to 16) 10 (19 to 20) 8 7 (13 to 14) 9 (17 to 18) 11 (21 to 22) 9 8 (15 to 16) 10 (19 to 20) 12 (23 to 24) 10 9 (17 to 18) 11 (21 to 22) 13 (25 to 26) The first number in each column is the counteract rank at which you can counteract an effect based on your degree of success. The numbers in parentheses are the typical level range corresponding to that rank. Section: Playing the Game Pathfinder Player Core pg. 431",
+      "topics": [
+        "combat",
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:light",
+      "book": "Pathfinder Player Core",
+      "page": "432",
+      "section": "Light",
+      "chapter": "Playing the Game",
+      "aon_url": null,
+      "text": "Levels of Light Description Bright Light In bright light, such as sunlight, creatures and objects can be observed clearly by anyone with average vision or better. Dim Light Areas in shadow or lit by weak light sources are in dim light. Creatures and objects in dim light have the Concealed condition, unless the seeker has darkvision or low-light vision, or a precise sense other than vision. Darkness A creature or object within darkness is Hidden or undetected unless the seeker has darkvision or a precise sense other than vision. A creature without darkvision or another means of perceiving in darkness has the Blinded condition while in darkness, though it might be able to see illuminated areas beyond the darkness. If a creature can see into an illuminated area, it can observe creatures within that illuminated area normally. After being in darkness, sudden exposure to bright light might make you Dazzled for a short time, as determined by the GM. Section: Playing the Game Pathfinder Player Core pg. 432",
+      "topics": [
+        "detection",
+        "senses"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:senses",
+      "book": "Pathfinder Player Core",
+      "page": "433",
+      "section": "Senses",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2386",
+      "text": "The ways a creature can use Perception depend on what senses it has. Precise Senses Average vision is a precise sense—a sense that can be used to perceive the world in nuanced detail. The only way to target a creature without having drawbacks is to use a precise sense. You can usually detect a creature automatically with a precise sense unless that creature is hiding or obscured by the environment, in which case you can use the Seek basic action to better detect the creature. Imprecise Senses Average hearing is an imprecise sense—it can't detect the full range of detail that a precise sense can. You can usually sense a creature automatically with an imprecise sense, but it has the Hidden condition instead of the observed condition. It might be undetected by you if it's using Stealth or is in an environment that distorts the sense, such as a noisy room in the case of hearing. In those cases, you have to use the Seek basic action to detect the creature. At best, an imprecise sense can be used to make an undetected creature (or one you didn't even know was there) merely hidden—it can't make the creature observed. Vague Senses A character also has many vague senses—ones that can alert you that something is there but aren't useful for zeroing in on it to determine exactly what it is. The most useful of these for a typical character is the sense of smell. At best, a vague sense can be used to detect the presence of an unnoticed creature, making it undetected. Even then, the vague sense isn't sufficient to make the creature Hidden or observed. Special Senses Darkvision and Greater Darkvision A creature with darkvision or greater darkvision can see perfectly well in areas of darkness and dim light, though such vision is in black and white only. Some forms of magical darkness, such as a 4th-rank darkness spell, block normal darkvision. A creature with greater darkvision, however, can see through even these forms of magical darkness. Low-Light Vision A creature with low-light vision can see in dim light as though it were bright light, so it ignores the Concealed condition due to dim light. Scent Scent involves sensing creatures or objects by smell, and is usually a vague sense. The range is listed in the ability, and it functions only if the creature or object being detected emits an aroma. If a creature emits a heavy aroma or is upwind, the GM can double or even triple the range of scent abilities used to detect that creature, and the GM can reduce the range if a creature is downwind. Tremorsense Tremorsense allows a creature to feel the vibrations through a solid surface caused by movement. It is usually an imprecise sense with a limited range (listed in the ability). Tremorsense functions only if the detecting creature is on the same surface as the subject, and only if the subject is moving along (or burrowing through) the surface. Section: Playing the Game Pathfinder Player Core pg. 433",
+      "topics": [
+        "detection",
+        "senses",
+        "spellcasting",
+        "trip"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:detecting-creatures",
+      "book": "Pathfinder Player Core",
+      "page": "434",
+      "section": "Detecting Creatures",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2386",
+      "text": "Observed A creature you're observed by knows where you are and can target you normally. Concealed A creature that you're concealed from must succeed at a @Check[flat|dc:5] when targeting you with a non-area effect. Hidden A creature you're hidden from knows the space you're in. It is Off-Guard to you, and must succeed at a @Check[flat|dc:11] to affect you. You can Hide to become hidden, and Seek to find hidden creatures. Undetected When you are undetected by a creature, it's Off-Guard to you, can't see you, has no idea what space you occupy, and can't target you. It can try to guess your square by picking a square and attempting an attack. This works like targeting a Hidden creature, but the flat check and attack roll are rolled in secret by the GM. Unnoticed A creature you're unnoticed by is unaware of your presence. Invisible You're undetected by everyone. You can't become observed while invisible except via special abilities or magic. Section: Playing the Game Pathfinder Player Core pg. 434",
+      "topics": [
+        "combat",
+        "detection",
+        "off-guard"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:detecting-and-stealth-with-other-senses",
+      "book": "Pathfinder Player Core",
+      "page": "433",
+      "section": "Detecting and Stealth with Other Senses",
+      "chapter": "Playing the Game",
+      "aon_url": null,
+      "text": "Detecting with Other Senses Most abilities that designate \"a creature you can see\" or the like function just as well if the user can precisely sense the subject with a different sense. If a monster uses a sense other than vision, the GM can adapt ways of avoiding detection that work with the monster's senses. For example, a creature that has echolocation might use hearing as a primary sense. This could mean its quarry is Concealed in a noisy chamber, Hidden in a great enough din, or Invisible under a Silence spell. Using Stealth with Other Senses The Stealth skill is designed to use Hide for avoiding visual detection and Notice and Sneak to avoid being both seen and heard. For many special senses, a player can describe how they're avoiding detection by that special sense and use the most applicable Stealth action. For instance, a creature stepping lightly to avoid being detected via tremorsense would be using Sneak. In some cases, rolling a Dexterity-based Stealth skill check to Sneak doesn't make the most sense. For example, a PC trying to avoid being detected by a creature that senses heartbeats might meditate to slow their heart rate, using Wisdom instead of Dexterity for their Stealth check. When a creature could detect you using multiple different senses, use your lowest applicable attribute modifier. Section: Playing the Game Pathfinder Player Core pg. 433",
+      "topics": [
+        "detection",
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:travel-speed",
+      "book": "Pathfinder Player Core",
+      "page": "438",
+      "section": "Travel Speed",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2453",
+      "text": "Speed Feet per Minute Miles per Hour Miles per Day 10 feet 100 1 8 15 feet 150 1-1/2 12 20 feet 200 2 16 25 feet 250 2-1/2 20 30 feet 300 3 24 35 feet 350 3-1/2 28 40 feet 400 4 32 50 feet 500 5 40 60 feet 600 6 48 Section: Playing the Game Pathfinder Player Core pg. 438",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:exploration-activities",
+      "book": "Pathfinder Player Core",
+      "page": "438",
+      "section": "Exploration Activities",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2363",
+      "text": "You must move at half speed to use any of these but Hustle. Notice Use Stealth to avoid being noticed. Defend Raise a Shield before your first turn begins. Magic concentrate Detect magic at regular intervals. Expert auditory concentration visual Gain bonus with a skill from an expert ally. Add your level if untrained, and get +2 circumstance bonus (+3 if ally is master, +4 if ally is legendary). Hustle move Move at double Speed for up to Con x 10 minutes. Investigate concentrate Use Recall Knowledge to discover clues. Spell concentrate Repeatedly cast the same spell, or continue Activation or Sustain a Spell. Scout concentrate Party members get +1 circumstance bonus to their initiative rolls. Search concentrate Seek for hidden doors and hazards. Effect concentrate Sustain an effect that can be sustained. Section: Playing the Game Pathfinder Player Core pg. 438",
+      "topics": [
+        "detection",
+        "exploration",
+        "spellcasting",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:skill-actions",
+      "book": "Pathfinder Player Core",
+      "page": "227",
+      "section": "Skill Actions",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2433",
+      "text": "Skill Key Attribute Untrained Actions Trained Actions Acrobatics Dexterity Balance A Through A Flight A Squeeze E Arcana Intelligence Knowledge A G Spell E Writing E, G Magic E, G Spell E, G Athletics Strength Climb A Open A Grapple A Jump 2 Jump 2 Reposition A Shove A Swim A Trip A Disarm A Crafting Intelligence Knowledge A G Repair Craft D Income D, G Alchemy E Deception Charisma Diversion A Impersonate E Lie Feint A Diplomacy Charisma Information E Impression E Request A Intimidation Charisma Coerce E Demoralize A Lore Intelligence Knowledge A G Income D, G Medicine Wisdom Aid 2 Knowledge A G Disease D Poison A Wounds E Nature Wisdom Animal A Knowledge A G Magic E, G Spell E, G Occultism Intelligence Knowledge A G Spell E Writing E, G Magic E, G Spell E, G Performance Charisma Perform A Income D, G Religion Wisdom Knowledge A G Spell E Writing E, G Magic E, G Spell E, G Society Intelligence Knowledge A G Subsist D, G Forgery D Writing E, G Stealth Dexterity Object A Hide A Sneak A Survival Wisdom Direction E Subsist D, G Tracks E Track E Thievery Dexterity Object A Steal A Device 2 Lock 2 D This skill action is used during downtime. E This skill action is used during exploration. G This is a general skill action, with a description appearing on the listed page number instead of in the skill's entry. Section: Playing the Game Pathfinder Player Core pg. 227",
+      "topics": [
+        "actions",
+        "grapple",
+        "shove",
+        "skills",
+        "spellcasting",
+        "trip"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:gm-screen",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "GM Screen",
+      "chapter": null,
+      "aon_url": null,
+      "text": "Playing the Game ZrEmfrgDlmlhdvQg{Basic Actions} nhYDtKvrdKi55HU2{Skill Actions} 7sclmGmVRrNOjlNF{Conditions} 9e26SSQNYcyizEQ2{Bonuses and Penalties} CfYcefv7nOP0H5H6{Size and Reach} QnqlEgRJdEsrdM9q{Falling} KdoLyU91c0oS2hTw{Death, Dying and Unconscious} z68vgV2XWhi1KYEP{Terrain and Cover} ga3hoHFR4l1dqEev{Treat Wounds} E4Q7EiSG18sIvFwg{Counteracting} pW3Q267nqiRu4h38{Light} DUOb8QrlC5t0adkL{Travel Speed} q2chuQ4Am5puc9Cc{Senses} qGZwh7wge4Z5iR0a{Detecting Creatures} lq9onil5mhl9UGQT{Detecting and Stealth with Other Senses} qbFZJybp6aFvj1VR{Exploration Activities} iufSTIPL6F63UTCv{Hero Points} 8jKbVJi0VzlwbS3Q{Traits} KCtjphOgwTWcfBks{Bulk and Encumbered} 8gcp880pEWZ9VPnF{Summon Trait} CtFrwkS2yJ64080e{Attitudes} 0dfomTXKVf7J9OFV{Archetypes} yqgXircyvQ2e56X5{Ancestries} Running the Game 4hahgIx6iZfRMpT8{Simple DCs} pBS3DUjlzVuFgapv{DCs by Level} 7zHsWW9q6YqiMIwy{DC Adjustments} sXpFBQMoDx0PpUew{Specific Skill DCs} oEyx39yADr2OjfTz{Creature Identification} oKTxJegLqJezOVEe{Environmental Damage} HM9LqMsbqeRGhKo5{Structures and Force Open DCs} ZcddTU02joqYuuoV{XP Awards} WZgFEMDSP9TvYc4u{Encounter Budget} jcRaFZEXoq7gtfBu{Monster Adjustments} I5V4dZlNV1R6KOQM{Earn Income Tasks} or9dAZfXyd01A8dS{Downtime Events} lfqjXVxMhxKrzIJD{Cost of Living} Dae8LHdXZuBv06Jk{Treasure} O357iNXwHotbecK1{Resting} OiRwxbfLNUniLg15{Special Battles} tjuR9WvTxFNXQbwv{Weather Effects} Subsystems and Variant Rules GvJVd2Yj3Lk2zM6r{Automatic Bonus Progression} LfRm7SNxoGyzBfOI{Free Archetype} gP7twT1asY7rknRA{Gradual Attribute Boosts} EgFKC3mPAUuccald{Proficiency without Level} XujUKJKdFfXSelmZ{Stamina} EBWqgmHdFUYBTD0a{Victory Points} ARVOEu4oeL3BKEOH zkQJzslkiNQuUuKd HSg7h1jm5oASbXao{Chases} 14gM2CIUCwZvxr3W{Infiltration} GMRQwFnChvxIjIiP{Reputation} 09Jpj4cCKYClyAE7{Duels} EdDpecb4EKATiYJH{Mythic Characters} gGbJqPCTf6iJsJr6{Hexploration} LkqoPLbd36O1aC7V{Leadership}",
+      "topics": [
+        "conditions",
+        "dying",
+        "encumbrance",
+        "exploration",
+        "falling",
+        "healing",
+        "hero-points",
+        "identification",
+        "terrain",
+        "treasure"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:bulk-and-encumbered",
+      "book": "Pathfinder Player Core",
+      "page": "269-270",
+      "section": "Bulk and Encumbered",
+      "chapter": "Playing the Game",
+      "aon_url": null,
+      "text": "Bulk Carrying especially heavy or unwieldy items can make it more difficult for you to move, as can overloading yourself with too much gear. The Bulk value of an item reflects how difficult the item is to handle, representing its size, weight, and general awkwardness. If you have a high Strength modifier, you usually don't need to worry about Bulk unless you're carrying numerous substantial items. Size of Creature Bulk Tiny 1 Small 3 Medium 6 Large 12 Huge 24 Gargantuan 48 Bulk Conversions for Different Sizes As shown in the table below, Large or larger creatures are less encumbered by bulky items than Small or Medium creatures, while Tiny creatures become overburdened more quickly. A Large creature treats 10 items of 1 Bulk as 1 Bulk, a Huge creature treats 10 items of 2 Bulk as 1 Bulk, and so on. A Tiny creature treats 10 items of negligible Bulk as 1 Bulk. Negligible items work in a similar way—a Huge creature treats items of 1 Bulk as negligible, so it can carry any number of items of 1 Bulk. A Tiny creature doesn't treat any items as having negligible Bulk. Creature Size Bulk Limit Treats as Light Treats as Negligible Tiny Half - none Small or Med. Standard L - Large x2 1 Bulk L Huge x4 2 Bulk 1 Bulk Gargantuan x8 4 Bulk 2 Bulk Encumbered You are carrying more weight than you can manage. While you're encumbered, you're Clumsy{Clumsy 1} and take a –10-foot penalty to all your Speeds. As with all penalties to your Speed, this can't reduce your Speed below 5 feet. Section: Playing the Game Pathfinder Player Core pg. 269-270",
+      "topics": [
+        "encumbrance"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:hero-points",
+      "book": "Pathfinder Player Core",
+      "page": "413",
+      "section": "Hero Points",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2278",
+      "text": "Give out 1 Hero Point to each PC at the start of the session. Give out roughly 1 more per hour of play, for a heroic act or a moderate or major accomplishment. Hero Points can be spent in two ways. Spend 1 Hero Point to reroll a check and use the second result. This is a fortune effect. Spend all your Hero Points to avoid death when your dying condition would increase. Lose dying and stabilize with 0 HP. Don't gain or increase your wounded value from losing the dying condition in this way, but if you already had that condition you don't lose it. Section: Playing the Game Pathfinder Player Core pg. 413",
+      "topics": [
+        "conditions",
+        "dying",
+        "hero-points"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:playing-the-game",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Playing the Game",
+      "chapter": null,
+      "aon_url": "https://2e.aonprd.com/Rules.aspx?ID=2275",
+      "text": "Sources: Pathfinder Player Core",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:running-the-game",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Running the Game",
+      "chapter": null,
+      "aon_url": null,
+      "text": "Sources: Pathfinder GM Core Pathfinder Monster Core",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:subsystems-and-variant-rules",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Subsystems and Variant Rules",
+      "chapter": null,
+      "aon_url": null,
+      "text": "Sources: Pathfinder GM Core Pathfinder Gamemastery Guide",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:traits",
+      "book": "Pathfinder Player Core",
+      "page": "271-272",
+      "section": "Traits",
+      "chapter": "Playing the Game",
+      "aon_url": "https://2e.aonprd.com/Traits.aspx",
+      "text": "Armor Traits Trait Description Bulwark @Localize[PF2E.TraitDescriptionBulwark] Comfort @Localize[PF2E.TraitDescriptionComfort] Flexible @Localize[PF2E.TraitDescriptionFlexible] Noisy @Localize[PF2E.TraitDescriptionNoisy] Pathfinder Player Core pg. 271-272 Weapon Traits Weapons and unarmed attacks can have these traits. Weapons crafted and used by a given ancestry (such as the elven curve blade) often have the trait for that ancestry. Trait Description Agile @Localize[PF2E.TraitDescriptionAgile] Attached @Localize[PF2E.TraitDescriptionAttached] Backstabber @Localize[PF2E.TraitDescriptionBackstabber] Backswing @Localize[PF2E.TraitDescriptionBackswing] Concealable @Localize[PF2E.TraitDescriptionConcealable] Deadly @Localize[PF2E.TraitDescriptionDeadly] Disarm @Localize[PF2E.TraitDescriptionDisarm] Fatal @Localize[PF2E.TraitDescriptionFatal] Finesse @Localize[PF2E.TraitDescriptionFinesse] Forceful @Localize[PF2E.TraitDescriptionForceful] Free-Hand @Localize[PF2E.TraitDescriptionFreeHand] Grapple @Localize[PF2E.TraitDescriptionGrapple] Jousting @Localize[PF2E.TraitDescriptionJousting] Monk @Localize[PF2E.TraitDescriptionMonk] Nonlethal @Localize[PF2E.TraitDescriptionNonlethal] Parry @Localize[PF2E.TraitDescriptionParry] Propulsive @Localize[PF2E.TraitDescriptionPropulsive] Ranged Trip @Localize[PF2E.TraitDescriptionRangedTrip] Reach @Localize[PF2E.TraitDescriptionReach] Shove @Localize[PF2E.TraitDescriptionShove] Sweep @Localize[PF2E.TraitDescriptionSweep] Thrown @Localize[PF2E.TraitDescriptionThrown] Trip @Localize[PF2E.TraitDescriptionTrip] Twin @Localize[PF2E.TraitDescriptionTwin] Two-Hand @Localize[PF2E.TraitDescriptionTwoHand] Unarmed @Localize[PF2E.TraitDescriptionUnarmed] Versatile @Localize[PF2E.TraitDescriptionVersatile] Volley @Localize[PF2E.TraitDescriptionVolley] Pathfinder Player Core pg. 282-283 General Traits Trait Description Additive @Localize[PF2E.TraitDescriptionAdditive] Deadly @Localize[PF2E.TraitDescriptionDeadly] Death @Localize[PF2E.TraitDescriptionDeath] Flourish @Localize[PF2E.TraitDescriptionFlourish] Finesse @Localize[PF2E.TraitDescriptionFinesse] Move @Localize[PF2E.TraitDescriptionMove] Press @Localize[PF2E.TraitDescriptionPress] Spellshape @Localize[PF2E.TraitDescriptionSpellshape] Stance @Localize[PF2E.TraitDescriptionStance] Section: Playing the Game Pathfinder Player Core",
+      "topics": [
+        "grapple",
+        "shove",
+        "spellcasting",
+        "trip"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:player-screen",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Player Screen",
+      "chapter": null,
+      "aon_url": null,
+      "text": "ZrEmfrgDlmlhdvQg{Basic Actions} nhYDtKvrdKi55HU2{Skill Actions} 7sclmGmVRrNOjlNF{Conditions} 8jKbVJi0VzlwbS3Q{Traits} 0dfomTXKVf7J9OFV{Archetypes} yqgXircyvQ2e56X5{Ancestries}",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:summon-trait",
+      "book": "Pathfinder Player Core",
+      "page": "360",
+      "section": "Summon Trait",
+      "chapter": null,
+      "aon_url": "https://2e.aonprd.com/Traits.aspx?ID=213",
+      "text": "Spells with the summon trait can conjure creatures, typically ones with a particular trait. Such creatures can be found in Monster Core and similar books. Unless noted otherwise, the creature must be common, it gains the summoned trait, and it must appear in an unoccupied space in range large enough to contain it. The highest level of creature the spell can summon depends on the rank of the spell, as listed below. The spell can still summon a creature of a lower level if you so choose. These rules apply only to spells that have the summon trait; other spells that call or conjure items or beings but that don't have the trait, like summon instrument, work as explained in the spell. Spell Rank Maximum Creature Level 1st –1 2nd 1 3rd 2 4th 3 5th 5 6th 7 7th 9 8th 11 9th 13 10th 15 Pathfinder Player Core pg. 360",
+      "topics": [
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:mythic-characters",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Mythic Characters",
+      "chapter": null,
+      "aon_url": null,
+      "text": "Mythic Rules Summary Mythic Proficiency Bonus: A proficiency bonus equal to 10 + your level, accessed with certain mythic feats. Mythic Points: Gain 3 at the start of a session, and can have 3 maximum at any time. Restoring Points: You can regain Mythic Points by slaying a mythic opponent, completing a mythic deed, or following your Calling. Mythic Calling: The initial ability that lets you access mythic power. Mythic Feats: You gain additional mythic feats at 2nd, 4th, 6th, 8th, and 10th level. Mythic Destines: At 12th level, you enter your mythic destiny, which you have for the rest of your story as an adventurer and on into immortality. You gain its mythic feats at 12th, 14th, 16th, 18th, and 20th levels. Mythic characters can gain their mythic power through a variety of means: it can be granted by a deity, gained by slaying a mythic monster or completing a mythic deed, acquired through exposure to a powerful artifact, obtained during an event when mythic power is unleashed over a large area (like the Godsrain), or via other means as determined by the GM and the story being told. Every character gains a mythic Calling when they first gain mythic power, which influences some of the fundamental nature of their power. They also gain mythic feats and, ultimately, a mythic destiny. The following sections explain how becoming mythic affects a PC. Mythic Proficiency Mythic characters have access to abilities that allow them to roll various checks using mythic proficiency instead of their normal proficiency. These abilities typically involve drawing on your reserves of mythic power to perform superhuman exploits that would be beyond normal mortal capabilities. Your proficiency bonus when using mythic proficiency is 10 plus your level. Mythic proficiency is the step above legendary proficiency, so a character attempting a check at mythic proficiency can complete any task that normally requires a specific proficiency, even if they wouldn't normally meet that requirement (such as disabling a hazard that normally requires expert or greater proficiency.) Unlike trained, expert, master, and legendary proficiency, you use mythic proficiency only when an ability tells you to, and these abilities typically require you to expend a Mythic Point to gain their benefits. Mythic Points The mythic power instilled in you gives you a pool of Mythic Points. Unlike most aspects of your character, which persist over the long term, Mythic Points last for only a single session. Mythic Points are required to cast mythic spells, use some mythic feats, activate mythic items, and can be required to attempt some mythic deeds (see below). Each mythic character starts the session with 3 Mythic Points and can have a maximum of 3 Mythic Points at any time. If you have Mythic Points, you do not gain Hero Points. Mythic Deeds A mythic deed is a task, often in the form of a hazard or noncombat challenge, that restores an adventuring party's Mythic Points once successfully navigated. It's even possible that a party might uncover their Callings after completing their first mythic deed as non-mythic characters. A mythic deed should generally be at least a moderate challenge for a party of the characters' level or involve a combination of hard and very hard skill checks for the pBS3DUjlzVuFgapv{PCs' level}; if the deed is easily accomplished without using mythic resources, it isn't a mythic deed. Many mythic monsters have mythic deeds associated with them. These can serve as examples for creating your own mythic deeds as a GM and are often intended to allow players to interact with the monster at a level where fighting the creature would be unwise or unrewarding. A mythic deed tied to a monster doesn't necessarily need to be presented at a different level than the monster it's associated with. For mythic monsters whose presence in a campaign is only intended to last a single session, it's likely that any associated mythic deeds will be no more than 2 levels higher than the monster and no more than 2 levels lower. Recovering Mythic Points Mythic power is a rare and precious resource. While it accrues and recovers naturally within mythic characters over time, it can be difficult to accrue during the heat of combat. The following are ways a character might regain Mythic Points during a session. Slaying a mythic opponent in combat restores 2 Mythic Points to the character whose attack, spell, or effect defeated the opponent, and 1 Mythic Point to all other mythic characters in the party. Completing a mythic deed restores 3 Mythic Points to each mythic character in the party. Following their Calling by taking actions particularly in line with the edicts (as determined by the GM) restores 1 Mythic Point to that character's mythic pool. A legendary accomplishment or epic sacrifice can restore 1 or more Mythic Points for a character, even if it's not one of the more defined ways to recover Mythic Points. The GM gauges when this should occur. Mythic characters have more power over their own story than most and should be rewarded when the story is particularly compelling! Death and Dying as a Mythic Character Mythic characters are much harder to kill than normal heroes. When a mythic character's dying value would reach an amount sufficient to kill them (usually 4), they instead increase their doomed value by 1 and stabilize at 0 Hit Points. A mythic character doesn't permanently die until their doomed value reaches 4. As normal, a mythic character's doomed value decreases by 1 each time they get a full night's rest.",
+      "topics": [
+        "conditions",
+        "dying",
+        "hero-points",
+        "spellcasting",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:special-battles",
+      "book": "Pathfinder Player Core",
+      "page": "437",
+      "section": "Special Battles",
+      "chapter": "Playing the Game",
+      "aon_url": null,
+      "text": "Mounted Combat You can ride some creatures into combat. As noted in the Mount specialty basic action, your mount needs to be willing and at least one size larger than you. Your mount acts on your initiative. You must use the Animal action to get your mount to spend its actions. If you don't, the animal wastes its actions. If you have the Ride general feat, you succeed automatically when you Command an Animal that's your mount. For example, if you are mounted on a horse and you make three attacks, your horse would remain stationary since you didn't command it. If you instead spent your first action to Command an Animal and succeeded, you could get your mount to Stride. You could spend your next action to attack or to command the horse to attack, but not both. Mounted Attacks You and your mount fight as a unit. Consequently, you share a multiple attack penalty. For example, if you Strike and then Command an Animal to have your mount Strike, your mount's attack takes a –5 multiple attack penalty. You occupy every square of your mount's space for the purpose of making attacks. If you were a Medium creature on a Large mount, you could attack a creature on one side of your mount, then attack on the opposite side. On a Medium or smaller mount, use the normal reach of an attack. On a Large or Huge mount, you can attack any square adjacent to the mount if you have 5- or 10-foot reach, or any square within 10 feet of the mount (including diagonally) if you have 15-foot reach. Use the adjusted reach for determining flanking and other rules that depend on reach. Mounted Defenses Attackers can target either you or your mount. An area effect affects both of you as long as you're both in the area. You are in an attacker's reach or range if any square of your mount is within reach or range. Because your mount is larger than you and you share its space, you have lesser cover against attacks targeting you when you're mounted if the mount would be in the way (as determined by the GM). Because you can't move your body as freely while you're riding a mount, you take a –2 circumstance penalty to Reflex saves while mounted. Additionally, the only move action you can use is the Mount action to dismount. Mounted Aerial Combat Many monsters can fly, and PCs can use spells and items to gain the ability to fly. Flying creatures have to use the Fly action to move through the air. Performing an especially tricky maneuver might require using Acrobatics to Maneuver in Flight. Creatures might fall from the sky, using the falling rules found on page 421. At the GM's discretion, some ground-based actions might not work in the air. For instance, a flying creature couldn't Leap. Aquatic Combat Use these rules for battles in water or underwater: You're Off-Guard unless you have a swim Speed. You gain resistance 5 to acid and fire. You take a –2 circumstance penalty to your attack roll for bludgeoning or slashing attacks that pass through water. Ranged attacks made by an underwater creature or against an underwater target have their range increments halved. You can't cast fire spells or use actions with the fire trait underwater. As normal for how traits work, any part of the effect that's unrelated to fire still works. For example, an attack with a flaming battleaxe could still deal its physical damage, just not its fire damage. At the GM's discretion, some ground-based actions might not work underwater or while floating. Combat Drowning and Suffocating You can hold your breath for a number of rounds equal to 5 + your Constitution modifier. Reduce your remaining air by 1 round at the end of each of your turns, or by 2 if you attacked or cast any spells that turn. You also lose 1 round worth of air each time you are critically hit or critically fail a save against a damaging effect. If you speak (including Casting a Spell) you lose all remaining air. Air When you run out of air, you fall Unconscious and start suffocating. You can't recover from being unconscious and must attempt a DC 20 @Check[fortitude] save at the end of each of your turns. On a failure, you take @Damage[1d10[untyped]] damage, and on a critical failure, you die. On each check after the first, the DC increases by 5 and the damage by 1d10; these increases are cumulative. Once your access to air is restored, you stop suffocating and are no longer unconscious (unless you're at 0 Hit Points). Section: Playing the Game Pathfinder Player Core pg. 437",
+      "topics": [
+        "combat",
+        "conditions",
+        "dying",
+        "falling",
+        "flanking",
+        "off-guard",
+        "spellcasting",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "gm-screen:attitudes",
+      "book": "Pathfinder Player Core",
+      "page": "239",
+      "section": "Attitudes",
+      "chapter": "Skills",
+      "aon_url": null,
+      "text": "Your influence on NPCs is measured with a set of attitudes that reflect how they view your character. These are only a brief summary of a creature's disposition. The GM will supply additional nuance based on the history and beliefs of the characters you're interacting with, and their attitudes can change in accordance with the story. The attitudes are summarized here. Helpful: Willing to help you and responds favorably to your requests. Friendly: Has a good attitude toward you, but won't necessarily stick their neck out to help you. Indifferent: Doesn't care about you either way. (Most NPCs start out indifferent.) Unfriendly: Dislikes you and doesn't want to help you. Hostile: Actively works against you—and might attack you just because of their dislike. Attitude No one can ever change the attitude of a player character with these skills. You can roleplay interactions with player characters, and even use Diplomacy results if the player wants a mechanical sense of how convincing or charming a character is, but players make the ultimate decisions about how their characters respond. Section: Skills Pathfinder Player Core pg. 239",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:blinded",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Blinded",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=1",
+      "text": "You can't see. All normal terrain is difficult terrain to you. You can't detect anything using vision. You automatically critically fail Perception checks that require you to be able to see, and if vision is your only precise sense, you take a –4 status penalty to Perception checks. You are immune to visual effects. Blinded overrides Dazzled.",
+      "topics": [
+        "combat",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:broken",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Broken",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=2",
+      "text": "Broken is a condition that affects only objects. An object is broken when damage has reduced its Hit Points to equal or less than its Broken Threshold. A broken object can't be used for its normal function, nor does it grant bonuses—with the exception of armor. Broken armor still grants its item bonus to AC, but it also imparts a status penalty to AC depending on its category: –1 for broken light armor, –2 for broken medium armor, or –3 for broken heavy armor. A broken item still imposes penalties and limitations normally incurred by carrying, holding, or wearing it. For example, broken armor would still impose its Dexterity modifier cap, check penalty, and so forth. If an effect makes an item broken automatically and the item has more HP than its Broken Threshold, that effect also reduces the item's current HP to the Broken Threshold.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:clumsy",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Clumsy",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=3",
+      "text": "Your movements become clumsy and inexact. Clumsy always includes a value. You take a status penalty equal to the condition value to Dexterity-based rolls and DCs, including AC, Reflex saves, ranged attack rolls, and skill checks using Acrobatics, Stealth, and Thievery.",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:concealed",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Concealed",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=4",
+      "text": "You are difficult for one or more creatures to see due to thick fog or some other obscuring feature. You can be concealed to some creatures but not others. While concealed, you can still be Observed, but you're tougher to target. A creature that you're concealed from must succeed at a @Check[flat|showDC:all|dc:5] when targeting you with an attack, spell, or other effect. If the check fails, you aren't affected. Area effects aren't subject to this flat check.",
+      "topics": [
+        "detection",
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:confused",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Confused",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=5",
+      "text": "You don't have your wits about you, and you attack wildly. You are Off-Guard, you don't treat anyone as your ally (though they might still treat you as theirs), and you can't Delay, Ready, or use reactions. You use all your actions to Strike or cast offensive cantrips, though the GM can have you use other actions to facilitate attack, such as draw a weapon, move so target is in reach, and so forth. Your targets are determined randomly by the GM. If you have no other viable targets, you target yourself, automatically hitting but not scoring a critical hit. If it's impossible for you to attack or cast spells, you babble incoherently, wasting your actions. Each time you take damage from an attack or spell, you can attempt a @Check[flat|showDC:all|dc:11] to recover from your confusion and end the condition.",
+      "topics": [
+        "combat",
+        "off-guard",
+        "spellcasting",
+        "terrain",
+        "trip"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:controlled",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Controlled",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=6",
+      "text": "You have been commanded, magically dominated, or otherwise had your will subverted. The controller dictates how you act and can make you use any of your actions, including attacks, reactions, or even Delay. The controller usually doesn't have to spend their own actions when controlling you.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:cursebound",
+      "book": "Pathfinder Player Core 2",
+      "page": null,
+      "section": "Cursebound",
+      "chapter": "Conditions",
+      "aon_url": null,
+      "text": "Your oracular curse is constricting around you as you receive divine punishment after drawing too deeply on your mystery's powers. Cursebound is a condition that affects only creatures with an oracular curse, and cursebound always includes a value. Your specific oracular curse imposes unique negative effects depending on your cursebound value. You can remove the cursebound condition only by Refocusing.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:dazzled",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Dazzled",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=7",
+      "text": "Your eyes are overstimulated or your vision is swimming. If vision is your only precise sense, all creatures and objects are Concealed from you.",
+      "topics": [
+        "detection"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:deafened",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Deafened",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=8",
+      "text": "You can't hear. You automatically critically fail Perception checks that require you to be able to hear. You take a –2 status penalty to Perception checks for initiative and checks that involve sound but also rely on other senses. If you perform an action that has the auditory trait, you must succeed at a @Check[flat|showDC:all|dc:5] or the action is lost; attempt the check after spending the action but before any effects are applied. You are immune to auditory effects while deafened.",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:doomed",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Doomed",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=9",
+      "text": "Your soul has been gripped by a powerful force that calls you closer to death. Doomed always includes a value. The Dying value at which you die is reduced by your doomed value. If your maximum dying value is reduced to 0, you instantly die. When you die, you're no longer doomed. Your doomed value decreases by 1 each time you get a full night's rest.",
+      "topics": [
+        "conditions",
+        "dying"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:drained",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Drained",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=10",
+      "text": "Your health and vitality have been depleted as you've lost blood, life force, or some other essence. Drained always includes a value. You take a status penalty equal to your drained value on Constitution-based rolls and DCs, such as Fortitude saves. You also lose a number of Hit Points equal to your level (minimum 1) times the drained value, and your maximum Hit Points are reduced by the same amount. For example, if you become drained 3 and you're a 3rd-level character, you lose 9 Hit Points and reduce your maximum Hit Points by 9. Losing these Hit Points doesn't count as taking damage. Each time you get a full night's rest, your drained value decreases by 1. This increases your maximum Hit Points, but you don't immediately recover the lost Hit Points.",
+      "topics": [
+        "healing",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:dying",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Dying",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=11",
+      "text": "You are bleeding out or otherwise at death's door. While you have this condition, you are Unconscious. Dying always includes a value, and if it ever reaches dying 4, you die. When you're dying, you must attempt a recovery check at the start of your turn each round to determine whether you get better or worse. Your dying condition increases by 1 if you take damage while dying, or by 2 if you take damage from an enemy's critical hit or a critical failure on your save. If you lose the dying condition by succeeding at a recovery check and are still at 0 Hit Points, you remain unconscious, but you can wake up as described in that condition. You lose the dying condition automatically and wake up if you ever have 1 Hit Point or more. Any time you lose the dying condition, you gain the Wounded{Wounded 1} condition, or increase your wounded condition value by 1 if you already have that condition.",
+      "topics": [
+        "combat",
+        "conditions",
+        "dying",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:encumbered",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Encumbered",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=12",
+      "text": "You are carrying more weight than you can manage. While you're encumbered, you're Clumsy{Clumsy 1} and take a 10-foot penalty to all your Speeds. As with all penalties to your Speed, this can't reduce your Speed below 5 feet.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:enfeebled",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Enfeebled",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=13",
+      "text": "You're physically weakened. Enfeebled always includes a value. When you are enfeebled, you take a status penalty equal to the condition value to Strength-based rolls and DCs, including Strength-based melee attack rolls, Strength-based damage rolls, and Athletics checks.",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:fascinated",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Fascinated",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=14",
+      "text": "You're compelled to focus your attention on something, distracting you from whatever else is going on around you. You take a –2 status penalty to Perception and skill checks, and you can't use concentrate actions unless they (or their intended consequences) are related to the subject of your fascination, as determined by the GM. For instance, you might be able to Seek and Knowledge about the subject, but you likely couldn't cast a spell targeting a different creature. This condition ends if a creature uses hostile actions against you or any of your allies.",
+      "topics": [
+        "detection",
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:fatigued",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Fatigued",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=15",
+      "text": "You're tired and can't summon much energy. You take a –1 status penalty to AC and saving throws. You can't use exploration activities performed while traveling. You recover from fatigue after a full night's rest.",
+      "topics": [
+        "exploration",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:fleeing",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Fleeing",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=17",
+      "text": "You're forced to run away due to fear or some other compulsion. On your turn, you must spend each of your actions trying to escape the source of the fleeing condition as expediently as possible (such as by using move actions to flee, or opening doors barring your escape). The source is usually the effect or creature that gave you the condition, though some effects might define something else as the source. You can't Delay or Ready while fleeing.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:friendly",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Friendly",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=18",
+      "text": "This condition reflects a creature's disposition toward a particular character, and only supernatural effects (like a spell) can impose this condition on a PC. A creature that is friendly to a character likes that character. It is likely to agree to Request{Requests} from that character as long as they are simple, safe, and don't cost too much to fulfill. If the character (or one of their allies) uses hostile actions against the creature, the creature gains a worse attitude condition depending on the severity of the hostile action, as determined by the GM.",
+      "topics": [
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:frightened",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Frightened",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=19",
+      "text": "You're gripped by fear and struggle to control your nerves. The frightened condition always includes a value. You take a status penalty equal to this value to all your checks and DCs. Unless specified otherwise, at the end of each of your turns, the value of your frightened condition decreases by 1.",
+      "topics": [
+        "conditions"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:grabbed",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Grabbed",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=20",
+      "text": "You're held in place by another creature, giving you the Off-Guard and Immobilized conditions. If you attempt a manipulate action while grabbed, you must succeed at a @Check[flat|showDC:all|dc:5] or it is lost; roll the check after spending the action, but before any effects are applied.",
+      "topics": [
+        "grapple",
+        "off-guard"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:helpful",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Helpful",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=21",
+      "text": "This condition reflects a creature's disposition toward a particular character, and only supernatural effects (like a spell) can impose this condition on a PC. A creature that is helpful to a character wishes to actively aid that character. It will accept reasonable Request{Requests} from that character, as long as such requests aren't at the expense of the helpful creature's goals or quality of life. If the character (or one of their allies) uses a hostile action against the creature, the creature gains a worse attitude condition depending on the severity of the hostile action, as determined by the GM.",
+      "topics": [
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:hidden",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Hidden",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=22",
+      "text": "While you're hidden from a creature, that creature knows the space you're in but can't tell precisely where you are. You typically become hidden by using Stealth to Hide. When Seek{Seeking} a creature using only imprecise senses, it remains hidden, rather than Observed. A creature you're hidden from is Off-Guard to you, and it must succeed at a @Check[flat|showDC:all|dc:11] when targeting you with an attack, spell, or other effect or it fails to affect you. Area effects aren't subject to this flat check. A creature might be able to use the seek action to try to observe you.",
+      "topics": [
+        "detection",
+        "off-guard",
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:hostile",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Hostile",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=23",
+      "text": "This condition reflects a creature's disposition toward a particular character, and only supernatural effects (like a spell) can impose on a PC. A creature hostile to a character actively seeks to harm that character. It doesn't necessarily attack, but it won't accept Request{Requests} from the character.",
+      "topics": [
+        "detection",
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:immobilized",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Immobilized",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=24",
+      "text": "You are incapable of movement. You can't use any actions that have the move trait. If you're immobilized by something holding you in place and an external force would move you out of your space, the force must succeed at a check against either the DC of the effect holding you in place or the relevant defense (usually Fortitude DC) of the monster holding you in place.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:indifferent",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Indifferent",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=25",
+      "text": "This condition reflects a creature's disposition toward a particular character, and only supernatural effects (like a spell) can impose this condition on a PC. A creature that is indifferent to a character doesn't really care one way or the other about that character. Assume a creature's attitude to a given character is indifferent unless specified otherwise.",
+      "topics": [
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:invisible",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Invisible",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=26",
+      "text": "You can't be seen. You're Undetected to everyone. Creatures can Seek to detect you; if a creature succeeds at its Perception check against your Stealth DC, you become Hidden to that creature until you Sneak to become undetected again. If you become invisible while someone can already see you, you start out hidden to them (instead of undetected) until you successfully Sneak. You can't become Observed while invisible except via special abilities or magic.",
+      "topics": [
+        "detection"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:observed",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Observed",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=27",
+      "text": "Anything in plain view is observed by you. If a creature takes measures to avoid detection, such as by using Stealth to Hide, it can become Hidden or Undetected instead of observed. If you have another precise sense besides sight, you might be able to observe a creature or object using that sense instead. You can observe a creature with only your precise senses. When Seek{Seeking} a creature using only imprecise senses, it remains hidden, rather than observed.",
+      "topics": [
+        "detection"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:off-guard",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Off-Guard",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=31",
+      "text": "You're distracted or otherwise unable to focus your full attention on defense. You take a –2 circumstance penalty to AC. Some effects give you the off-guard condition only to certain creatures or against certain attacks. Others—especially conditions—can make you off-guard against everything. If a rule doesn't specify that the condition applies only to certain circumstances, it applies to all of them, such as \"The target is off-guard.\"",
+      "topics": [
+        "off-guard"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:paralyzed",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Paralyzed",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=28",
+      "text": "You're frozen in place. You have the Off-Guard condition and can't act except to Knowledge and use actions that require only your mind (as determined by the GM). Your senses still function, but only in the areas you can perceive without moving, so you can't Seek.",
+      "topics": [
+        "conditions",
+        "detection",
+        "off-guard"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:persistent-damage",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Persistent Damage",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=29",
+      "text": "You are taking damage from an ongoing effect, such as from being lit on fire. This appears as \"X persistent [type] damage,\" where \"X\" is the amount of damage dealt and \"[type]\" is the damage type. Like normal damage, it can be doubled or halved based on the results of an attack roll or saving throw. Instead of taking persistent damage immediately, you take it at the end of each of your turns as long as you have the condition, rolling any damage dice anew each time. After you take persistent damage, roll a @Check[flat|showDC:all|dc:15] to see if you recover from the persistent damage. If you succeed, the condition ends.",
+      "topics": [
+        "combat",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:petrified",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Petrified",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=30",
+      "text": "You have been turned to stone. You can't act, nor can you sense anything. You become an object with a Bulk double your normal Bulk (typically 12 for a petrified Medium creature or 6 for a petrified Small creature), AC 9, Hardness 8, and the same current Hit Points you had when alive. You don't have a Broken Threshold. When the petrified condition ends, you have the same number of Hit Points you had as a statue. If the statue is destroyed, you immediately die. While petrified, your mind and body are in stasis, so you don't age or notice the passing of time.",
+      "topics": [
+        "encumbrance"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:prone",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Prone",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=32",
+      "text": "You're lying on the ground. You are Off-Guard and take a –2 circumstance penalty to attack rolls. The only move actions you can use while you're prone are Crawl and Stand. Standing up ends the prone condition. You can Cover while prone to hunker down and gain greater cover against ranged attacks, even if you don't have an object to get behind, which grants you a +4 circumstance bonus to AC against ranged attacks (but you remain off-guard). If you would be knocked prone while you're Climb{Climbing} or Fly{Flying}, you fall. You can't be knocked prone when Swim{Swimming}.",
+      "topics": [
+        "combat",
+        "conditions",
+        "falling",
+        "off-guard",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:quickened",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Quickened",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=33",
+      "text": "You're able to act more quickly. You gain 1 additional action at the start of your turn each round. Many effects that make you quickened require you use this extra action only in certain ways. If you become quickened from multiple sources, you can use the extra action you've been granted for any single action allowed by any of the effects that made you quickened. Because quickened has its effect at the start of your turn, you don't immediately gain actions if you become quickened during your turn.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:restrained",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Restrained",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=34",
+      "text": "You're tied up and can barely move, or a creature has you pinned. You have the Off-Guard and Immobilized conditions, and you can't use any attack or manipulate actions except to attempt to Escape or Open your bonds. Restrained overrides Grabbed.",
+      "topics": [
+        "grapple",
+        "off-guard"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:sickened",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Sickened",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=35",
+      "text": "@Localize[PF2E.condition.sickened.rules]",
+      "topics": [
+        "conditions"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:slowed",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Slowed",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=36",
+      "text": "You have fewer actions. Slowed always includes a value. When you regain your actions, reduce the number of actions regained by your slowed value. Because you regain actions at the start of your turn, you don't immediately lose actions if you become slowed during your turn.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:stunned",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Stunned",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=37",
+      "text": "You've become senseless. You can't act. Stunned usually includes a value, which indicates how many total actions you lose, possibly over multiple turns, from being stunned. Each time you regain actions, reduce the number you regain by your stunned value, then reduce your stunned value by the number of actions you lost. For example, if you were stunned 4, you would lose all 3 of your actions on your turn, reducing you to stunned 1; on your next turn, you would lose 1 more action, and then be able to use your remaining 2 actions normally. Stunned might also have a duration instead, such as \"stunned for 1 minute,\" causing you to lose all your actions for the duration. Stunned overrides Slowed. If the duration of your stunned condition ends while you are slowed, you count the actions lost to the stunned condition toward those lost to being slowed. So, if you were stunned 1 and slowed 2 at the beginning of your turn, you would lose 1 action from stunned, and then lose only 1 additional action by being slowed, so you would still have 1 action remaining to use that turn.",
+      "topics": [
+        "conditions"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:stupefied",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Stupefied",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=38",
+      "text": "Your thoughts and instincts are clouded. Stupefied always includes a value. You take a status penalty equal to this value on Intelligence-, Wisdom-, and Charisma-based rolls and DCs, including Will saving throws, spell attack modifiers, spell DCs, and skill checks that use these attribute modifiers. Any time you attempt to Spell while stupefied, the spell is disrupted unless you succeed at a @Check[flat|showDC:all|dc:resolve(5+@item.badge.value)] with a DC equal to 5 + your stupefied value.",
+      "topics": [
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:unconscious",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Unconscious",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=40",
+      "text": "You're sleeping or have been knocked out. You can't act. You take a –4 status penalty to AC, Perception, and Reflex saves, and you have the Blinded and Off-Guard conditions. When you gain this condition, you fall Prone and drop items you're holding unless the effect states otherwise or the GM determines you're positioned so you wouldn't. If you're unconscious because you're Dying, you can't wake up while you have 0 Hit Points. If you are restored to 1 Hit Point or more, you lose the dying and unconscious conditions and can act normally on your next turn. If you are unconscious and at 0 Hit Points, but not dying, you return to 1 Hit Point and awaken after sufficient time passes. The GM determines how long you remain unconscious, from a minimum of 10 minutes to several hours. If you are healed, you lose the unconscious condition and can act normally on your next turn. If you're unconscious and have more than 1 Hit Point (typically because you are asleep or unconscious due to an effect), you wake up in one of the following ways. You take damage, though if the damage reduces you to 0 Hit Points, you remain unconscious and gain the dying condition as normal. You receive healing, other than the natural healing you get from resting. Someone shakes you awake with an Interact action. Loud noise around you might wake you. At the start of your turn, you automatically attempt a Perception check against the noise's DC (or the lowest DC if there is more than one noise), waking up if you succeed. If creatures are attempting to stay quiet around you, this Perception check uses their Stealth DCs. Some effects make you sleep so deeply that they don't allow you this Perception check. If you are simply asleep, the GM decides you wake up either because you have had a restful night's sleep or something disrupted that rest.",
+      "topics": [
+        "conditions",
+        "dying",
+        "falling",
+        "healing",
+        "off-guard"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:undetected",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Undetected",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=41",
+      "text": "When you are undetected by a creature, that creature can't see you at all, has no idea what space you occupy, and can't target you, though you still can be affected by abilities that target an area. When you're undetected by a creature, that creature is Off-Guard to you. A creature you're undetected by can guess which square you're in to try targeting you. It must pick a square and attempt an attack. This works like targeting a Hidden creature (requiring a @Check[flat|showDC:all|dc:11|traits:secret]), but the flat check and attack roll are rolled in secret by the GM, who doesn't reveal whether the attack missed due to failing the flat check, failing the attack roll, or choosing the wrong square. They can Seek to try to find you.",
+      "topics": [
+        "combat",
+        "detection",
+        "off-guard"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:unfriendly",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Unfriendly",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=42",
+      "text": "This condition reflects a creature's disposition toward a particular character, and only supernatural effects (like a spell) can impose this condition on a PC. A creature that is unfriendly to a character dislikes and distrusts that character. The unfriendly creature won't accept Request{Requests} from the character.",
+      "topics": [
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:unnoticed",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Unnoticed",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=43",
+      "text": "If you're unnoticed by a creature, that creature has no idea you're present. When you're unnoticed, you're also Undetected. This matters for abilities that can be used only against targets totally unaware of your presence.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "conditions:wounded",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Wounded",
+      "chapter": "Conditions",
+      "aon_url": "https://2e.aonprd.com/Conditions.aspx?ID=44",
+      "text": "You have been seriously injured. If you lose the Dying condition and do not already have the wounded condition, you become wounded 1. If you already have the wounded condition when you lose the dying condition, your wounded condition value increases by 1. If you gain the dying condition while wounded, increase your dying condition value by your wounded value. The wounded condition ends if someone successfully restores Hit Points to you using Wounds, or if you are restored to full Hit Points by any means and rest for 10 minutes.",
+      "topics": [
+        "conditions",
+        "dying"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:aid",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Aid",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=73",
+      "text": "Trigger An ally is about to use an action that requires a skill check or attack roll. Requirements The ally is willing to accept your aid, and you have prepared to help (see below). You try to help your ally with a task. To use this reaction, you must first prepare to help, usually by using an action during your turn. You must explain to the GM exactly how you're trying to help, and they determine whether you can Aid your ally. When you use your Aid reaction, attempt a skill check or attack roll of a type decided by the GM. The typical DC is 15, but the GM might adjust this DC for particularly hard or easy tasks. The GM can add any relevant traits to your preparatory action or to your Aid reaction depending on the situation, or even allow you to Aid checks other than skill checks and attack rolls. Critical Success You grant your ally a +2 circumstance bonus to the triggering check. If you're a master with the check you attempted, the bonus is +3, and if you're legendary, it's +4. Success You grant your ally a +1 circumstance bonus to the triggering check. Critical Failure Your ally takes a –1 circumstance penalty to the triggering check. Aid",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:arrest-a-fall",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Arrest a Fall",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=245",
+      "text": "Trigger You fall. Requirements You have a fly Speed. You attempt an Acrobatics check or Reflex save to slow your fall. The DC is typically 15, but it might be higher due to air turbulence or other circumstances. Success You take no damage from the fall.",
+      "topics": [
+        "falling"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:avert-gaze",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Avert Gaze",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=224",
+      "text": "You avert your gaze from danger, such as a medusa's gaze. You gain a +2 circumstance bonus to saves against visual abilities that require you to look at a creature or object, such as a medusa's petrifying gaze. Your gaze remains averted until the start of your next turn.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:burrow",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Burrow",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=243",
+      "text": "Requirements You have a burrow Speed. You dig your way through dirt, sand, or a similar loose material at a rate up to your burrow Speed. You can't burrow through rock or other substances denser than dirt unless you have an ability that allows you to do so.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:cast-a-spell",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Cast a Spell",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=76",
+      "text": "Spells can vary in how many actions they take, as shown in the spell's stat block. You cast cantrips, spells from spell slots, and focus spells using the same process, but must expend the spell when casting a spell from a spell slot and must spend 1 Focus Point to cast a focus spell. Some rules will refer to the Cast a Spell activity, such as \"if the next action you use is to Cast a Spell.\" Any spell qualifies as a Cast a Spell activity, and any characteristics of the spell use those of the specific spell you're casting. Costs and Loci Some spells require you to pay a cost or provide a locus. If the spell lists a cost, you must have the listed money, valuable materials, or other resources to cast the spell (such as gems or magical reagents), and they're expended during the casting. A locus is an object that funnels or directs the magical energy of the spell but is not consumed in its casting. As part of Casting the Spell, you retrieve the locus (if necessary, and if you have a free hand), and you can put it away again if you so choose. Loci tend to be expensive, and you need to acquire them in advance to cast the spell, but they aren't expended like costs are. Unless noted otherwise, a locus has negligible Bulk. Long Casting Times Some spells take minutes or hours to cast. You can't use other actions or reactions while casting such a spell, though at the GM's discretion, you might be able to speak a few sentences. As with other activities that take a long time, these spells have the exploration trait, and you can't cast them in an encounter. If combat breaks out while you're casting one, your spell is disrupted. Disrupted and Lost Spells Some abilities and spells can disrupt a spell, causing it to have no effect and be lost. When you lose a spell, you've already expended the spell slot and spent the spell's costs and actions. If a spell is disrupted during a Sustain action, the spell immediately ends.",
+      "topics": [
+        "encumbrance",
+        "spellcasting",
+        "trip"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:crawl",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Crawl",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=228",
+      "text": "Requirements You are prone and your Speed is at least 10 feet. You move 5 feet by crawling and continue to stay Prone.",
+      "topics": [
+        "conditions"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:delay",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Delay",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=78",
+      "text": "Trigger Your turn begins. You wait for the right moment to act. The rest of your turn doesn't happen yet. Instead, you're removed from the initiative order. You can return to the initiative order as a free action triggered by the end of any other creature's turn. This permanently changes your initiative to the new position. You can't use reactions until you return to the initiative order. If you Delay an entire round without returning to the initiative order, the actions from the Delayed turn are lost, your initiative doesn't change, and your next turn occurs at your original position in the initiative order. When you Delay, any Damage or other negative effects that normally occur at the start or end of your turn occur immediately when you use the Delay action. Any beneficial effects that would end at any point during your turn also end. The GM might determine that other effects end when you Delay as well. Essentially, you can't Delay to avoid negative consequences that would happen on your turn or to extend beneficial effects that would end on your turn.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:dismiss",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Dismiss",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=79",
+      "text": "You end an effect that states you can Dismiss it. Dismissing ends the entire effect unless noted otherwise.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:drop-prone",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Drop Prone",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=227",
+      "text": "You fall Prone.",
+      "topics": [
+        "conditions",
+        "falling"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:escape",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Escape",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=233",
+      "text": "You attempt to escape from being Grabbed, Immobilized, or Restrained. Choose one creature, object, spell effect, hazard, or other impediment imposing any of those conditions on you. Attempt a check using your [[/act escape statistic=unarmed]]{unarmed attack modifier} against the DC of the effect. This is typically the Athletics DC of a creature grabbing you, the Thievery DC of a creature who tied you up, the spell DC for a spell effect, or the listed Escape DC of an object, hazard, or other impediment. You can attempt an [[/act escape statistic=acrobatics]]{Acrobatics} or [[/act escape statistic=athletics]]{Athletics} check instead of using your attack modifier if you choose (but this action still has the attack trait). Critical Success You get free and remove the grabbed, immobilized, and restrained conditions imposed by your chosen target. You can then Stride up to 5 feet. Success You get free and remove the grabbed, immobilized, and restrained conditions imposed by your chosen target. Critical Failure You don't get free, and you can't attempt to Escape again until your next turn.",
+      "topics": [
+        "combat",
+        "grapple",
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:fly",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Fly",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=244",
+      "text": "Requirements You have a fly Speed. You move through the air up to your fly Speed. Moving upward (straight up or diagonally) uses the rules for moving through difficult terrain. You can move straight down 10 feet for every 5 feet of movement you spend. If you Fly to the ground, you don't take falling damage. You can use an action to Fly 0 feet to hover in place. If you're airborne at the end of your turn and didn't use a Fly action this round, you fall.",
+      "topics": [
+        "falling",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:grab-an-edge",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Grab an Edge",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=246",
+      "text": "Trigger You fall from or past an edge or handhold. Requirements Your hands are not tied behind your back or otherwise restrained. When you fall off or past an edge or other handhold, you can try to grab it, potentially stopping your fall. You must succeed at your choice of an Acrobatics check or a Reflex save, usually at the Climb DC. If you grab the edge or handhold, you can then Climb up using Athletics. Critical Success You grab the edge or handhold, whether or not you have a hand free, typically by using a suitable held item to catch yourself (catching a battle axe on a ledge, for example). You still take damage from the distance fallen so far, but you treat the fall as though it were 30 feet shorter. Success If you have at least one hand free, you grab the edge or handhold, stopping your fall. You still take damage from the distance fallen so far, but you treat the fall as though it were 20 feet shorter. If you have no hands free, you continue to fall as if you had failed the check. Critical Failure You continue to fall, and if you've fallen 20 feet or more before you use this reaction, you take 10 bludgeoning damage from the impact for every 20 feet fallen.",
+      "topics": [
+        "combat",
+        "falling",
+        "grapple"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:interact",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Interact",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=80",
+      "text": "You use your hand or hands to manipulate an object or the terrain. You can grab an unattended or stored object, draw a weapon, swap a held item for another, open a door, or achieve a similar effect. On rare occasions, you might have to attempt a skill check to determine if your Interact action was successful.",
+      "topics": [
+        "grapple"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:leap",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Leap",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=82",
+      "text": "You take a short horizontal or vertical jump. Jumping a greater distance requires using the Athletics skill for a Jump or Jump. Horizontal Jump up to 10 feet horizontally if your Speed is at least 15 feet, or up to 15 feet horizontally if your speed is at least 30 feet. You land in the space where your Leap ends (meaning you can typically clear a 5-foot gap, or a 10-foot gap if your Speed is 30 feet or more). You can't make a horizontal Leap if your Speed is less than 15 feet. Vertical Jump up to 3 feet vertically and 5 feet horizontally onto an elevated surface.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:mount",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Mount",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=74",
+      "text": "Requirements You are adjacent to a creature that is at least one size larger than you and is willing to be your mount. You move onto the creature and ride it. If you're already mounted, you can instead use this action to dismount, moving off the mount into a space adjacent to it.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:point-out",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Point Out",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=248",
+      "text": "Requirements A creature is undetected by one or more of your allies but isn't undetected by you. You indicate a creature that you can see to one or more allies, gesturing in a direction and describing the distance verbally. That creature is Hidden to your allies, rather than Undetected. This works only for allies who can see you and are in a position where they could potentially detect the target. If your allies can't hear or understand you, they must succeed at a Perception check against the creature's Stealth DC or they misunderstand and believe the target is in a different location.",
+      "topics": [
+        "detection"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:raise-a-shield",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Raise a Shield",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=75",
+      "text": "Requirements You are wielding a shield. You position your shield to protect yourself. When you have Raised a Shield, you gain its listed circumstance bonus to AC. Your shield remains raised until the start of your next turn.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:ready",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Ready",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=83",
+      "text": "You prepare to use an action that will occur outside your turn. Choose a single action or free action you can use, and designate a trigger. Your turn then ends. If the trigger you designated occurs before the start of your next turn, you can use the chosen action as a reaction (provided you still meet the requirements to use it). You can't Ready a free action that already has a trigger. If you have a multiple attack penalty and your readied action is an attack action, your readied attack takes the multiple attack penalty you had at the time you used Ready. This is one of the few times the multiple attack penalty applies when it's not your turn.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:release",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Release",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=86",
+      "text": "You release something you're holding in your hand or hands. This might mean dropping an item, removing one hand from your weapon while continuing to hold it in another hand, releasing a rope suspending a chandelier, or performing a similar action. Unlike most manipulate actions, Release does not trigger reactions that can be triggered by actions with the manipulate trait (such as Reactive Strike). If you want to prepare to Release something outside of your turn, use the Ready activity.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:seek",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Seek",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=84",
+      "text": "You scan an area for signs of creatures or objects, possibly including secret doors or hazards. Choose an area to scan. The GM determines the area you can scan with one Seek action—almost always 30 feet or less in any dimension. The GM might impose a penalty if you search far away from you or adjust the number of actions it takes to Seek a particularly cluttered area. The GM attempts a single secret [[/act seek]]{Perception} check for you and compares the result to the Stealth DCs of any Undetected or Hidden creatures in the area, or the DC to detect each object in the area (as determined by the GM or by someone Object{Concealing the Object}). A creature you detect might remain hidden, rather than becoming Observed, if you're using an imprecise sense or if an effect (such as Invisibility) prevents the subject from being observed. Critical Success Any undetected or hidden creature you critically succeeded against becomes observed by you. You learn the location of objects in the area you critically succeeded against. Success Any undetected creature you suceeded against becomes hidden from you instead of undetected, and any hidden creature you succeeded against becomes observed by you. You learn the location of any object or get a clue to its whereabouts, as determined by the GM.",
+      "topics": [
+        "combat",
+        "detection"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:sense-motive",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Sense Motive",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=46",
+      "text": "You try to tell whether a creature's behavior is abnormal. Choose one creature and assess it for odd body language, signs of nervousness, and other indicators that it might be trying to deceive someone. The GM attempts a single secret [[/act sense-motive]]{Perception} check for you and compares the result to the Deception DC of the creature, the DC of a spell affecting the creature's mental state, or another appropriate DC determined by the GM. You typically can't try to Sense the Motive of the same creature again until the situation changes significantly. Critical Success You determine the creature's true intentions and get a solid idea of any mental magic affecting it. Success You can tell whether the creature is behaving normally, but you don't know its exact intentions or what magic might be affecting it. Failure You detect what a deceptive creature wants you to believe. If they're not being deceptive, you believe they're behaving normally. Critical Failure You get a false sense of the creature's intentions.",
+      "topics": [
+        "combat",
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:stand",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Stand",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=16",
+      "text": "You stand up from Prone.",
+      "topics": [
+        "conditions"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:step",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Step",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=87",
+      "text": "Requirements Your Speed is at least 10 feet. You carefully move 5 feet. Unlike most types of movement, Stepping doesn't trigger reactions, such as Strike, that can be triggered by move actions or upon leaving or entering a square. You can't Step into difficult terrain, and you can't Step using a Speed other than your land Speed.",
+      "topics": [
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:stride",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Stride",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=88",
+      "text": "You move up to your Speed.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:strike",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Strike",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=89",
+      "text": "You attack with a weapon you're wielding or with an unarmed attack, targeting one creature within your reach (for a melee attack) or within range (for a ranged attack). Roll an attack roll using the attack modifier for the weapon or unarmed attack you're using, and compare the result to the target creature's AC to determine the effect. Critical Success You make a damage roll according to the weapon or unarmed attack and deal double damage. Success You make a damage roll according to the weapon or unarmed attack and deal damage.",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:sustain",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Sustain",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=90",
+      "text": "Choose one of your effects that has a sustained duration or lists a special benefit when you Sustain it. Most such effects come from spells or magic item activations. If the effect has a sustained duration, its duration extends until the end of your next turn. (Sustaining more than once in the same turn doesn't extend the duration to subsequent turns.) If an ability can be sustained but doesn't list how long, it can be sustained up to 10 minutes. An effect might list an additional benefit that occurs if you Sustain it, and this can even appear on effects that don't have a sustained duration. If the effect has both a special benefit and a sustained duration, your Sustain action extends the duration as well as having the special benefit. If your Sustain action is disrupted, the ability ends.",
+      "topics": [
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "basic:take-cover",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Take Cover",
+      "chapter": "Basic Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=70",
+      "text": "Requirements You are benefiting from standard cover, are near a feature that allows you to take cover, or are Prone. You press yourself against a wall or duck behind an obstacle to take better advantage of cover. If you would have standard cover, you instead gain greater cover, which provides a +4 circumstance bonus to AC; to Reflex saves against area effects; and to Stealth checks to [[/act hide]], [[/act sneak]], or otherwise avoid detection. Otherwise, you gain standard cover (a +2 circumstance bonus instead). If you're prone, you gain greater cover against ranged attacks. Take Cover lasts until you move from your current space, use an attack action, become Unconscious, or end it as a free action.",
+      "topics": [
+        "conditions",
+        "dying",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:administer-first-aid",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Administer First Aid",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=226",
+      "text": "Requirements You're wearing or holding a Toolkit. You perform first aid on an adjacent creature that is Dying or Damage{Bleeding}. If a creature is both dying and bleeding, choose which ailment you're trying to treat before you roll. You can Administer First Aid again to attempt to remedy the other effect. Stabilize Attempt a [[/act administer-first-aid variant=stabilize]]{Medicine} check on a creature that has 0 Hit Points and the dying condition. The DC is equal to 5 + that creature's recovery roll DC (typically 15 + its dying value). Stop Bleeding Attempt a [[/act administer-first-aid variant=stop-bleeding]]{Medicine} check on a creature that is taking persistent bleed damage. The DC is usually the DC of the effect that caused the bleed. Success If you're trying to stabilize, the target loses the dying condition (but remains Unconscious). If you're trying to stop bleeding, the target benefits from an assisted recovery with the lowered DC for particularly appropriate help. Critical Failure If you were trying to stabilize, the target's dying value increases by 1. If you were trying to stop bleeding, the target immediately takes an amount of damage equal to its persistent bleed damage.",
+      "topics": [
+        "combat",
+        "conditions",
+        "dying",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:balance",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Balance",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=1",
+      "text": "Requirements You are in a square that contains a narrow surface, uneven ground, or another similar feature. You move across a narrow surface or uneven ground, attempting an [[/act balance]]{Acrobatics} check against its Balance DC. You are Off-Guard while on a narrow surface or uneven ground. Critical Success You move up to your Speed. Success You move up to your Speed, treating it as difficult terrain (every 5 feet costs 10 feet of movement). Failure You must remain stationary to keep your balance (wasting the action) or you fall. If you fall, your turn ends. Critical Failure You fall and your turn ends. Sample Balance Tasks Untrained tangled roots, uneven cobblestones Trained wooden beam Expert deep, loose gravel Master tightrope, smooth sheet of ice Legendary razor's edge, chunks of floor falling in midair",
+      "topics": [
+        "combat",
+        "falling",
+        "off-guard",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:borrow-an-arcane-spell",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Borrow an Arcane Spell",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=25",
+      "text": "If you're an arcane spellcaster who prepares from a spellbook, you can attempt to prepare a spell from someone else's spellbook. The GM sets the DC for the check based on the spell's rank and rarity; it's typically a bit easier than Spell{Learning the Spell}. Success You prepare the borrowed spell as part of your normal spell preparation. Failure You fail to prepare the spell, but the spell slot remains available for you to prepare a different spell. You can't try to prepare this spell until the next time you prepare spells.",
+      "topics": [
+        "spellcasting"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:climb",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Climb",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=4",
+      "text": "Requirements You have both hands free You attempt an [[/act climb]]{Athletics} check to move a maximum distance of 5 feet up, down, or across an incline. You're Off-Guard while climbing unless you have a climb Speed. The GM determines the DC based on the nature of the incline and environmental circumstances; you might get an automatic critical success on an incline that's trivial to climb. If your land Speed is 40 feet or higher, increase the maximum distance by 5 feet for every 20 feet of Speed above 20 feet. Critical Success You move along the incline, increasing the maximum distance by 5 feet. Success You move along the incline. Critical Failure You fall. If you began the climb on stable ground, you fall and land Prone. Sample Climb Tasks Untrained ladder, steep slope, low-branched tree Trained rigging, rope, typical tree Expert wall with small handholds and footholds Master ceiling with handholds and footholds, rock wall Legendary smooth surface",
+      "topics": [
+        "combat",
+        "conditions",
+        "falling",
+        "off-guard"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:coerce",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Coerce",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=43",
+      "text": "With threats either veiled or overt, you attempt to bully a creature into doing what you want. You must spend at least 1 minute of conversation with the creature. At the end of the conversation, attempt an [[/act coerce]]{Intimidation} check against the target's Will DC, modified by any circumstances the GM determines. (The attitudes referenced in the effects below are summarized in the Changing Attitudes section at the bottom) Critical Success The target gives you the information you seek or agrees to follow your directives so long as they aren't likely to harm the target in any way. The target continues to comply for an amount of time determined by the GM but not exceeding 1 day, at which point the target becomes unfriendly (if it wasn't already unfriendly or hostile). However, the target is too scared of you to retaliate—at least in the short term. Success As critical success, but once the target becomes unfriendly, they might decide to act against you—for example, by reporting you to the authorities or assisting your enemies. Failure The target doesn't do what you say, and if they were not already unfriendly or hostile, they become unfriendly. Critical Failure The target refuses to comply, becomes hostile if they weren't already, and is temporarily immune to your Coercion for at least 1 week. Changing Attitudes Your influence on NPCs is measured with a set of attitudes that reflect how they view your character. These are only a brief summary of a creature's disposition. The GM will supply additional nuance based on the history and beliefs of the characters you're interacting with, and their attitudes can change in accordance with the story. The attitudes are detailed in the Conditions Appendix and are summarized here. Helpful: Willing to help you and responds favorably to your requests. Friendly: Has a good attitude toward you, but won't necessarily stick their neck out to help you. Indifferent: Doesn't care about you either way. (Most NPCs start out indifferent.) Unfriendly: Dislikes you and doesn't want to help you. Hostile: Actively works against you—and might attack you just because of their dislike. No one can ever change the attitude of a player character with these skills. You can roleplay interactions with player characters, and even use Diplomacy results if the player wants a mechanical sense of how convincing or charming a character is, but players make the ultimate decisions about how their characters respond.",
+      "topics": [
+        "combat",
+        "detection"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:command-an-animal",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Command an Animal",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=40",
+      "text": "You issue an order to an animal. Attempt a [[/act command-an-animal]]{Nature} check against the animal's Will DC. The GM might adjust the DC if the animal has a good attitude toward you, you suggest a course of action it was predisposed toward, or you offer it a treat. You automatically fail if the animal is hostile or unfriendly to you. If the animal is helpful to you, increase your degree of success by one step. You might be able to Command an Animal more easily with a feat like Ride. Most animals know the Prone, Leap, Seek, Stand, Stride, and Strike basic actions. If an animal knows an activity, such as a horse's Gallop, you can Command the Animal to perform the activity, but you must spend as many actions on Command an Animal as the activity's number of actions. You can also spend multiple actions to Command the Animal to perform that number of basic actions on its next turn; for instance, you could spend 3 actions to Command an Animal to Stride three times or to Stride twice and then make a Strike. Success The animal does as you command on its next turn. Failure The animal is hesitant or resistant, and it does nothing. Critical Failure The animal misbehaves or misunderstands, and it takes some other action determined by the GM.",
+      "topics": [
+        "combat",
+        "conditions",
+        "detection"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:conceal-an-object",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Conceal an Object",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=64",
+      "text": "You hide a small object on your person (such as a weapon of light Bulk). When you try to sneak a concealed object past someone who might notice it, the GM rolls your [[/act conceal-an-object]]{Stealth} check and compares it to this passive observer's Perception DC. Once the GM rolls your check for a concealed object, that same result is used no matter how many passive observers you try to sneak it past. If a creature is specifically searching you for an item, it can attempt a Perception check against your Stealth DC (finding the object on success). You can also conceal an object somewhere other than your person, such as among undergrowth or in a secret compartment within a piece of furniture. In this case, characters Seeking in an area compare their Perception check results to your Stealth DC to determine whether they find the object. Success The object remains undetected. Failure The searcher finds the object.",
+      "topics": [
+        "detection",
+        "encumbrance"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:cover-tracks",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Cover Tracks",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=61",
+      "text": "You cover your tracks, moving up to half your travel Speed, using the DUOb8QrlC5t0adkL{Travel Speed} rules. You don't need to attempt a Survival check to cover your tracks, but anyone tracking you must succeed at a @Check[survival|against:survival|options:action:track] check against your Survival DC if it is higher than the normal DC to Track. In some cases, you might Cover Tracks in an encounter. In this case, Cover Tracks is a single action and doesn't have the exploration trait.",
+      "topics": [
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:craft",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Craft",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=27",
+      "text": "You can make an item from raw materials. You need the Crafting skill feat to create alchemical items and the Crafting feat to create magic items. To craft an item, you must meet the following requirements: The item is your level or lower. An item that doesn't list a level is level 0. If the item is 9th level or higher, you must be a master in Crafting, and if it's 17th or higher, you must be legendary. The item must be common, or you must otherwise have access to it. You have an appropriate set of tools and, in many cases, a workshop. For example, you need access to a smithy to forge a metal shield, or an Lab to produce alchemical items. You must supply raw materials worth at least half the item's Price. You always expend at least that amount of raw materials when you Craft successfully. If you're in a settlement, you can usually spend currency to get the amount of raw materials you need, except in the case of rarer precious materials. You attempt a @Check[crafting] check after you spend 2 days of work setting up, or 1 day if you have the item's formula. The GM determines the DC to Craft the item based on its level, rarity, and other circumstances. If your attempt to create the item is successful, you expend the raw materials you supplied. You can pay the remaining portion of the item's Price in materials to complete the item immediately, or you can spend additional downtime days working on it. For each additional day you spend, reduce the value of the materials you need to expend to complete the item. This amount is determined using the Income Earned table, based on your proficiency rank in Crafting and using your own level instead of a task level. After any of these downtime days, you can complete the item by spending the remaining portion of its Price in materials. If the downtime days you spend are interrupted,you can return to finish the item later, continuing where you left off. Critical Success Your attempt is successful. Each additional day spent Crafting reduces the materials needed to complete the item by an amount based on your level + 1 and your proficiency rank in Crafting. Success Your attempt is successful. Each additional day spent Crafting reduces the materials needed to complete the item by an amount based on your level and your proficiency rank. Failure You fail to complete the item. You can salvage the raw materials you supplied for their full value. If you want to try again, you must start over. Critical Failure You fail to complete the item. You ruin 10% of the raw materials you supplied, but you can salvage the rest. If you want to try again, you must start over.",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:create-a-diversion",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Create a Diversion",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=65",
+      "text": "With a [[/act create-a-diversion variant=gesture]]{gesture}, a [[/act create-a-diversion variant=trick]]{trick}, or some [[/act create-a-diversion variant=distracting-words]]{distracting words}, you can create a diversion that draws creatures' attention elsewhere. If you use a gesture or trick, this action gains the manipulate trait. If you use distracting words, it gains the auditory and linguistic traits. Attempt a single Deception check and compare it to the Perception DCs of the creatures whose attention you're trying to divert. Whether or not you succeed, creatures you attempt to divert gain a +4 circumstance bonus to their Perception DCs against your attempts to Create a Diversion for 1 minute. Success You become Hidden to each creature whose Perception DC is less than or equal to your result. (The hidden condition allows you to Sneak away.) This lasts until the end of your turn or until you do anything except Step or use the Stealth skill to Hide or Sneak. If you Strike a creature, the creature remains Off-Guard against that attack, and you then become observed. If you do anything else, you become observed just before you act unless the GM determines otherwise. Failure You don't divert the attention of any creatures whose Perception DC exceeds your result, and those creatures are aware you were trying to trick them.",
+      "topics": [
+        "detection",
+        "off-guard"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:create-forgery",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Create Forgery",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=68",
+      "text": "Requirements You provide the proper writing materials for your forgery. You create a forged document, usually over the course of a day or a week. The GM rolls a secret DC 20 [[/act create-forgery]]{Society} check. If you need to forge a specific person's handwriting, you need a sample of that person's handwriting. Otherwise, you need only to have seen a similar document, and you gain up to a +4 circumstance bonus to the check (the GM determines the bonus). Success The forgery is of good enough quality that passive observers can't notice the fake (but see Examining Forgeries). Failure The forgery has some obvious signs of being a fake, potentially allowing passive observers to detect it. Each time a passive observer sees the document, the GM compares your check result to the observer's Perception DC or Society DC, whichever is higher. If your result doesn't exceed a passive observer's DC, that observer knows the document is a forgery. Examining Forgeries A creature on the lookout for forgeries, even one who was fooled on a passive glance, can take time to closely examine a document to see if it's a forgery. They apply different techniques and analysis methods to look beyond the surface elements and attempt a secret Perception or Society check against the forger's Society DC; any bonus you had to create the forgery initially applies to this DC. On a success, the examiner knows the document is a forgery. On a failure, they think the document is genuine and can't try again unless they get a new reason to be suspicious of the document. If a PC examines a genuine document, the GM might still pretend to roll a secret check before revealing the document is genuine.",
+      "topics": [
+        "misc"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:decipher-writing",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Decipher Writing",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=26",
+      "text": "You attempt to decipher complicated writing or literature on an obscure topic. This usually takes 1 minute per page of text, but might take longer (typically an hour per page for decrypting ciphers or the like). The text must be in a language you can read, though the GM might allow you to attempt to decipher text written in an unfamiliar language using [[/act decipher-writing statistic=society]]{Society} instead. The DC is determined by the GM based on the state or complexity of the document. The GM might have you roll one check for a short text or a check for each section of a larger text. Skill Typically used for [[/act decipher-writing statistic=arcana]]{Arcana} Writing about magic or science [[/act decipher-writing statistic=occultism]]{Occultism} Esoteric texts about mysteries and philosophy [[/act decipher-writing statistic=religion]]{Religion} Scripture [[/act decipher-writing statistic=society]]{Society} Coded messages or archaic documents Critical Success You understand the true meaning of the text. Success You understand the true meaning of the text. If it was a coded document, you know the general meaning but might not have a word-for-word translation. Failure You can't understand the text and take a –2 circumstance penalty to further checks to decipher it. Critical Failure You believe you understand the text on that page, but you have in fact misconstrued its message. Sample Decipher Tasks Trained entry-level philosophy treatise Expert complex code, such as a cipher Master spymaster's code or advanced research notes Legendary esoteric planar text written in metaphor by an ancient celestial",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:demoralize",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Demoralize",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=231",
+      "text": "With a sudden shout, a well-timed taunt, or a cutting put-down, you can shake an enemy's resolve. Choose a creature within 30 feet of you who you're aware of. Attempt an [[/act demoralize]]{Intimidation} check against that target's Will DC. If the target doesn't understand the language you are speaking, or you're not speaking a language, you take a –4 circumstance penalty to the check. Regardless of your result, the target is temporarily immune to your attempts to Demoralize it for 10 minutes. Critical Success The target becomes Frightened{Frightened 2}. Success The target becomes Frightened{Frightened 1}.",
+      "topics": [
+        "combat",
+        "conditions"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:disable-a-device",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Disable a Device",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=21",
+      "text": "This action allows you to disarm a trap or another complex device. Often, a device requires numerous successes before becoming disabled, depending on its construction and complexity. A Toolkit is helpful and sometimes even required to Disable a Device, as determined by the GM, and sometimes a device requires a higher proficiency rank in Thievery to disable it. Your [[/act disable-device]]{Thievery} check result determines your progress. Critical Success You disable the device, or you achieve two successes toward disabling a device requiring more than one success. You leave no trace of your tampering, and you can rearm the device later, if that type of device can be rearmed. Success You disable the device, or you achieve one success toward disabling a device that requires more than one success. Critical Failure You trigger the device.",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:disarm",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Disarm",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=232",
+      "text": "Requirements You have at least one hand free. The target can't be more than one size larger than you. You try to knock an item out of a creature's grasp. Attempt an [[/act disarm]]{Athletics} check against the target's Reflex DC. Critical Success You knock the item out of the target's grasp. It falls to the ground in the target's space. Success You weaken your target's grasp on the item. Further attempts to Disarm the target of that item gain a +2 circumstance bonus, and the target takes a –2 circumstance penalty to attacks with the item or other checks requiring a firm grasp on the item. The creature can end the effect by Interacting to change its grip on the item; otherwise, it lasts as long as the creature holds the item. @UUID[Compendium.pf2e.other-effects.Item.Effect: Disarm (Success)] Critical Failure You lose your balance and become Off-Guard until the start of your next turn.",
+      "topics": [
+        "combat",
+        "falling",
+        "off-guard"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:earn-income",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Earn Income",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=32",
+      "text": "You can use a skill to earn money during downtime. You must be trained in the skill to do so. This takes time to set up, and your income depends on your proficiency rank and how lucrative a task you can find. Because this process requires a significant amount of time and involves tracking things outside the progress of adventures, it won't come up in every campaign. The most typical ways to earn income, detailed further in this section are: Crafting goods for the market (Crafting) Practicing a Trade (Lore) Staging a Performance (Performance) In some cases, the GM might let you use a different skill to Earn Income through specialized work. Usually, this is scholarly work, such as using Religion in a monastery to study old texts—but giving sermons at a church would still fall under Performance instead of Religion. You also might be able to use physical skills to make money, such as using Acrobatics to perform feats in a circus or Thievery to pick pockets. If you're using a skill other than Crafting, Lore, or Performance, the DC tends to be significantly higher. Earn Income Downtime You use one of your skills to make money during downtime. The GM assigns a task level representing the most lucrative job available. You can search for lower-level tasks, with the GM determining whether you find any. Sometimes you can attempt to find better work than the initial offerings, though this takes time and requires using the Diplomacy skill to Gather Information, doing some research, or socializing. When you take on a job, the GM secretly sets the DC of your skill check. After your first day of work, you roll to determine your earnings. You gain an amount of income based on your result, the task's level, and your proficiency rank (as listed on the Income Earned table). You can continue working at the task on subsequent days without needing to roll again. For each day you spend after the first, you earn the same amount as the first day, up until the task's completion. The GM determines how long you can work at the task. Most tasks last a week or two, though some can take months or even years. Table 4-2: Income Earned Task Level Failure Trained Expert Master Legendary 0 1 cp 5 cp 5 cp 5 cp 5 cp 1 2 cp 2 sp 2 sp 2 sp 2 sp 2 4 cp 3 sp 3 sp 3 sp 3 sp 3 8 cp 5 sp 5 sp 5 sp 5 sp 4 1 sp 7 sp 8 sp 8 sp 8 sp 5 2 sp 9 sp 1 gp 1 gp 1 gp 6 3 sp 1 gp, 5 sp 2 gp 2 gp 2 gp 7 4 sp 2 gp 2 gp, 5 sp 2 gp, 5 sp 2 gp, 5 sp 8 5 sp 2 gp, 5 sp 3 gp 3 gp 3 gp 9 6 sp 3 gp 4 gp 4 gp 4 gp 10 7 sp 4 gp 5 gp 6 gp 6 gp 11 8 sp 5 gp 6 gp 8 gp 8 gp 12 9 sp 6 gp 8 gp 10 gp 10 gp 13 1 gp 7 gp 10 gp 15 gp 15 gp 14 1 gp, 5 sp 8 gp 15 gp 20 gp 20 gp 15 2 gp 10 gp 20 gp 28 gp 28 gp 16 2 gp, 5 sp 13 gp 25 gp 36 gp 40 gp 17 3 gp 15 gp 30 gp 45 gp 55 gp 18 4 gp 20 gp 45 gp 70 gp 90 gp 19 6 gp 30 gp 60 gp 100 gp 130 gp 20 8 gp 40 gp 75 gp 150 gp 200 gp 20 (critical success) - 50 gp 90 gp 175 gp 300 gp Critical Success You do outstanding work. Gain the amount of currency listed for the task level + 1 and your proficiency rank. Success You do competent work. Gain the amount of currency listed for the task level and your proficiency rank. Failure You do shoddy work and get paid the bare minimum for your time. Gain the amount of currency listed in the failure column for the task level. The GM will likely reduce how long you can continue at the task. Critical Failure You earn nothing for your work and are fired immediately. You can't continue at the task. Your reputation suffers, potentially making it difficult for you to find rewarding jobs in that community in the future. Sample Earn Income Tasks These examples use Alcohol Lore to work in a bar or Legal Lore to perform legal work. Trained bartend, do legal research Expert curate drink selection, present minor court cases Master run a large brewery, present important court cases Legendary run an international brewing franchise, present a case in Hell's courts Crafting Goods for the Market [Crafting] Using Crafting, you can work at producing common items for the market. It's usually easy to find work making basic items whose level is 1 or 2 below your settlement's level. Higher-level tasks represent special commissions, which might require you to Craft a specific item using the Craft downtime activity and sell it to a buyer at full Price. These opportunities don't occur as often and might have special requirements—or serious consequences if you disappoint a prominent client. Practicing a Trade [Lore] You apply the practical benefits of one of your Lore specialties during downtime by practicing your trade. This is most effective for Lore specialties such as business, law, or sailing, where there's high demand for workers. The GM might increase the DC or determine only low-level tasks are available if you're attempting to use an obscure Lore skill to earn income. You might also need specialized tools to accept a job, like mining tools to work in a mine or a merchant's scale to buy and sell valuables in a market. Staging a Performance [Performance] You perform for an audience to make money. The available audiences determine the level of your task, since more discerning audiences are harder to impress but provide a bigger payout. The GM determines the task level based on the audiences available. Performing for a typical audience of commoners on the street is a level 0 task, but a performance for a group of artisans with more refined tastes might be a 2nd- or 3rd-level task, and ones for merchants, nobility, and royalty are increasingly higher level. Your degree of success determines whether you moved your audience and whether you were rewarded with applause or rotten fruit. Ending or Interrupting Tasks When a task you're doing is complete, or if you stop in the middle of one, you normally have to find a new task if you want to keep Earning Income. For instance, if you quit your job working at the docks, you'll need to find another place of employment instead of picking up where you left off. This usually takes 1 day or more of downtime looking for leads on new jobs. However, you might pause a task due to an adventure or event that wouldn't prevent you from returning to the old job later. The GM might decide that you can pick up where you left off, assuming the task hasn't been completed by others in your absence. Whether you roll a new skill check when you resume is also up to the GM. Generally speaking, if you had a good initial roll and want to keep it, you can, but if you had a bad initial roll, you can't try for a better one by pausing to do something else. If your statistics changed during the break—usually because you leveled up while adventuring—you can attempt a new check.",
+      "topics": [
+        "combat",
+        "falling"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:feint",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Feint",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=234",
+      "text": "Requirements You are within melee reach of the target you attempt to Feint. With a misleading flourish, you leave an opponent unprepared for your real attack. Attempt a [[/act feint]]{Deception} check against your target's Perception DC. Critical Success You throw your enemy's defenses against you entirely off. The target is Off-Guard against melee attacks that you attempt against it until the end of your next turn. Success Your foe is fooled, but only momentarily. The target is off-guard against the next melee attack that you attempt against it before the end of your current turn. Critical Failure Your feint backfires. You are off-guard against melee attacks the target attempts against you until the end of your next turn.",
+      "topics": [
+        "combat",
+        "off-guard"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:force-open",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Force Open",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=8",
+      "text": "Using your body, a lever, or some other tool, you attempt to forcefully open a door, window, container or heavy gate. With a high enough result, you can even smash through walls. Without a crowbar, prying something open takes a –2 item penalty to the [[/act force-open]]{Athletics} check to Force Open. Critical Success You open the door, window, container, or gate and can avoid damaging it in the process. Success You break the door, window, container, or gate open, and it gains the Broken condition. If it's especially sturdy, the GM might have it take damage but not be broken. Critical Failure Your attempt jams the door, window, container, or gate shut, imposing a –2 circumstance penalty on future attempts to Force it Open. Sample Force Open Tasks Untrained fabric, flimsy glass Trained ice, sturdy glass Expert flimsy wooden door, wooden portcullis Master sturdy wooden door, iron portcullis, metal bar Legendary stone or iron door",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:gather-information",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Gather Information",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=42",
+      "text": "You canvass local markets, taverns, and gathering places in an attempt to learn about a specific individual or topic. The GM determines the DC of the [[/act gather-information]]{Diplomacy} check and the amount of time it takes (typically 2 hours, but sometimes more), along with any benefit you might be able to gain by spending coin on bribes, drinks, or gifts. Success You collect information about the individual or topic. The GM determines the specifics. Critical Failure You collect incorrect information about the individual or topic. Sample Gather Information Tasks Untrained talk of the town Trained common rumor Expert obscure rumor, poorly guarded secret Master well-guarded or esoteric information Legendary information known only to an incredibly select few, or only to extraordinary beings",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:grapple",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Grapple",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=235",
+      "text": "Requirements You have at least one free hand and your target is no more than one size larger than you. You attempt to grab a creature or object with your free hand. Attempt an [[/act grapple]]{Athletics} check against the target's Fortitude DC. You can grapple a target you already have Grabbed or Restrained without having a hand free. Critical Success Your target is restrained until the end of your next turn unless you move or your target Escapes. Success Your target is grabbed until the end of your next turn unless you move or your target Escapes. Failure You fail to grab your target. If you already had the target grabbed or restrained using a Grapple, those conditions on the target end. Critical Failure If you already had the target grabbed or restrained, it breaks free. Your target can either grab you, as if it succeeded at using the Grapple action against you, or force you to fall and land Prone.",
+      "topics": [
+        "combat",
+        "conditions",
+        "falling",
+        "grapple"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:hide",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Hide",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=81",
+      "text": "You huddle behind cover or greater cover or deeper into concealment to become Hidden, rather than Observed. The GM rolls your [[/act hide]]{Stealth} check in secret and compares the result to the Perception DC of each creature you're observed by but that you have cover or greater cover against or are Concealed from. You get a +2 circumstance bonus to your check if you have standard cover (or +4 from greater cover). Success If the creature could see you, you're now Hidden from it instead of observed. If you were hidden from or Undetected by the creature, you retain that condition. If you successfully become hidden to a creature but then cease to have cover or greater cover against it or be concealed from it, you become observed again. You cease being hidden if you do anything except Hide, Sneak, or Step. If you attempt to Strike a creature, the creature remains off-guard against that attack, and you then become observed. If you do anything else, you become observed just before you act unless the GM determines otherwise. The GM might allow you to perform a particularly unobtrusive action without being noticed, possibly requiring another Stealth check. If a creature uses Seek to make you observed by it, you must successfully Hide to become hidden from it again.",
+      "topics": [
+        "detection",
+        "off-guard",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:high-jump",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "High Jump",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=9",
+      "text": "You Stride, then attempt a DC 30 [[/act high-jump]]{Athletics} check to jump vertically. If you didn't Stride at least 10 feet, you automatically fail. This DC might be increased or decreased due to the situation, as determined by the GM. Critical Success You Leap up to 8 feet vertically and 10 feet horizontally. Success You Leap up to 5 feet vertically and 5 feet horizontally. Failure You Leap normally. Critical Failure You fall Prone in your space.",
+      "topics": [
+        "combat",
+        "conditions",
+        "falling"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:identify-alchemy",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Identify Alchemy",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=28",
+      "text": "Requirements You're holding or wearing an Toolkit. You can identify the nature of an alchemical item with 10 minutes of testing using alchemist's toolkit. If your attempt is interrupted in any way, you must start over. Success You identify the item and the means of activating it. Failure You fail to identify the item but can try again. Critical Failure You misidentify the item as another item of the GM's choice.",
+      "topics": [
+        "combat",
+        "identification"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:identify-magic",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Identify Magic",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=29",
+      "text": "Once you discover that an item, location, or ongoing effect is magical, you can spend 10 minutes to try to identify the particulars of its magic. If your attempt is interrupted, you must start over. The GM sets the DC for your check. Cursed magic or esoteric subjects usually have higher DCs or might even be impossible to identify using this activity alone. Heightening a spell doesn't increase the DC to identify it. Critical Success You learn all the attributes of the magic, including its name (for an effect), what it does, any means of activating it (for an item or location), and whether it is cursed. Success For an item or location, you get a sense of what it does and learn any means of activating it. For an ongoing effect (such as a spell with a duration), you learn the effect's name and what it does. You can't try again in hopes of getting a critical success. Failure You fail to identify the magic and can't try again for 1 day. Critical Failure You misidentify the magic as something else of the GM's choice.",
+      "topics": [
+        "combat",
+        "identification",
+        "spellcasting",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:impersonate",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Impersonate",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=67",
+      "text": "You create a disguise to pass yourself off as someone or something you are not. Assembling a convincing disguise takes 10 minutes and requires a Kit, but a simpler, quicker disguise might do the job if you're not trying to imitate a specific individual, at the GM's discretion. In most cases, creatures have a chance to detect your deception only if they use the Seek action to attempt Perception checks against your Deception DC. If you attempt to directly interact with someone while disguised, the GM rolls a secret [[/act impersonate]]{Deception} check for you against that creature's Perception DC instead. If you're disguised as a specific individual, the GM might give creatures you interact with a circumstance bonus based on how well they know the person you're imitating, or the GM might roll a secret Deception check even if you aren't directly interacting with others. Success You trick the creature into thinking you're the person you're disguised as. You might have to attempt a new check if your behavior changes. Failure The creature can tell you're not who you claim to be. Critical Failure The creature can tell you're not who you claim to be, and it recognizes you if it would know you without a disguise.",
+      "topics": [
+        "combat",
+        "detection"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:learn-a-spell",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Learn a Spell",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=33",
+      "text": "Magical Traditions and Skills Each magical tradition has a corresponding skill, as shown on the table below. You must have the trained proficiency rank in a skill to use it to Identify Magic or Learn a Spell. Something without a specific tradition, such as an item with the magical trait, can be identified using any of these skills. Magical Tradition Corresponding Skill Arcane Arcana Divine Religion Occult Occultism Primal Nature Requirements You have a spellcasting class feature, and the spell you want to learn is on your magical tradition's spell list. You can gain access to a new spell of your tradition from someone who knows that spell or from magical writing like a spellbook or scroll. If you can cast spells of multiple traditions, you can Learn a Spell of any of those traditions, but you must use the corresponding skill to do so. For example, if you were a cleric with the bard multiclass archetype, you couldn't use Religion to add an occult spell to your bardic spell repertoire. To learn the spell, you must do the following: Spend 1 hour per spell rank, during which you must remain in conversation with a person who knows the spell or have the magical writing in your possession. Have materials with the Price indicated in the Learning a Spell table. Attempt a skill check for the skill corresponding to your tradition (DC determined by the GM, often close to the DC on the Learning a Spell Table). Uncommon or rare spells have higher DCs; full guidelines for the GM appear on page 52 of GM Core. Learning a Spell Spell Rank Price Typical DC 1st or cantrip 2 gp 15 2nd 6 gp 18 3rd 16 gp 20 4th 36 gp 23 5th 70 gp 26 6th 140 gp 28 7th 300 gp 31 8th 650 gp 34 9th 1,500 gp 36 10th 7,000 gp 41 Critical Success You expend half the materials and learn the spell. Success You expend the materials and learn the spell. Failure You fail to learn the spell but can try again after you gain a level. The materials aren't expended. Critical Failure As failure, except you expend half the materials.",
+      "topics": [
+        "combat",
+        "identification",
+        "spellcasting",
+        "trip"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:lie",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Lie",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=44",
+      "text": "You try to fool someone with an untruth. Doing so takes at least 1 round, or longer if the lie is elaborate. You roll a single [[/act lie]]{Deception} check and compare it against the Perception DC of every creature you are trying to fool. The GM might give them a circumstance bonus based on the situation and the nature of the lie you are trying to tell. Elaborate or highly unbelievable lies are much harder to get a creature to believe than simpler and more believable lies, and some lies are so big that it's impossible to get anyone to believe them. At the GM's discretion, if a creature initially believes your lie, it might attempt a Perception check later to Motive against your Deception DC to realize it's a lie. This usually happens if the creature discovers enough evidence to counter your statements. Success The target believes your lie. Failure The target doesn't believe your lie and gains a +4 circumstance bonus against your attempts to Lie for the duration of your conversation. The target is also more likely to be suspicious of you in the future.",
+      "topics": [
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:long-jump",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Long Jump",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=10",
+      "text": "You Stride, then attempt a DC 15 [[/act long-jump]]{Athletics} check to make a long jump in the direction you were Striding. If you didn't Stride at least 10 feet, you automatically fail your check. The GM might increase or decrease this DC depending on the situation. Success You Leap up to a distance equal to your check result rounded down to the nearest 5 feet. You can't jump farther than your land Speed. Failure You make a normal horizontal Leap. Critical Failure You make a normal horizontal Leap, then fall and land Prone.",
+      "topics": [
+        "combat",
+        "conditions",
+        "falling"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:make-an-impression",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Make an Impression",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=45",
+      "text": "With at least 1 minute of conversation, during which you engage in charismatic overtures, flattery, and other acts of goodwill, you seek to make a good impression on someone to make them temporarily agreeable. At the end of the conversation, attempt a [[/act make-an-impression]]{Diplomacy} check against the Will DC of one target. You can instead choose up to five targets if you take a –2 penalty. The GM might add other bonuses or penalties based on the situation. Any impression you make lasts for only the current social interaction unless the GM decides otherwise. See Changing Attitudes below for a summary of the attitude conditions. Critical Success The target's attitude toward you improves by two steps. Success The target's attitude toward you improves by one step. Critical Failure The target's attitude toward you decreases by one step. Changing Attitudes Your influence on NPCs is measured with a set of attitudes that reflect how they view your character. These are only a brief summary of a creature's disposition. The GM will supply additional nuance based on the history and beliefs of the characters you're interacting with, and their attitudes can change in accordance with the story. The attitudes are detailed in the Conditions Appendix and are summarized here. Helpful: Willing to help you and responds favorably to your requests. Friendly: Has a good attitude toward you, but won't necessarily stick their neck out to help you. Indifferent: Doesn't care about you either way. (Most NPCs start out indifferent.) Unfriendly: Dislikes you and doesn't want to help you. Hostile: Actively works against you—and might attack you just because of their dislike. No one can ever change the attitude of a player character with these skills. You can roleplay interactions with player characters, and even use Diplomacy results if the player wants a mechanical sense of how convincing or charming a character is, but players make the ultimate decisions about how their characters respond.",
+      "topics": [
+        "combat",
+        "detection"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:maneuver-in-flight",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Maneuver in Flight",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=247",
+      "text": "Requirements You have a fly Speed. You try a difficult maneuver while flying. Attempt an [[/act maneuver-in-flight]]{Acrobatics} check. The GM determines what maneuvers are possible, but they rarely allow you to move farther than your fly Speed. Success You succeed at the maneuver. Failure Your maneuver fails. The GM chooses if you simply can't move or if some other detrimental effect happens. The outcome should be appropriate for the maneuver you attempted (for instance, being blown off course if you were trying to fly against a strong wind). Critical Failure As failure, but the consequence is more dire. Sample Maneuver in Flight Tasks Trained steep ascent or descent Expert fly against the wind Master reverse direction Legendary fly through gale force winds",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:palm-an-object",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Palm an Object",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=69",
+      "text": "You pick up a small, unattended object and try not to be noticed. Roll a single [[/act palm-an-object]]{Thievery} check against the Perception DCs of all creatures who are currently observing you. You can typically only Palm Objects of negligible Bulk, though the GM might determine otherwise depending on the situation. Success The creature doesn't notice you Palming the Object. Failure The creature notices you Palming the Object.",
+      "topics": [
+        "encumbrance"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:perform",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Perform",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=47",
+      "text": "When making a brief performance—one song, a quick dance, or a few jokes—you use the Perform action. This action is most useful when you want to prove your capability or impress someone quickly. Performing rarely has an impact on its own, but it might influence the DCs of subsequent Diplomacy checks against the observers, or even change their attitudes if the GM sees fit. Performance Additional Traits Examples [[/act perform variant=acting]]{Acting} Auditory, linguistic, and visual Drama, pantomime, puppetry [[/act perform variant=comedy]]{Comedy} Auditory, linguistic, and visual Buffoonery, joke telling, limericks [[/act perform variant=dance]]{Dance} Move and visual Ballet, huara, jig, macru [[/act perform variant=keyboards]]{Play Keyboard} Auditory and manipulate Harpsichord, organ, piano [[/act perform variant=oratory]]{Oratory} Auditory and linguistic Epic, ode, poetry, storytelling [[/act perform variant=percussion]]{Play Percussion} Auditory and manipulate Chimes, drum, gong, xylophone [[/act perform variant=singing]]{Singing} Auditory and linguistic Ballad, chant, melody, rhyming [[/act perform variant=strings]]{Play Strings} Auditory and manipulate Fiddle, harp, lute, viol [[/act perform variant=winds]]{Play Winds} Auditory and manipulate Bagpipe, flute, recorder, trumpet Critical Success Your performance impresses the observers, and they're likely to share stories of your ability. Success You prove yourself, and observers appreciate the quality of your performance. Failure Your performance falls flat. Critical Failure You demonstrate only incompetence. Sample Perform Tasks Untrained audience of commoners Trained audience of artisans Expert audience of merchants or minor nobles Master audience of high nobility or minor royalty Legendary audience of major royalty or otherworldly beings",
+      "topics": [
+        "combat",
+        "falling"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:pick-a-lock",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Pick a Lock",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=22",
+      "text": "Requirements You're holding or wearing a Toolkit. Opening a lock without a key is very similar to Device{Disabling a Device}, but the DC of the check is determined by the complexity and construction of the lock you are attempting to pick. Locks of higher quality might require multiple successes to unlock. If you lack the proper tools, the GM might let you use improvised picks, which are treated as a shoddy toolkit. Critical Success You unlock the lock, or you achieve two successes toward opening a lock that requires more than one success. You leave no trace of your tampering. Success You open the lock, or you achieve one success toward opening a lock that requires more than one success. You leave behind damage that indicates the lock was picked on close scrutiny. Critical Failure You break your toolkit and leave behind obvious damage. Fixing a broken toolkit requires using Crafting to Repair it or else swapping in @UUID[Compendium.pf2e.equipment-srd.Item.Thieves' Toolkit (Replacement Picks)]{replacement picks} (costing 3 sp, or 3 gp for an @UUID[Compendium.pf2e.equipment-srd.Item.Thieves' Toolkit (Infiltrator Picks)]{infiltrator thieves' toolkit}).",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:plummeting-roll",
+      "book": "Pathfinder Player Core 2",
+      "page": null,
+      "section": "Plummeting Roll",
+      "chapter": "Skill Actions",
+      "aon_url": null,
+      "text": "Trigger You fall at least 10 feet and take no damage from the fall Effect You tuck and roll with the motion. You land on your feet and Stride up to half your Speed",
+      "topics": [
+        "falling"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:recall-knowledge",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Recall Knowledge",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=30",
+      "text": "You attempt a skill check to try to remember a bit of knowledge regarding a topic related to that skill. Suggest which skill you'd like to use and ask the GM one question. The GM determines the DC. You might need to collaborate with the GM to narrow down the question or skills, and you can decide not to Recall Knowledge before committing to the action if you don't like your options. Critical Success You recall the knowledge accurately. The GM answers your question truthfully and either tells you additional information or context, or answers one follow-up question. Success You recall the knowledge accurately. The GM answers your question truthfully. Critical Failure You recall incorrect information. The GM answers your question falsely (or decides to give you no information, as on a failure).",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:repair",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Repair",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=36",
+      "text": "Requirements You are holding or wearing a Toolkit{Repair Kit} You spend 10 minutes attempting to fix a damaged item, placing the item on a stable surface and using the repair kit with both hands. The GM sets the DC, but it's usually about the same DC to Repair a given item as it is to Craft it in the first place. You can't Repair a destroyed item. Critical Success You restore 10 Hit Points to the item, plus an additional 10 Hit Points per proficiency rank you have in Crafting (a total of 20 HP if you're trained, 30 HP if you're an expert, 40 HP if you're a master, or 50 HP if you're legendary). Success You restore 5 Hit Points to the item, plus an additional 5 per proficiency rank you have in Crafting (for a total of 10 HP if you are trained, 15 HP if you're an expert, 20 HP if you're a master, or 25 HP if you're legendary). Critical Failure You deal [[/r {2d6}]]{2d6 damage} to the item. Apply the item's Hardness to this damage.",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:reposition",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Reposition",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=239",
+      "text": "Requirements You either have at least one hand free, or you're grabbing or restraining the target. The target can't be more than one size larger than you. You muscle a creature or object around. Attempt an [[/act reposition]]{Athletics} check against the target's Fortitude DC. Critical Success You move the creature up to 10 feet. It must remain within your reach during this movement, and you can't move it into or through obstacles. Success You move the target up to 5 feet. It must remain within your reach during this movement, and you can't move it into or through obstacles. Critical Failure The target can move you up to 5 feet as though it successfully Repositioned you.",
+      "topics": [
+        "combat",
+        "grapple"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:request",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Request",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=48",
+      "text": "You can make a request of a creature that's friendly or helpful to you. You must couch the request in terms that the target would accept given their current attitude toward you. The GM sets the DC of the [[/act request]]{Diplomacy} check based on the difficulty of the request. Some requests are unsavory or impossible, and even a helpful NPC would never agree to them. Critical Success The target agrees to your request without qualifications. Success The target agrees to your request, but they might demand added provisions or alterations to the request. Failure The target refuses the request, though they might propose an alternative that is less extreme. Critical Failure Not only does the target refuse the request, but their attitude toward you decreases by one step due to the temerity of the request.",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:sense-direction",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Sense Direction",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=63",
+      "text": "Using the stars, the position of the sun, traits of the geography or flora, or the behavior of fauna, you can stay oriented in the wild. Typically, you attempt a [[/act sense-direction]]{Survival} check only once per day, but some environments or changes might necessitate rolling more often. The GM determines the DC and how long this activity takes (usually just a minute or so). More unusual locales or those you're unfamiliar with might require you to have a minimum proficiency rank to Sense Direction. Without a Compass, you take a –2 item penalty to checks to Sense Direction. Critical Success You get an excellent sense of where you are. If you are in an environment with cardinal directions, you know them exactly. Success You gain enough orientation to avoid becoming hopelessly lost. If you are in an environment with cardinal directions, you have a sense of those directions. Sense Direction Tasks Untrained determine a cardinal direction using the sun Trained find an overgrown path in a forest Expert navigate a hedge maze Master navigate a byzantine labyrinth or relatively featureless desert Legendary navigate an ever-changing dream realm",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:shove",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Shove",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=240",
+      "text": "Requirements You have at least one hand free. The target can't be more than one size larger than you. You push a creature away from you. Attempt an [[/act shove]]{Athletics} check against your target's Fortitude DC. Critical Success You push your target up to 10 feet away from you. You can Stride after it, but you must move the same distance and in the same direction. Success You push your target back 5 feet. You can Stride after it, but you must move the same distance and in the same direction. Critical Failure You lose your balance, fall, and land Prone.",
+      "topics": [
+        "combat",
+        "conditions",
+        "falling",
+        "shove"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:sneak",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Sneak",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=85",
+      "text": "You attempt to move to another place while becoming or staying undetected. Stride up to half your Speed. (You can use Sneak while Burrowing, Climbing, Flying, or Swimming instead of Striding if you have the corresponding movement type; you must move at half that Speed.) At the end of your movement, the GM rolls your [[/act sneak]] check in secret and compares the result to the Perception DC of each creature you were Hidden from or Undetected by at the start of your movement. If you have cover or greater cover from the creature throughout your Stride, you gain the +2 circumstance bonus from cover (or +4 from greater cover) to your Stealth check. Because you're moving, the bonus increase from Taking Cover doesn't apply. You don't get to roll against a creature if, at the end of your movement, you neither are Concealed from it nor have cover or greater cover against it. You automatically become observed by such a creature. Success You're undetected by the creature during your movement and remain undetected by the creature at the end of it. You become observed as soon as you do anything other than Hide, Sneak, or Step. If you attempt to Strike a creature, the creature remains Off-Guard against that attack, and you then become observed. If you do anything else, you become observed just before you act unless the GM determines otherwise. The GM might allow you to perform a particularly unobtrusive action without being noticed, possibly requiring another Stealth check. If you speak or make a deliberate loud noise, you become hidden instead of undetected. If a creature uses Seek and you become hidden to it as a result, you must Sneak if you want to become undetected by that creature again. Failure A telltale sound or other sign gives your position away, though you still remain unseen. You're hidden from the creature throughout your movement and remain so. Critical Failure You're spotted! You're observed by the creature throughout your movement and remain so. If you're Invisible and were hidden from the creature, instead of being observed you're hidden throughout your movement and remain so.",
+      "topics": [
+        "combat",
+        "detection",
+        "off-guard",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:squeeze",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Squeeze",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=15",
+      "text": "You contort yourself to [[/act squeeze]]{squeeze} through a space so small you can barely fit through. This action is for exceptionally small spaces; many tight spaces are difficult terrain that you can move through more quickly and without a check. Critical Success You squeeze through the tight space in 1 minute per 10 feet of squeezing. Success You squeeze through in 1 minute per 5 feet. Critical Failure You become stuck in the tight space. While you're stuck, you can spend 1 minute attempting another Acrobatics check at the same DC. Any result on that check other than a critical failure causes you to become unstuck. Sample Squeeze Tasks Trained space barely fitting your shoulders Master space barely fitting your head",
+      "topics": [
+        "combat",
+        "terrain"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:steal",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Steal",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=71",
+      "text": "You try to take a small object from another creature without being noticed. Typically, you can Steal only an object of negligible Bulk, you must have a free hand, and you automatically fail if the creature who has the object is in combat or on guard. Attempt a [[/act steal]]{Thievery} check to determine if you successfully Steal the object. The DC is usually the Perception DC of the creature wearing the object. It's easiest to steal an object that is worn but not closely guarded (like a loosely carried pouch filled with coins, or an object within such a pouch). The GM might increase the DC if the object is protected or if the nature of the object makes it harder to steal (such as a very small item in a large pack, or a sheet of parchment mixed in with other documents). For instance, the DC is typically 5 higher if the object is in a pocket, held in a creature's hand, or similarly protected. You might also need to compare your Thievery check result against the Perception DCs of observers other than the person wearing the object. The GM might impose a circumstance penalty to the DCs of observers who are distracted. Success You steal the item without the bearer noticing, or an observer doesn't see you take or attempt to take the item. Failure The item's bearer notices your attempt before you can take the object, or an observer sees you take or attempt to take the item. The GM determines the response of any creature that notices your theft.",
+      "topics": [
+        "encumbrance"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:subsist",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Subsist",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=60",
+      "text": "You try to provide food and shelter for yourself, and possibly others as well, with a standard of living. This typically uses [[/act subsist statistic=society]]{Society} if you're in a settlement or [[/act subsist statistic=survival]]{Survival} if you're in the wild. The GM determines the DC based on the nature of the place where you're trying to Subsist. You might need a minimum proficiency rank to Subsist in particularly strange environments. Unlike most downtime activities, you can Subsist after 8 hours or less of exploration, but if you do, you take a –5 penalty. Sample Subsist Tasks Untrained a lush forest with calm weather or a large city with plentiful resources Trained typical hillside or village Expert typical mountains or insular hamlet Master typical desert or city under siege Legendary barren wasteland or city of undead Critical Success You either provide a subsistence living for yourself and one additional creature, or you improve your own food and shelter, granting yourself a comfortable living. Success You find enough food and shelter with basic protection from the elements to provide you a subsistence living. Failure You're exposed to the elements and don't get enough food, becoming Fatigued until you attain sufficient food and shelter. Critical Failure You attract trouble, eat something you shouldn't, or otherwise worsen your situation. You take a –2 circumstance penalty to checks to Subsist for 1 week. You don't find any food at all; if you don't have any stored up, you're in danger of starving or dying of thirst if you continue failing. Situation",
+      "topics": [
+        "combat",
+        "conditions",
+        "dying"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:swim",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Swim",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=19",
+      "text": "You attempt an [[/act swim]]{Athletics} check to move a maximum distance of 10 feet through water. The GM determines the DC based on the turbulence or danger of the water; in most instances of calm water, you get an automatic critical success. If your land Speed is 40 feet or higher, increase the maximum possible distance by 5 feet for every 20 feet of Speed above 20 feet. If you end your turn in water and haven't succeeded at a Swim action that turn, you sink 10 feet or get moved by the current, as determined by the GM. This doesn't apply if your last action on your turn was to enter the water. Critical Success You move through the water, increasing the maximum distance by 5 feet. Success You move through the water. Critical Failure You make no progress. If you're holding your breath, you lose 1 round of air. Sample Swim Tasks Untrained lake or other still water Trained flowing water, like a river Expert swiftly flowing river Master stormy sea Legendary maelstrom, waterfall",
+      "topics": [
+        "combat",
+        "falling"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:track",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Track",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=62",
+      "text": "You follow tracks, moving at up to half your travel Speed, using the DUOb8QrlC5t0adkL{Travel Speed} rules. After a successful check to Track, you can continue following the tracks at half your Speed without attempting additional checks for up to 1 hour. In some cases, you might Track in an encounter. In this case, Track is a single action and doesn't have the exploration trait, but you might need to roll more often because you're in a tense situation. The GM determines how often you must attempt this check. You attempt your [[/act track]]{Survival} check when you start Tracking, once every hour you continue tracking, and any time something significant changes in the trail. The GM determines the DCs for such checks, depending on the freshness of the trail, the weather, and the type of ground. Sample Track Tasks Untrained the path of a large army following a road Trained relatively fresh tracks of a rampaging bear through the plains Expert a nimble panther's tracks through a jungle, tracks obscured by rainfall Master tracks obscured by winter snow, tracks of a mouse or smaller creature, tracks left on surfaces that can't hold prints like bare rock Legendary old tracks through a windy desert's sands, tracks obscured by a major blizzard or hurricane Success You find the trail or continue to follow the one you're already following. Failure You lose the trail but can try again after a 1-hour delay. Critical Failure You lose the trail and can't try again for 24 hours.",
+      "topics": [
+        "combat",
+        "falling"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:treat-disease",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Treat Disease",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=54",
+      "text": "Requirements You're wearing or holding a Toolkit You spend at least 8 hours caring for a diseased creature. Attempt a [[/act treat-disease]]{Medicine} check against the disease's DC. After you attempt to Treat a Disease for a creature, you can't try again until after that creature's next save against the disease. Critical Success You grant the creature a +4 circumstance bonus to its next saving throw against the disease. Success You grant the creature a +2 circumstance bonus to its next saving throw against the disease. Critical Failure Your efforts cause the creature to take a −2 circumstance penalty to its next save against the disease. Disease",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:treat-poison",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Treat Poison",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=56",
+      "text": "Requirements You're wearing or holding a Toolkit You treat a patient to prevent the spread of poison. Attempt a [[/act treat-poison]]{Medicine} check against the poison's DC. After you attempt to Treat a Poison for a creature, you can't try again until after the next time that creature attempts a save against the poison. Critical Success You grant the creature a +4 circumstance bonus to its next saving throw against the poison. Success You grant the creature a +2 circumstance bonus to its next saving throw against the poison. Critical Failure Your efforts cause the creature to take a −2 circumstance penalty to its next save against the poison. Poison",
+      "topics": [
+        "combat"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:treat-wounds",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Treat Wounds",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=55",
+      "text": "Requirements You're wearing or holding a Toolkit. You spend 10 minutes treating one injured living creature (targeting yourself, if you so choose). The target is then temporarily Immunity{immune} to Treat Wounds actions for 1 hour, but this interval overlaps with the time you spent treating (so a patient can be treated once per hour, not once per 70 minutes). The Medicine check DC is usually 15, though the GM might adjust it based on the circumstances, such as treating a patient outside in a storm, or treating magically cursed wounds. If you're an expert in Medicine, you can instead attempt a DC 20 check to increase the Hit Points regained by 10; if you're a master of Medicine, you can instead attempt a DC 30 check to increase the Hit Points regained by 30; and if you're legendary, you can instead attempt a DC 40 check to increase the Hit Points regained by 50. The damage dealt on a critical failure remains the same. If you succeed at your check, you can continue treating the target to grant additional healing. If you treat it for a total of 1 hour, double the Hit Points it regains from Treat Wounds. The result of your Medicine check determines how many Hit Points the target regains. Wounds Critical Success The target regains [[/r 4d8[healing] #Treat Wounds]] Hit Points and loses the Wounded condition. Success The target regains [[/r 2d8[healing] #Treat Wounds]] Hit Points, and loses the wounded condition. Critical Failure The target takes [[/r 1d8[damage] #Treat Wounds (Critical Failure)]] damage.",
+      "topics": [
+        "combat",
+        "conditions",
+        "healing"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:trip",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Trip",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=242",
+      "text": "Requirements You have at least one hand free. Your target can't be more than one size larger than you. You try to knock a creature to the ground. Attempt an [[/act trip]]{Athletics} check against the target's Reflex DC. Critical Success The target falls, lands Prone, and takes @Damage[1d6[bludgeoning]] damage. Success The target falls and lands prone. Critical Failure You lose your balance, fall, and land prone.",
+      "topics": [
+        "combat",
+        "conditions",
+        "falling",
+        "trip"
+      ],
+      "source_license": "ORC"
+    },
+    {
+      "id": "skill:tumble-through",
+      "book": "Pathfinder Player Core",
+      "page": null,
+      "section": "Tumble Through",
+      "chapter": "Skill Actions",
+      "aon_url": "https://2e.aonprd.com/Actions.aspx?ID=20",
+      "text": "You Stride up to your Speed. During this movement, you can try to move through the space of one enemy. Attempt an [[/act tumble-through]]{Acrobatics} check against the enemy's Reflex DC as soon as you try to enter its space. You can Tumble Through using Climb, Fly, Swim, or another action instead of Stride in the appropriate environment. Success You move through the enemy's space, treating the squares in its space as difficult terrain (every 5 feet costs 10 feet of movement). If you don't have enough Speed to move all the way through its space, you get the same effect as a failure. Failure Your movement ends, and you trigger reactions as if you had moved out of the square you started in.",
+      "topics": [
+        "terrain"
+      ],
+      "source_license": "ORC"
+    }
+  ]
+}

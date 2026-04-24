@@ -14,7 +14,9 @@ RUN pip install --no-cache-dir \
     "pydantic-settings>=2.13.0" \
     "pyyaml>=6.0.0" \
     "rapidfuzz>=3.14.0" \
-    "reportlab>=4.4.0"
+    "reportlab>=4.4.0" \
+    "beautifulsoup4>=4.12.0" \
+    "numpy>=1.26.0"
 
 COPY . .
 
