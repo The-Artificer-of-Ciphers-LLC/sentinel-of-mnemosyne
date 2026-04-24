@@ -2,6 +2,18 @@
 
 Calls litellm.acompletion() directly (no wrapper class).
 Uses the project's configured LITELLM_MODEL + LITELLM_API_BASE from settings.
+
+Phase 33 (Wave 2) adds four rules-engine helpers:
+  - embed_texts           — litellm.aembedding batch call (D-02 step 3 retrieval)
+  - classify_rule_topic   — topic-slug classifier with L-6 closed-vocab coerce
+  - generate_ruling_from_passages — corpus-hit D-08 composer (marker='source')
+  - generate_ruling_fallback      — corpus-miss D-08 composer (marker='generated')
+
+Import ordering note (L-4 / Phase 32-03): the ruling helpers import
+`coerce_topic`, `_normalize_ruling_output`, and `_validate_ruling_shape`
+from app.rules at function scope (not module scope) to keep the Wave-1
+pure-transform module free of any back-reference to app.llm. The rules
+module intentionally has zero `from app.llm` imports (grep gate).
 """
 import json
 import logging
@@ -16,6 +28,12 @@ litellm.suppress_debug_info = True
 # Cap per-NPC reply length so multi-NPC scenes rendered as stacked "> " quote
 # markdown stay under Discord's 2000-char message limit (IN-03).
 _MAX_REPLY_CHARS = 1500  # leaves headroom under Discord's 2000-char limit once wrapped in "> " quote markdown across multi-NPC scenes
+
+# Phase 33 — ruling composer timeouts / output caps.
+_RULING_TIMEOUT_S = 60.0
+_TOPIC_CLASSIFIER_TIMEOUT_S = 30.0
+_RULING_MAX_ANSWER_CHARS = 2000
+_RULING_MAX_WHY_CHARS = 3000
 
 
 def _strip_code_fences(text: str) -> str:
@@ -375,3 +393,83 @@ async def generate_harvest_fallback(
                     f"LLM returned malformed harvest shape: components[{i}].craftable[{j}] missing string value"
                 )
     return parsed
+
+
+# ---------------------------------------------------------------------------
+# Phase 33 — Rules-engine LLM helpers (Wave 2 / Plan 33-03)
+# ---------------------------------------------------------------------------
+
+
+async def embed_texts(
+    texts: list[str],
+    model: str,
+    api_base: str | None = None,
+) -> list[list[float]]:
+    """Return a list of embedding vectors (one per input) via litellm.aembedding.
+
+    Used at module startup to embed the 149-chunk Player-Core corpus, and
+    per-query to embed user questions before RAG retrieval (D-02 step 3).
+    A single batch call is cheaper than N sequential calls; LiteLLM passes
+    the list through to the /v1/embeddings endpoint unchanged.
+
+    Arguments:
+      texts: list of raw strings — caller is responsible for HTML stripping
+             (strip_rule_html in app.rules) and normalization.
+      model: the embedding model identifier (e.g. "text-embedding-nomic-embed-text-v1.5");
+             per settings.rules_embedding_model at call sites.
+      api_base: LM Studio base URL (settings.litellm_api_base); omitted for cloud providers.
+
+    Returns: list[list[float]] — one vector per input text, preserved in order.
+
+    Raises:
+      ValueError on empty input, on mismatched response length, or on non-list embeddings.
+      Any litellm-raised exception propagates (caller decides retry policy).
+    """
+    if not isinstance(texts, list):
+        raise ValueError(f"embed_texts: 'texts' must be a list, got {type(texts).__name__}")
+    if len(texts) == 0:
+        raise ValueError("embed_texts: 'texts' must be a non-empty list")
+    for i, t in enumerate(texts):
+        if not isinstance(t, str):
+            raise ValueError(
+                f"embed_texts: texts[{i}] must be a str, got {type(t).__name__}"
+            )
+
+    kwargs: dict = {
+        "model": model,
+        "input": texts,
+        "timeout": _RULING_TIMEOUT_S,
+    }
+    if api_base:
+        kwargs["api_base"] = api_base
+
+    response = await litellm.aembedding(**kwargs)
+
+    # litellm.aembedding normalizes OpenAI-style responses; data is a list of
+    # {"object": "embedding", "embedding": [...], "index": N} dicts.
+    # Access via object attribute OR dict key — litellm returns a response
+    # object that supports both; normalize to list-of-lists.
+    try:
+        data = response["data"] if isinstance(response, dict) else response.data
+    except AttributeError as exc:
+        raise ValueError(f"embed_texts: response missing 'data' attr: {exc}") from exc
+
+    if not isinstance(data, list):
+        raise ValueError(
+            f"embed_texts: response 'data' not a list, got {type(data).__name__}"
+        )
+    if len(data) != len(texts):
+        raise ValueError(
+            f"embed_texts: expected {len(texts)} embeddings, got {len(data)}"
+        )
+
+    vectors: list[list[float]] = []
+    for i, item in enumerate(data):
+        vec = item["embedding"] if isinstance(item, dict) else item.embedding
+        if not isinstance(vec, list):
+            raise ValueError(
+                f"embed_texts: data[{i}].embedding is not a list (got {type(vec).__name__})"
+            )
+        # Preserve as float — LiteLLM returns floats already; coerce defensively.
+        vectors.append([float(x) for x in vec])
+    return vectors
