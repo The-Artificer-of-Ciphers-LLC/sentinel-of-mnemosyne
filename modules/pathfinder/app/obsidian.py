@@ -98,6 +98,57 @@ class ObsidianClient:
 
         return await self._safe_request(_inner(), None, f"get_binary({path})")
 
+    async def list_directory(self, prefix: str) -> list[str]:
+        """Recursively list full paths of files under a vault directory prefix.
+
+        Used by the rules-engine reuse-match scan (D-05) and the /rule/show,
+        /rule/history, /rule/list enumeration endpoints.
+
+        Obsidian's `GET /vault/{dir}/` returns `{"files": [...]}` listing the
+        immediate children: files end without a trailing slash, subdirectories
+        end with `/`. We recurse into subdirectories so the returned list
+        contains leaf file paths only (rooted at the vault, matching the shape
+        expected by route-layer callers).
+
+        Returns empty list on 404 or any error (silent fallback, mirrors
+        get_note's degrade-gracefully shape).
+        """
+        # Ensure trailing slash — Obsidian REST distinguishes dir vs file by slash.
+        dir_path = prefix if prefix.endswith("/") else f"{prefix}/"
+
+        async def _inner() -> list[str]:
+            resp = await self._client.get(
+                f"{self._base_url}/vault/{dir_path}",
+                headers=self._headers,
+                timeout=10.0,
+            )
+            if resp.status_code == 404:
+                return []
+            resp.raise_for_status()
+            try:
+                data = resp.json()
+            except Exception:
+                return []
+            children = data.get("files") if isinstance(data, dict) else None
+            if not isinstance(children, list):
+                return []
+            out: list[str] = []
+            for child in children:
+                if not isinstance(child, str):
+                    continue
+                full = f"{dir_path}{child}"
+                if child.endswith("/"):
+                    # Recurse into subdirectory; strip inner trailing slash on the join.
+                    sub = await self.list_directory(full)
+                    out.extend(sub)
+                else:
+                    out.append(full)
+            return out
+
+        return await self._safe_request(
+            _inner(), [], f"list_directory({dir_path})"
+        )
+
     async def patch_frontmatter_field(self, path: str, field: str, value) -> None:
         """PATCH /vault/{path} — replace ONE frontmatter field.
 
