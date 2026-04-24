@@ -504,3 +504,149 @@ async def test_thread_history_filter_scene():
         limit=50,
     )
     assert len(turns_none) == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 32 — :pf harvest dispatch tests (HRV-01, HRV-06)
+# Wave 0 RED scaffolding — implementation lands in Wave 4 (Plan 32-05).
+# Stubs reference the `harvest` noun branch and `build_harvest_embed` which
+# Plan 32-05 will add to bot.py. Tests collect cleanly; failures are honest RED.
+# ---------------------------------------------------------------------------
+
+
+async def test_pf_harvest_solo_dispatch():
+    """`:pf harvest Boar` posts to modules/pathfinder/harvest with names=['Boar'] (HRV-01)."""
+    mock_result = {
+        "monsters": [
+            {
+                "monster": "Boar",
+                "level": 2,
+                "source": "seed",
+                "verified": True,
+                "components": [],
+                "note": None,
+            }
+        ],
+        "aggregated": [
+            {"type": "Hide", "medicine_dc": 16, "craftable": [], "monsters": ["Boar"]}
+        ],
+        "footer": "Source — FoundryVTT pf2e",
+    }
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch("harvest Boar", "user123")
+
+    mock_ptm.assert_called_once()
+    assert mock_ptm.call_args[0][0] == "modules/pathfinder/harvest"
+    payload = mock_ptm.call_args[0][1]
+    assert payload["names"] == ["Boar"]
+    assert payload["user_id"] == "user123"
+    # Silence unused-variable warning while the embed contract is locked separately.
+    assert result is not None
+
+
+async def test_pf_harvest_batch_dispatch():
+    """`:pf harvest Boar,Wolf,Orc` posts names=['Boar','Wolf','Orc'] (HRV-06)."""
+    mock_result = {
+        "monsters": [],
+        "aggregated": [],
+        "footer": "",
+    }
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch("harvest Boar,Wolf,Orc", "user123")
+
+    mock_ptm.assert_called_once()
+    assert mock_ptm.call_args[0][0] == "modules/pathfinder/harvest"
+    payload = mock_ptm.call_args[0][1]
+    assert payload["names"] == ["Boar", "Wolf", "Orc"]
+    assert result is not None
+
+
+async def test_pf_harvest_multi_word_monster():
+    """`:pf harvest Giant Rat` → single name preserved (Pitfall 5 — comma-split only)."""
+    mock_result = {"monsters": [], "aggregated": [], "footer": ""}
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch("harvest Giant Rat", "user123")
+
+    mock_ptm.assert_called_once()
+    payload = mock_ptm.call_args[0][1]
+    assert payload["names"] == ["Giant Rat"]
+    assert result is not None
+
+
+async def test_pf_harvest_batch_trimmed_commas():
+    """`:pf harvest Boar , Wolf , Orc` → each name trimmed (HRV-06, Pitfall 5)."""
+    mock_result = {"monsters": [], "aggregated": [], "footer": ""}
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch("harvest Boar , Wolf , Orc", "user123")
+
+    mock_ptm.assert_called_once()
+    payload = mock_ptm.call_args[0][1]
+    assert payload["names"] == ["Boar", "Wolf", "Orc"]
+    assert result is not None
+
+
+async def test_pf_harvest_empty_returns_usage():
+    """`:pf harvest` (no names) → usage string, post_to_module NOT called (HRV-01 usage)."""
+    with patch.object(
+        bot._sentinel_client,
+        "post_to_module",
+        new=AsyncMock(side_effect=AssertionError("post_to_module should not be called")),
+    ) as mock_ptm:
+        result = await bot._pf_dispatch("harvest", "user123")
+
+    mock_ptm.assert_not_called()
+    assert isinstance(result, str)
+    assert "Usage" in result
+    assert "harvest" in result
+
+
+async def test_pf_harvest_returns_embed_dict():
+    """Solo harvest call returns the embed-dict shape `{type, content, embed}` (HRV-01, D-03a)."""
+    mock_result = {
+        "monsters": [
+            {
+                "monster": "Boar",
+                "level": 2,
+                "source": "seed",
+                "verified": True,
+                "components": [],
+                "note": None,
+            }
+        ],
+        "aggregated": [
+            {"type": "Hide", "medicine_dc": 16, "craftable": [], "monsters": ["Boar"]}
+        ],
+        "footer": "Source — FoundryVTT pf2e",
+    }
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)):
+        result = await bot._pf_dispatch("harvest Boar", "user123")
+
+    assert isinstance(result, dict)
+    assert result["type"] == "embed"
+    assert result["content"] == ""
+    assert "embed" in result
+
+
+async def test_pf_harvest_noun_recognised():
+    """`harvest` is a recognised noun (not "Unknown pf category") — locks in noun widen."""
+    mock_result = {
+        "monsters": [
+            {
+                "monster": "Boar",
+                "level": 2,
+                "source": "seed",
+                "verified": True,
+                "components": [],
+                "note": None,
+            }
+        ],
+        "aggregated": [
+            {"type": "Hide", "medicine_dc": 16, "craftable": [], "monsters": ["Boar"]}
+        ],
+        "footer": "Source — FoundryVTT pf2e",
+    }
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock(return_value=mock_result)):
+        result = await bot._pf_dispatch("harvest Boar", "user123")
+
+    if isinstance(result, str):
+        assert not result.startswith("Unknown pf category")
