@@ -135,7 +135,14 @@ def _build_from_seed(entry, monster_name: str, note: str | None) -> dict:
 
 
 def _build_footer(per_monster: list[dict]) -> str:
-    """Footer wording per D-04 — attribution for the batch."""
+    """Footer wording per D-04 — attribution for the batch.
+
+    IN-02: ORC license attribution is a legal requirement, not cosmetic.
+    All three branches (all-seed / all-generated / mixed) now carry the
+    FoundryVTT pf2e + Paizo + ORC attribution, so a DM inspecting a batch
+    composed entirely of LLM-generated data still sees the upstream source
+    citation.
+    """
     total = len(per_monster)
     if total == 0:
         return ""
@@ -144,10 +151,16 @@ def _build_footer(per_monster: list[dict]) -> str:
     )
     llm_count = total - seed_count
     if llm_count == 0:
-        return "Source — FoundryVTT pf2e"
+        return "Source — FoundryVTT pf2e (Paizo, ORC license)"
     if seed_count == 0:
-        return "Source — LLM generated (verify)"
-    return f"Mixed sources — {seed_count} seed / {llm_count} generated"
+        return (
+            "Source — LLM generated (verify). "
+            "Seed reference: FoundryVTT pf2e (Paizo, ORC license)"
+        )
+    return (
+        f"Mixed sources — {seed_count} seed / {llm_count} generated. "
+        f"Seed reference: FoundryVTT pf2e (Paizo, ORC license)"
+    )
 
 
 # --- Route handler ---
