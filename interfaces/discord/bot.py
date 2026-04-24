@@ -521,6 +521,120 @@ async def _pf_dispatch(
                     "embed": build_harvest_embed(result),
                 }
 
+            if noun == "rule":
+                # D-10 sub-verbs: <free text> (default) | show <topic> | history [N] | list.
+                # `verb` here is the second whitespace-token after `rule`. If it
+                # matches a reserved sub-verb token we route to that endpoint;
+                # otherwise the entire post-noun string is the free-text query.
+                reserved = {"show", "history", "list"}
+                if verb in reserved:
+                    sub_verb = verb
+                    sub_arg = rest.strip()
+                else:
+                    sub_verb = "query"
+                    # Entire post-noun string is the query (verb + rest re-joined).
+                    full_tail = " ".join(parts[1:]).strip()
+                    sub_arg = full_tail
+
+                if sub_verb == "query" and not sub_arg:
+                    return (
+                        "Usage: `:pf rule <question>` | "
+                        "`:pf rule show <topic>` | "
+                        "`:pf rule history [N]` | "
+                        "`:pf rule list`"
+                    )
+
+                if sub_verb == "list":
+                    result = await _sentinel_client.post_to_module(
+                        "modules/pathfinder/rule/list", {}, http_client,
+                    )
+                    topics = result.get("topics", []) or [] if isinstance(result, dict) else []
+                    if not topics:
+                        return "_No rulings cached yet._"
+                    lines = [
+                        f"• `{t.get('slug', '?')}` ({t.get('count', 0)} rulings, last active {str(t.get('last_activity', 'never'))[:19]})"
+                        for t in topics
+                    ]
+                    return "**Rule topics with cached rulings:**\n" + "\n".join(lines)
+
+                if sub_verb == "show":
+                    if not sub_arg:
+                        return "Usage: `:pf rule show <topic>`"
+                    result = await _sentinel_client.post_to_module(
+                        "modules/pathfinder/rule/show",
+                        {"topic": sub_arg},
+                        http_client,
+                    )
+                    rulings = result.get("rulings", []) or [] if isinstance(result, dict) else []
+                    if not rulings:
+                        return f"_No rulings under `{sub_arg}`._"
+                    lines = [
+                        f"• `{r.get('hash', '?')}` — {(r.get('question', '') or '')[:80]} [{r.get('marker', '?')}]"
+                        for r in rulings
+                    ]
+                    return f"**Rulings under `{sub_arg}`** ({len(rulings)}):\n" + "\n".join(lines)
+
+                if sub_verb == "history":
+                    n = 10
+                    if sub_arg:
+                        try:
+                            n = max(1, min(100, int(sub_arg)))
+                        except ValueError:
+                            pass
+                    result = await _sentinel_client.post_to_module(
+                        "modules/pathfinder/rule/history",
+                        {"n": n},
+                        http_client,
+                    )
+                    rulings = result.get("rulings", []) or [] if isinstance(result, dict) else []
+                    if not rulings:
+                        return "_No rulings yet._"
+                    lines = [
+                        f"• {str(r.get('last_reused_at', ''))[:19]} — `{r.get('topic', '?')}/{(r.get('question', '') or '')[:60]}` → {r.get('marker', '?')}"
+                        for r in rulings
+                    ]
+                    return f"**Recent rulings (N={n}):**\n" + "\n".join(lines)
+
+                # sub_verb == "query" — D-11 slow path with placeholder+edit UX.
+                # L-9: the bot's httpx.AsyncClient inherits the default 5s connect
+                # timeout — a fresh embed + retrieve + LLM compose can take 5-15s
+                # so the placeholder hides the latency from the DM. The sentinel-core
+                # proxy's own timeout (configured upstream) is the real per-call ceiling.
+                placeholder = None
+                if channel is not None and hasattr(channel, "send"):
+                    try:
+                        placeholder = await channel.send(
+                            f"🤔 _Thinking on PF2e rules: {sub_arg[:80]}..._"
+                        )
+                    except Exception:
+                        placeholder = None
+                try:
+                    result = await _sentinel_client.post_to_module(
+                        "modules/pathfinder/rule/query",
+                        {"query": sub_arg, "user_id": user_id},
+                        http_client,
+                    )
+                    embed = build_ruling_embed(result)
+                    if placeholder is not None and hasattr(placeholder, "edit"):
+                        try:
+                            await placeholder.edit(content="", embed=embed)
+                            # Suppressed — outer handler does NOT re-send.
+                            return {"type": "suppressed", "content": "", "embed": embed}
+                        except Exception:
+                            pass
+                    return {"type": "embed", "content": "", "embed": embed}
+                except Exception as exc:
+                    if placeholder is not None and hasattr(placeholder, "edit"):
+                        try:
+                            await placeholder.edit(
+                                content=f"⚠ Rules query failed — {exc}",
+                                embed=None,
+                            )
+                            return {"type": "suppressed", "content": "", "embed": None}
+                        except Exception:
+                            pass
+                    raise
+
             if verb == "create":
                 # Split name | description on first pipe (D-05, Pitfall 5: maxsplit=1)
                 name, _, description = rest.partition("|")
