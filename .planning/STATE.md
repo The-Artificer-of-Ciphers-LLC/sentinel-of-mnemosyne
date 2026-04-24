@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: The Dungeon
 status: in_progress
-stopped_at: Phase 32 (Monster Harvesting) PLANNED (5 plans, 5 waves serial) — ready to execute
-last_updated: "2026-04-23T23:00:00.000Z"
-last_activity: 2026-04-23 -- Phase 32 planning complete — discuss + research + plan + plan-checker PASS iter 2/3; 31 test stubs + 12 tasks across 5 waves; serial wave DAG to avoid rapidfuzz install race
+stopped_at: Phase 32 Plan 01 (RED test stubs) COMPLETE — 31 stubs collected + RED; Plan 02 (rapidfuzz + seed YAML) up next
+last_updated: "2026-04-24T01:45:21Z"
+last_activity: 2026-04-24 -- Phase 32-01 executed: 21 unit stubs + 3 integration stubs + 7 bot dispatch stubs = 31 RED, all collect cleanly; Waves 1-3 implement against this contract
 progress:
   total_phases: 26
   completed_phases: 13
   total_plans: 37
-  completed_plans: 43
+  completed_plans: 44
   percent: 100
 ---
 
@@ -25,11 +25,11 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 32 (Monster Harvesting) — PLANNED (5 plans, 5 waves serial), ready to execute
-Next Phase: 32 — Monster Harvesting (execute)
+Phase: 32 (Monster Harvesting) — IN PROGRESS (Plan 01/05 complete)
+Next Plan: 32-02 (rapidfuzz dep + seed YAML scaffold)
 Milestone: v0.5 The Dungeon — IN PROGRESS
-Status: Phase 32 planning complete — CONTEXT.md (5 locked decisions inc. D-01 reshape after F-01 research finding), RESEARCH.md (1113 lines), PATTERNS.md (929 lines), VALIDATION.md (12 task rows), 5 PLAN.md files. Plan-checker PASS on iteration 2/3 (after fixing 3 blockers + 5 warnings + 3 info items).
-Last activity: 2026-04-23 -- Phase 32 planning complete; ready for /gsd-execute-phase 32
+Status: Phase 32-01 (Wave 0) shipped 31 RED test stubs (21 unit + 3 integration + 7 bot dispatch) against app.harvest.*, app.routes.harvest.*, app.llm.generate_harvest_fallback, bot.build_harvest_embed — Waves 1-4 implement against this contract.
+Last activity: 2026-04-24 -- Phase 32-01 executed: 3 atomic test commits (e62d56c, 563f191, 8b38a25); all 31 stubs collect cleanly and fail on run for expected reason (ModuleNotFoundError/AttributeError/unknown-noun).
 
 ## Milestone Progress
 
@@ -139,11 +139,11 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-23
-Stopped at: Phase 31 complete — 26/26 tests GREEN, 8/8 review findings fixed
-Resume file: .planning/phases/31-dialogue-engine/31-VERIFICATION.md (for audit) or pick next v0.5 phase
+Last session: 2026-04-24
+Stopped at: Phase 32-01 complete — 31/31 RED stubs collected; next plan is 32-02 (rapidfuzz + seed YAML)
+Resume file: .planning/phases/32-monster-harvesting/32-01-red-test-stubs-SUMMARY.md
 
-**Next Phase:** 32 (Monster Harvesting, HRV-01..06) — PLANNED, ready for /gsd-execute-phase 32
+**In-Progress Phase:** 32 (Monster Harvesting) — 1/5 plans complete — Plan 32-02 next (rapidfuzz dep + seed YAML scaffold)
 
 **Completed Phase:** 31 (Dialogue Engine) — 5 plans / 4 waves — 2026-04-23T21:30:00.000Z — DLG-01..03 shipped
 
