@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
-stopped_at: Phase 33-03 complete — Wave 2 LLM adapter layer shipped (app/llm.py 845 lines: embed_texts + classify_rule_topic + generate_ruling_from_passages + generate_ruling_fallback; calibrate_retrieval_threshold.py 203-line F1-sweep script; RETRIEVAL_SIMILARITY_THRESHOLD calibrated 0.55→0.65 via 20-query fixture); 40/40 unit stubs GREEN (3 classify_rule_topic flipped this wave), 8 integration stubs still RED-pending Wave 3 (route.obsidian); 129 total GREEN, zero regressions. L-1/L-2/L-4 lints clean. 6 atomic commits + merge commit on main. Ready for Plan 33-04 (Wave 3 — HTTP routes + lifespan wiring + 14-route REGISTRATION).
-last_updated: "2026-04-24T19:50:00.000Z"
-last_activity: 2026-04-24 -- Phase 33-03 Wave 2 LLM adapter layer + threshold calibration complete
+stopped_at: Phase 33-04 complete — Wave 3 HTTP layer shipped (routes/rule.py 527 lines: 4 endpoints implementing D-02 9-step orchestration + D-08 response shape + D-12 URL honesty + D-14 GET-then-PUT last_reused_at; main.py lifespan loads corpus + builds index + wires 3 module-level singletons; REGISTRATION_PAYLOAD 13→14; ObsidianClient.list_directory added). 138/138 pathfinder tests GREEN — all 8 RED integration stubs from Wave 0 flipped this wave. Zero regressions. L-3/L-4/L-7/L-8/L-10 lints clean. AI Deferral Ban clean. 5 atomic commits + merge commit on main. Ready for Plan 33-05 (Wave 4 — discord bot wiring + live-stack UAT). NOTE: interfaces/discord venv has a pre-existing setuptools.backends ModuleNotFoundError unrelated to phase 33; Wave 4 may need to refresh that venv.
+last_updated: "2026-04-24T20:30:00.000Z"
+last_activity: 2026-04-24 -- Phase 33-04 Wave 3 HTTP layer + lifespan wiring complete
 progress:
   total_phases: 35
   completed_phases: 16
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 33 (Rules Engine) — EXECUTING
-Plan: 4 of 5 (Plan 33-01 Wave 0 ✅; Plan 33-02 Wave 1 ✅; Plan 33-03 Wave 2 ✅; Plan 33-04 Wave 3 NEXT — HTTP routes + lifespan wiring + 14-route REGISTRATION)
-Next Plan: /gsd-execute-phase 33 (continues automatically; or targeted Plan 33-04 invocation)
+Plan: 5 of 5 (Plans 33-01..04 ✅ complete; Plan 33-05 Wave 4 NEXT — discord bot wiring + live-stack UAT)
+Next Plan: /gsd-execute-phase 33 (continues automatically; or targeted Plan 33-05 invocation)
 Prior Phase: 32 (Monster Harvesting) — ✅ COMPLETE + VERIFIED (5/5 plans, 22/22 must-haves, 89/89 + 38/38 unit, 17/17 live UAT)
 Milestone: v0.5 The Dungeon — IN PROGRESS (5/9 phases complete)
 Status: Executing Phase 33
-Last activity: 2026-04-24 -- Phase 33-03 Wave 2 LLM adapter + threshold calibration complete (RETRIEVAL 0.55→0.65 calibrated; 6 atomic commits + merge to main)
+Last activity: 2026-04-24 -- Phase 33-04 Wave 3 HTTP layer + lifespan wiring complete (138/138 pathfinder GREEN; 5 atomic commits + merge to main)
 
 ## Milestone Progress
 
