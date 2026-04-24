@@ -63,6 +63,7 @@ __all__ = [
     "load_rules_corpus",
     "normalize_query",
     "query_hash",
+    "render_citation_label",
     "retrieve",
     "slugify",
     "strip_rule_html",
@@ -477,6 +478,34 @@ def _iso_utc_now() -> str:
     return datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
 
 
+# --- Canonical D-09 citation-label renderer (WR-05 — single source of truth) ---
+
+def render_citation_label(
+    *,
+    book: str | None,
+    page: str | None,
+    section: str | None,
+    url: str | None,
+) -> str:
+    """Render a single D-09 citation label: 'Book p. N — Section | URL'.
+
+    D-09: omit missing fields — NEVER fabricate. Missing is represented as
+    None OR the empty string (WR-04 fix — empty string is not a value).
+
+    Called from BOTH build_ruling_markdown (cache body) and
+    app.llm._render_citation_label (response source field) so the two
+    renderings cannot drift.
+    """
+    label = book if book else "?"
+    if page is not None and page != "":
+        label = f"{label} p. {page}"
+    if section:
+        label = f"{label} — {section}"
+    if url:
+        label = f"{label} | {url}"
+    return label
+
+
 # --- Obsidian cache markdown builder (D-13 + D-14 frontmatter) ---
 
 def build_ruling_markdown(result: dict) -> str:
@@ -566,20 +595,14 @@ def build_ruling_markdown(result: dict) -> str:
             for c in citations:
                 if not isinstance(c, dict):
                     continue
-                book = c.get("book", "?")
-                page = c.get("page")
-                section = c.get("section", "?")
-                url = c.get("url")
-                # D-09 render: "Book p. N — Section | URL" (omit missing fields).
-                label = book
-                if page:
-                    label = f"{label} p. {page}"
-                if section:
-                    label = f"{label} — {section}"
-                line = f"- {label}"
-                if url:
-                    line = f"{line} | {url}"
-                body_lines.append(line)
+                # D-09 render via canonical helper — WR-05 single source of truth.
+                label = render_citation_label(
+                    book=c.get("book"),
+                    page=c.get("page"),
+                    section=c.get("section"),
+                    url=c.get("url"),
+                )
+                body_lines.append(f"- {label}")
 
         if reused and topic:
             body_lines.append("")

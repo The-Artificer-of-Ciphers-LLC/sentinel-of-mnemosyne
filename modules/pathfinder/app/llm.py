@@ -556,35 +556,41 @@ async def classify_rule_topic(
 
 
 def _render_citation_label(chunk) -> str:
-    """Render a single-chunk D-09 citation label: 'Book p. N — Section | URL'.
+    """Thin adapter over app.rules.render_citation_label (WR-05 single source).
 
     Missing fields are omitted (never fabricated — D-09 explicit prohibition).
+    Empty strings are treated as missing (WR-04 fix).
     """
-    book = str(getattr(chunk, "book", "")) or "?"
-    page = getattr(chunk, "page", None)
-    section = getattr(chunk, "section", None) or ""
-    url = getattr(chunk, "aon_url", None)
+    # Function-scope import preserves the L-4 "no top-level import cycle" shape.
+    from app.rules import render_citation_label
 
-    label = book
-    if page:
-        label = f"{label} p. {page}"
-    if section:
-        label = f"{label} — {section}"
-    if url:
-        label = f"{label} | {url}"
-    return label
+    return render_citation_label(
+        book=getattr(chunk, "book", None),
+        page=getattr(chunk, "page", None),
+        section=getattr(chunk, "section", None),
+        url=getattr(chunk, "aon_url", None),
+    )
 
 
 def _chunk_to_citation_dict(chunk) -> dict:
     """Convert a RuleChunk to the D-08 citations[] item shape: {book,page,section,url}.
 
     Missing fields become None in the emitted dict (D-09 — no fabrication).
+    WR-04: empty strings are also normalised to None so downstream renderers
+    cannot silently drop a field that looked like a value.
     """
+    def _none_if_blank(v):
+        if v is None:
+            return None
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
+
     return {
-        "book": str(getattr(chunk, "book", "")) or None,
-        "page": getattr(chunk, "page", None),
-        "section": getattr(chunk, "section", None),
-        "url": getattr(chunk, "aon_url", None),
+        "book": _none_if_blank(getattr(chunk, "book", None)),
+        "page": _none_if_blank(getattr(chunk, "page", None)),
+        "section": _none_if_blank(getattr(chunk, "section", None)),
+        "url": _none_if_blank(getattr(chunk, "aon_url", None)),
     }
 
 

@@ -511,6 +511,61 @@ def test_build_ruling_markdown_generated_banner():
     assert "[GENERATED — verify]" not in md_src
 
 
+def test_render_citation_label_omits_missing_fields():
+    """WR-04/WR-05: canonical renderer omits missing (None or empty-string) fields.
+
+    D-09: omit-don't-fabricate. Empty strings must be treated as missing so
+    callers that accidentally pass ""  instead of None do not silently render
+    a degraded citation.
+    """
+    from app.rules import render_citation_label
+
+    # Full citation.
+    assert render_citation_label(
+        book="Player Core", page="234", section="Off-Guard",
+        url="https://2e.aonprd.com/X.aspx?ID=1",
+    ) == "Player Core p. 234 — Off-Guard | https://2e.aonprd.com/X.aspx?ID=1"
+
+    # Empty string page (WR-04) — must be treated as missing.
+    assert render_citation_label(
+        book="Player Core", page="", section="Off-Guard", url=None,
+    ) == "Player Core — Off-Guard"
+
+    # Page '0' is a legitimate value and must be preserved.
+    assert render_citation_label(
+        book="Player Core", page="0", section="Intro", url=None,
+    ) == "Player Core p. 0 — Intro"
+
+    # Missing book falls back to '?'.
+    assert render_citation_label(
+        book=None, page="100", section="Section X", url=None,
+    ) == "? p. 100 — Section X"
+
+
+def test_render_citation_label_matches_build_ruling_markdown_body():
+    """WR-05: build_ruling_markdown must delegate to the canonical renderer.
+
+    Regression guard: the two rendering sites cannot drift on whitespace,
+    fallback behaviour, or field-ordering.
+    """
+    from app.rules import build_ruling_markdown, render_citation_label
+
+    citation = {"book": "Pathfinder Player Core", "page": "416",
+                "section": "Flanking",
+                "url": "https://2e.aonprd.com/Rules.aspx?ID=1349"}
+    expected_label = render_citation_label(
+        book=citation["book"], page=citation["page"],
+        section=citation["section"], url=citation["url"],
+    )
+    md = build_ruling_markdown({
+        "question": "Q?", "answer": "A", "why": "W",
+        "source": expected_label, "citations": [citation],
+        "marker": "source", "topic": "flanking",
+        "query_embedding": [0.1], "embedding_model": "m",
+    })
+    assert f"- {expected_label}" in md
+
+
 def test_build_ruling_markdown_declined_shape():
     """marker=='declined' renders D-07 template body with AoN 1e pointer."""
     from app.rules import build_ruling_markdown
