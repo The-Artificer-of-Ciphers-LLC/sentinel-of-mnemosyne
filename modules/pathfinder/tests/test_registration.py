@@ -82,3 +82,20 @@ async def test_registration_payload_correct(monkeypatch):
     assert call_kwargs.kwargs["headers"]["X-Sentinel-Key"] == "test-sentinel-key"
     assert call_kwargs.kwargs["json"]["name"] == "pathfinder"
     assert call_kwargs.kwargs["json"]["base_url"] == "http://pf2e-module:8000"
+
+
+def test_registration_payload_has_14_routes():
+    """Phase 33 Wave 3: REGISTRATION_PAYLOAD grows from 13 -> 14 with the rule route.
+
+    The 14th entry is {'path': 'rule', ...} covering RUL-01..04 (query + show +
+    history + list sub-verbs all proxied under the single 'rule' path — sentinel-core
+    strips /modules/pathfinder and forwards all sub-paths under the module's base_url).
+    """
+    from app.main import REGISTRATION_PAYLOAD
+
+    routes = REGISTRATION_PAYLOAD["routes"]
+    assert len(routes) == 14, (
+        f"Expected 14 registered routes after Phase 33 Wave 3, got {len(routes)}"
+    )
+    paths = [r["path"] for r in routes]
+    assert "rule" in paths, f"'rule' missing from registration payload: {paths}"
