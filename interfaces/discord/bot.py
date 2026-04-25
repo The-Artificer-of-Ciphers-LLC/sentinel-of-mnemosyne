@@ -185,7 +185,49 @@ _VALID_RELATIONS = frozenset({"knows", "trusts", "hostile-to", "allied-with", "f
 # the noun guard in _pf_dispatch and the usage/unknown-noun error strings
 # so adding a new noun (e.g. `spell`) is a one-line change rather than a
 # scavenger hunt through two mirrored literals.
-_PF_NOUNS = frozenset({"npc", "harvest", "rule"})
+_PF_NOUNS = frozenset({"npc", "harvest", "rule", "session"})  # Phase 34: session added (D-02)
+
+
+class RecapView(discord.ui.View):
+    """Discord View with a 'Recap last session' button for session start (D-08, D-11).
+
+    Constructed by the session 'start' verb handler when a prior ended session exists.
+    The caller MUST set view.message = msg AFTER await channel.send(..., view=self) returns —
+    do NOT set it before send(), or on_timeout will call None.edit() (PATTERNS.md anti-pattern).
+
+    timeout=180.0 (D-11) — ephemeral, no bot-restart re-registration needed.
+    """
+
+    def __init__(self, recap_text: str):
+        super().__init__(timeout=180.0)  # NEVER use timeout=None — would require re-registration
+        self.recap_text = recap_text
+        self.message = None  # set by caller after send() returns
+
+    @discord.ui.button(label="Recap last session", style=discord.ButtonStyle.primary)
+    async def recap_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        embed = discord.Embed(
+            title="Last session recap",
+            description=self.recap_text,
+            color=discord.Color.blue(),
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        self.stop()
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except Exception:
+                pass
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(
+                    content="Recap timed out — use `:pf session start --recap` to recap later.",
+                    embed=None,
+                    view=None,
+                )
+            except Exception:
+                pass
 
 # Phase 31 dialogue: pair `:pf npc say ...` user messages with their bot quote-block replies
 # in a thread. Capture group 1 = names (must NOT contain newlines or pipes — they delimit the
@@ -370,6 +412,88 @@ def build_harvest_embed(data: dict) -> "discord.Embed":
         embed.add_field(name=comp.get("type", "?"), value=field_value, inline=False)
 
     embed.set_footer(text=footer_text)
+    return embed
+
+
+def build_session_embed(data: dict) -> "discord.Embed":
+    """Build a Discord Embed from /session module response (SES-01..03, D-08, D-18, D-27).
+
+    Dispatches on data["type"]:
+    - "start": session started confirmation + optional recap button hint
+    - "log": event appended confirmation
+    - "undo": event removed confirmation
+    - "show": narrative story-so-far
+    - "end": session closed + recap
+    - "end_skeleton": session closed but recap failed + retry hint
+    """
+    verb_type = data.get("type", "")
+
+    if verb_type == "start":
+        embed = discord.Embed(
+            title=f"Session started — {data.get('date', '?')}",
+            description=f"Note: `{data.get('path', '?')}`",
+            color=discord.Color.green(),
+        )
+        if data.get("recap_available") and not data.get("recap_text"):
+            embed.set_footer(text="Use the button below to recap last session.")
+
+    elif verb_type == "log":
+        embed = discord.Embed(
+            title="Event logged",
+            description=f"`{data.get('line', '?')}`",
+            color=discord.Color.blue(),
+        )
+
+    elif verb_type == "undo":
+        removed = data.get("removed", "?")
+        remaining = data.get("remaining", "?")
+        embed = discord.Embed(
+            title="Event removed",
+            description=f"Removed: `{removed}`\nEvents remaining: {remaining}",
+            color=discord.Color.orange(),
+        )
+
+    elif verb_type == "show":
+        embed = discord.Embed(
+            title=f"Story so far — {data.get('date', '?')}",
+            description=data.get("narrative", "_No narrative generated._"),
+            color=discord.Color.blue(),
+        )
+
+    elif verb_type == "end":
+        recap = data.get("recap", "")
+        npcs = ", ".join(f"[[{s}]]" for s in (data.get("npcs") or []))
+        locations = ", ".join(f"[[{s}]]" for s in (data.get("locations") or []))
+        embed = discord.Embed(
+            title=f"Session ended — {data.get('date', data.get('path', '?'))}",
+            description=(recap[:2048] if recap else "_Recap empty._"),
+            color=discord.Color.dark_green(),
+        )
+        if npcs:
+            embed.add_field(name="NPCs", value=npcs[:1024], inline=False)
+        if locations:
+            embed.add_field(name="Locations", value=locations[:1024], inline=False)
+
+    elif verb_type == "end_skeleton":
+        embed = discord.Embed(
+            title="Session ended (recap failed)",
+            description=(
+                f"Note written: `{data.get('path', '?')}`\n"
+                f"Error: {str(data.get('error', '?'))[:200]}\n\n"
+                "_Use `:pf session end --retry-recap` to regenerate the recap._"
+            ),
+            color=discord.Color.red(),
+        )
+
+    else:
+        # Generic fallback for unknown or error responses from route
+        error_msg = data.get("error") or data.get("detail") or str(data)
+        embed = discord.Embed(
+            title="Session",
+            description=str(error_msg)[:2048],
+            color=discord.Color.red(),
+        )
+
     return embed
 
 
@@ -635,6 +759,77 @@ async def _pf_dispatch(
                         except Exception:
                             pass
                     raise
+
+            elif noun == "session":
+                # D-04: session noun dispatch — verbs: start, log, end, show, undo
+                # Flags parsed here and stripped from event text before forwarding to route.
+                force = "--force" in rest
+                recap_flag = "--recap" in rest
+                retry_recap = "--retry-recap" in rest
+
+                # Strip flag tokens from event text so "log" verb gets clean text
+                # T-34-W4-01 mitigation: flags read from rest only; event_text sent in args
+                # so route cannot be tricked by embedding --force in the event body.
+                event_text = rest
+                for flag_token in ("--force", "--recap", "--retry-recap"):
+                    event_text = event_text.replace(flag_token, "").strip()
+
+                payload = {
+                    "verb": verb,
+                    "args": event_text,
+                    "flags": {
+                        "force": force,
+                        "recap": recap_flag,
+                        "retry_recap": retry_recap,
+                    },
+                    "user_id": user_id,
+                }
+
+                # D-20: slow-query placeholder for show and end (LLM calls take 2-15s)
+                needs_placeholder = verb in {"show", "end"}
+                placeholder = None
+                if needs_placeholder and channel is not None and hasattr(channel, "send"):
+                    try:
+                        placeholder = await channel.send("_Generating session narrative..._")
+                    except Exception:
+                        placeholder = None
+
+                try:
+                    result = await _sentinel_client.post_to_module(
+                        "modules/pathfinder/session", payload, http_client
+                    )
+                except Exception as exc:
+                    if placeholder is not None and hasattr(placeholder, "edit"):
+                        try:
+                            await placeholder.edit(
+                                content=f"Session operation failed — {exc}", embed=None
+                            )
+                            return {"type": "suppressed", "content": "", "embed": None}
+                        except Exception:
+                            pass
+                    raise
+
+                # D-08/D-09: start verb — show recap button if prior session recap available
+                if verb == "start" and result.get("recap_text") and not recap_flag:
+                    recap_view = RecapView(recap_text=result["recap_text"])
+                    embed = build_session_embed(result)
+                    if channel is not None and hasattr(channel, "send"):
+                        try:
+                            msg = await channel.send(embed=embed, view=recap_view)
+                            recap_view.message = msg  # D-11: set AFTER send so on_timeout can edit
+                            return {"type": "suppressed", "content": "", "embed": embed}
+                        except Exception:
+                            pass
+                    return {"type": "embed", "content": "", "embed": embed}
+
+                embed = build_session_embed(result)
+                if placeholder is not None and hasattr(placeholder, "edit"):
+                    try:
+                        await placeholder.edit(content="", embed=embed)
+                        return {"type": "suppressed", "content": "", "embed": embed}
+                    except Exception:
+                        pass
+                return {"type": "embed", "content": "", "embed": embed}
 
             if verb == "create":
                 # Split name | description on first pipe (D-05, Pitfall 5: maxsplit=1)
