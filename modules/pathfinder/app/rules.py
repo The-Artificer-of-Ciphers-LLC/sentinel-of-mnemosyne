@@ -73,7 +73,7 @@ __all__ = [
 # --- Module constants ---
 
 RETRIEVAL_SIMILARITY_THRESHOLD: float = 0.65   # Calibrated Wave 2 (see 33-03-SUMMARY §Threshold Calibration)
-REUSE_SIMILARITY_THRESHOLD: float = 0.80       # D-05 — user-locked
+REUSE_SIMILARITY_THRESHOLD: float = 0.70       # D-05 — calibrated Phase 33.1 (F1-max sweep, 8-anchor paraphrase fixture)
 RULING_CACHE_PATH_PREFIX: str = "mnemosyne/pf2e/rulings"  # D-04
 MAX_QUERY_CHARS: int = 500
 EMBEDDING_DIM_DEFAULT: int = 768               # nomic-embed-text-v1.5 dim

@@ -273,7 +273,7 @@ def test_chunker_html_uuid_refs_resolved():
 
 
 # ---------------------------------------------------------------------------
-# RAG retrieval — thresholds (Wave-2 calibrated retrieval=0.65 / D-05 reuse=0.80)
+# RAG retrieval — thresholds (Wave-2 calibrated retrieval=0.65 / Phase 33.1 calibrated reuse=0.70)
 # ---------------------------------------------------------------------------
 
 
@@ -734,20 +734,24 @@ def test_coerce_topic_rejects_unknown_returns_misc():
 
 
 # ---------------------------------------------------------------------------
-# Threshold constants — RETRIEVAL (0.65 Wave-2 calibrated) + REUSE (D-05 0.80)
+# Threshold constants — RETRIEVAL (0.65 Wave-2 calibrated) + REUSE (0.70 Phase 33.1 calibrated)
 # ---------------------------------------------------------------------------
 
 
 def test_retrieval_threshold_constants_present():
-    """Thresholds: RETRIEVAL (Wave-2 calibrated) + REUSE (D-05 user-locked).
+    """Thresholds: RETRIEVAL (Wave-2 calibrated) + REUSE (Phase 33.1 calibrated).
 
     RETRIEVAL_SIMILARITY_THRESHOLD was calibrated in Wave 2 against the 20-query
     fixture (tests/fixtures/rules_threshold_calibration.json) using LM Studio's
     text-embedding-nomic-embed-text-v1.5 — the F1-maximizer is 0.65 (see the
     Plan 33-03 SUMMARY §Threshold Calibration for the full sweep table).
 
-    REUSE_SIMILARITY_THRESHOLD=0.80 is D-05 user-locked (CONTEXT.md) and must
-    never drift without a new user decision.
+    REUSE_SIMILARITY_THRESHOLD was calibrated in Phase 33.1 against the
+    8-anchor paraphrase fixture (tests/fixtures/rules_reuse_calibration.json)
+    on the same embedding model — the F1-maximizer is 0.70 (see Phase 33.1
+    SUMMARY for the full sweep table). D-05 was re-classified from
+    user-locked to calibrated by explicit operator decision after live UAT
+    surfaced an empirical mismatch with the original 0.80 ceiling.
     """
     from app.rules import (
         RETRIEVAL_SIMILARITY_THRESHOLD,
@@ -755,4 +759,4 @@ def test_retrieval_threshold_constants_present():
     )
 
     assert RETRIEVAL_SIMILARITY_THRESHOLD == 0.65
-    assert REUSE_SIMILARITY_THRESHOLD == 0.80
+    assert REUSE_SIMILARITY_THRESHOLD == 0.70
