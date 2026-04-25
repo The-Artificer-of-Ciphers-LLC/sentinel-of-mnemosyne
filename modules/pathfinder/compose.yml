@@ -34,6 +34,10 @@ services:
       - SESSION_TZ=America/New_York
       # SESSION_RECAP_MODEL: leave unset to fall back to LITELLM_MODEL
       # - SESSION_RECAP_MODEL=
+      # Foundry VTT event ingest (Phase 35 / FVT-01..03, D-12, D-14)
+      - DISCORD_BOT_INTERNAL_URL=http://discord-bot:8001
+      # FOUNDRY_NARRATION_MODEL: leave unset to fall back to LITELLM_MODEL (D-12)
+      # - FOUNDRY_NARRATION_MODEL=
     depends_on:
       sentinel-core:
         condition: service_healthy
