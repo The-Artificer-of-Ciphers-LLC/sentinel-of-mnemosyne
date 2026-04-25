@@ -88,6 +88,7 @@ async def test_invalid_payload():
             json={"event_type": "roll"},  # missing actor_name, outcome, roll_total, etc.
             headers={"X-Sentinel-Key": "test-key-for-pytest"},
         )
+    assert resp.status_code != 401, "Auth rejected before Pydantic validation — test is incorrect"
     assert resp.status_code == 422
 
 

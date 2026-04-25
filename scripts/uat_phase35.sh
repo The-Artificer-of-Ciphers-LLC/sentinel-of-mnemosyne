@@ -16,7 +16,7 @@
 #   4. POST /modules/pathfinder/foundry/event with roll payload — expect 200
 #   5. POST /modules/pathfinder/foundry/event with wrong key — expect 401
 #   6. POST /modules/pathfinder/foundry/event with malformed payload — expect 422
-#   7. GET /foundry/static/module.json — expect 200 + correct content-type
+#   7. GET /foundry/static/module.json (direct, PF2E_URL) — expect 200; no placeholder YOUR_SENTINEL_IP
 #   8. GET /foundry/static/sentinel-connector.zip — expect 200
 #   9. POST /modules/pathfinder/foundry/event with chat payload — expect 200
 
@@ -132,15 +132,25 @@ check "malformed payload returns 422" "422" "$STATUS"
 # -----------------------------------------------------------------------
 echo "Step 7: GET /foundry/static/module.json"
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-  "${BASE_URL}/foundry/static/module.json")
+  "${PF2E_URL}/foundry/static/module.json")
 check "module.json served with 200" "200" "$STATUS"
+
+# IN-01: guard against placeholder IP left in module.json
+MANIFEST_CONTENT=$(curl -s "${PF2E_URL}/foundry/static/module.json" 2>/dev/null || echo "")
+if echo "$MANIFEST_CONTENT" | grep -q "YOUR_SENTINEL_IP"; then
+  echo "  FAIL: module.json still contains placeholder YOUR_SENTINEL_IP — update before distributing"
+  ((FAIL++)) || true
+else
+  echo "  PASS: module.json has no placeholder YOUR_SENTINEL_IP"
+  ((PASS++)) || true
+fi
 
 # -----------------------------------------------------------------------
 # Step 8: GET /foundry/static/sentinel-connector.zip
 # -----------------------------------------------------------------------
 echo "Step 8: GET /foundry/static/sentinel-connector.zip"
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-  "${BASE_URL}/foundry/static/sentinel-connector.zip")
+  "${PF2E_URL}/foundry/static/sentinel-connector.zip")
 # 200 if zip exists; 404 if package.sh hasn't been run — acceptable for UAT
 if [[ "$STATUS" == "200" ]]; then
   echo "  PASS: sentinel-connector.zip served with 200"
