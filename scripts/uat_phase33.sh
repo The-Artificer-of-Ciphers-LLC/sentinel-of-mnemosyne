@@ -105,7 +105,7 @@ echo "── Step 4: Confirm LM Studio embeddings reachable from inside pf2e-mod
 # embeddings model loaded). Failure here = lifespan would have crashed at
 # startup; if we got past Step 2 healthy this should always pass, but the
 # explicit check makes the failure mode visible at the orchestrator level.
-if ! docker exec pf2e-module python -c "
+if ! docker compose exec -T pf2e-module python -c "
 import asyncio, sys
 from app.llm import embed_texts
 from app.config import settings
