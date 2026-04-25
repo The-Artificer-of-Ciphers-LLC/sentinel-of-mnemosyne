@@ -56,7 +56,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 31: Dialogue Engine** — `:pf npc say` + multi-turn history, conversation persistence (completed 2026-04-23)
 - [x] **Phase 32: Monster Harvesting** — `:pf harvest` with components, Medicine DCs, craftable item rendering (completed 2026-04-24)
 - [x] **Phase 33: Rules Engine** — `:pf rule` PF2e Remaster rules Q&A with citation, generation, decline, and reuse-cache. D-05 reuse threshold calibrated 0.80→0.70 in Phase 33.1. (completed 2026-04-25)
-- [ ] **Phase 34: Session Notes** — Structured session-end notes to Obsidian with NPC/location auto-tagging
+- [x] **Phase 34: Session Notes** — Structured session-end notes to Obsidian with NPC/location auto-tagging (completed 2026-04-25)
 - [ ] **Phase 35: Foundry VTT Event Ingest** — Live event stream from Foundry → Sentinel for context awareness
 - [ ] **Phase 36: Foundry NPC Pull Import** — Import existing Foundry NPCs into the Sentinel vault
 
@@ -493,13 +493,13 @@ Plans:
   3. `/pf session log [event]` appends a timestamped entry to the active session log
   4. Session notes use a consistent template structure across multiple sessions
 **Status:** In progress
-**Plans:** 5 plans
+**Plans:** 5/5 plans complete
 Plans:
-- [ ] 34-01-PLAN.md — Wave 0 RED test scaffolding (unit stubs, integration stubs, conftest, UAT)
-- [ ] 34-02-PLAN.md — Wave 1 session pure helpers + ObsidianClient.patch_heading + config settings
-- [ ] 34-03-PLAN.md — Wave 2 FastAPI session route (5-verb router) + LLM helpers
-- [ ] 34-04-PLAN.md — Wave 3 main.py registration + lifespan wiring + compose.yml env vars
-- [ ] 34-05-PLAN.md — Wave 4 bot.py Discord wiring (_PF_NOUNS, session branch, RecapView)
+- [x] 34-01-PLAN.md — Wave 0 RED test scaffolding (unit stubs, integration stubs, conftest, UAT)
+- [x] 34-02-PLAN.md — Wave 1 session pure helpers + ObsidianClient.patch_heading + config settings
+- [x] 34-03-PLAN.md — Wave 2 FastAPI session route (5-verb router) + LLM helpers
+- [x] 34-04-PLAN.md — Wave 3 main.py registration + lifespan wiring + compose.yml env vars
+- [x] 34-05-PLAN.md — Wave 4 bot.py Discord wiring (_PF_NOUNS, session branch, RecapView)
 
 ### Phase 35: Foundry VTT Event Ingest
 **Goal:** A Foundry VTT JavaScript module hooks into chat messages and dice rolls, POSTs events to Sentinel Core, and receives Discord responses with roll interpretations.
