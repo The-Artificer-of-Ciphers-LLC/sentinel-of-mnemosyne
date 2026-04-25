@@ -517,9 +517,9 @@ Plans:
 
 Plans:
 - [x] 35-01-PLAN.md — Wave 0 RED test stubs (test_foundry.py + test_discord_foundry.py + conftest gold())
-- [ ] 35-02-PLAN.md — Wave 1 Python backend (app/foundry.py helpers + app/routes/foundry.py + config.py)
-- [ ] 35-03-PLAN.md — Wave 1 Discord bot internal listener (aiohttp server + build_foundry_roll_embed)
-- [ ] 35-04-PLAN.md — Wave 3 main.py wiring (REGISTRATION_PAYLOAD + StaticFiles + lifespan + compose env)
+- [x] 35-02-PLAN.md — Wave 1 Python backend (app/foundry.py helpers + app/routes/foundry.py + config.py)
+- [x] 35-03-PLAN.md — Wave 1 Discord bot internal listener (aiohttp server + build_foundry_roll_embed)
+- [x] 35-04-PLAN.md — Wave 3 main.py wiring (REGISTRATION_PAYLOAD + StaticFiles + lifespan + compose env)
 - [ ] 35-05-PLAN.md — Wave 4 Foundry JS module (module.json + sentinel-connector.js + package.sh + UAT)
 
 ### Phase 36: Foundry NPC Pull Import

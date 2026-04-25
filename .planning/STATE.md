@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
-status: "Phase 35 in progress — Plan 01 complete (Wave 0 RED stubs). 4 plans remaining."
-stopped_at: Phase 35 Plan 01 complete (2026-04-25)
-last_updated: "2026-04-25T07:00:00.000Z"
-last_activity: 2026-04-25 -- Phase 35 Plan 01 complete: Wave 0 RED stubs (8 tests across test_foundry.py + test_discord_foundry.py, conftest gold() added)
+status: "Phase 35 in progress — Plan 04 complete (foundry router wired + env docs). 1 plan remaining."
+stopped_at: Phase 35 Plan 04 complete (2026-04-25)
+last_updated: "2026-04-25T14:40:24Z"
+last_activity: 2026-04-25 -- Phase 35 Plan 04 complete: foundry router wired into main.py, REGISTRATION_PAYLOAD 16th entry, StaticFiles mount, lifespan discord_bot_url, compose.yml + .env.example updated (280b629, c62c838)
 progress:
   total_phases: 35
   completed_phases: 19
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 35 (Foundry VTT Event Ingest) — IN PROGRESS
-Plan: 1 of 5 (Plan 01 complete — Wave 0 RED stubs)
-Next Plan: 35-02 (Wave 1 — Foundry route + service implementation)
+Plan: 4 of 5 (Plans 01-04 complete — Wave 0 RED stubs, Wave 1 implementation, Wave 2 Discord wiring, Wave 3 main.py integration)
+Next Plan: 35-05 (Wave 4 — Discord subcommand + JS client)
 Prior Phase: 34 (Session Notes) — ✅ COMPLETE + FULLY VERIFIED (9/9 UAT passed 2026-04-25)
 Milestone: v0.5 The Dungeon — IN PROGRESS (7/9 phases complete: 28, 29, 30, 31, 32, 33, 34)
 Status: Phase 35 Plan 01 complete. Wave 0 RED stubs: 8 tests (6 pathfinder + 2 discord), conftest gold() added.
@@ -63,7 +63,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | 32 | Monster Harvesting | HRV-01..06 | Phase 28 | ✅ COMPLETE (2026-04-24) |
 | 33 | Rules Engine | RUL-01..04 | Phase 28 | ✅ COMPLETE (2026-04-25) |
 | 34 | Session Notes | SES-01..03 | Phase 29 | ✅ COMPLETE (2026-04-25) |
-| 35 | Foundry VTT Event Ingest | FVT-01..03 | Phase 28 | Not started |
+| 35 | Foundry VTT Event Ingest | FVT-01..03 | Phase 28 | IN PROGRESS (4/5 plans complete) |
 | 36 | Foundry NPC Pull Import | FVT-04 | Phase 30, Phase 35 | Not started |
 
 ## Performance Metrics
@@ -154,12 +154,12 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-25T05:15:00.000Z
-Stopped at: Phase 34 complete, ready to discuss Phase 35
+Last session: 2026-04-25T14:40:24Z
+Stopped at: Phase 35 Plan 04 complete — 35-05 (Wave 4 Discord subcommand + JS client) is next
 Resume file: None
 
-**In-Progress Phase:** none
+**In-Progress Phase:** 35 (Foundry VTT Event Ingest) — Plan 04 complete (2026-04-25)
 
 **Completed Phase:** 34 (Session Notes) — 5 plans / 4 waves (Wave 0 RED, Waves 1-3 implementation, Wave 4 Discord wiring) — 2026-04-25 — SES-01..03 shipped; RecapView Bug A+B fixed during UAT; 9/9 UAT passed
 
-**Next Phase:** 35 (Foundry VTT Event Ingest) — no context yet, start with /gsd-discuss-phase 35
+**Next Plan:** 35-05 (Wave 4 — Discord :pf foundry subcommand + JS client foundry-client/)

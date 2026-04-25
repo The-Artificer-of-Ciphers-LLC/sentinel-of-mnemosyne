@@ -1,0 +1,31 @@
+{
+  "id": "sentinel-connector",
+  "title": "Sentinel Connector",
+  "description": "Sends PF2e roll events and chat messages to the Sentinel of Mnemosyne AI assistant.",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "12",
+    "verified": "14"
+  },
+  "esmodules": [
+    "sentinel-connector.js"
+  ],
+  "relationships": {
+    "systems": [
+      {
+        "id": "pf2e",
+        "type": "system",
+        "compatibility": {
+          "minimum": "6.0.0"
+        }
+      }
+    ]
+  },
+  "authors": [
+    {
+      "name": "Sentinel of Mnemosyne"
+    }
+  ],
+  "manifest": "http://YOUR_SENTINEL_IP:8000/foundry/static/module.json",
+  "download": "http://YOUR_SENTINEL_IP:8000/foundry/static/sentinel-connector.zip"
+}
