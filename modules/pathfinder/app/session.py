@@ -293,6 +293,47 @@ def session_note_markdown(
 # ---------------------------------------------------------------------------
 
 
+async def build_npc_roster_cache(obsidian_client) -> dict:
+    """Build {lowercase_name_or_slug: canonical_slug} map from vault NPC notes.
+
+    Called by main.py lifespan at startup (D-22). Used by log verb for fast-pass
+    wikilink rewriting. Returns empty dict if vault is unreachable or has no NPCs.
+    Silently skips malformed notes.
+    """
+    roster: dict[str, str] = {}
+    try:
+        npc_paths = await obsidian_client.list_directory("mnemosyne/pf2e/npcs/")
+    except Exception as exc:
+        logger.warning("build_npc_roster_cache: list_directory failed: %s", exc)
+        return roster
+
+    for path in npc_paths:
+        if not path.endswith(".md"):
+            continue
+        try:
+            note = await obsidian_client.get_note(path)
+            if note is None:
+                continue
+            # Extract slug from path (filename without .md extension).
+            slug = path.rsplit("/", 1)[-1].replace(".md", "")
+            roster[slug] = slug
+            # Also index by NPC name from frontmatter if available.
+            if note.startswith("---"):
+                end = note.find("---", 3)
+                if end > 0:
+                    fm_text = note[3:end].strip()
+                    try:
+                        fm = yaml.safe_load(fm_text) or {}
+                        name = fm.get("name", "")
+                        if name and isinstance(name, str):
+                            roster[name.lower()] = slug
+                    except Exception:
+                        pass
+        except Exception as exc:
+            logger.warning("build_npc_roster_cache: failed to process %s: %s", path, exc)
+    return roster
+
+
 def parse_session_verb_args(rest: str, verb: str) -> dict:
     """Parse flags from the remainder of a session command string.
 

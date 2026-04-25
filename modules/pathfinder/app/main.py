@@ -46,12 +46,14 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.harvest import load_harvest_tables
 from app.obsidian import ObsidianClient
-from app.routes.harvest import router as harvest_router
-from app.routes.npc import router as npc_router
-from app.routes.rule import router as rule_router
 import app.routes.harvest as _harvest_module
 import app.routes.npc as _npc_module
 import app.routes.rule as _rule_module
+import app.routes.session as _session_module
+from app.routes.harvest import router as harvest_router
+from app.routes.npc import router as npc_router
+from app.routes.rule import router as rule_router
+from app.routes.session import router as session_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -166,6 +168,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "Phase 33 rules engine: loaded %d corpus chunks, embedding model=%s",
             len(_rule_corpus_chunks), settings.rules_embedding_model,
         )
+        # Phase 34: wire the session route's module-level singletons.
+        _session_module.obsidian = obsidian_client
+        # NPC roster cache: load from vault at startup for fast-pass wikilink rewriting (D-22).
+        # If vault is unreachable, start with empty cache (non-fatal — next session start retries).
+        try:
+            from app.session import build_npc_roster_cache
+            _session_module.npc_roster_cache = await build_npc_roster_cache(obsidian_client)
+            logger.info(
+                "Phase 34 session engine: NPC roster cache loaded (%d entries)",
+                len(_session_module.npc_roster_cache),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Phase 34 session engine: NPC roster cache load failed (%s) — starting empty",
+                exc,
+            )
+            _session_module.npc_roster_cache = {}
         yield
     # obsidian_http_client closes when the async with block exits (on shutdown)
     _npc_module.obsidian = None
@@ -174,6 +193,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _rule_module.obsidian = None
     _rule_module.rules_index = None
     _rule_module.aon_url_map = None
+    _session_module.obsidian = None
+    _session_module.npc_roster_cache = None
 
 
 app = FastAPI(
@@ -186,6 +207,10 @@ app = FastAPI(
 app.include_router(npc_router)
 app.include_router(harvest_router)
 app.include_router(rule_router)
+app.include_router(session_router)
+# Also mount at /modules/pathfinder/session so integration tests that simulate
+# the sentinel-core proxy path work against the pathfinder app directly.
+app.include_router(session_router, prefix="/modules/pathfinder")
 
 
 @app.get("/healthz")
