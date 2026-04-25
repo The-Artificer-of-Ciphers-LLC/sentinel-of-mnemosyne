@@ -79,6 +79,14 @@ class _ColorStub:
     def blue(cls):
         return "blue"
 
+    @classmethod
+    def green(cls):
+        return "green"
+
+    @classmethod
+    def orange(cls):
+        return "orange"
+
 
 _app_commands_stub = types.ModuleType("discord.app_commands")
 _app_commands_stub.CommandTree = MagicMock()
