@@ -1,9 +1,10 @@
 ---
 phase: 35-foundry-vtt-event-ingest
-reviewed: 2026-04-25T00:00:00Z
+reviewed: 2026-04-25T12:00:00Z
 depth: standard
-files_reviewed: 10
+files_reviewed: 11
 files_reviewed_list:
+  - .env.example
   - interfaces/discord/bot.py
   - interfaces/discord/tests/conftest.py
   - interfaces/discord/tests/test_discord_foundry.py
@@ -13,77 +14,88 @@ files_reviewed_list:
   - modules/pathfinder/foundry-client/sentinel-connector.js
   - modules/pathfinder/tests/test_foundry.py
   - modules/pathfinder/tests/test_registration.py
-  - .env.example
+  - scripts/uat_phase35.sh
 findings:
   critical: 2
-  warning: 3
-  info: 2
+  warning: 4
+  info: 1
   total: 7
 status: issues_found
 ---
 
 # Phase 35: Code Review Report
 
-**Reviewed:** 2026-04-25
+**Reviewed:** 2026-04-25T12:00:00Z
 **Depth:** standard
-**Files Reviewed:** 10
+**Files Reviewed:** 11
 **Status:** issues_found
 
 ## Summary
 
-Phase 35 introduces Foundry VTT event ingest: `sentinel-connector.js` delivers roll/chat events to the pf2e-module via a webhook-first hybrid path, and `app/main.py` adds `PNACORSMiddleware` to permit browser fetch from Forge VTT (Private Network Access spec compliance).
-
-The gap-closure changes in Plan 35-06 contain two critical defects. The `PNACORSMiddleware` subclass both duplicates functionality already present in Starlette 1.0.0 (the installed version) and places the PNA header in `simple_headers` — the non-preflight response headers — whereas the PNA spec requires the header only on the `OPTIONS` preflight response. Starlette 1.0.0 already handles the correct placement via its native `allow_private_network` constructor parameter. Additionally the `AbortController` timer in `sentinel-connector.js` is not cleared in a `finally` block, so a non-abort exception during the fetch leaves the 3-second timer running against a discarded request.
+Phase 35 adds Foundry VTT event ingest: `sentinel-connector.js` posts roll and chat events to the pf2e-module, which narrates via LLM and notifies the Discord bot through an internal aiohttp endpoint. The implementation is structurally sound with one exception: the internal notification server in `bot.py` is bound to `127.0.0.1` (loopback), making it unreachable from the `pf2e-module` container over the Docker bridge network. This completely breaks the Discord notification pipeline in deployed environments. There is also a type contract mismatch where `outcome=None` (valid for hidden-DC rolls per CR-01 comments) is passed to a function that treats `outcome` as `str`, producing a malformed LLM prompt. Two JavaScript issues — a timer not cleared in `finally` and HTTP error responses not triggering the webhook fallback — are confirmed and need fixes.
 
 ---
 
 ## Critical Issues
 
-### CR-01: `PNACORSMiddleware` puts PNA header on wrong response type; Starlette 1.0.0 already handles it natively
+### CR-01: Internal aiohttp server bound to `127.0.0.1` — unreachable from `pf2e-module` container
 
-**File:** `modules/pathfinder/app/main.py:231-252`
+**File:** `interfaces/discord/bot.py:1365`
 
-**Issue:** Starlette 1.0.0 (installed version confirmed) accepts `allow_private_network=True` as a native constructor parameter and emits `Access-Control-Allow-Private-Network: true` inside `preflight_response()` at line 139 of Starlette's cors.py — exactly where the WICG PNA spec requires it (only on the `OPTIONS` preflight).
+**Issue:** `web.TCPSite(self._internal_runner, "127.0.0.1", internal_port)` binds the notification endpoint to the loopback interface inside the `discord-bot` container. The `pf2e-module` container calls `http://discord-bot:8001/internal/notify` over the Docker bridge network. Docker bridge traffic arrives on the container's eth0 interface, not loopback. The connection is refused for every roll event. Every `notify_discord_bot()` call silently logs a warning and Discord never receives any Foundry event notification — the entire Phase 35 FVT-02/FVT-03 notification path is dead in Docker deployment.
 
-The `PNACORSMiddleware` subclass additionally injects this header into `self.simple_headers` (line 235). `simple_headers` is applied to all non-OPTIONS responses (Starlette cors.py line 163). The net effect is:
-
-1. The PNA header is correctly sent on `OPTIONS` preflights by native Starlette logic (because `allow_private_network=True` is passed through `**kwargs`).
-2. The subclass additionally stamps the header onto every `POST` and `GET` simple response, which is a PNA spec violation.
-3. The stated motivation (fill in a missing Starlette feature) no longer applies to Starlette 1.0.0.
-
-**Fix:** Delete `PNACORSMiddleware` entirely. Replace the `add_middleware` call with native `CORSMiddleware`:
+**Fix:** Bind to `0.0.0.0` so the container's network interface accepts connections from other containers. The port is unexposed to the host network (no `ports:` mapping in `discord-bot`'s compose service), so binding broadly within Docker does not increase the external attack surface.
 
 ```python
-# Remove the subclass entirely.
-# Replace add_middleware call with:
-from starlette.middleware.cors import CORSMiddleware
+# bot.py:1365 — change "127.0.0.1" to "0.0.0.0"
+site = web.TCPSite(self._internal_runner, "0.0.0.0", internal_port)
+```
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://forge-vtt.com",
-        "http://localhost:30000",
-        "http://localhost:8000",
-        "http://127.0.0.1:30000",
-        "http://127.0.0.1:8000",
-    ],
-    allow_origin_regex=r"https://[a-zA-Z0-9-]+\.forge-vtt\.com",  # see WR-01
-    allow_methods=["POST", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Sentinel-Key"],
-    allow_credentials=False,
-    allow_private_network=True,
-)
+If strict isolation between containers is desired, the alternative is to use a Docker internal network shared only between `discord-bot` and `pf2e-module` — but `0.0.0.0` with no host port mapping achieves the same security posture more simply.
+
+---
+
+### CR-02: `generate_foundry_narrative` receives `None` for `outcome` — type mismatch produces garbled LLM prompt
+
+**File:** `modules/pathfinder/app/routes/foundry.py:98`, `modules/pathfinder/app/foundry.py:42`
+
+**Issue:** `FoundryRollEvent.outcome` is `Optional[str] = None` (routes/foundry.py:46). On hidden-DC rolls the JS module sends `outcome: "unknown"` or omits the field entirely (sentinel-connector.js:125). When `outcome` is `None`, `_handle_roll` passes it directly to `generate_foundry_narrative(outcome=event.outcome, ...)`. The function signature declares `outcome: str` (foundry.py:42), but Python does not enforce this at runtime.
+
+Inside `generate_foundry_narrative`:
+- `OUTCOME_LABELS.get(None, None)` → returns `None` (not in dict, default is second arg which defaults to `None`)
+- The f-string becomes: `"Outcome: None."` in the LLM prompt
+
+`build_narrative_fallback` handles `None` correctly (foundry.py:96: `outcome.capitalize() if outcome else "Roll"`), but it is only called when `generate_foundry_narrative` returns `""` — the LLM still receives the malformed prompt first.
+
+**Fix:** Annotate the signature correctly and add a None guard:
+
+```python
+# foundry.py:42 — update signature
+async def generate_foundry_narrative(
+    actor_name: str,
+    target_name: str | None,
+    item_name: str | None,
+    outcome: str | None,        # was: str
+    roll_total: int,
+    dc: int | None,
+    model: str,
+    api_base: str | None = None,
+) -> str:
+    outcome_label = OUTCOME_LABELS.get(outcome or "", outcome.capitalize() if outcome else "unknown")
+    # rest unchanged
 ```
 
 ---
 
-### CR-02: `clearTimeout` is only called on the happy path — timer leaks on network error
+## Warnings
 
-**File:** `modules/pathfinder/foundry-client/sentinel-connector.js:198-203`
+### WR-01: `clearTimeout` not in `finally` — timer leaks when `fetch()` throws
 
-**Issue:** `clearTimeout(timeoutId)` is inside the `try` block after `await fetch(...)`. When the fetch throws (TypeError for network/CORS block, or AbortError when the timer already fired), execution jumps to `catch` without calling `clearTimeout`. In the TypeError case (network blocked), the 3-second timer is still live when the catch block runs. Three seconds later it calls `controller.abort()` on a request that has already been abandoned. In a long-running browser session such as FoundryVTT this causes a spurious abort call per forwarded event. More importantly, if the server returns a non-2xx status (4xx/5xx), `fetch()` resolves rather than throws, so `clearTimeout` is called and `return` exits — silently dropping the event without a fallback (see WR-02 for that related bug).
+**File:** `modules/pathfinder/foundry-client/sentinel-connector.js:187-206`
 
-**Fix:** Move `clearTimeout` to a `finally` block:
+**Issue:** `clearTimeout(timeoutId)` is only called in the `try` block after `await fetch(...)` returns. When `fetch()` throws (TypeError for network error, AbortError when the timer fires first), execution jumps directly to `catch` without clearing the timer. In the TypeError case (e.g., network blocked by CORS), a 3-second-stale `setTimeout` callback fires `controller.abort()` on an already-abandoned request. In a long-running Foundry session this accumulates per-roll timer orphans.
+
+**Fix:**
 
 ```javascript
 const controller = new AbortController();
@@ -98,9 +110,7 @@ try {
     body: JSON.stringify(payload),
     signal: controller.signal,
   });
-  if (!response.ok) {
-    throw new Error(`Sentinel returned HTTP ${response.status}`);
-  }
+  if (!response.ok) throw new Error(`Sentinel returned HTTP ${response.status}`);
   return; // success — no fallback needed
 } catch (err) {
   console.warn('[sentinel-connector] Sentinel POST failed, falling back to webhook:', err.message);
@@ -111,76 +121,83 @@ try {
 
 ---
 
-## Warnings
-
-### WR-01: Wildcard subdomain origin `https://*.forge-vtt.com` is not supported by Starlette CORS and is silently ignored
-
-**File:** `modules/pathfinder/app/main.py:242`
-
-**Issue:** Starlette's `CORSMiddleware.is_allowed_origin()` performs exact string membership (`origin in self.allow_origins`). The string `"https://*.forge-vtt.com"` is never equal to an actual origin like `"https://user123.forge-vtt.com"`, so all Forge subdomains are silently rejected. The entry has zero effect and creates a false impression of Forge support. The fix is to use `allow_origin_regex` as shown in CR-01's fix above.
-
-**Fix:** Remove `"https://*.forge-vtt.com"` from `allow_origins` and add `allow_origin_regex=r"https://[a-zA-Z0-9-]+\.forge-vtt\.com"` (anchored so it cannot match `evil.forge-vtt.com.attacker.com`).
-
----
-
-### WR-02: HTTP 4xx/5xx from Sentinel is treated as success — event silently dropped without webhook fallback
+### WR-02: HTTP 4xx/5xx from Sentinel treated as success — event silently dropped, no webhook fallback
 
 **File:** `modules/pathfinder/foundry-client/sentinel-connector.js:197-199`
 
-**Issue:** `fetch()` in a browser does not reject on HTTP error status codes — it resolves with a `Response` object whose `ok` property is `false`. After `await fetch(...)` the code calls `clearTimeout(timeoutId); return;` without checking `response.ok`. A 401 (bad API key), 422 (validation error), or 503 (module down) causes `postEvent` to return successfully with no fallback to the Discord webhook. The event is silently dropped.
-
-**Fix:** Add a `response.ok` guard as shown in the CR-02 fix block above.
+**Issue:** `fetch()` resolves (does not throw) on 4xx/5xx HTTP responses. The current code calls `clearTimeout(timeoutId); return;` without checking `response.ok`. A 401 Unauthorized (wrong API key), 422 Unprocessable Entity (schema mismatch), or 503 Service Unavailable causes `postEvent` to silently return as if the event was delivered. The webhook fallback is never attempted. The fix is to throw on non-ok status as shown in the WR-01 fix block above.
 
 ---
 
-### WR-03: `_handle_internal_notify` calls `build_foundry_roll_embed` unconditionally — chat events produce malformed roll embeds
+### WR-03: `_handle_internal_notify` always calls `build_foundry_roll_embed` — chat events produce malformed roll embeds
 
-**File:** `interfaces/discord/bot.py:1394`
+**File:** `interfaces/discord/bot.py:1394-1399`
 
-**Issue:** The internal notify handler calls `build_foundry_roll_embed(data)` for every incoming event. `sentinel-connector.js` sends both `event_type: "roll"` and `event_type: "chat"` to the same endpoint. When a chat event arrives (e.g., from a chat-prefix trigger with `sentinelBaseUrl` set), `build_foundry_roll_embed` is invoked with a dict that contains `content` but lacks `outcome`, `roll_total`, `dc`, and `roll_type`. The function defaults all missing fields to `"?"` or `""` and produces a confusing embed with `"🎲  | ? (check)"` as the title rather than any useful chat display.
+**Issue:** `bot.py:1394` checks `if event_type != "roll": return 200` before calling `build_foundry_roll_embed`. This means chat events are silently dropped (status 200 returned without sending anything to Discord). However, `sentinel-connector.js` does forward chat events to the Sentinel endpoint (`postEvent` is called for both roll and chat in lines 100-107). The phase 35 MVP intentionally omits chat notification (`_handle_chat` in routes/foundry.py:147 returns ok without notifying), but the internal notify handler also needs to handle the eventual chat path gracefully.
 
-**Fix:**
+The current code on line 1394-1397 silently ignores non-roll events. If the pf2e-module is later updated to notify chat events (chat events arrive at `/internal/notify` with `event_type: "chat"`), the bot will log a warning and return 200 without displaying anything — a silent no-op rather than a useful display.
+
+**Fix:** Document the intentional no-op and add a simple chat embed path for future use:
+
 ```python
 event_type = data.get("event_type", "roll")
 if event_type == "roll":
     embed = build_foundry_roll_embed(data)
-else:
-    # chat event — simple embed
+elif event_type == "chat":
+    # Phase 35 MVP: route chat events to Discord too
     embed = discord.Embed(
         title=f"[Chat] {data.get('actor_name', 'DM')}",
         description=(data.get("content") or "")[:4000],
         color=discord.Color.blue(),
     )
+else:
+    logger.info("_handle_internal_notify: unsupported event_type %r — ignoring", event_type)
+    return web.Response(status=200)
 ```
+
+---
+
+### WR-04: `min(ALLOWED_CHANNEL_IDS)` selects notification channel by snowflake age — wrong if channels were created out-of-order
+
+**File:** `interfaces/discord/bot.py:1382`
+
+**Issue:** `channel_id = min(ALLOWED_CHANNEL_IDS) if ALLOWED_CHANNEL_IDS else None` selects the numerically smallest Discord channel ID from the allowlist. Discord snowflake IDs encode creation timestamp, so `min()` picks the oldest channel. If a server has multiple allowed channels configured and the DM channel was created after a general channel, roll notifications go to the wrong channel. The comment says "WR-02: deterministic" — determinism is correct but the selection criterion is wrong.
+
+**Fix:** Add a dedicated `DISCORD_NOTIFY_CHANNEL_ID` env var for the Foundry roll notification target, falling back to `min()` only if absent:
+
+```python
+# bot.py — near ALLOWED_CHANNEL_IDS parsing
+NOTIFY_CHANNEL_ID_RAW = os.environ.get("DISCORD_NOTIFY_CHANNEL_ID", "")
+NOTIFY_CHANNEL_ID: int | None = int(NOTIFY_CHANNEL_ID_RAW) if NOTIFY_CHANNEL_ID_RAW.isdigit() else None
+
+# in _handle_internal_notify:
+channel_id = NOTIFY_CHANNEL_ID or (min(ALLOWED_CHANNEL_IDS) if ALLOWED_CHANNEL_IDS else None)
+```
+
+Alternatively, document in `.env.example` that `DISCORD_ALLOWED_CHANNELS` should list the notification channel first and change `min()` to `next(iter(...))` with a consistent ordering guarantee.
 
 ---
 
 ## Info
 
-### IN-01: `test_thread_persistence.py` duplicates the discord stub already provided by `conftest.py`
+### IN-01: `test_discord_foundry.py` has no async test markers but `asyncio_mode = "auto"` in pyproject.toml covers it
 
-**File:** `interfaces/discord/tests/test_thread_persistence.py:14-45`
+**File:** `interfaces/discord/tests/test_discord_foundry.py:22-62`
 
-**Issue:** `test_thread_persistence.py` contains a full inline discord stub identical to the one in `conftest.py`. The conftest comment explicitly flags this pattern as prohibited ("Phase 32-05 Rule 3 fix — centralise here; never add per-file"). The duplicate uses `sys.modules.setdefault` so it is currently harmless (conftest wins), but it adds 30 lines of dead code and will confuse anyone extending the stub.
+**Issue:** The two test functions `test_embed_critical_success` and `test_embed_hidden_dc` are declared `async def` without `@pytest.mark.asyncio`. This is intentional because `asyncio_mode = "auto"` in `interfaces/discord/pyproject.toml:21` applies the marker automatically. This is not a bug, but worth noting for reviewers: the tests exercise synchronous embed-builder functions via `async def` test functions, which is unnecessary overhead. Sync functions do not need async test wrappers.
 
-**Fix:** Remove lines 14–57 of `test_thread_persistence.py` (the inline stub + `sys.modules.setdefault` calls + path insertions). The conftest already handles all of this. Keep only the `os.environ.setdefault` calls if any are not already in conftest.
+**Fix (optional):** Convert to `def` (non-async) — `build_foundry_roll_embed` is a pure synchronous function. Reduces cognitive overhead for future contributors.
 
----
+```python
+def test_embed_critical_success():
+    ...
 
-### IN-02: `.env.example` instructs storing the Discord webhook URL "for reference" in `.env`
-
-**File:** `.env.example:127`
-
-**Issue:** The comment `# DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/{id}/{token}` tells the user to store the webhook URL in `.env` for reference. Discord webhook URLs contain a secret token in the path. Despite the top-of-file warning not to commit `.env`, storing secrets there increases accidental-commit risk. The comment should redirect to `secrets/`.
-
-**Fix:**
-```
-# discordWebhookUrl is configured in Foundry module settings — do NOT store it in .env.
-# The URL embeds a secret token. If you need a local record, add it to secrets/discord_webhook_url.
+def test_embed_hidden_dc():
+    ...
 ```
 
 ---
 
-_Reviewed: 2026-04-25_
+_Reviewed: 2026-04-25T12:00:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
