@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
-status: "Phase 35 in progress — Plan 04 complete (foundry router wired + env docs). 1 plan remaining."
-stopped_at: Phase 35 Plan 04 complete (2026-04-25)
-last_updated: "2026-04-25T14:40:24Z"
-last_activity: 2026-04-25 -- Phase 35 Plan 04 complete: foundry router wired into main.py, REGISTRATION_PAYLOAD 16th entry, StaticFiles mount, lifespan discord_bot_url, compose.yml + .env.example updated (280b629, c62c838)
+status: "Phase 35 COMPLETE — all 5 plans done. Foundry VTT event ingest fully wired (FVT-01..03)."
+stopped_at: Phase 35 Plan 05 complete (2026-04-25)
+last_updated: "2026-04-25T14:46:00Z"
+last_activity: 2026-04-25 -- Phase 35 Plan 05 complete: Foundry JS module artifacts (module.json, sentinel-connector.js, package.sh, sentinel-connector.zip) + UAT script (95895ff, 532c3e9)
 progress:
   total_phases: 35
   completed_phases: 19
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 35 (Foundry VTT Event Ingest) — IN PROGRESS
-Plan: 4 of 5 (Plans 01-04 complete — Wave 0 RED stubs, Wave 1 implementation, Wave 2 Discord wiring, Wave 3 main.py integration)
-Next Plan: 35-05 (Wave 4 — Discord subcommand + JS client)
+Plan: 5 of 5 (All plans complete — FVT-01..03 requirements satisfied)
+Next Plan: Phase 36 Plan 01 (Foundry NPC Pull Import)
 Prior Phase: 34 (Session Notes) — ✅ COMPLETE + FULLY VERIFIED (9/9 UAT passed 2026-04-25)
-Milestone: v0.5 The Dungeon — IN PROGRESS (7/9 phases complete: 28, 29, 30, 31, 32, 33, 34)
-Status: Phase 35 Plan 01 complete. Wave 0 RED stubs: 8 tests (6 pathfinder + 2 discord), conftest gold() added.
-Last activity: 2026-04-25 -- Phase 35 Plan 01 complete: Wave 0 RED stubs committed (37daf84, a015a72, 345f8a8)
+Milestone: v0.5 The Dungeon — IN PROGRESS (8/9 phases complete: 28, 29, 30, 31, 32, 33, 34, 35)
+Status: Phase 35 COMPLETE. All 5 plans done. Foundry JS module installable as zip; POST /foundry/event live; Discord roll embed wired.
+Last activity: 2026-04-25 -- Phase 35 Plan 05 complete: Foundry JS module artifacts + UAT script (95895ff, 532c3e9)
 
 ## Milestone Progress
 
@@ -63,7 +63,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | 32 | Monster Harvesting | HRV-01..06 | Phase 28 | ✅ COMPLETE (2026-04-24) |
 | 33 | Rules Engine | RUL-01..04 | Phase 28 | ✅ COMPLETE (2026-04-25) |
 | 34 | Session Notes | SES-01..03 | Phase 29 | ✅ COMPLETE (2026-04-25) |
-| 35 | Foundry VTT Event Ingest | FVT-01..03 | Phase 28 | IN PROGRESS (4/5 plans complete) |
+| 35 | Foundry VTT Event Ingest | FVT-01..03 | Phase 28 | ✅ COMPLETE (2026-04-25) |
 | 36 | Foundry NPC Pull Import | FVT-04 | Phase 30, Phase 35 | Not started |
 
 ## Performance Metrics

@@ -57,7 +57,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 32: Monster Harvesting** — `:pf harvest` with components, Medicine DCs, craftable item rendering (completed 2026-04-24)
 - [x] **Phase 33: Rules Engine** — `:pf rule` PF2e Remaster rules Q&A with citation, generation, decline, and reuse-cache. D-05 reuse threshold calibrated 0.80→0.70 in Phase 33.1. (completed 2026-04-25)
 - [x] **Phase 34: Session Notes** — Structured session-end notes to Obsidian with NPC/location auto-tagging, real-time event log, RecapView Discord button, LLM recap with skeleton fallback (completed 2026-04-25)
-- [ ] **Phase 35: Foundry VTT Event Ingest** — Live event stream from Foundry → Sentinel for context awareness
+- [x] **Phase 35: Foundry VTT Event Ingest** — Live event stream from Foundry → Sentinel for context awareness (completed 2026-04-25)
 - [ ] **Phase 36: Foundry NPC Pull Import** — Import existing Foundry NPCs into the Sentinel vault
 
 ## Phase Details
@@ -512,15 +512,15 @@ Plans:
   3. A dice roll result in Foundry chat produces a hit/miss/DC interpretation in the DM's Discord channel
   4. `X-Sentinel-Key` is stored in Foundry world settings (GM-only) and sent on every POST
   5. Module declares explicit `compatibility.verified` for the installed Foundry version
-**Status:** In progress (Plan 01 complete 2026-04-25)
-**Plans:** 5 plans (1/5 complete)
+**Status:** COMPLETE (2026-04-25) — all 5 plans done, FVT-01..03 requirements satisfied
+**Plans:** 5 plans (5/5 complete)
 
 Plans:
 - [x] 35-01-PLAN.md — Wave 0 RED test stubs (test_foundry.py + test_discord_foundry.py + conftest gold())
 - [x] 35-02-PLAN.md — Wave 1 Python backend (app/foundry.py helpers + app/routes/foundry.py + config.py)
 - [x] 35-03-PLAN.md — Wave 1 Discord bot internal listener (aiohttp server + build_foundry_roll_embed)
 - [x] 35-04-PLAN.md — Wave 3 main.py wiring (REGISTRATION_PAYLOAD + StaticFiles + lifespan + compose env)
-- [ ] 35-05-PLAN.md — Wave 4 Foundry JS module (module.json + sentinel-connector.js + package.sh + UAT)
+- [x] 35-05-PLAN.md — Wave 4 Foundry JS module (module.json + sentinel-connector.js + package.sh + UAT)
 
 ### Phase 36: Foundry NPC Pull Import
 **Goal:** Enable the Foundry VTT module to pull NPC actor JSON directly from Sentinel — one click imports the actor into the world with no file attachment or copy-paste.
