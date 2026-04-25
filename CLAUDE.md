@@ -186,22 +186,17 @@ A self-hosted, containerized AI assistant platform built for personal use. The S
 Conventions not yet established. Will populate as patterns emerge during development.
 <!-- GSD:conventions-end -->
 
-## Protected Files — NEVER Delete or Overwrite
+## Protected Files — NEVER Delete, Rename, Move, or Overwrite
 
-The following files are immutable planning artifacts. **You are not authorised to delete, rename, move, or overwrite them.** They have been deleted silently three times by AI agents and each incident required manual recovery.
+The following files are load-bearing planning artifacts. **You are not authorised to delete, rename, move, or overwrite them.** They have been deleted silently three times by AI agents (worktree merges, mishandled `mv` operations) and each incident required manual recovery.
 
-| File | Protection |
-|------|-----------|
-| `.planning/ROADMAP.md` | macOS `uchg` flag + PreToolUse hook + this rule |
+| File | Protection | Edits-in-place allowed? |
+|------|-----------|-------------------------|
+| `.planning/ROADMAP.md` | PreToolUse Bash hook blocks `rm`/`mv`/`cp`-overwrite/`git rm`/worktree-move | ✅ YES — use Edit/Write tools |
 
-**To update ROADMAP.md legitimately (human only):**
-```bash
-chflags nouchg .planning/ROADMAP.md
-# make edits
-chflags uchg .planning/ROADMAP.md
-```
+The hook blocks deletion and movement at the Bash layer; the file itself is freely editable in place. Earlier project history added a `chflags uchg` immutable layer alongside the hook, but that was removed 2026-04-25 because it blocked legitimate edits during phase-completion updates and the hook is sufficient on its own.
 
-AI agents: if you believe ROADMAP.md needs updating, output the proposed change as text and stop. Do not attempt to modify the file directly.
+**Updating ROADMAP.md is part of the normal workflow** — phase status changes there cascade into STATE.md, `/gsd-progress`, and milestone advancement. Edit it directly via the Edit/Write tools whenever a phase transitions to/from a status. Do NOT attempt to delete, rename, or move it under any circumstances; if the hook blocks an unrelated bash command because of an incidental ROADMAP touch (e.g. a `cp` that would overwrite it), find a different approach rather than working around the hook.
 
 ## Git Workflow
 

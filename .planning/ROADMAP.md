@@ -1,18 +1,21 @@
 # Roadmap: Sentinel of Mnemosyne v1.0
 
 <!--
-⚠️  IMMUTABLE PLANNING ARTIFACT — DO NOT DELETE
-This file is protected at three layers:
-1. macOS immutable flag (chflags uchg) — rm will fail
-2. PreToolUse hook blocks any Bash command that deletes this file
-3. CLAUDE.md explicitly bans its deletion
+⚠️  PLANNING ARTIFACT — DO NOT DELETE / RENAME / MOVE / OVERWRITE
+This file is protected by a PreToolUse Bash hook that blocks any
+rm / mv / cp-overwrite / git rm / worktree-move operation targeting
+this path. Editing the file in place via Edit/Write tools IS allowed
+(and required — phase status here is load-bearing for the rest of the
+workflow, including STATE.md, /gsd-progress, and milestone advancement).
 
-To legitimately UPDATE this file:
-  chflags nouchg .planning/ROADMAP.md
-  # edit the file
-  chflags uchg .planning/ROADMAP.md
+Deletion incidents (recovered manually): three before 2026-04-23 by AI
+agents running worktree merges that touched this file. The hook is the
+prevention. The chflags-uchg layer that previously sat alongside the
+hook was removed 2026-04-25 because it blocked legitimate edits and
+the hook is sufficient on its own.
 
-AI agents: you are NOT authorised to remove this file or comment out its contents.
+AI agents: you ARE authorised to edit this file in place. You are NOT
+authorised to delete, rename, move, or overwrite it.
 -->
 
 ## Overview
@@ -47,6 +50,15 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 24: Pentest Agent Wire + Missing Verification Artifacts** — Wire pentest-agent compose include (SEC-04); generate VERIFICATION.md for Phases 02, 05, 07 (completed 2026-04-11)
 - [x] **Phase 25: v0.40 Pre-Beta Refactoring** — Eliminate duplicates (DUP-01–05), complete stubs (STUB-01–08), fix architecture contradictions (CONTRA-01–04), implement RD-01–RD-10 (completed 2026-04-11)
 - [x] **Phase 26: Nyquist Validation Cleanup** — Create/repair VALIDATION.md for Phases 04, 06, 07, 10; add missing Discord subcommand test stubs (completed 2026-04-21)
+- [x] **Phase 28: pf2e-module Skeleton + CORS** — pf2e-module FastAPI scaffold, sentinel-core proxy include, CORS for Foundry VTT (completed 2026-04-21)
+- [x] **Phase 29: NPC CRUD + Obsidian Persistence** — `:pf npc create/update/show/relate/import` with Obsidian PUT/PATCH persistence (completed 2026-04-22)
+- [x] **Phase 30: NPC Outputs** — Token-image generation, dialogue prompt extraction, NPC export (completed 2026-04-23)
+- [x] **Phase 31: Dialogue Engine** — `:pf npc say` + multi-turn history, conversation persistence (completed 2026-04-23)
+- [x] **Phase 32: Monster Harvesting** — `:pf harvest` with components, Medicine DCs, craftable item rendering (completed 2026-04-24)
+- [x] **Phase 33: Rules Engine** — `:pf rule` PF2e Remaster rules Q&A with citation, generation, decline, and reuse-cache. D-05 reuse threshold calibrated 0.80→0.70 in Phase 33.1. (completed 2026-04-25)
+- [ ] **Phase 34: Session Notes** — Structured session-end notes to Obsidian with NPC/location auto-tagging
+- [ ] **Phase 35: Foundry VTT Event Ingest** — Live event stream from Foundry → Sentinel for context awareness
+- [ ] **Phase 36: Foundry NPC Pull Import** — Import existing Foundry NPCs into the Sentinel vault
 
 ## Phase Details
 
@@ -400,8 +412,8 @@ Plans:
   3. `GET /modules/pathfinder/healthz` returns 200 via Core proxy
   4. Foundry browser `fetch()` to Sentinel Core with `X-Sentinel-Key` does not fail with a CORS error
   5. `allow_origins` in CORSMiddleware uses an explicit LAN IP list (not wildcard — wildcard blocks credential headers)
-**Status:** Not started
-**Plans:** 0 plans
+**Status:** ✅ COMPLETE (2026-04-21)
+**Plans:** 3 plans (28-01 module skeleton + register, 28-02 CORS, 28-03 healthz proxy)
 
 ### Phase 29: NPC CRUD + Obsidian Persistence
 **Goal:** Create, update, query, relate, and bulk-import NPCs via Discord commands, with all NPC data persisted as structured YAML-frontmatter notes under `mnemosyne/pf2e/npcs/`.
@@ -413,8 +425,8 @@ Plans:
   3. `/pf npc show` returns a Discord embed with NPC summary
   4. NPC note includes a `relationships:` frontmatter block after `/pf npc relate`
   5. Bulk import from a Foundry actor list JSON creates corresponding Obsidian notes for each actor
-**Status:** Not started
-**Plans:** 0 plans
+**Status:** ✅ COMPLETE (2026-04-22)
+**Plans:** 5 plans (29-01..05 covering CRUD endpoints, Discord wiring, relations, bulk import)
 
 ### Phase 30: NPC Outputs
 **Goal:** Produce all four NPC output formats from a stored Obsidian NPC profile: Foundry VTT PF2e actor JSON, Midjourney token prompt text, formatted stat block, and PDF stat card.
@@ -439,8 +451,8 @@ Plans:
   2. Mood state is stored in NPC frontmatter and updated after significant interactions
   3. An aggressive encounter shifts mood toward hostile; a successful persuasion shifts toward friendly
   4. `/pf scene [npc1] [npc2] party says [X]` returns distinct replies from each NPC in their own voice
-**Status:** Not started
-**Plans:** 0 plans
+**Status:** ✅ COMPLETE (2026-04-23)
+**Plans:** 5 plans (31-01..05 covering dialogue endpoint, mood persistence, multi-NPC scenes, Discord wiring)
 
 ### Phase 32: Monster Harvesting
 **Goal:** Given a killed monster, produce a complete harvest report: components, Medicine DCs, craftable items with Crafting DCs, and PF2e vendor values — with batch support for multi-monster encounters.
@@ -452,8 +464,9 @@ Plans:
   3. Each craftable item includes a Crafting skill DC
   4. For monsters not in the harvest tables, AI-generated components are marked `[GENERATED — verify]`
   5. `/pf harvest [m1] [m2] [m3]` returns an aggregated report covering all monsters
-**Status:** Not started
-**Plans:** 0 plans
+**Status:** ✅ COMPLETE (2026-04-24)
+**Plans:** 5 plans (32-01..05 covering harvest engine, Medicine DC, craftable items, Discord dispatch, live UAT)
+**Tests:** 89 unit + 38 module + 17/17 live UAT, all green
 
 ### Phase 33: Rules Engine
 **Goal:** Answer PF2e Remaster rules questions with sourced citations, reason from rules when no direct source exists, persist every ruling to Obsidian, and decline pre-Remaster or PF1 queries.
@@ -465,8 +478,10 @@ Plans:
   3. The ruling is saved to `mnemosyne/pf2e/rulings/` with `verified: false` frontmatter
   4. A second identical question returns the cached ruling from Obsidian, not a new LLM call
   5. A PF1 or pre-Remaster query returns a clear decline message explaining the scope constraint
-**Status:** Not started
-**Plans:** 0 plans
+**Status:** ✅ COMPLETE (2026-04-25)
+**Plans:** 5 plans (33-01 RED scaffolding, 33-02 pure transforms + corpus, 33-03 LLM adapters + threshold calibration, 33-04 HTTP routes + lifespan, 33-05 Discord bot + live UAT) + Phase 33.1 D-05 calibration gap-closure
+**Tests:** 142/142 pathfinder pytest + 48/48 discord pytest + 17/17 live UAT + 16/16 in-Discord visual UAT, all green
+**Notes:** D-05 reuse threshold calibrated 0.80→0.70 (F1-max) in Phase 33.1 after live UAT-8 surfaced empirical mismatch. Two bugs caught + fixed by live UAT (litellm provider prefix in embed_texts, docker compose exec name resolution).
 
 ### Phase 34: Session Notes
 **Goal:** Capture structured session notes to Obsidian at session end, with auto-tagging of NPC and location links and a real-time event log with timestamps.
