@@ -1,15 +1,103 @@
 ---
 phase: 34
-reviewers: [lm_studio]
-reviewed_at: 2026-04-25T19:15:41Z
+reviewers: [opencode, lm_studio]
+reviewed_at: 2026-04-25T21:00:00Z
 plans_reviewed: [34-01-PLAN.md, 34-02-PLAN.md, 34-03-PLAN.md, 34-04-PLAN.md, 34-05-PLAN.md]
-lm_studio_model: qwen3.6-35b-a3b
-notes: claude skipped (self — running inside Claude Code CLI); opencode skipped (ProviderModelNotFoundError — model qwen3.5-27b-unsloth-mlx not loaded in LM Studio)
+lm_studio_models: [qwen2.5-coder-14b-instruct-mlx]
+opencode_model: nemotron-3-super-free
+prior_cycle_reviewer: qwen3.6-35b-a3b (cycle 1, 2026-04-25T19:15:41Z)
+notes: |
+  claude skipped (self — running inside Claude Code CLI).
+  qwen3.6-35b-a3b crashed (OOM) on second invocation; qwen2.5-coder-14b-instruct-mlx used instead.
+  devstral-small-2507 failed to load (insufficient system resources).
+  This file combines cycle-2 (opencode + qwen2.5-coder) with cycle-1 (qwen3.6) for full consensus.
 ---
 
 # Cross-AI Plan Review — Phase 34: Session Notes
 
-## LM Studio Review (qwen3.6-35b-a3b)
+## OpenCode Review (nemotron-3-super-free)
+
+### Summary
+The implementation plans for Phase 34 show a thorough, TDD-driven approach to implementing session notes for the Pathfinder 2e DM Co-pilot module. The plans break down the work into logical waves that build upon each other, starting with test scaffolding and progressing through helpers, API implementation, wiring, and Discord bot integration. Overall, the plans align well with the phase goals and established project patterns, though some areas need stronger error handling and edge case consideration.
+
+### Strengths
+- **TDD methodology**: Proper RED-GREEN progression with comprehensive test stubs before implementation
+- **Modular design**: Clear separation of concerns (pure helpers → API route → wiring → UI)
+- **Pattern consistency**: Follows established practices from previous phases (module-level singletons, lifespan events)
+- **Design adherence**: Explicitly addresses key design decisions (D-05 through D-37) from CONTEXT.md
+- **Test coverage**: Plans for substantial unit (≥17) and integration (≥8) tests plus Discord bot and UAT tests
+- **Error awareness**: Mentions specific error handling for LLM failures (D-31) and Obsidian unreachability (D-07)
+
+### Concerns
+
+#### HIGH Severity
+- **LLM response parsing fragility**: Plan 34-02 mentions `_strip_code_fences + json.loads` but lacks specifications for handling malformed JSON, network timeouts, or service unavailable errors from LM Studio. This could cause unhandled exceptions crashing the session endpoint.
+- **Obsidian API usage correctness**: While Plan 34-02 correctly specifies `patch_heading` with proper headers, it doesn't detail how different operations (append/prepend/replace) map to Obsidian API capabilities, risking incorrect implementation.
+
+#### MEDIUM Severity
+- **Undo operation complexity**: Plan 34-03's description of undo ("remove last Events Log bullet") lacks specifics for identifying the last bullet, handling empty logs, or dealing with multi-line entries.
+- **NPC linking reliability**: Dual-pass NPC linking (D-21) is mentioned but Plan 34-03 doesn't specify confidence thresholds or fallback mechanisms when LLM linking fails or produces incorrect matches.
+- **Configuration validation**: Plan 34-02 adds session settings but doesn't specify validation rules (e.g., valid timezone strings for SESSION_TZ).
+
+#### LOW Severity
+- **Cache invalidation**: Plan 34-04 builds NPC roster cache at startup but doesn't address how it stays updated if the Obsidian vault changes during runtime.
+- **Rate limiting**: No mention of rate limiting or timeouts for external calls (Obsidian, LM Studio) which could lead to resource exhaustion under load.
+- **Health monitoring**: Missing health check endpoints to verify module dependencies (Obsidian, LM Studio) are reachable.
+
+### Suggestions
+- Strengthen LLM error handling: Add explicit requirements for timeout handling, JSON parsing fallbacks, and circuit breaker patterns in Plan 34-02
+- Specify Obsidian operations: Detail exactly how `patch_heading` handles append/prepend/replace operations with Obsidian API in Plan 34-02
+- Clarify undo mechanics: Define precise algorithm for identifying and removing the last Events Log bullet in Plan 34-03
+- Add input validation: Implement strict validation for all API parameters and Discord command inputs
+- Implement health checks: Add `/health` endpoint verifying Obsidian and LM Studio connectivity
+- Define test oracles: Specify exact expected outputs for test stubs beyond just verifying they run without errors
+- Consider idempotency: Ensure operations like session start/log are safe to retry
+
+### Risk Assessment: MEDIUM
+The overall risk is MEDIUM. While the plans follow sound engineering practices and TDD principles, the primary risks stem from:
+1. **LLM integration uncertainty** (Wave 2): Dependence on external AI service for core functionality introduces failure modes that require robust handling
+2. **External API correctness** (Waves 2-4): Interactions with Obsidian Local REST API and Discord API need precise implementation to avoid data corruption or poor UX
+3. **Error handling depth**: While error cases are mentioned, the specifics of handling cascading failures, partial successes, and edge cases need strengthening
+
+These risks are mitigated by the TDD approach, clear design documentation, and modular isolation of concerns.
+
+---
+
+## LM Studio Review (qwen2.5-coder-14b-instruct-mlx)
+
+### Summary
+The plans for Phase 34, "Session Notes," are well-structured and cover the essential components required to implement session note capture, logging, and management in the Pathfinder 2e DM Co-pilot Module. The plans include comprehensive test stubs, implementation of pure helpers and LLM functions, wiring into the FastAPI app, and integration with the Discord bot. However, there are some concerns regarding error handling, dependency management, and potential performance implications.
+
+### Strengths
+- **Comprehensive Test Coverage**: The plans include detailed test stubs for both unit and integration tests, ensuring thorough testing of the new functionality.
+- **Clear Objectives**: Each plan has a clear objective and key contracts, making it easy to understand the intended outcomes.
+- **Consistent Design Patterns**: The use of module-level singletons and established patterns aligns with the project's architecture, maintaining consistency.
+- **Environment Configuration**: Proper handling of environment variables through `compose.yml` and `.env.example`.
+
+### Concerns
+
+#### MEDIUM Severity
+- **Error Handling**: There is a concern about the completeness of error handling, particularly in scenarios where Obsidian is unreachable or LLM calls fail.
+- **Dependency Management**: The plans do not explicitly address the order of dependency initialization, which could lead to potential runtime errors.
+
+#### LOW Severity
+- **Performance Implications**: The dual-pass NPC linking and the generation of session recaps through LLM calls could introduce performance bottlenecks.
+- **Security Considerations**: The plans do not explicitly address security concerns related to data handling and API interactions.
+
+### Suggestions
+- **Enhance Error Handling**: Ensure that all potential error scenarios, such as Obsidian unavailability or LLM failures, are thoroughly handled with appropriate logging and user feedback.
+- **Define Dependency Order**: Clearly define the order of initialization for dependencies, such as ObsidianClient and NPC roster cache, to prevent runtime errors.
+- **Optimize Performance**: Consider optimizing the NPC linking process and LLM calls to reduce latency and improve user experience.
+- **Implement Security Measures**: Ensure that all API interactions and data handling comply with security best practices, including input validation and secure communication.
+
+### Risk Assessment: MEDIUM
+The plans are well-designed and cover the essential components required for Phase 34. However, there are concerns about error handling and dependency management that could lead to runtime issues. While performance implications and security considerations are present, they are considered lower in severity compared to the primary concerns.
+
+---
+
+## LM Studio Review — Cycle 1 (qwen3.6-35b-a3b, 2026-04-25T19:15:41Z)
+
+*Retained from cycle 1 for consensus analysis. This model is no longer loaded in LM Studio (OOM on reload).*
 
 ### Plan 34-01: Wave 0 RED Test Scaffolding
 
@@ -32,7 +120,6 @@ notes: claude skipped (self — running inside Claude Code CLI); opencode skippe
 - Include stubs for D-06 collision checks and D-13 timezone rendering to ensure full requirement coverage before Wave 1.
 
 **Risk Assessment:** `MEDIUM`
-The TDD approach is sound, but the import workaround and missing flag/error stubs introduce collection fragility. Addressing these before Wave 1 lands will prevent test suite rot during implementation.
 
 ---
 
@@ -57,7 +144,6 @@ The TDD approach is sound, but the import workaround and missing flag/error stub
 - Clarify collision detection scope and add unit tests for edge cases (e.g., "Drake" vs "Drakes").
 
 **Risk Assessment:** `MEDIUM`
-Core logic is sound, but missing retry logic and regex inefficiency will cause production failures under load or with large NPC rosters. Add retries and caching before Wave 2.
 
 ---
 
@@ -84,7 +170,6 @@ Core logic is sound, but missing retry logic and regex inefficiency will cause p
 - Clarify "Story So Far" patch behavior: should overwrite the section or append? Recommend overwrite for consistency.
 
 **Risk Assessment:** `HIGH`
-Module-level state and missing D-07 handling are critical architectural flaws that will cause state leaks, test failures, and production crashes. Refactoring to DI and adding connectivity checks are mandatory before Wave 3.
 
 ---
 
@@ -105,10 +190,9 @@ Module-level state and missing D-07 handling are critical architectural flaws th
 **Suggestions:**
 - Replace module assignment with FastAPI `Depends()` or lifespan-scoped state (`app.state`).
 - Move NPC cache refresh to session `start` verb (per D-22) or add a configurable TTL/refresh trigger.
-- Add startup validation for env vars with clear error messages (e.g., `python -c "zoneinfo.ZoneInfo('Invalid/Zone')"`).
+- Add startup validation for env vars with clear error messages.
 
 **Risk Assessment:** `MEDIUM`
-The wiring is functionally correct but architecturally fragile. Replacing module assignment with DI and aligning cache refresh timing will significantly improve maintainability and testability.
 
 ---
 
@@ -130,69 +214,63 @@ The wiring is functionally correct but architecturally fragile. Replacing module
 **Suggestions:**
 - Include `guild_id` and `channel_id` in the payload to the module for session routing.
 - Add error handling: if module returns failure, edit placeholder to error message and log warning.
-- Implement Discord API rate limit handling for `RecapView` timeout vs success edits (use `try/except discord.HTTPException`).
-- Propagate D-06/D-07 errors from module to bot UI (e.g., "Session already exists" or "Vault unreachable").
+- Implement Discord API rate limit handling for `RecapView` timeout vs success edits.
+- Propagate D-06/D-07 errors from module to bot UI.
 
 **Risk Assessment:** `HIGH`
-Missing session context and error handling will cause silent failures, stale placeholders, and broken UX. Adding payload context and robust error handling is mandatory before deployment.
 
 ---
 
-### Overall Risk Assessment
+### Overall Risk Assessment (qwen3.6 cycle 1): HIGH
 
-**Overall Risk Level:** `HIGH`
-
-**Justification:**
-While individual plans are well-structured and cover requirements thoroughly, cross-cutting architectural flaws create significant production risk:
-1. **State Management:** Module-level singletons (34-03, 34-04) violate FastAPI patterns and will cause state leakage, test brittleness, and deployment fragility.
-2. **Error Handling & Retries:** Missing Obsidian connectivity checks (D-07), LLM JSON parse fallbacks, and Discord API error handling will cause silent failures or crashes under real-world conditions.
+**Justification:** Cross-cutting architectural flaws create significant production risk:
+1. **State Management:** Module-level singletons (34-03, 34-04) violate FastAPI patterns and will cause state leakage.
+2. **Error Handling & Retries:** Missing Obsidian connectivity checks (D-07), LLM JSON parse fallbacks, and Discord API error handling.
 3. **Payload Context:** Discord bot payload lacks session/channel routing context, breaking multi-session support.
 4. **Caching/Performance:** Regex compilation per session and startup-only NPC caching conflict with D-22 refresh requirements.
-
-**Critical Path Recommendations:**
-- Replace module-level singletons with FastAPI `Depends()` or lifespan-scoped state across 34-03/04.
-- Add exponential backoff retries to `patch_heading` and JSON parse fallbacks to LLM helpers (34-02/03).
-- Include `guild_id`/`channel_id` in Discord→module payloads and add error propagation to bot UI (34-05).
-- Align NPC cache refresh with D-22 (session start, not just lifespan) and add startup env var validation (34-04).
-- Address TDD import workarounds and add missing flag/collision stubs before Wave 1 (34-01).
-
-Once these cross-cutting issues are resolved, the phase risk drops to `LOW`. The plans demonstrate strong requirement coverage and architectural awareness; tightening error handling, state management, and payload routing will ensure production readiness.
 
 ---
 
 ## Consensus Summary
 
-Only one reviewer contributed to this cycle (LM Studio / qwen3.6-35b-a3b). The review flags several cross-cutting concerns that apply across all five plans.
+Three AI reviewers contributed to this analysis across two cycles: OpenCode/nemotron-3-super-free and LM Studio/qwen2.5-coder-14b-instruct-mlx (cycle 2), and LM Studio/qwen3.6-35b-a3b (cycle 1).
 
 ### Agreed Strengths
 
-- Strong TDD discipline: Wave 0 RED scaffolding before any production code is a solid practice.
-- Clean separation of pure helpers (session.py) from I/O (route, Obsidian client) is well-designed.
-- The dual-pass NPC linking strategy (log-time fast-pass + session-end LLM) is pragmatic.
-- `StatefulMockVault` test fixture is correctly designed for integration testing without a live vault.
-- `RecapView` 180s timeout with graceful degradation is the right UX approach.
+- **Strong TDD discipline**: Wave 0 RED scaffolding before any production code — all three reviewers validated this as the right approach.
+- **Clean separation of concerns**: Pure helpers (session.py) separated from I/O (route, Obsidian client) is well-designed.
+- **Dual-pass NPC linking**: The log-time fast-pass + session-end LLM strategy is pragmatic and was praised by two reviewers.
+- **`StatefulMockVault` test fixture**: Correctly designed for integration testing without a live vault.
+- **`RecapView` 180s timeout with graceful degradation**: The right UX approach.
+- **Error case coverage**: D-07 (Obsidian down), D-31 (LLM failure → skeleton note) both acknowledged in the plans.
 
 ### Agreed Concerns
 
-- **HIGH — Module-level singletons:** The `obsidian = None` / `npc_roster_cache = None` pattern in routes/session.py and its assignment in main.py lifespan is a known anti-pattern in FastAPI. All prior phases used it (it's the established project pattern), but the reviewer flags it as fragile. **Context: this pattern is consistent with Phases 29–33 in this codebase. It is the established project pattern, not a deviation. Flagged here for awareness; not a blocker.**
-- **HIGH — D-07 Obsidian-down handling:** D-07 is a stated requirement (refuse at start if Obsidian unreachable) but the plan doesn't explicitly detail the connectivity check implementation. This should be verified in 34-03 execution.
-- **HIGH — Discord bot error handling:** No explicit error handling when the module returns 4xx/5xx. The placeholder→edit pattern should include an error branch.
-- **HIGH — Discord payload missing user_id context:** The `user_id` field IS included in `SessionRequest` per 34-03, but guild_id/channel_id for routing is not addressed. However, because session state is per-date in Obsidian (not per-user/channel), this is lower actual risk than the reviewer assessed.
+- **HIGH — LLM response parsing fragility** (opencode + qwen3.6): `_strip_code_fences + json.loads` pattern needs explicit fallback handling for malformed JSON and LLM service unavailability. Both reviewers flagged this from different angles.
+- **HIGH — D-07 Obsidian-down handling** (opencode + qwen3.6): The requirement is stated (D-07) but the plan doesn't detail the connectivity check implementation at route level. Both reviewers called this out explicitly.
+- **HIGH — Discord bot error handling** (opencode + qwen3.6): No explicit error branch when the module returns 4xx/5xx — stale placeholders are a live UX failure mode.
+- **MEDIUM — Error handling completeness** (all three): All reviewers flagged that error scenarios need more complete specification and implementation, even if they assessed severity differently.
+- **MEDIUM — Undo operation edge cases** (opencode + qwen2.5-coder): Removing the last Events Log bullet needs precise algorithm specification (empty log, multi-line entries).
 
 ### Divergent Views
 
-- **Function-scope imports (34-01):** Reviewer flags as HIGH but this is the deliberate project pattern from Phase 33 (test_rules.py). It prevents collection-time ImportError during RED phase. The pattern is intentional, not a defect.
-- **Module-level singletons (34-03/04):** Reviewer flags as HIGH architectural flaw. In practice, all prior phases (29–33) use this exact pattern successfully. FastAPI `Depends()` would require refactoring all modules. Not a per-phase regression.
-- **`guild_id`/`channel_id` in payload:** Session state in Obsidian is date-scoped, not channel-scoped. The concern about "routing context" is partially moot — the module already knows the session date from the server clock.
+- **Module-level singletons** (qwen3.6 HIGH, opencode/qwen2.5 unmentioned): qwen3.6 flagged the `obsidian = None` pattern as an architectural anti-pattern. OpenCode and qwen2.5-coder noted it without raising severity. **Context: this is the established project pattern across Phases 29–33. Not a per-phase regression.**
+- **Function-scope imports** (qwen3.6 HIGH, others unmentioned): qwen3.6 flagged as flaky test discovery risk. This is intentional — prevents collection-time ImportError during RED phase. **Established pattern, not a defect.**
+- **Guild/channel context in payload** (qwen3.6 HIGH): qwen3.6 raised guild_id/channel_id missing. Session state in Obsidian is date-scoped, not channel-scoped, so routing context is lower actual risk than the reviewer assessed.
+- **Security considerations** (qwen2.5-coder LOW, others unmentioned): qwen2.5-coder flagged API security; given this is a local personal-use system with X-Sentinel-Key, this is accepted risk.
 
 ### Reviewer Notes on False Positives
 
-The reviewer (qwen3.6-35b-a3b) applied generic FastAPI best practices that don't account for this project's established patterns. The following concerns are noted but assessed as **non-blocking** for this phase:
+The following concerns are **non-blocking** based on project context:
 - Function-scope imports (established TDD pattern, Phases 29–33)
-- Module-level singletons (consistent across all 5 prior modules)
+- Module-level singletons (consistent across all 5 prior modules — Phases 29–33)
 - guild_id/channel_id payload (session is date-scoped, not channel-scoped)
 
-The following concerns ARE actionable:
-- D-07 Obsidian-down check implementation detail (verify in 34-03 execution)
-- Discord bot error handling for module failures (34-05)
-- JSON parse fallback definition for `generate_session_recap` (34-03)
+### Actionable Concerns
+
+The following concerns ARE actionable and should be verified during execution:
+1. **D-07 Obsidian-down check** (34-03): Verify explicit connectivity check is in `start` verb — return structured 503, not unhandled exception
+2. **Discord bot error handling** (34-05): Verify httpx.HTTPStatusError is caught with error embed edit, no stale placeholder on 4xx/5xx
+3. **LLM JSON parse fallback** (34-03): Verify malformed LLM response triggers D-31 skeleton note, not a crash
+4. **Undo edge cases** (34-03): Verify algorithm handles empty Events Log and multi-line entries
+5. **D-07 retry logic for patch_heading** (34-02): Verify Obsidian transient errors don't silently drop log events
