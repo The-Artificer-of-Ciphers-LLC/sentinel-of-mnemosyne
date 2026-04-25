@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
-status: "Phase 35 COMPLETE — all 5 plans done. Foundry VTT event ingest fully wired (FVT-01..03)."
-stopped_at: Phase 35 Plan 05 complete (2026-04-25)
-last_updated: "2026-04-25T14:46:00Z"
-last_activity: 2026-04-25 -- Phase 35 Plan 05 complete: Foundry JS module artifacts (module.json, sentinel-connector.js, package.sh, sentinel-connector.zip) + UAT script (95895ff, 532c3e9)
+status: completed
+stopped_at: context exhaustion at 78% (2026-04-25)
+last_updated: "2026-04-25T17:00:00.000Z"
+last_activity: "2026-04-25 -- Phase 35 Plan 06 complete: Forge connectivity gap closure (webhook-first + PNACORSMiddleware)"
 progress:
   total_phases: 35
   completed_phases: 19
-  total_plans: 65
-  completed_plans: 72
+  total_plans: 66
+  completed_plans: 73
   percent: 100
 ---
 
@@ -25,13 +25,13 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 35 (Foundry VTT Event Ingest) — IN PROGRESS
-Plan: 5 of 5 (All plans complete — FVT-01..03 requirements satisfied)
+Phase: 35 (Foundry VTT Event Ingest) — COMPLETE
+Plan: 6 of 6 (All plans complete — FVT-01..03 requirements satisfied, Forge gap closure applied)
 Next Plan: Phase 36 Plan 01 (Foundry NPC Pull Import)
 Prior Phase: 34 (Session Notes) — ✅ COMPLETE + FULLY VERIFIED (9/9 UAT passed 2026-04-25)
 Milestone: v0.5 The Dungeon — IN PROGRESS (8/9 phases complete: 28, 29, 30, 31, 32, 33, 34, 35)
-Status: Phase 35 COMPLETE. All 5 plans done. Foundry JS module installable as zip; POST /foundry/event live; Discord roll embed wired.
-Last activity: 2026-04-25 -- Phase 35 Plan 05 complete: Foundry JS module artifacts + UAT script (95895ff, 532c3e9)
+Status: Phase 35 COMPLETE. All 6 plans done. Forge connectivity gap closed: webhook-first fallback, PNACORSMiddleware, .env.example docs.
+Last activity: 2026-04-25 -- Phase 35 Plan 06 complete: Forge connectivity gap closure (webhook-first + PNACORSMiddleware)
 
 ## Milestone Progress
 
@@ -151,11 +151,12 @@ Recent decisions affecting current work:
 | 260421-nzr | update contributing.md to reflect current v0.40 design, it still references the pi interface | 2026-04-21 | 7d9a26e | [260421-nzr-update-contributing-md-to-reflect-curren](.planning/quick/260421-nzr-update-contributing-md-to-reflect-curren/) |
 | 260423-mdl | registry-aware LLM model selector — query LM Studio /v1/models + litellm.get_model_info to pick best model per task kind (chat/structured/fast); pathfinder-only scope | 2026-04-23 | 0f80c42 | [260423-mdl-llm-model-selector-registry-aware](.planning/quick/260423-mdl-llm-model-selector-registry-aware/) |
 | 260423-tki | npc token image upload (OUT-02 ext) + PDF embed — `:pf npc token-image <name>` stores PNG at mnemosyne/pf2e/tokens/<slug>.png and updates frontmatter; `:pf npc pdf` embeds it in header; 42/42 tests pass | 2026-04-23 | (this commit) | [260423-tki-npc-token-image-pdf-embed](.planning/quick/260423-tki-npc-token-image-pdf-embed/) |
+| 260425-k9r | Foundry module connectivity design options — surfaces 5 options (Tailscale, Cloudflare Tunnel, nginx proxy, Discord webhook, WireGuard) to address Phase 35 internet-exposure gap; recommends Tailscale + webhook fallback mode | 2026-04-25 | — | [260425-k9r-foundry-connectivity-design-options](.planning/quick/260425-k9r-foundry-connectivity-design-options/) |
 
 ## Session Continuity
 
-Last session: 2026-04-25T14:40:24Z
-Stopped at: Phase 35 Plan 04 complete — 35-05 (Wave 4 Discord subcommand + JS client) is next
+Last session: 2026-04-25T16:34:54.076Z
+Stopped at: context exhaustion at 78% (2026-04-25)
 Resume file: None
 
 **In-Progress Phase:** 35 (Foundry VTT Event Ingest) — Plan 04 complete (2026-04-25)
