@@ -50,6 +50,7 @@ import app.routes.harvest as _harvest_module
 import app.routes.npc as _npc_module
 import app.routes.rule as _rule_module
 import app.routes.session as _session_module
+from app.routes.foundry import router as foundry_router
 from app.routes.harvest import router as harvest_router
 from app.routes.npc import router as npc_router
 from app.routes.rule import router as rule_router
@@ -209,6 +210,8 @@ app.include_router(npc_router)
 app.include_router(harvest_router)
 app.include_router(rule_router)
 app.include_router(session_router)
+# Phase 35: Foundry VTT event ingest route (FVT-01..03)
+app.include_router(foundry_router)
 # Also mount at /modules/pathfinder/session so integration tests that simulate
 # the sentinel-core proxy path work against the pathfinder app directly.
 app.include_router(session_router, prefix="/modules/pathfinder")
