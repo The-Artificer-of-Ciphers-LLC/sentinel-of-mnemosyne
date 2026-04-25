@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
-status: executing
-stopped_at: Phase 33 + 33.1 FULLY VERIFIED. Pathfinder pytest 142/142 GREEN, Discord pytest 48/48 GREEN, live UAT 17/17 PASS, in-Discord visual UAT 16/16 sections PASS (A1-G). Every D-XX/L-XX locked decision verified end-to-end against real LLM + real Obsidian + real Discord. D-05 reuse threshold calibrated 0.80 → 0.70 (F1-max sweep, see 33.1-SUMMARY.md). Two bugs caught and fixed by live UAT (litellm prefix in embed_texts, docker compose exec name resolution). One human deferral remaining: IN-02 corpus has 2 PC2 entries (Cursebound, Plummeting Roll) — D-15 scope ambiguity needs operator decision before next phase. Phase 33 closes; v0.5 milestone advances to 6/9 phases complete.
-last_updated: "2026-04-25T01:05:00.000Z"
-last_activity: 2026-04-25 -- Phase 33 + 33.1 fully verified end-to-end (pytest + live UAT + Discord visual all PASS)
+status: "Phase 34 complete. Phase 35 (Foundry VTT Event Ingest) is next — no CONTEXT.md yet, run /gsd-discuss-phase 35."
+stopped_at: Phase 34 complete (2026-04-25)
+last_updated: "2026-04-25T05:15:00.000Z"
+last_activity: 2026-04-25 -- Phase 34 UAT 9/9 passed, transition complete; Phase 35 next
 progress:
   total_phases: 35
-  completed_phases: 16
-  total_plans: 55
-  completed_plans: 56
+  completed_phases: 19
+  total_plans: 65
+  completed_plans: 72
   percent: 100
 ---
 
@@ -21,17 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 33 — Rules Engine
+**Current focus:** Phase 35 — Foundry VTT Event Ingest
 
 ## Current Position
 
-Phase: 34 (Session Notes) — CONTEXT GATHERED
-Plan: 0 of N (planning not yet started)
-Next Plan: /gsd-plan-phase 34 — research → plan → verify
-Prior Phase: 33 (Rules Engine) — ✅ COMPLETE + FULLY VERIFIED
-Milestone: v0.5 The Dungeon — IN PROGRESS (6/9 phases complete: 28, 29, 30, 31, 32, 33)
-Status: Phase 34 context locked via discuss-phase. 38 decisions captured (D-01..D-38) covering 5-verb command surface, frontmatter-tracked state, dual-pass NPC linking, location auto-stubs, structured-output single-LLM-call recap, schema_version:1, Discord button + interactive components, --retry-recap, SESSION_RECAP_MODEL env. Campaign-narrative compiler deferred.
-Last activity: 2026-04-25 -- Phase 34 CONTEXT.md + DISCUSSION-LOG.md written; ready for /gsd-plan-phase 34
+Phase: 35 (Foundry VTT Event Ingest) — NOT STARTED
+Plan: 0 of N (context not yet gathered)
+Next Plan: /gsd-discuss-phase 35 → research → plan → execute
+Prior Phase: 34 (Session Notes) — ✅ COMPLETE + FULLY VERIFIED (9/9 UAT passed 2026-04-25)
+Milestone: v0.5 The Dungeon — IN PROGRESS (7/9 phases complete: 28, 29, 30, 31, 32, 33, 34)
+Status: Phase 34 complete. Phase 35 (Foundry VTT Event Ingest) is next — no CONTEXT.md yet, run /gsd-discuss-phase 35.
+Last activity: 2026-04-25 -- Phase 34 UAT 9/9 passed; RecapView Bug A+B committed; transition complete
 
 ## Milestone Progress
 
@@ -50,7 +50,7 @@ Last activity: 2026-04-25 -- Phase 34 CONTEXT.md + DISCUSSION-LOG.md written; re
 | v0.10 | The Trader Goes Live | TBD | — |
 | v1.0 | Community Release | TBD | — |
 
-Progress (v0.5): [█████     ] 56% (5/9 phases — 28, 29, 30, 31, 32 complete)
+Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 32, 33, 34 complete)
 
 ## v0.5 Phase Map
 
@@ -61,8 +61,8 @@ Progress (v0.5): [█████     ] 56% (5/9 phases — 28, 29, 30, 31, 32 c
 | 30 | NPC Outputs | OUT-01..04 | Phase 29 | ✅ COMPLETE (2026-04-23) |
 | 31 | Dialogue Engine | DLG-01..03 | Phase 29 | ✅ COMPLETE (2026-04-23) |
 | 32 | Monster Harvesting | HRV-01..06 | Phase 28 | ✅ COMPLETE (2026-04-24) |
-| 33 | Rules Engine | RUL-01..04 | Phase 28 | Not started |
-| 34 | Session Notes | SES-01..03 | Phase 29 | Not started |
+| 33 | Rules Engine | RUL-01..04 | Phase 28 | ✅ COMPLETE (2026-04-25) |
+| 34 | Session Notes | SES-01..03 | Phase 29 | ✅ COMPLETE (2026-04-25) |
 | 35 | Foundry VTT Event Ingest | FVT-01..03 | Phase 28 | Not started |
 | 36 | Foundry NPC Pull Import | FVT-04 | Phase 30, Phase 35 | Not started |
 
@@ -125,15 +125,17 @@ Recent decisions affecting current work:
 - [Phase 33-01]: Discord conftest Color shim extended centrally with red + blue classmethods (alongside pre-existing dark_green + dark_gold). L-5 prevention: never add per-file Color attribute assignments; collection-order races broke Phase 32 until consolidated.
 - [Phase 33-01]: D-15 scope lock enforced at test layer — zero Monster Core / GM Core rules-prose references in test .py files. RESEARCH §Threshold Calibration fixture preserves one "GM Core — DCs by Level" expected_source entry in the calibration data; at Phase 33 runtime this query falls through to [GENERATED — verify] per D-15 (Player-Core-only MVP). Not a scope violation — fixture is Wave 1 calibration data.
 - [Phase 33-01]: uat_phase33.sh adds a hard 14-route registration gate (Step 3) — fails fast on Phase 32 G-1 regression class (stale container images where REGISTRATION_PAYLOAD lags source changes). uat_rules.py adds an L-10 pre-check (POST LM Studio /v1/embeddings with text-embedding-nomic-embed-text-v1.5) so missing embeddings-model config is caught upfront with a clear error, not 15 cascading assertion failures.
+- [Phase 34-05]: RecapView(discord.ui.View) timeout=180.0 (never None — persistent views require bot-restart re-registration). `view.message = msg` must be set AFTER `await channel.send(..., view=view)` returns so on_timeout can edit the message.
+- [Phase 34-UAT Bug A]: recap_text was gated behind session_auto_recap — button never appeared even when prior ended session existed. Fix: always populate recap_text when recap_available=True; session_auto_recap only controls inline display.
+- [Phase 34-UAT Bug B]: same-day --force start overwrote the ended note before the recap scan ran — recap lost. Fix: capture prior recap from existing_note frontmatter BEFORE the PUT overwrite into forced_prior_recap; use it ahead of the vault scan.
 
 ### Pending Todos
 
-- Apply v0.5 phase checklist entries and Phase Detail sections to .planning/ROADMAP.md (blocked by uchg flag; human must run `chflags nouchg .planning/ROADMAP.md` first)
+(none)
 
 ### Blockers/Concerns
 
 - Pi-mono releases breaking changes every 2-4 days -- adapter pattern in Phase 1 is the mitigation
-- ROADMAP.md has macOS uchg flag; v0.5 phase content was produced as text output for manual apply
 
 ### Quick Tasks Completed
 
@@ -152,12 +154,12 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-24
-Stopped at: Phase 32-05 complete — interfaces/discord/bot.py wired (build_harvest_embed + noun-widen + harvest dispatch branch + updated usage strings); conftest.py consolidated discord stub; 7/7 test_pf_harvest_* flipped GREEN; 38/38 discord tests + 84/84 pathfinder tests green; Phase 32 ready for /gsd-verify-work 32
-Resume file: .planning/phases/32-monster-harvesting/32-05-bot-wiring-SUMMARY.md
+Last session: 2026-04-25T05:15:00.000Z
+Stopped at: Phase 34 complete, ready to discuss Phase 35
+Resume file: None
 
-**In-Progress Phase:** none (Phase 32 implementation complete; awaiting `/gsd-verify-work 32` acceptance gate before formal phase close). Next candidate phases in v0.5: 33 (Rules Engine), 34 (Session Notes), 35 (Foundry VTT Event Ingest), 36 (Foundry NPC Pull Import).
+**In-Progress Phase:** none
 
-**Completed Phase:** 32 (Monster Harvesting) — 5 plans / 4 waves (Wave 0 RED, Waves 1-3 implementation, Wave 4 bot wiring) — 2026-04-24 — HRV-01..06 shipped end-to-end; previous: 31 (Dialogue Engine) — 5 plans / 4 waves — 2026-04-23T21:30:00.000Z — DLG-01..03 shipped
+**Completed Phase:** 34 (Session Notes) — 5 plans / 4 waves (Wave 0 RED, Waves 1-3 implementation, Wave 4 Discord wiring) — 2026-04-25 — SES-01..03 shipped; RecapView Bug A+B fixed during UAT; 9/9 UAT passed
 
-**Planned Phase:** 32 (Monster Harvesting) — 5 plans / 5 waves serial — 2026-04-23T23:00:00.000Z — plan-checker PASS iter 2/3 → implementation complete 2026-04-24
+**Next Phase:** 35 (Foundry VTT Event Ingest) — no context yet, start with /gsd-discuss-phase 35

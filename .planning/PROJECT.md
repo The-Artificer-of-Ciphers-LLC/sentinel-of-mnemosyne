@@ -74,7 +74,7 @@ A message goes in, an AI response that knows your history comes back — and wha
 - [ ] Dialogue engine — "party says [X]" → in-character reply grounded in Obsidian NPC profile
 - [ ] Monster harvesting — killed monster → harvestable components, craftable items, PF2E vendor value (gp/sp/cp)
 - [ ] Rules engine — search valid PF2E sources for RAW rulings; reason from rules if not sourced; save rulings to Obsidian
-- [ ] Session note capture with structured Obsidian output
+- [x] Session note capture with structured Obsidian output — Phase 34
 - [ ] Foundry VTT connector — bidirectional: export NPC JSON to Foundry, receive chat/rolls from Foundry module
 - [ ] Module delivered as Docker Compose include (Path B reference implementation)
 
@@ -165,6 +165,8 @@ A message goes in, an AI response that knows your history comes back — and wha
 | **Path B: LiteLLM-direct (v0.40)** | Architecture crisis — Pi was bypassed in Phase 25 message route; full replan executed | Pi removed from base stack; LiteLLM-direct is canonical AI call path |
 | **Module API gateway (v0.40)** | Path B extensibility model — modules register at startup, receive proxied requests | POST /modules/register + proxy implemented; Phase 11 is reference impl |
 | **shared/sentinel_client.py (v0.40)** | DUP-04: call_core() was inline in both interfaces; shared package eliminates duplication | SentinelCoreClient used by all interfaces |
+| **Session recap gated by `session_auto_recap` (Phase 34 bug)** | recap_text was not returned when auto-recap was OFF — RecapView button never appeared. Fix: always populate recap_text when recap_available=True; session_auto_recap only controls inline display | Fixed in UAT |
+| **RecapView --force same-day race (Phase 34 bug)** | --force start overwrote ended note before recap scan ran — recap lost. Fix: capture prior recap from existing_note before the PUT overwrite. | Fixed in UAT |
 | Alpaca for trading API | Commission-free, paper/live at same endpoints (different keys), built for algorithmic trading | Pending |
 | `ofxtools` for OFX parsing | Well-maintained Python library; handles XML complexity of OFX format | Pending |
 

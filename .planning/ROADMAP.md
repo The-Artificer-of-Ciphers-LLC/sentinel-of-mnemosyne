@@ -56,7 +56,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 31: Dialogue Engine** — `:pf npc say` + multi-turn history, conversation persistence (completed 2026-04-23)
 - [x] **Phase 32: Monster Harvesting** — `:pf harvest` with components, Medicine DCs, craftable item rendering (completed 2026-04-24)
 - [x] **Phase 33: Rules Engine** — `:pf rule` PF2e Remaster rules Q&A with citation, generation, decline, and reuse-cache. D-05 reuse threshold calibrated 0.80→0.70 in Phase 33.1. (completed 2026-04-25)
-- [x] **Phase 34: Session Notes** — Structured session-end notes to Obsidian with NPC/location auto-tagging (completed 2026-04-25)
+- [x] **Phase 34: Session Notes** — Structured session-end notes to Obsidian with NPC/location auto-tagging, real-time event log, RecapView Discord button, LLM recap with skeleton fallback (completed 2026-04-25)
 - [ ] **Phase 35: Foundry VTT Event Ingest** — Live event stream from Foundry → Sentinel for context awareness
 - [ ] **Phase 36: Foundry NPC Pull Import** — Import existing Foundry NPCs into the Sentinel vault
 
@@ -492,8 +492,9 @@ Plans:
   2. NPC names in the session note are wiki-linked to their `mnemosyne/pf2e/npcs/` pages
   3. `/pf session log [event]` appends a timestamped entry to the active session log
   4. Session notes use a consistent template structure across multiple sessions
-**Status:** In progress
+**Status:** ✅ COMPLETE (2026-04-25)
 **Plans:** 5/5 plans complete
+**Tests:** 22/22 session unit + 8/8 integration + 50/50 Discord + 9/9 live UAT, all green
 Plans:
 - [x] 34-01-PLAN.md — Wave 0 RED test scaffolding (unit stubs, integration stubs, conftest, UAT)
 - [x] 34-02-PLAN.md — Wave 1 session pure helpers + ObsidianClient.patch_heading + config settings
