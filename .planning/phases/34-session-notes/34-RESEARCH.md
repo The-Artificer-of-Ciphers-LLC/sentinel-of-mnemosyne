@@ -673,20 +673,20 @@ elif noun == "session":
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Obsidian PATCH heading for `undo` and `show` (D-17, D-19)**
    - What we know: `Operation: replace` is documented and confirmed working for heading sections in v3.6.1.
    - What's unclear: Whether the operator's deployed plugin version is v3.6.1 or earlier.
-   - Recommendation: Implement PATCH replace as primary path; add GET-then-PUT as the fallback (catch `httpx.HTTPStatusError` with status 400/404, fall through to GET-then-PUT). Document the dual path in comments.
+   - RESOLVED: Implement PATCH replace as primary path; add GET-then-PUT as the fallback (catch `httpx.HTTPStatusError` with status 400/404, fall through to GET-then-PUT). Document the dual path in comments.
 
 2. **NPC notes merge strategy for multi-appearance NPCs (Claude's Discretion)**
    - What we know: D-35 shows `npc_notes_per_character` as a single string per NPC from the LLM.
    - What's unclear: If Varek appears in 5 events, does the LLM produce one cumulative summary or per-event notes?
-   - Recommendation: The system prompt instructs the LLM to produce one summary line per character — this is a reasonable default. If the LLM produces multi-sentence summaries for active NPCs, truncate to the first 200 chars for the NPCs Encountered bullet. The frontmatter `npcs[]` carries full slugs; the bullet carries the note from `npc_notes_per_character[slug]`.
+   - RESOLVED: The system prompt instructs the LLM to produce one summary line per character — this is a reasonable default. If the LLM produces multi-sentence summaries for active NPCs, truncate to the first 200 chars for the NPCs Encountered bullet. The frontmatter `npcs[]` carries full slugs; the bullet carries the note from `npc_notes_per_character[slug]`.
 
 3. **SESSION_AUTO_RECAP home: env var vs config.yaml (D-10, Claude's Discretion)**
-   - Recommendation: **Env var in pydantic-settings**, matching every other pathfinder runtime setting. There is no YAML config pattern in the pathfinder module; `mnemosyne/pf2e/sessions/.config.yaml` would require a new Obsidian read on every `start`. Env var in `compose.yml` + `.env.example` is the correct home.
+   - RESOLVED: **Env var in pydantic-settings**, matching every other pathfinder runtime setting. There is no YAML config pattern in the pathfinder module; `mnemosyne/pf2e/sessions/.config.yaml` would require a new Obsidian read on every `start`. Env var in `compose.yml` + `.env.example` is the correct home.
 
 ---
 
