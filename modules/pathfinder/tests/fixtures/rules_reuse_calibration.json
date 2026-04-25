@@ -1,0 +1,106 @@
+[
+  {
+    "anchor": "How does flanking work?",
+    "topic": "flanking",
+    "paraphrases": [
+      "If I'm flanking an enemy, what happens to their AC?",
+      "What's the rule for flanking in PF2e?",
+      "How do I flank an opponent in combat?"
+    ],
+    "different": [
+      "Can a Sneak Attack work without flanking?",
+      "Does Stealth let me ignore the flanking requirement?"
+    ]
+  },
+  {
+    "anchor": "What does the off-guard condition do?",
+    "topic": "off-guard",
+    "paraphrases": [
+      "What's the AC penalty for being off-guard?",
+      "How does off-guard affect a character?",
+      "What happens when you're off-guard?"
+    ],
+    "different": [
+      "What conditions make a creature off-guard automatically?",
+      "Can a magic item suppress the off-guard condition?"
+    ]
+  },
+  {
+    "anchor": "How do I run a Demoralize check?",
+    "topic": "demoralize",
+    "paraphrases": [
+      "What's the action and DC for Demoralize?",
+      "How does the Demoralize action work in PF2e?",
+      "Can you walk me through Demoralize step by step?"
+    ],
+    "different": [
+      "Does Demoralize bypass mindless creature immunity?",
+      "What's the bonus for Demoralizing a creature you've already frightened?"
+    ]
+  },
+  {
+    "anchor": "How many actions does spellcasting take?",
+    "topic": "spellcasting",
+    "paraphrases": [
+      "What's the action cost to cast a spell?",
+      "How long does it take to cast spells in PF2e?",
+      "How many actions per turn do I spend casting?"
+    ],
+    "different": [
+      "Can I cast two spells in the same turn?",
+      "Does Quickened Casting reduce the action cost?"
+    ]
+  },
+  {
+    "anchor": "How do I use Treat Wounds?",
+    "topic": "healing",
+    "paraphrases": [
+      "What's the action to heal someone out of combat?",
+      "How does the Treat Wounds skill action work?",
+      "Walk me through using Medicine to heal a downed ally."
+    ],
+    "different": [
+      "What's the DC to Treat Wounds for a level 5 character?",
+      "Can you Treat Wounds on yourself?"
+    ]
+  },
+  {
+    "anchor": "What's the rule for falling damage?",
+    "topic": "falling",
+    "paraphrases": [
+      "How much damage do you take from a fall?",
+      "How does fall damage work in PF2e?",
+      "What's the formula for falling damage?"
+    ],
+    "different": [
+      "Does Tumble Through reduce falling damage?",
+      "How far can a feather fall amulet save you?"
+    ]
+  },
+  {
+    "anchor": "What happens when a character starts dying?",
+    "topic": "dying",
+    "paraphrases": [
+      "What's the dying condition rule?",
+      "How does dying work in PF2e?",
+      "When my character drops to 0 HP, what happens?"
+    ],
+    "different": [
+      "What recovery checks does a dying character roll?",
+      "Can you stabilize a dying ally without Medicine?"
+    ]
+  },
+  {
+    "anchor": "What's a critical hit on an attack roll?",
+    "topic": "combat",
+    "paraphrases": [
+      "How do critical hits work on attacks?",
+      "When do I score a crit on an attack?",
+      "What are the rules for critical hits in combat?"
+    ],
+    "different": [
+      "Does a natural 20 always crit?",
+      "How does critical specialization work for weapons?"
+    ]
+  }
+]
