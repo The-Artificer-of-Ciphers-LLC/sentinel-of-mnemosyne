@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
-status: "Phase 35 context gathered. Run /gsd-plan-phase 35 to research and plan."
-stopped_at: Phase 35 context gathered (2026-04-25)
-last_updated: "2026-04-25T05:30:00.000Z"
-last_activity: 2026-04-25 -- Phase 35 context discussion complete; 35-CONTEXT.md committed
+status: "Phase 35 planned — 5 plans ready to execute. Run /gsd-execute-phase 35."
+stopped_at: Phase 35 planned (2026-04-25)
+last_updated: "2026-04-25T06:00:00.000Z"
+last_activity: 2026-04-25 -- Phase 35 planned: 5 plans (Wave 0 TDD RED, Wave 1 Python backend + Discord bot, Wave 3 main.py wiring, Wave 4 JS module + UAT)
 progress:
   total_phases: 35
   completed_phases: 19
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 35 (Foundry VTT Event Ingest) — NOT STARTED
-Plan: 0 of N (context not yet gathered)
-Next Plan: /gsd-discuss-phase 35 → research → plan → execute
+Phase: 35 (Foundry VTT Event Ingest) — READY TO EXECUTE
+Plan: 0 of 5 (5 plans planned, execution not started)
+Next Plan: /gsd-execute-phase 35
 Prior Phase: 34 (Session Notes) — ✅ COMPLETE + FULLY VERIFIED (9/9 UAT passed 2026-04-25)
 Milestone: v0.5 The Dungeon — IN PROGRESS (7/9 phases complete: 28, 29, 30, 31, 32, 33, 34)
-Status: Phase 34 complete. Phase 35 (Foundry VTT Event Ingest) is next — no CONTEXT.md yet, run /gsd-discuss-phase 35.
+Status: Phase 35 planned (5 plans, 5 waves, FVT-01/02/03). Execute with /gsd-execute-phase 35.
 Last activity: 2026-04-25 -- Phase 34 UAT 9/9 passed; RecapView Bug A+B committed; transition complete
 
 ## Milestone Progress
