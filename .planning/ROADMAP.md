@@ -492,8 +492,14 @@ Plans:
   2. NPC names in the session note are wiki-linked to their `mnemosyne/pf2e/npcs/` pages
   3. `/pf session log [event]` appends a timestamped entry to the active session log
   4. Session notes use a consistent template structure across multiple sessions
-**Status:** Not started
-**Plans:** 0 plans
+**Status:** In progress
+**Plans:** 5 plans
+Plans:
+- [ ] 34-01-PLAN.md — Wave 0 RED test scaffolding (unit stubs, integration stubs, conftest, UAT)
+- [ ] 34-02-PLAN.md — Wave 1 session pure helpers + ObsidianClient.patch_heading + config settings
+- [ ] 34-03-PLAN.md — Wave 2 FastAPI session route (5-verb router) + LLM helpers
+- [ ] 34-04-PLAN.md — Wave 3 main.py registration + lifespan wiring + compose.yml env vars
+- [ ] 34-05-PLAN.md — Wave 4 bot.py Discord wiring (_PF_NOUNS, session branch, RecapView)
 
 ### Phase 35: Foundry VTT Event Ingest
 **Goal:** A Foundry VTT JavaScript module hooks into chat messages and dice rolls, POSTs events to Sentinel Core, and receives Discord responses with roll interpretations.
