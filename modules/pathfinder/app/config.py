@@ -27,7 +27,10 @@ class Settings(BaseSettings):
     litellm_model_fast: str | None = None
 
     # Phase 33 rules engine — embedding model loaded in LM Studio for corpus + query embeds.
-    # Must match a model identifier that LM Studio's /v1/models endpoint reports as loaded.
+    # Stored as the BARE model id (no provider prefix). The bare name is what
+    # gets persisted in cached-ruling frontmatter (D-13), so reuse-match cache
+    # comparisons work across processes. embed_texts() prepends "openai/" at
+    # the litellm call site — see _resolve_embed_provider in app/llm.py.
     rules_embedding_model: str = "text-embedding-nomic-embed-text-v1.5"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}

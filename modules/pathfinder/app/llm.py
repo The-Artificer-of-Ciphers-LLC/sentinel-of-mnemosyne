@@ -435,8 +435,15 @@ async def embed_texts(
                 f"embed_texts: texts[{i}] must be a str, got {type(t).__name__}"
             )
 
+    # litellm requires a provider/model form. LM Studio exposes an
+    # OpenAI-compatible /v1/embeddings endpoint, so bare names from
+    # /v1/models must be prefixed with "openai/". Settings stores the bare
+    # name so it round-trips into cached-ruling frontmatter unchanged
+    # (see settings.rules_embedding_model).
+    litellm_model = model if "/" in model else f"openai/{model}"
+
     kwargs: dict = {
-        "model": model,
+        "model": litellm_model,
         "input": texts,
         "timeout": _RULING_TIMEOUT_S,
     }
