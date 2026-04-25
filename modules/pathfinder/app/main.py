@@ -43,7 +43,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.cors import CORSMiddleware as _CORSMiddleware
+from starlette.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.harvest import load_harvest_tables
@@ -214,37 +214,29 @@ app = FastAPI(
 )
 
 # ---------------------------------------------------------------------------
-# PNA-aware CORS middleware (Phase 35 gap closure)
+# CORS middleware with Private Network Access support (Phase 35 gap closure)
 #
-# Starlette's built-in CORSMiddleware does not emit Access-Control-Allow-Private-Network.
-# This subclass adds that header when allow_private_network=True, which is required for
-# browser fetch() from https://forge-vtt.com to a Tailscale HTTPS target (100.64.0.0/10
-# is classified as "private network" by WICG PNA spec and Chrome/Firefox/Edge).
+# Starlette 1.0+ supports allow_private_network natively — it injects the
+# Access-Control-Allow-Private-Network header only on OPTIONS preflight responses,
+# as required by the WICG PNA spec. No subclass needed.
 #
-# allow_origins includes:
-#   - https://forge-vtt.com and wildcard for per-user Forge subdomains
-#   - localhost variants for local LAN play and development
+# allow_origin_regex covers per-user Forge subdomains (https://*.forge-vtt.com).
+# Starlette does exact-string matching on allow_origins so the wildcard pattern
+# must go in allow_origin_regex instead.
 #
 # X-Sentinel-Key is a non-standard header — must be listed in allow_headers or
 # the CORS preflight will block credentialed requests.
 # ---------------------------------------------------------------------------
-class PNACORSMiddleware(_CORSMiddleware):
-    def __init__(self, app, allow_private_network: bool = False, **kwargs):
-        super().__init__(app, **kwargs)
-        if allow_private_network:
-            self.simple_headers["Access-Control-Allow-Private-Network"] = "true"
-
-
 app.add_middleware(
-    PNACORSMiddleware,
+    CORSMiddleware,
     allow_origins=[
         "https://forge-vtt.com",
-        "https://*.forge-vtt.com",
         "http://localhost:30000",
         "http://localhost:8000",
         "http://127.0.0.1:30000",
         "http://127.0.0.1:8000",
     ],
+    allow_origin_regex=r"https://[a-zA-Z0-9-]+\.forge-vtt\.com",
     allow_methods=["POST", "OPTIONS"],
     allow_headers=["Content-Type", "X-Sentinel-Key"],
     allow_credentials=False,

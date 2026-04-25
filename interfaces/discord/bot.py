@@ -1391,6 +1391,11 @@ class SentinelBot(discord.Client):
             )
             return web.Response(status=500)
 
+        event_type = data.get("event_type", "roll")
+        if event_type != "roll":
+            logger.info("_handle_internal_notify: unsupported event_type %r — ignoring", event_type)
+            return web.Response(status=200)
+
         embed = build_foundry_roll_embed(data)
         try:
             await channel.send(embed=embed)

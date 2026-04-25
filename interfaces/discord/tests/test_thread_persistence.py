@@ -1,61 +1,9 @@
 """Tests for Discord bot thread ID persistence (2B-03) — moved from sentinel-core/tests/."""
-import os
-import sys
-import types
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import httpx
 import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
 
-# ---------------------------------------------------------------------------
-# Stub out discord before importing bot.py (no discord.py in test env)
-# ---------------------------------------------------------------------------
-
-
-class _DiscordClientStub:
-    """Minimal discord.Client stub — accepts any keyword args and is no-op."""
-
-    def __init__(self, **kwargs):
-        pass
-
-
-class _IntentsStub:
-    message_content = False
-
-    @classmethod
-    def default(cls):
-        return cls()
-
-
-_app_commands_stub = types.ModuleType("discord.app_commands")
-_app_commands_stub.CommandTree = MagicMock()
-_app_commands_stub.describe = lambda **_: (lambda f: f)
-
-_discord_stub = types.ModuleType("discord")
-_discord_stub.Client = _DiscordClientStub
-_discord_stub.Intents = _IntentsStub
-_discord_stub.Message = object
-_discord_stub.Thread = object
-_discord_stub.ChannelType = MagicMock()
-_discord_stub.Forbidden = Exception
-_discord_stub.HTTPException = Exception
-_discord_stub.Interaction = object
-_discord_stub.app_commands = _app_commands_stub
-sys.modules.setdefault("discord", _discord_stub)
-sys.modules.setdefault("discord.app_commands", _app_commands_stub)
-
-# Set required env vars before importing bot.py
-os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token-for-pytest")
-os.environ.setdefault("SENTINEL_API_KEY", "test-key-for-pytest")
-
-# Add interfaces/discord to path
-_discord_dir = os.path.join(os.path.dirname(__file__), "..")
-sys.path.insert(0, os.path.abspath(_discord_dir))
-# Add repo root so `shared` package is importable
-_repo_root = os.path.join(os.path.dirname(__file__), "..", "..", "..")
-sys.path.insert(0, os.path.abspath(_repo_root))
-
-import bot  # noqa: E402
+import bot
 
 
 # ---------------------------------------------------------------------------

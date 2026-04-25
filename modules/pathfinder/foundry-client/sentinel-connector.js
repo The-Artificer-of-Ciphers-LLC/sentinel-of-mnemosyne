@@ -16,7 +16,7 @@
  *   D-06: chat payload shape (event_type, actor_name, content, timestamp)
  *   D-07: sentinelBaseUrl stored as world setting (empty default = webhook-only mode)
  *   D-17: ESModule (no bundler) — Foundry v14 native support
- *   Plan 35-06: webhook-first fallback + PNACORSMiddleware gap closure
+ *   Plan 35-06: webhook-first fallback + native Starlette PNA CORS gap closure
  *
  * IMPORTANT: preCreateChatMessage ALWAYS returns true — never suppresses Foundry messages.
  * postEvent() is called fire-and-forget (no await) so hook returns synchronously.
@@ -183,10 +183,10 @@ async function postEvent(payload) {
 
   // Primary path: Sentinel (LLM narration)
   if (sentinelUrl) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SENTINEL_TIMEOUT_MS);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), SENTINEL_TIMEOUT_MS);
-      await fetch(`${sentinelUrl}/modules/pathfinder/foundry/event`, {
+      const response = await fetch(`${sentinelUrl}/modules/pathfinder/foundry/event`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -195,11 +195,13 @@ async function postEvent(payload) {
         body: JSON.stringify(payload),
         signal: controller.signal,
       });
-      clearTimeout(timeoutId);
+      if (!response.ok) throw new Error(`Sentinel returned HTTP ${response.status}`);
       return; // success — no fallback needed
     } catch (err) {
-      // AbortError = 3s timeout; TypeError = mixed content / network / CORS block
+      // AbortError = 3s timeout; TypeError = network/CORS; Error = non-2xx
       console.warn('[sentinel-connector] Sentinel POST failed, falling back to webhook:', err.message);
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
