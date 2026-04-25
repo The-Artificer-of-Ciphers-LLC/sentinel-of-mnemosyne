@@ -370,6 +370,7 @@ def build_foundry_roll_embed(data: dict) -> "discord.Embed":
     Description: LLM narrative (or empty)
     Footer: "Roll: {total} | DC/AC: {dc}" or "DC: [hidden]" + optional item_name
     """
+    # WR-04: keep in sync with app/foundry.py OUTCOME_EMOJIS/OUTCOME_LABELS (separate containers).
     OUTCOME_EMOJIS = {
         "criticalSuccess": "🎯",
         "success": "✅",
@@ -1378,7 +1379,7 @@ class SentinelBot(discord.Client):
         except Exception:
             return web.Response(status=400)
 
-        channel_id = next(iter(ALLOWED_CHANNEL_IDS), None)
+        channel_id = min(ALLOWED_CHANNEL_IDS) if ALLOWED_CHANNEL_IDS else None  # WR-02: deterministic
         if channel_id is None:
             logger.warning("_handle_internal_notify: no DISCORD_ALLOWED_CHANNELS configured")
             return web.Response(status=500)
