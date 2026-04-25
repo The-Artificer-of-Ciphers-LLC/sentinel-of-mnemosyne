@@ -25,14 +25,13 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 33 (Rules Engine) — EXECUTING
-Phase: 33 (Rules Engine) — ✅ COMPLETE + FULLY VERIFIED (5/5 plans + Phase 33.1 calibration; pytest 142/142 + live UAT 17/17 + Discord visual 16/16)
-Plan: 5 of 5 done; Phase 33.1 calibration done; Task 33-05-06 in-Discord visual done
-Next Plan: ROADMAP.md update needed — manually mark Phase 33 ✅ COMPLETE (2026-04-25); ROADMAP is uchg-protected per CLAUDE.md (`chflags nouchg .planning/ROADMAP.md` to edit, then `chflags uchg`)
-Prior Phase: 32 (Monster Harvesting) — ✅ COMPLETE + VERIFIED
+Phase: 34 (Session Notes) — CONTEXT GATHERED
+Plan: 0 of N (planning not yet started)
+Next Plan: /gsd-plan-phase 34 — research → plan → verify
+Prior Phase: 33 (Rules Engine) — ✅ COMPLETE + FULLY VERIFIED
 Milestone: v0.5 The Dungeon — IN PROGRESS (6/9 phases complete: 28, 29, 30, 31, 32, 33)
-Status: Phase 33 closes. v0.5 advances to 6/9. Next phase candidates: 34 (Session Notes) or 35 (Foundry VTT Event Ingest)
-Last activity: 2026-04-25 -- Phase 33 + 33.1 fully verified end-to-end; ready to close phase and advance milestone
+Status: Phase 34 context locked via discuss-phase. 38 decisions captured (D-01..D-38) covering 5-verb command surface, frontmatter-tracked state, dual-pass NPC linking, location auto-stubs, structured-output single-LLM-call recap, schema_version:1, Discord button + interactive components, --retry-recap, SESSION_RECAP_MODEL env. Campaign-narrative compiler deferred.
+Last activity: 2026-04-25 -- Phase 34 CONTEXT.md + DISCUSSION-LOG.md written; ready for /gsd-plan-phase 34
 
 ## Milestone Progress
 
