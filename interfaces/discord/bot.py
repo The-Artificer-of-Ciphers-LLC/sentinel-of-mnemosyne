@@ -362,6 +362,64 @@ def build_stat_embed(data: dict) -> "discord.Embed":
     return embed
 
 
+def build_foundry_roll_embed(data: dict) -> "discord.Embed":
+    """Build embed for a Foundry roll event notification (D-16, FVT-03).
+
+    Title: "{emoji} {outcome_label} | {actor} vs {target}" (or actor + roll_type if no target)
+    Description: LLM narrative (or empty)
+    Footer: "Roll: {total} | DC/AC: {dc}" or "DC: [hidden]" + optional item_name
+    """
+    OUTCOME_EMOJIS = {
+        "criticalSuccess": "🎯",
+        "success": "✅",
+        "failure": "❌",
+        "criticalFailure": "💀",
+    }
+    OUTCOME_LABELS = {
+        "criticalSuccess": "Critical Hit!",
+        "success": "Success",
+        "failure": "Failure",
+        "criticalFailure": "Critical Failure!",
+    }
+    OUTCOME_COLORS = {
+        "criticalSuccess": discord.Color.gold(),
+        "success": discord.Color.green(),
+        "failure": discord.Color.orange(),
+        "criticalFailure": discord.Color.red(),
+    }
+    outcome = data.get("outcome", "")
+    actor = data.get("actor_name", "?")
+    target = data.get("target_name")
+    narrative = data.get("narrative", "")
+    roll_total = data.get("roll_total", "?")
+    dc = data.get("dc")
+    dc_hidden = data.get("dc_hidden", False)
+    item_name = data.get("item_name", "")
+    roll_type = data.get("roll_type", "check")
+
+    emoji = OUTCOME_EMOJIS.get(outcome, "🎲")
+    label = OUTCOME_LABELS.get(outcome, outcome.capitalize() if outcome else "Roll")
+    color = OUTCOME_COLORS.get(outcome, discord.Color.blue())
+
+    if target:
+        title = f"{emoji} {label} | {actor} vs {target}"
+    else:
+        title = f"{emoji} {label} | {actor} ({roll_type})"
+
+    dc_str = "DC: [hidden]" if dc_hidden else f"DC/AC: {dc}"
+    footer_parts = [f"Roll: {roll_total}", dc_str]
+    if item_name:
+        footer_parts.append(item_name)
+
+    embed = discord.Embed(
+        title=title,
+        description=narrative[:4000] if narrative else None,
+        color=color,
+    )
+    embed.set_footer(text=" | ".join(footer_parts))
+    return embed
+
+
 def build_harvest_embed(data: dict) -> "discord.Embed":
     """Build a Discord Embed from /harvest module response (HRV-01..06, D-03a, D-04).
 
