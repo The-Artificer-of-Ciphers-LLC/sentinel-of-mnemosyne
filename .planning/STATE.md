@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
-status: "Phase 34 complete. Phase 35 (Foundry VTT Event Ingest) is next — no CONTEXT.md yet, run /gsd-discuss-phase 35."
-stopped_at: Phase 34 complete (2026-04-25)
-last_updated: "2026-04-25T05:15:00.000Z"
-last_activity: 2026-04-25 -- Phase 34 UAT 9/9 passed, transition complete; Phase 35 next
+status: "Phase 35 context gathered. Run /gsd-plan-phase 35 to research and plan."
+stopped_at: Phase 35 context gathered (2026-04-25)
+last_updated: "2026-04-25T05:30:00.000Z"
+last_activity: 2026-04-25 -- Phase 35 context discussion complete; 35-CONTEXT.md committed
 progress:
   total_phases: 35
   completed_phases: 19
