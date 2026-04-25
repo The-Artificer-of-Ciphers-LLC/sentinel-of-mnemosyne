@@ -103,7 +103,17 @@ async def test_setup_hook_loads_threads_on_start():
     """After setup_hook runs, SENTINEL_THREAD_IDS contains IDs from ops/discord-threads.md."""
     threads_content = "12345\n67890\n"
 
-    with patch("bot.httpx") as mock_httpx:
+    mock_runner = AsyncMock()
+    mock_runner.setup = AsyncMock()
+    mock_runner.cleanup = AsyncMock()
+    mock_site = AsyncMock()
+    mock_site.start = AsyncMock()
+    mock_web = MagicMock()
+    mock_web.Application.return_value = MagicMock()
+    mock_web.AppRunner.return_value = mock_runner
+    mock_web.TCPSite.return_value = mock_site
+
+    with patch("bot.httpx") as mock_httpx, patch("bot.web", mock_web):
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
@@ -124,7 +134,17 @@ async def test_setup_hook_loads_threads_on_start():
 
 async def test_setup_hook_graceful_on_404():
     """setup_hook does not crash when ops/discord-threads.md returns 404."""
-    with patch("bot.httpx") as mock_httpx:
+    mock_runner = AsyncMock()
+    mock_runner.setup = AsyncMock()
+    mock_runner.cleanup = AsyncMock()
+    mock_site = AsyncMock()
+    mock_site.start = AsyncMock()
+    mock_web = MagicMock()
+    mock_web.Application.return_value = MagicMock()
+    mock_web.AppRunner.return_value = mock_runner
+    mock_web.TCPSite.return_value = mock_site
+
+    with patch("bot.httpx") as mock_httpx, patch("bot.web", mock_web):
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)

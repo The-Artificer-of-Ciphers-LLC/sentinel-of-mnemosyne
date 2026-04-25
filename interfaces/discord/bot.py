@@ -48,6 +48,7 @@ import re
 
 import discord
 import httpx
+from aiohttp import web
 from discord import app_commands
 from shared.sentinel_client import SentinelCoreClient
 
@@ -1315,6 +1316,7 @@ class SentinelBot(discord.Client):
         intents.message_content = True  # required to read thread reply content
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
+        self._internal_runner: "web.AppRunner | None" = None  # D-14: aiohttp internal server
 
     async def setup_hook(self) -> None:
         """Called once per process startup — safe point to sync command tree and load thread IDs."""
@@ -1352,6 +1354,50 @@ class SentinelBot(discord.Client):
                     logger.warning("Unexpected status %d loading thread IDs", resp.status_code)
         except Exception as exc:
             logger.warning("Could not load thread IDs from vault: %s", exc)
+
+        # D-14: Start internal aiohttp notification server for Foundry VTT event ingest (Phase 35)
+        internal_port = int(os.environ.get("DISCORD_BOT_INTERNAL_PORT", "8001"))
+        _aiohttp_app = web.Application()
+        _aiohttp_app.router.add_post("/internal/notify", self._handle_internal_notify)
+        self._internal_runner = web.AppRunner(_aiohttp_app)
+        await self._internal_runner.setup()
+        site = web.TCPSite(self._internal_runner, "0.0.0.0", internal_port)
+        await site.start()
+        logger.info("Internal notification server started on port %d", internal_port)
+
+    async def _handle_internal_notify(self, request: "web.Request") -> "web.Response":
+        """Handle POST /internal/notify from pf2e-module (D-14, FVT-02).
+
+        Validates X-Sentinel-Key, builds embed, sends to first ALLOWED_CHANNEL_IDS channel.
+        """
+        key = request.headers.get("X-Sentinel-Key", "")
+        if key != SENTINEL_API_KEY:
+            return web.Response(status=401)
+        try:
+            data = await request.json()
+        except Exception:
+            return web.Response(status=400)
+
+        channel_id = next(iter(ALLOWED_CHANNEL_IDS), None)
+        if channel_id is None:
+            logger.warning("_handle_internal_notify: no DISCORD_ALLOWED_CHANNELS configured")
+            return web.Response(status=500)
+
+        channel = self.get_channel(channel_id)
+        if channel is None:
+            logger.warning(
+                "_handle_internal_notify: channel %d not found or not cached", channel_id
+            )
+            return web.Response(status=500)
+
+        embed = build_foundry_roll_embed(data)
+        try:
+            await channel.send(embed=embed)
+        except Exception as exc:
+            logger.error("_handle_internal_notify: channel.send failed: %s", exc)
+            return web.Response(status=500)
+
+        return web.Response(status=200)
 
     async def on_ready(self) -> None:
         user = self.user
@@ -1414,6 +1460,12 @@ class SentinelBot(discord.Client):
                 )
             else:
                 await message.channel.send(ai_response.get("content", str(ai_response)))
+
+    async def close(self) -> None:
+        """Clean up aiohttp internal server before closing discord client (Pitfall 5)."""
+        if self._internal_runner:
+            await self._internal_runner.cleanup()
+        await super().close()
 
 
 bot = SentinelBot()
