@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
-stopped_at: Phase 33 live UAT 17/17 PASS after Phase 33.1 D-05 reuse-threshold calibration. Operator authorized re-classifying D-05 from user-locked to calibrated; F1-max sweep on 40-pair paraphrase fixture (24 paraphrase + 16 same-topic-different-question across 8 anchors) yielded REUSE_SIMILARITY_THRESHOLD = 0.70 (F1=0.821, recall=0.958, precision=0.719) — see 33.1-SUMMARY.md. Pathfinder pytest 142/142 GREEN with new value. Stack rebuilt; UAT-8 now reads `reused=True note='_reusing prior ruling on flanking — confirm applicability_'`. Phase 33 code-side complete + automated-UAT complete. Pending only: Task 33-05-06 in-Discord visual verification (D-08 embed colors / D-11 placeholder-edit UX / D-13-14 Obsidian frontmatter inspection) — requires real DM session, can only be done by human operator.
-last_updated: "2026-04-25T00:35:00.000Z"
-last_activity: 2026-04-25 -- Phase 33.1 D-05 calibration complete (0.80 → 0.70 F1-max); live UAT 17/17 PASS; only Discord visual verification remaining
+stopped_at: Phase 33 + 33.1 FULLY VERIFIED. Pathfinder pytest 142/142 GREEN, Discord pytest 48/48 GREEN, live UAT 17/17 PASS, in-Discord visual UAT 16/16 sections PASS (A1-G). Every D-XX/L-XX locked decision verified end-to-end against real LLM + real Obsidian + real Discord. D-05 reuse threshold calibrated 0.80 → 0.70 (F1-max sweep, see 33.1-SUMMARY.md). Two bugs caught and fixed by live UAT (litellm prefix in embed_texts, docker compose exec name resolution). One human deferral remaining: IN-02 corpus has 2 PC2 entries (Cursebound, Plummeting Roll) — D-15 scope ambiguity needs operator decision before next phase. Phase 33 closes; v0.5 milestone advances to 6/9 phases complete.
+last_updated: "2026-04-25T01:05:00.000Z"
+last_activity: 2026-04-25 -- Phase 33 + 33.1 fully verified end-to-end (pytest + live UAT + Discord visual all PASS)
 progress:
   total_phases: 35
   completed_phases: 16
@@ -26,12 +26,13 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 33 (Rules Engine) — EXECUTING
-Plan: 5 of 5 (Plans 33-01..05 code complete; Phase 33.1 D-05 calibration complete; live UAT 17/17 PASS; only Task 33-05-06 in-Discord visual remains)
-Next Plan: Operator runs in-Discord visual verification (Task 33-05-06) — :pf rule flow + D-08 embed colors + D-11 placeholder-edit UX + D-13/D-14 Obsidian frontmatter
-Prior Phase: 32 (Monster Harvesting) — ✅ COMPLETE + VERIFIED (5/5 plans, 22/22 must-haves, 89/89 + 38/38 unit, 17/17 live UAT)
-Milestone: v0.5 The Dungeon — IN PROGRESS (5/9 phases — 33 functionally complete, awaiting only Discord visual)
-Status: Phase 33 functional verification complete (pytest 142/142 + live UAT 17/17); awaiting in-Discord visual checks
-Last activity: 2026-04-25 -- Phase 33.1 D-05 calibrated 0.80 → 0.70 (F1-max); live UAT 17/17 PASS; only Discord visual remaining
+Phase: 33 (Rules Engine) — ✅ COMPLETE + FULLY VERIFIED (5/5 plans + Phase 33.1 calibration; pytest 142/142 + live UAT 17/17 + Discord visual 16/16)
+Plan: 5 of 5 done; Phase 33.1 calibration done; Task 33-05-06 in-Discord visual done
+Next Plan: ROADMAP.md update needed — manually mark Phase 33 ✅ COMPLETE (2026-04-25); ROADMAP is uchg-protected per CLAUDE.md (`chflags nouchg .planning/ROADMAP.md` to edit, then `chflags uchg`)
+Prior Phase: 32 (Monster Harvesting) — ✅ COMPLETE + VERIFIED
+Milestone: v0.5 The Dungeon — IN PROGRESS (6/9 phases complete: 28, 29, 30, 31, 32, 33)
+Status: Phase 33 closes. v0.5 advances to 6/9. Next phase candidates: 34 (Session Notes) or 35 (Foundry VTT Event Ingest)
+Last activity: 2026-04-25 -- Phase 33 + 33.1 fully verified end-to-end; ready to close phase and advance milestone
 
 ## Milestone Progress
 

@@ -1,9 +1,17 @@
 ---
-status: pending
+status: resolved
 phase: 33-rules-engine
 task: 33-05-06 (checkpoint:human-verify — in-Discord visual)
 parent_uat: .planning/phases/33-rules-engine/33-UAT-RESULT.md
 prerequisites: live UAT 17/17 PASS (33-UAT-RESULT.md status=resolved)
+started: 2026-04-25T00:50:00Z
+completed: 2026-04-25T01:05:00Z
+sections_passed: [A1, A2, A3, B1, B2, C1, C2, C3, D1, D2, D3, E1, E2, E3, F1, G]
+sections_failed: []
+notes:
+  - A1 was a bot-side help response (no LLM call); A2 was the first real cold call but rendered correctly. Future checklists should specify a real chat-model warmup (e.g. curl to /v1/chat/completions) rather than a `:pf` help command.
+  - D2 sub-second response confirmed Phase 33.1 calibrated 0.70 reuse threshold catches paraphrase pairs as designed (UAT-8 visual case).
+  - F1 confirmed D-15 scope-lock end-to-end: Monster Core query → yellow generated, NOT red declined.
 ---
 
 # Phase 33 — Discord Visual UAT Walkthrough
