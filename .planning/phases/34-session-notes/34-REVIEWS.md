@@ -3,14 +3,15 @@ phase: 34
 reviewers: [opencode, lm_studio]
 reviewed_at: 2026-04-25T21:00:00Z
 plans_reviewed: [34-01-PLAN.md, 34-02-PLAN.md, 34-03-PLAN.md, 34-04-PLAN.md, 34-05-PLAN.md]
-lm_studio_models: [qwen2.5-coder-14b-instruct-mlx]
+lm_studio_models: [qwen2.5-coder-14b-instruct-mlx, meta-llama-3.1-8b-instruct-abliterated-mlx]
 opencode_model: nemotron-3-super-free
 prior_cycle_reviewer: qwen3.6-35b-a3b (cycle 1, 2026-04-25T19:15:41Z)
+cycle_3_reviewer: meta-llama-3.1-8b-instruct-abliterated-mlx (cycle 3, 2026-04-25)
 notes: |
   claude skipped (self — running inside Claude Code CLI).
   qwen3.6-35b-a3b crashed (OOM) on second invocation; qwen2.5-coder-14b-instruct-mlx used instead.
   devstral-small-2507 failed to load (insufficient system resources).
-  This file combines cycle-2 (opencode + qwen2.5-coder) with cycle-1 (qwen3.6) for full consensus.
+  This file combines cycle-2 (opencode + qwen2.5-coder) with cycle-1 (qwen3.6) and cycle-3 (llama-3.1-8b) for full consensus.
 ---
 
 # Cross-AI Plan Review — Phase 34: Session Notes
@@ -231,9 +232,117 @@ The plans are well-designed and cover the essential components required for Phas
 
 ---
 
+## LM Studio Review — Cycle 3 (meta-llama-3.1-8b-instruct-abliterated-mlx, 2026-04-25)
+
+### Plan 34-01: Wave 0 RED Test Scaffolding
+
+**Summary:** Well-structured test scaffolding plan with clear separation of concerns between stubs.
+
+**Strengths:**
+- Comprehensive test suite creation across unit, integration, Discord bot, and UAT layers
+- Clear separation of concerns between stubs for each wave
+
+**Concerns:**
+- **MEDIUM:** No explicit test coverage percentage goals stated — unclear how completeness is measured beyond stub count thresholds
+- **LOW:** No mention of test data generation strategy for parameterized cases
+
+**Suggestions:**
+- Define measurable coverage goals (e.g., 80%+ line coverage) to complement the stub count floor
+- Include parametrized test data examples in the plan for edge-case-heavy helpers
+
+**Risk Assessment:** MEDIUM
+
+---
+
+### Plan 34-02: Wave 1 Pure Helpers + ObsidianClient.patch_heading + Config
+
+**Summary:** Clean, well-organized plan for the pure logic layer and Obsidian API extension. Configuration additions are minimal and appropriate.
+
+**Strengths:**
+- Clear separation between pure logic and I/O layers
+- Well-structured config additions (session_auto_recap, session_tz, session_recap_model)
+
+**Concerns:**
+- **MEDIUM:** No explicit failure handling plan for ObsidianClient.patch_heading edge cases (e.g., note does not exist, heading not found)
+- **LOW:** Helper testing coverage (>=17 unit stubs) covers happy paths; boundary conditions (empty roster, unicode event text) not explicitly called out
+
+**Suggestions:**
+- Specify expected HTTP status codes and retry behavior for patch_heading failures
+- Add explicit test cases for unicode/emoji in event text and empty NPC roster edge cases
+
+**Risk Assessment:** LOW
+
+---
+
+### Plan 34-03: Wave 2 FastAPI Route + LLM Functions
+
+**Summary:** Core route implementation is well-specified with good error handling contracts (D-07, D-31). The 5-verb dispatch covers the primary use cases with clear per-verb contracts.
+
+**Strengths:**
+- Clear separation between route logic and LLM functions
+- Error handling for D-07 (Obsidian-down) and D-31 (LLM failure) explicitly specified in truths
+
+**Concerns:**
+- **HIGH:** No explicit plan for handling edge cases where LLM output is partially valid JSON (e.g., truncated at max_tokens boundary) — current _strip_code_fences + json.loads may silently fail before raising JSONDecodeError
+- **MEDIUM:** Testing strategy for LLM functions not specified — unclear how generate_session_recap is tested without a live LM Studio instance
+
+**Suggestions:**
+- Add explicit handling for truncated/partial JSON responses from LLM (detect incomplete object before calling json.loads)
+- Specify mock strategy for LLM functions in integration tests (static fixture JSON responses)
+
+**Risk Assessment:** HIGH
+
+---
+
+### Plan 34-04: Wave 3 main.py Wiring + compose.yml
+
+**Summary:** Standard wiring plan consistent with Phases 29-33 patterns. Configuration additions are minimal and correct.
+
+**Strengths:**
+- Clear separation between main.py wiring and other components
+- Well-organized env var additions (SESSION_AUTO_RECAP, SESSION_TZ, SESSION_RECAP_MODEL)
+
+**Concerns:**
+- **MEDIUM:** Dependency ordering for build_npc_roster_cache (startup) vs D-22 (refresh at session start) not reconciled in this plan
+- **LOW:** No explicit testing strategy for main.py lifespan wiring
+
+**Suggestions:**
+- Reconcile NPC cache refresh timing: document whether startup cache is acceptable or D-22 requires per-session refresh
+- Add lifespan startup test or note that existing module startup tests cover this
+
+**Risk Assessment:** MEDIUM
+
+---
+
+### Plan 34-05: Wave 4 Discord Bot Wiring
+
+**Summary:** Discord bot wiring plan is well-structured with clear verb-to-module dispatch and UX patterns (placeholder->edit, RecapView timeout).
+
+**Strengths:**
+- Clear separation between bot.py and module routing
+- Well-organized payload structure with {verb, args, flags}
+
+**Concerns:**
+- **HIGH:** No explicit error handling plan for module 4xx/5xx responses — stale placeholder edit case not addressed
+- **MEDIUM:** RecapView timeout (180s) vs Discord interaction token expiry (15 min) not explicitly verified as compatible
+
+**Suggestions:**
+- Add explicit error path: on module 4xx/5xx, edit placeholder to error embed rather than leaving stale
+- Verify interaction token lifetime covers worst-case LLM recap latency
+
+**Risk Assessment:** HIGH
+
+---
+
+### Overall Risk Assessment (llama-3.1-8b cycle 3): MEDIUM-HIGH
+
+Primary risks: (1) partial JSON from LLM truncation, (2) Discord placeholder stale on module error, (3) NPC cache refresh timing mismatch.
+
+---
+
 ## Consensus Summary
 
-Three AI reviewers contributed to this analysis across two cycles: OpenCode/nemotron-3-super-free and LM Studio/qwen2.5-coder-14b-instruct-mlx (cycle 2), and LM Studio/qwen3.6-35b-a3b (cycle 1).
+Four AI reviewers contributed to this analysis across three cycles: OpenCode/nemotron-3-super-free and LM Studio/qwen2.5-coder-14b-instruct-mlx (cycle 2), LM Studio/qwen3.6-35b-a3b (cycle 1), and LM Studio/meta-llama-3.1-8b-instruct-abliterated-mlx (cycle 3).
 
 ### Agreed Strengths
 
@@ -246,18 +355,20 @@ Three AI reviewers contributed to this analysis across two cycles: OpenCode/nemo
 
 ### Agreed Concerns
 
-- **HIGH — LLM response parsing fragility** (opencode + qwen3.6): `_strip_code_fences + json.loads` pattern needs explicit fallback handling for malformed JSON and LLM service unavailability. Both reviewers flagged this from different angles.
+- **HIGH — LLM response parsing fragility** (opencode + qwen3.6 + llama-3.1-8b): `_strip_code_fences + json.loads` pattern needs explicit fallback handling for malformed JSON, LLM service unavailability, and truncated-at-max_tokens responses. Three reviewers flagged this from different angles. llama-3.1-8b specifically raised the partial-JSON truncation case.
 - **HIGH — D-07 Obsidian-down handling** (opencode + qwen3.6): The requirement is stated (D-07) but the plan doesn't detail the connectivity check implementation at route level. Both reviewers called this out explicitly.
-- **HIGH — Discord bot error handling** (opencode + qwen3.6): No explicit error branch when the module returns 4xx/5xx — stale placeholders are a live UX failure mode.
-- **MEDIUM — Error handling completeness** (all three): All reviewers flagged that error scenarios need more complete specification and implementation, even if they assessed severity differently.
+- **HIGH — Discord bot error handling** (opencode + qwen3.6 + llama-3.1-8b): No explicit error branch when the module returns 4xx/5xx — stale placeholders are a live UX failure mode. Three reviewers agreed.
+- **MEDIUM — Error handling completeness** (all four): All reviewers flagged that error scenarios need more complete specification and implementation, even if they assessed severity differently.
 - **MEDIUM — Undo operation edge cases** (opencode + qwen2.5-coder): Removing the last Events Log bullet needs precise algorithm specification (empty log, multi-line entries).
+- **MEDIUM — NPC cache refresh timing** (qwen3.6 + llama-3.1-8b): D-22 requires refresh at session start; startup-only cache creates a mismatch if vault changes mid-session.
 
 ### Divergent Views
 
-- **Module-level singletons** (qwen3.6 HIGH, opencode/qwen2.5 unmentioned): qwen3.6 flagged the `obsidian = None` pattern as an architectural anti-pattern. OpenCode and qwen2.5-coder noted it without raising severity. **Context: this is the established project pattern across Phases 29–33. Not a per-phase regression.**
+- **Module-level singletons** (qwen3.6 HIGH, opencode/qwen2.5/llama unmentioned): qwen3.6 flagged the `obsidian = None` pattern as an architectural anti-pattern. **Context: this is the established project pattern across Phases 29–33. Not a per-phase regression.**
 - **Function-scope imports** (qwen3.6 HIGH, others unmentioned): qwen3.6 flagged as flaky test discovery risk. This is intentional — prevents collection-time ImportError during RED phase. **Established pattern, not a defect.**
 - **Guild/channel context in payload** (qwen3.6 HIGH): qwen3.6 raised guild_id/channel_id missing. Session state in Obsidian is date-scoped, not channel-scoped, so routing context is lower actual risk than the reviewer assessed.
 - **Security considerations** (qwen2.5-coder LOW, others unmentioned): qwen2.5-coder flagged API security; given this is a local personal-use system with X-Sentinel-Key, this is accepted risk.
+- **Test coverage goals** (llama-3.1-8b MEDIUM, others unmentioned): llama-3.1-8b flagged lack of explicit coverage % targets. **Context: stub count floors (≥17, ≥8) are the project's coverage contract; percentage targets are not used.**
 
 ### Reviewer Notes on False Positives
 
@@ -265,12 +376,14 @@ The following concerns are **non-blocking** based on project context:
 - Function-scope imports (established TDD pattern, Phases 29–33)
 - Module-level singletons (consistent across all 5 prior modules — Phases 29–33)
 - guild_id/channel_id payload (session is date-scoped, not channel-scoped)
+- Test coverage % goals (stub count + truth assertions are the project standard)
 
 ### Actionable Concerns
 
 The following concerns ARE actionable and should be verified during execution:
 1. **D-07 Obsidian-down check** (34-03): Verify explicit connectivity check is in `start` verb — return structured 503, not unhandled exception
 2. **Discord bot error handling** (34-05): Verify httpx.HTTPStatusError is caught with error embed edit, no stale placeholder on 4xx/5xx
-3. **LLM JSON parse fallback** (34-03): Verify malformed LLM response triggers D-31 skeleton note, not a crash
+3. **LLM JSON parse fallback** (34-03): Verify malformed LLM response triggers D-31 skeleton note, not a crash — including partial/truncated-at-max_tokens JSON
 4. **Undo edge cases** (34-03): Verify algorithm handles empty Events Log and multi-line entries
 5. **D-07 retry logic for patch_heading** (34-02): Verify Obsidian transient errors don't silently drop log events
+6. **NPC cache refresh timing** (34-04): Document whether startup-only cache is acceptable or D-22 requires per-session refresh at `start` verb
