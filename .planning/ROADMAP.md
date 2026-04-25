@@ -512,8 +512,15 @@ Plans:
   3. A dice roll result in Foundry chat produces a hit/miss/DC interpretation in the DM's Discord channel
   4. `X-Sentinel-Key` is stored in Foundry world settings (GM-only) and sent on every POST
   5. Module declares explicit `compatibility.verified` for the installed Foundry version
-**Status:** Not started
-**Plans:** 0 plans
+**Status:** In progress (planning complete 2026-04-25)
+**Plans:** 5 plans
+
+Plans:
+- [ ] 35-01-PLAN.md — Wave 0 RED test stubs (test_foundry.py + test_discord_foundry.py + conftest gold())
+- [ ] 35-02-PLAN.md — Wave 1 Python backend (app/foundry.py helpers + app/routes/foundry.py + config.py)
+- [ ] 35-03-PLAN.md — Wave 2 Discord bot internal listener (aiohttp server + build_foundry_roll_embed)
+- [ ] 35-04-PLAN.md — Wave 3 main.py wiring (REGISTRATION_PAYLOAD + StaticFiles + lifespan + compose env)
+- [ ] 35-05-PLAN.md — Wave 4 Foundry JS module (module.json + sentinel-connector.js + package.sh + UAT)
 
 ### Phase 36: Foundry NPC Pull Import
 **Goal:** Enable the Foundry VTT module to pull NPC actor JSON directly from Sentinel — one click imports the actor into the world with no file attachment or copy-paste.
