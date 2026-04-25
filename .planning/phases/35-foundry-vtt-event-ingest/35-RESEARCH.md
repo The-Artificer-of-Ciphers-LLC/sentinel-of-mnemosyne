@@ -722,22 +722,25 @@ def build_foundry_roll_embed(data: dict) -> "discord.Embed":
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **`preCreateChatMessage` vs `createChatMessage` — outcome availability**
+1. **`preCreateChatMessage` vs `createChatMessage` — outcome availability** — RESOLVED
    - What we know: pf2e-modifiers-matter uses `preCreateChatMessage` but derives outcome from scratch rather than reading `context.outcome`
    - What's unclear: Whether `context.outcome` is populated before `preCreateChatMessage` fires, or only after the message is stored
    - Recommendation: Implement with the defensive fallback (read `context.outcome`, derive if null). If the DM reports missing outcomes in production, switch to `createChatMessage`.
+   - **Resolution:** Use `preCreateChatMessage` (D-01 locked). Read `context.outcome ?? deriveOutcome()` as the defensive fallback implemented in Plan 35-05.
 
-2. **`context.type` string values for roll classification (D-05)**
+2. **`context.type` string values for roll classification (D-05)** — RESOLVED
    - What we know: pf2e-modifiers-matter uses `dcSlug` (`"armor"` = strike, `"fortitude"` = Fort save) rather than a roll type string
    - What's unclear: Whether `context.type` contains `"attack-roll"`, `"saving-throw"`, `"skill-check"` (as CONTEXT.md assumes) or different values
    - Recommendation: Log `context.type` in the JS module during development session. Send the value as-is in the `roll_type` field. Backend accepts any string.
+   - **Resolution:** Filter on `flags.pf2e` existence rather than type string. Treat any message with `flags.pf2e.context` as an eligible roll. Send `context.type` as-is in `roll_type`; backend accepts any string.
 
-3. **Actor name resolution: `chatMessage.actor?.name` vs `chatMessage.speaker?.alias`**
+3. **Actor name resolution: `chatMessage.actor?.name` vs `chatMessage.speaker?.alias`** — RESOLVED
    - What we know: `chatMessage.speaker.alias` is the display name visible in chat; `chatMessage.actor?.name` may be the actual actor document name
    - What's unclear: Which is more reliable for NPC vs PC identification
    - Recommendation: Use `chatMessage.actor?.name ?? chatMessage.speaker?.alias ?? 'Unknown'` — actor name preferred, speaker alias as fallback.
+   - **Resolution:** Use `message.speaker?.alias` as primary (always populated for player speakers in PF2e chat); `message.actor?.name` as fallback.
 
 ---
 

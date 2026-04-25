@@ -63,7 +63,7 @@ Deliver a Foundry VTT JavaScript module (`modules/pathfinder/foundry-client/`) t
 
 ### Backend — pf2e module route
 - **D-08 (new route: `POST /foundry/event`):** New file `modules/pathfinder/app/routes/foundry.py` with a FastAPI router. Receives the event, classifies `event_type`, dispatches to `app/foundry.py` helpers. Follows the single-file-per-noun pattern of `app/routes/harvest.py`, `app/routes/session.py`.
-- **D-09 (REGISTRATION_PAYLOAD):** Add `{"path": "foundry/event", "description": "Receive Foundry VTT game events (FVT-01..03)"}` to `REGISTRATION_PAYLOAD` in `modules/pathfinder/app/main.py`. This is the 15th route entry.
+- **D-09 (REGISTRATION_PAYLOAD):** Add `{"path": "foundry/event", "description": "Receive Foundry VTT game events (FVT-01..03)"}` to `REGISTRATION_PAYLOAD` in `modules/pathfinder/app/main.py`. This is the **16th route entry**.
 - **D-10 (StaticFiles mount for JS distribution):** Mount `modules/pathfinder/foundry-client/dist/` at `/foundry/static/` using FastAPI's `StaticFiles`. `module.json` served at `GET /foundry/module.json`. The zip served at `GET /foundry/sentinel-connector.zip`. These URLs are what the DM pastes into Foundry's module manager as the manifest URL.
 
 ### Backend — LLM narration
@@ -148,7 +148,7 @@ Deliver a Foundry VTT JavaScript module (`modules/pathfinder/foundry-client/`) t
 ### Reusable Assets
 - `modules/pathfinder/app/llm.py` — LiteLLM call helpers; reuse for D-11 narrative LLM call (same `litellm_api_base` + `litellm_model` config)
 - `modules/pathfinder/app/config.py` — `Settings` class; extend with `foundry_narration_model: str | None = None`
-- `modules/pathfinder/app/main.py:63` — `REGISTRATION_PAYLOAD` list; add `foundry/event` entry (15th route)
+- `modules/pathfinder/app/main.py:63` — `REGISTRATION_PAYLOAD` list; add `foundry/event` entry (16th route)
 - `modules/pathfinder/app/main.py:110-160` — lifespan pattern for module-level singleton wiring; extend if a pathfinder→bot HTTP client needs initialization
 - `modules/pathfinder/app/routes/session.py` — FastAPI router structure and pydantic request/response models template for `app/routes/foundry.py`
 - `interfaces/discord/bot.py` — embed builder pattern (`discord.Embed` with fields/footer); `_pf_dispatch` channel send mechanism; async bot lifecycle to hook aiohttp into
