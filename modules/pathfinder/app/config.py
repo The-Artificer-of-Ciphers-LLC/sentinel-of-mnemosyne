@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     session_tz: str = "America/New_York"  # SESSION_TZ env var (D-13)
     session_recap_model: str | None = None  # SESSION_RECAP_MODEL; None falls back to litellm_model (D-37)
 
+    # Phase 35 Foundry VTT event ingest settings (D-12, D-14)
+    foundry_narration_model: str | None = None  # FOUNDRY_NARRATION_MODEL; None falls back to litellm_model
+    discord_bot_internal_url: str = "http://discord-bot:8001"  # DISCORD_BOT_INTERNAL_URL
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
