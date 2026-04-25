@@ -39,7 +39,7 @@ async def generate_foundry_narrative(
     actor_name: str,
     target_name: str | None,
     item_name: str | None,
-    outcome: str,
+    outcome: str | None,        # CR-02 fix: None for hidden-DC rolls
     roll_total: int,
     dc: int | None,
     model: str,
@@ -50,7 +50,7 @@ async def generate_foundry_narrative(
     Returns plain string. On failure, returns "" — caller uses build_narrative_fallback.
     Never raises (D-13 fallback policy).
     """
-    outcome_label = OUTCOME_LABELS.get(outcome, outcome)
+    outcome_label = OUTCOME_LABELS.get(outcome or "", outcome.capitalize() if outcome else "unknown")
     dc_str = str(dc) if dc is not None else "hidden"
     user_content = (
         f"Actor: {actor_name}. "
