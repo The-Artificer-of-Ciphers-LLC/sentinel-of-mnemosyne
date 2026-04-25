@@ -84,17 +84,18 @@ async def test_registration_payload_correct(monkeypatch):
     assert call_kwargs.kwargs["json"]["base_url"] == "http://pf2e-module:8000"
 
 
-def test_registration_payload_has_15_routes():
-    """Phase 34 Wave 3: REGISTRATION_PAYLOAD grows from 14 -> 15 with the session route.
+def test_registration_payload_has_16_routes():
+    """Phase 35 Wave 3: REGISTRATION_PAYLOAD grows from 15 -> 16 with the foundry/event route.
 
-    The 15th entry is {'path': 'session', ...} covering SES-01..03 (start/log/end/show/undo
-    all proxied under the single 'session' path).
+    The 16th entry is {'path': 'foundry/event', ...} covering FVT-01..03 (Foundry VTT event
+    ingest — roll and chat events from sentinel-connector.js).
     """
     from app.main import REGISTRATION_PAYLOAD
 
     routes = REGISTRATION_PAYLOAD["routes"]
-    assert len(routes) == 15, (
-        f"Expected 15 registered routes after Phase 34 Wave 3, got {len(routes)}"
+    assert len(routes) == 16, (
+        f"Expected 16 registered routes after Phase 35 Wave 3, got {len(routes)}"
     )
     paths = [r["path"] for r in routes]
     assert "rule" in paths, f"'rule' missing from registration payload: {paths}"
+    assert "foundry/event" in paths, f"'foundry/event' missing from registration payload: {paths}"

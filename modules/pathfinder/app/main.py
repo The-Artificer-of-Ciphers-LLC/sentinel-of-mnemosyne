@@ -42,10 +42,12 @@ from typing import AsyncGenerator
 import httpx
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.harvest import load_harvest_tables
 from app.obsidian import ObsidianClient
+import app.routes.foundry as _foundry_module
 import app.routes.harvest as _harvest_module
 import app.routes.npc as _npc_module
 import app.routes.rule as _rule_module
@@ -82,6 +84,7 @@ REGISTRATION_PAYLOAD = {
         {"path": "harvest", "description": "Monster harvest report with Medicine/Crafting DCs and vendor values (HRV-01..06)"},
         {"path": "rule", "description": "PF2e Remaster rules RAG engine with Paizo citations (RUL-01..04)"},
         {"path": "session", "description": "Session notes — start/log/end/show/undo with Obsidian persistence (SES-01..03)"},
+        {"path": "foundry/event", "description": "Receive Foundry VTT game events (FVT-01..03)"},
     ],
 }
 
@@ -187,6 +190,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 exc,
             )
             _session_module.npc_roster_cache = {}
+        # Phase 35: wire foundry route's module-level discord_bot_url singleton (D-14).
+        _foundry_module.discord_bot_url = settings.discord_bot_internal_url
         yield
     # obsidian_http_client closes when the async with block exits (on shutdown)
     _npc_module.obsidian = None
@@ -197,6 +202,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _rule_module.aon_url_map = None
     _session_module.obsidian = None
     _session_module.npc_roster_cache = None
+    _foundry_module.discord_bot_url = ""
 
 
 app = FastAPI(
@@ -206,12 +212,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# D-10: Serve Foundry JS module assets (module.json, sentinel-connector.zip).
+# IMPORTANT: mount StaticFiles BEFORE include_router(foundry_router) to prevent
+# the /foundry prefix router from capturing /foundry/static paths (Pitfall 3).
+FOUNDRY_CLIENT_DIR = Path(__file__).parent.parent / "foundry-client"
+if FOUNDRY_CLIENT_DIR.exists():
+    app.mount(
+        "/foundry/static",
+        StaticFiles(directory=str(FOUNDRY_CLIENT_DIR)),
+        name="foundry_static",
+    )
+
+# Phase 35: Foundry VTT event ingest route (FVT-01..03) — must come AFTER StaticFiles mount.
+app.include_router(foundry_router)
 app.include_router(npc_router)
 app.include_router(harvest_router)
 app.include_router(rule_router)
 app.include_router(session_router)
-# Phase 35: Foundry VTT event ingest route (FVT-01..03)
-app.include_router(foundry_router)
 # Also mount at /modules/pathfinder/session so integration tests that simulate
 # the sentinel-core proxy path work against the pathfinder app directly.
 app.include_router(session_router, prefix="/modules/pathfinder")
