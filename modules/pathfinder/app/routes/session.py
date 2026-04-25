@@ -228,6 +228,7 @@ async def _handle_start(req: SessionRequest, today_str: str, path: str) -> dict:
 
     # D-06: collision check — read existing note before writing.
     existing_note = await obsidian.get_note(path)
+    forced_prior_recap: str | None = None
     if existing_note is not None:
         fm = _parse_note_frontmatter(existing_note)
         status = fm.get("status", "")
@@ -248,6 +249,12 @@ async def _handle_start(req: SessionRequest, today_str: str, path: str) -> dict:
                 ),
                 "type": "refuse",
             }
+        # Capture recap from the note being overwritten so the post-PUT scan
+        # still surfaces it even though the path will be reused (same-day --force).
+        if force and status == "ended":
+            candidate = fm.get("recap", "")
+            if candidate and isinstance(candidate, str):
+                forced_prior_recap = candidate
 
     # Build new open session note.
     started_at = utc_now_iso()
@@ -268,26 +275,31 @@ async def _handle_start(req: SessionRequest, today_str: str, path: str) -> dict:
         )
 
     # D-08/D-09/D-10: check for prior ended session to offer recap.
+    # Use the recap captured before the --force overwrite if available; otherwise
+    # scan the vault for the most recent ended session on a different date.
     recap_text = None
     recap_available = False
-    try:
-        prior_sessions = await obsidian.list_directory("mnemosyne/pf2e/sessions/")
-        for prior_path in sorted(prior_sessions, reverse=True):
-            if prior_path == path:
-                continue
-            prior_note = await obsidian.get_note(prior_path)
-            if prior_note is None:
-                continue
-            prior_fm = _parse_note_frontmatter(prior_note)
-            if prior_fm.get("status") == "ended":
-                prior_recap = prior_fm.get("recap", "")
-                if prior_recap and isinstance(prior_recap, str):
-                    recap_available = True
-                    if settings.session_auto_recap or recap_flag:
+    if forced_prior_recap:
+        recap_available = True
+        recap_text = forced_prior_recap
+    else:
+        try:
+            prior_sessions = await obsidian.list_directory("mnemosyne/pf2e/sessions/")
+            for prior_path in sorted(prior_sessions, reverse=True):
+                if prior_path == path:
+                    continue
+                prior_note = await obsidian.get_note(prior_path)
+                if prior_note is None:
+                    continue
+                prior_fm = _parse_note_frontmatter(prior_note)
+                if prior_fm.get("status") == "ended":
+                    prior_recap = prior_fm.get("recap", "")
+                    if prior_recap and isinstance(prior_recap, str):
+                        recap_available = True
                         recap_text = prior_recap
-                break
-    except Exception as exc:
-        logger.warning("session_start: prior session scan failed: %s", exc)
+                    break
+        except Exception as exc:
+            logger.warning("session_start: prior session scan failed: %s", exc)
 
     return {
         "type": "start",
