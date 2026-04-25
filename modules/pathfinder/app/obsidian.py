@@ -169,6 +169,37 @@ class ObsidianClient:
             _inner(), [], f"list_directory({dir_path})"
         )
 
+    async def patch_heading(
+        self,
+        path: str,
+        heading: str,
+        content: str,
+        operation: str = "append",
+    ) -> None:
+        """PATCH /vault/{path} targeting a markdown heading section body.
+
+        IMPORTANT: Uses Content-Type: text/markdown and Target-Type: heading.
+        Do NOT reuse patch_frontmatter_field — that uses application/json + frontmatter.
+        (RESEARCH.md §Pitfall 1 — content-type mismatch causes silent corruption)
+
+        heading: bare heading text without ## (e.g. "Events Log" not "## Events Log")
+                 (RESEARCH.md §Pitfall 2 — heading name mismatch causes 404/invalid-target)
+        operation: "append" | "replace"
+        """
+        resp = await self._client.patch(
+            f"{self._base_url}/vault/{path}",
+            headers={
+                **self._headers,
+                "Content-Type": "text/markdown",
+                "Target-Type": "heading",
+                "Target": heading,
+                "Operation": operation,
+            },
+            content=content.encode("utf-8"),
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+
     async def patch_frontmatter_field(self, path: str, field: str, value) -> None:
         """PATCH /vault/{path} — replace ONE frontmatter field.
 

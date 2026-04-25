@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # the litellm call site — see _resolve_embed_provider in app/llm.py.
     rules_embedding_model: str = "text-embedding-nomic-embed-text-v1.5"
 
+    # Phase 34 session notes settings (D-10, D-13, D-37)
+    session_auto_recap: bool = False  # SESSION_AUTO_RECAP env var (D-10)
+    session_tz: str = "America/New_York"  # SESSION_TZ env var (D-13)
+    session_recap_model: str | None = None  # SESSION_RECAP_MODEL; None falls back to litellm_model (D-37)
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
