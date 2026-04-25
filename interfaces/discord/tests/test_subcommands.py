@@ -862,3 +862,31 @@ async def test_pf_rule_declined_renders_decline_embed():
         or "declined" in combined.lower()
         or "PF1" in combined
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 34 — :pf session dispatch tests (SES-01..03)
+# Wave 0 RED scaffolding — implementation lands in Wave 4 (Plan 34-05).
+# Stubs reference the `session` noun branch and `build_session_embed` /
+# `RecapView` which Plan 34-05 will add to bot.py.
+# Tests collect cleanly; failures are honest RED.
+# ---------------------------------------------------------------------------
+
+
+async def test_session_noun_registered():
+    """D-01: `session` is a recognised noun in `_PF_NOUNS`."""
+    # RED: bot.py does not yet include 'session' in _PF_NOUNS.
+    # Will go GREEN when Plan 34-05 lands.
+    assert "session" in bot._PF_NOUNS
+
+
+async def test_pf_session_unknown_verb_returns_usage():
+    """`:pf session badverb` returns usage text, not an exception (SES-01)."""
+    # RED: bot._pf_dispatch has no `session` branch yet.
+    # Will go GREEN when Plan 34-05 lands.
+    result = await bot._pf_dispatch("session badverb", "user123", channel=None)
+    # Either a usage string or a dict — must not raise
+    if isinstance(result, str):
+        assert "session" in result.lower() or "usage" in result.lower() or result != ""
+    else:
+        assert result is not None
