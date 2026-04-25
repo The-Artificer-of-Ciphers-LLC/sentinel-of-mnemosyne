@@ -48,6 +48,8 @@ created: 2026-04-25
 | 35-04-02 | 04 | 3 | FVT-01..03 | — | compose.yml DISCORD_BOT_INTERNAL_URL present; .env.example has Foundry section | manual | `grep -v '^#' modules/pathfinder/compose.yml | grep -c DISCORD_BOT_INTERNAL_URL` returns 1 | ✅ | ⬜ pending |
 | 35-05-01 | 05 | 4 | FVT-01 | T-35-05-04 | package.sh produces zip with sentinel-connector/ subdirectory at root | automated | `cd modules/pathfinder/foundry-client && bash package.sh && unzip -l sentinel-connector.zip | grep -c sentinel-connector/module.json` | ✅ | ⬜ pending |
 | 35-05-02 | 05 | 4 | FVT-01..03 | — | UAT script passes all 9 automated steps against live stack | automated | `bash scripts/uat_phase35.sh` | ✅ | ⬜ pending |
+| 35-06-A | 06 | 5 | FVT-01..03 | T-35-06-01..05 | discordWebhookUrl/sentinelBaseUrl settings registered; postEvent() has AbortController + no-cors fallback; _postRollEvent/_postChatEvent removed | automated | `grep -c 'discordWebhookUrl' modules/pathfinder/foundry-client/sentinel-connector.js && grep -c 'AbortController' modules/pathfinder/foundry-client/sentinel-connector.js && grep -c "mode: 'no-cors'" modules/pathfinder/foundry-client/sentinel-connector.js` | ✅ | ⬜ pending |
+| 35-06-B | 06 | 5 | FVT-01..03 | T-35-06-03..04 | PNACORSMiddleware defined and registered; all pathfinder tests still pass | automated | `grep -c 'class PNACORSMiddleware' modules/pathfinder/app/main.py && cd modules/pathfinder && python -m pytest tests/ -x -q 2>&1 | tail -1` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
