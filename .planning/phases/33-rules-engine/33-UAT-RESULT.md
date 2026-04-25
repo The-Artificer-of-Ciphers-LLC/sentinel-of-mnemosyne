@@ -1,10 +1,15 @@
 ---
-status: partial
+status: resolved
 phase: 33-rules-engine
 source: [./scripts/uat_phase33.sh]
 started: 2026-04-25T00:18:00Z
-completed: 2026-04-25T00:19:00Z
-result: 16/17 passed
+completed: 2026-04-25T00:35:00Z
+result: 17/17 passed (after Phase 33.1 D-05 calibration)
+result_history:
+  - 2026-04-25T00:19Z 16/17 — UAT-8 failed at user-locked 0.80
+  - 2026-04-25T00:35Z 17/17 — UAT-8 passes after Phase 33.1 calibrated 0.70
+addresses_resolved_in:
+  - .planning/phases/33-rules-engine/33.1-SUMMARY.md
 ---
 
 # Phase 33 — Live UAT Result
