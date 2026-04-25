@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-04-25T05:00:18Z",
+  "phase": "34",
+  "phase_name": "session-notes",
+  "phase_dir": ".planning/phases/34-session-notes",
+  "plan": 5,
+  "task": "UAT Test 9",
+  "total_tasks": 9,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Cold Start Smoke Test", "status": "done"},
+    {"id": 2, "name": "Start a session", "status": "done"},
+    {"id": 3, "name": "Log an event", "status": "done"},
+    {"id": 4, "name": "NPC wikilink auto-tagging", "status": "done"},
+    {"id": 5, "name": "Show narrative", "status": "done"},
+    {"id": 6, "name": "Undo last event", "status": "done"},
+    {"id": 7, "name": "End session with full recap", "status": "done"},
+    {"id": 8, "name": "Collision guard", "status": "done"}
+  ],
+  "remaining_tasks": [
+    {"id": 9, "name": "RecapView button on next session start", "status": "in_progress", "progress": "Code fixed (2 bugs), needs clean end→start flow to verify"}
+  ],
+  "blockers": [
+    {"description": "Test 9 needs ended session in vault then fresh start; current vault has open session from same-day --force loop", "type": "human_action", "workaround": "End current session with :pf session end, then start fresh"}
+  ],
+  "human_actions_pending": [
+    {"action": "End current open session and start a new one to test RecapView button", "context": "Vault has open 2026-04-25.md; need ended status to trigger recap button on next start", "blocking": true}
+  ],
+  "decisions": [
+    {"decision": "recap_text always populated when recap_available=True", "rationale": "session_auto_recap only controls inline display; button needs recap_text regardless", "phase": "34"},
+    {"decision": "Capture prior recap from existing_note BEFORE PUT overwrite on --force", "rationale": "After PUT the ended note is gone, vault scan finds nothing", "phase": "34"},
+    {"decision": "Delete modules/pathfinder/__init__.py", "rationale": "Made /app a Python package in Docker, poisoning pytest sys.path insertion", "phase": "34"},
+    {"decision": "slugify imported from app.session not app.routes.npc", "rationale": "Removes reportlab from host test import chain", "phase": "34"}
+  ],
+  "uncommitted_files": [
+    "modules/pathfinder/app/routes/session.py",
+    ".planning/STATE.md"
+  ],
+  "next_action": "git diff HEAD to review fixes, run host unit tests, commit, then complete Test 9 via Discord",
+  "context_notes": "8/9 UAT tests passed. Two bugs fixed during testing (recap_text gating, --force recap capture). Both uncommitted. Test 9 is a test-setup constraint, not a code bug."
+}
