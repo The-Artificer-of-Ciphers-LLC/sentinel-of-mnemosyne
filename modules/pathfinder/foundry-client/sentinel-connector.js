@@ -1,21 +1,25 @@
 /**
  * Sentinel Connector — Foundry VTT module for Sentinel of Mnemosyne
  *
- * Hooks into PF2e-typed dice rolls and trigger-prefixed chat messages,
- * POSTs structured events to POST {SENTINEL_BASE_URL}/modules/pathfinder/foundry/event.
+ * Hooks into PF2e-typed dice rolls and trigger-prefixed chat messages.
+ * Delivers events via a webhook-first hybrid:
+ *   - If sentinelBaseUrl is set: attempt Sentinel first (3s timeout), then fall back to webhook.
+ *   - If sentinelBaseUrl is empty: post directly to Discord webhook (webhook-only mode).
+ *   - If neither is configured: log once, no-op.
  *
  * Decisions implemented:
  *   D-01: preCreateChatMessage hook — forward PF2e rolls with dc
  *   D-02: chat forwarding only when trigger prefix matches
- *   D-03: X-Sentinel-Key stored as world setting (GM-only write)
+ *   D-03: X-Sentinel-Key stored as world setting (GM-only write, config:false — CR-03)
  *   D-04: compatibility minimum=12 verified=14 (in module.json)
  *   D-05: roll payload shape (event_type, roll_type, actor_name, target_name, outcome, ...)
  *   D-06: chat payload shape (event_type, actor_name, content, timestamp)
- *   D-07: SENTINEL_BASE_URL stored as world setting
+ *   D-07: sentinelBaseUrl stored as world setting (empty default = webhook-only mode)
  *   D-17: ESModule (no bundler) — Foundry v14 native support
+ *   Plan 35-06: webhook-first fallback + PNACORSMiddleware gap closure
  *
  * IMPORTANT: preCreateChatMessage ALWAYS returns true — never suppresses Foundry messages.
- * fetch() calls use .catch(() => {}) — fire-and-forget, never block the hook.
+ * postEvent() is called fire-and-forget (no await) so hook returns synchronously.
  */
 
 const MODULE_ID = 'sentinel-connector';
@@ -34,16 +38,25 @@ function deriveOutcome(rollTotal, dcValue) {
 }
 
 // ---------------------------------------------------------------------------
-// Settings registration (D-02, D-03, D-07)
+// Settings registration (D-02, D-03, D-07, Plan 35-06)
 // ---------------------------------------------------------------------------
 Hooks.once('init', () => {
-  game.settings.register(MODULE_ID, 'baseUrl', {
+  game.settings.register(MODULE_ID, 'sentinelBaseUrl', {
     name: 'Sentinel Base URL',
-    hint: 'Base URL of your Sentinel server, e.g. http://192.168.1.10:8000',
+    hint: 'Sentinel server URL. LAN: http://192.168.1.x:8000  |  Forge play: https://mac-mini.tailXXXX.ts.net:8000  |  Leave empty for webhook-only mode.',
     scope: 'world',
     config: true,
     type: String,
-    default: 'http://localhost:8000',
+    default: '',
+  });
+
+  game.settings.register(MODULE_ID, 'discordWebhookUrl', {
+    name: 'Discord Webhook URL',
+    hint: 'Discord incoming webhook URL for direct roll embeds. Used as fallback when Sentinel is unreachable, or as primary when Sentinel Base URL is empty. Get this from: Discord channel settings → Integrations → Webhooks → New Webhook → Copy Webhook URL.',
+    scope: 'world',
+    config: true,
+    type: String,
+    default: '',
   });
 
   game.settings.register(MODULE_ID, 'apiKey', {
@@ -78,7 +91,18 @@ Hooks.once('ready', () => {
       if (!prefix) return true; // no prefix configured — skip chat forwarding
       const content = chatMessage.content ?? '';
       if (!content.startsWith(prefix)) return true;
-      _postChatEvent(chatMessage, prefix);
+
+      const rawContent = content;
+      const strippedContent = rawContent.startsWith(prefix)
+        ? rawContent.slice(prefix.length).trim()
+        : rawContent.trim();
+
+      postEvent({
+        event_type: 'chat',
+        actor_name: chatMessage.speaker?.alias ?? 'DM',
+        content: strippedContent,
+        timestamp: new Date().toISOString(),
+      });
       return true; // NEVER suppress the message
     }
 
@@ -109,7 +133,7 @@ Hooks.once('ready', () => {
       : null;
     const targetName = targetToken?.name ?? null;
 
-    _postRollEvent({
+    postEvent({
       event_type: 'roll',
       roll_type: context.type ?? 'unknown',
       actor_name: actorName,
@@ -127,44 +151,97 @@ Hooks.once('ready', () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST helpers (D-05, D-06, D-07)
+// Hybrid POST: Sentinel primary (3s timeout) → Discord webhook fallback
+//
+// Sentinel path: LLM narration, full roll data, requires HTTPS for Forge play.
+// Webhook path: direct Discord embed, no LLM, works from any browser/network.
+// If sentinelBaseUrl is empty: skip Sentinel entirely, post webhook directly.
+// If both are unconfigured: log once to console and return (no user-visible error).
 // ---------------------------------------------------------------------------
-function _postRollEvent(payload) {
-  const baseUrl = game.settings.get(MODULE_ID, 'baseUrl');
-  const apiKey = game.settings.get(MODULE_ID, 'apiKey');
-  if (!apiKey) return; // not configured — skip silently
+const SENTINEL_TIMEOUT_MS = 3000;
 
-  fetch(`${baseUrl}/modules/pathfinder/foundry/event`, {
+const OUTCOME_EMOJI = {
+  criticalSuccess: '🎯',
+  success: '✅',
+  failure: '❌',
+  criticalFailure: '💀',
+  unknown: '🎲',
+};
+
+const OUTCOME_COLOR = {
+  criticalSuccess: 0x00FF00,
+  success: 0x00AA00,
+  failure: 0xFF4444,
+  criticalFailure: 0x880000,
+  unknown: 0x888888,
+};
+
+async function postEvent(payload) {
+  const sentinelUrl = game.settings.get(MODULE_ID, 'sentinelBaseUrl');
+  const sentinelKey = game.settings.get(MODULE_ID, 'apiKey');
+  const webhookUrl = game.settings.get(MODULE_ID, 'discordWebhookUrl');
+
+  // Primary path: Sentinel (LLM narration)
+  if (sentinelUrl) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), SENTINEL_TIMEOUT_MS);
+      await fetch(`${sentinelUrl}/modules/pathfinder/foundry/event`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Sentinel-Key': sentinelKey,
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return; // success — no fallback needed
+    } catch (err) {
+      // AbortError = 3s timeout; TypeError = mixed content / network / CORS block
+      console.warn('[sentinel-connector] Sentinel POST failed, falling back to webhook:', err.message);
+    }
+  }
+
+  // Fallback path: direct Discord webhook (no LLM narration)
+  if (!webhookUrl) {
+    if (!sentinelUrl) {
+      // Neither configured — log once, silent no-op
+      console.info('[sentinel-connector] No Sentinel URL or Discord webhook configured — roll not forwarded.');
+    }
+    return;
+  }
+
+  // Build embed from local roll data
+  const outcome = payload.outcome ?? 'unknown';
+  const emoji = OUTCOME_EMOJI[outcome] ?? '🎲';
+  const color = OUTCOME_COLOR[outcome] ?? 0x888888;
+
+  let title = `${emoji} ${outcome}`;
+  if (payload.actor_name) title += ` | ${payload.actor_name}`;
+  if (payload.target_name) title += ` vs ${payload.target_name}`;
+
+  let footerParts = [];
+  if (payload.roll_total != null) footerParts.push(`Roll: ${payload.roll_total}`);
+  if (payload.dc_hidden) {
+    footerParts.push('DC: [hidden]');
+  } else if (payload.dc != null) {
+    footerParts.push(`DC/AC: ${payload.dc}`);
+  }
+  if (payload.item_name) footerParts.push(payload.item_name);
+  if (payload.roll_type && payload.roll_type !== 'unknown') footerParts.push(payload.roll_type);
+
+  const embed = {
+    title,
+    description: payload.event_type === 'chat' ? (payload.content ?? '') : '',
+    footer: { text: footerParts.join(' | ') },
+    color,
+  };
+
+  fetch(webhookUrl, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Sentinel-Key': apiKey,
-    },
-    body: JSON.stringify(payload),
-  }).catch(err => console.warn('[sentinel-connector] Roll POST failed:', err));
-}
-
-function _postChatEvent(chatMessage, prefix) {
-  const baseUrl = game.settings.get(MODULE_ID, 'baseUrl');
-  const apiKey = game.settings.get(MODULE_ID, 'apiKey');
-  if (!apiKey) return;
-
-  const rawContent = chatMessage.content ?? '';
-  const content = rawContent.startsWith(prefix)
-    ? rawContent.slice(prefix.length).trim()
-    : rawContent.trim();
-
-  fetch(`${baseUrl}/modules/pathfinder/foundry/event`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Sentinel-Key': apiKey,
-    },
-    body: JSON.stringify({
-      event_type: 'chat',
-      actor_name: chatMessage.speaker?.alias ?? 'DM',
-      content: content,
-      timestamp: new Date().toISOString(),
-    }),
-  }).catch(err => console.warn('[sentinel-connector] Chat POST failed:', err));
+    mode: 'no-cors', // Discord webhooks: no CORS preflight, opaque response is fine
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ embeds: [embed] }),
+  }).catch(() => {}); // fire-and-forget
 }
