@@ -7,7 +7,7 @@
   "firecrawl": false,
   "exa_search": false,
   "git": {
-    "branching_strategy": "none",
+    "branching_strategy": "milestone",
     "phase_branch_template": "gsd/phase-{phase}-{slug}",
     "milestone_branch_template": "gsd/{milestone}-{slug}",
     "quick_branch_template": null
@@ -28,7 +28,14 @@
     "skip_discuss": false,
     "code_review": true,
     "code_review_depth": "standard",
+    "tdd_mode": true,
     "_auto_chain_active": false
+  },
+  "intel": {
+    "enabled": true
+  },
+  "graphify": {
+    "enabled": true
   },
   "hooks": {
     "context_warnings": true
