@@ -1361,7 +1361,7 @@ class SentinelBot(discord.Client):
         _aiohttp_app.router.add_post("/internal/notify", self._handle_internal_notify)
         self._internal_runner = web.AppRunner(_aiohttp_app)
         await self._internal_runner.setup()
-        site = web.TCPSite(self._internal_runner, "0.0.0.0", internal_port)
+        site = web.TCPSite(self._internal_runner, "127.0.0.1", internal_port)  # CR-02: loopback only
         await site.start()
         logger.info("Internal notification server started on port %d", internal_port)
 

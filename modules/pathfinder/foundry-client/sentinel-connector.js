@@ -50,7 +50,7 @@ Hooks.once('init', () => {
     name: 'Sentinel API Key',
     hint: 'The X-Sentinel-Key shared secret from your .env file.',
     scope: 'world',
-    config: true,
+    config: false,  // CR-03: hide from settings UI panel — readable via browser devtools otherwise
     type: String,
     default: '',
   });
@@ -93,8 +93,12 @@ Hooks.once('ready', () => {
     const rollTotal = chatMessage.rolls?.[0]?.total ?? chatMessage.roll?.total;
     if (rollTotal == null) return true; // roll data unavailable — skip (Pitfall 2)
 
-    // D-01 amendment: read pre-computed outcome or derive from roll math
-    const outcome = context.outcome ?? deriveOutcome(rollTotal, dcValue);
+    // D-01 amendment: read pre-computed outcome or derive from roll math.
+    // CR-01: when DC is hidden (dcValue=null), deriveOutcome would coerce null→0 and
+    // produce wrong results. Use context.outcome when available; fall back to "unknown"
+    // for hidden-DC rolls where pf2e hasn't pre-computed the outcome.
+    const outcome = context.outcome
+      ?? (dc_hidden ? 'unknown' : deriveOutcome(rollTotal, dcValue));
 
     const actorName = chatMessage.speaker?.alias ?? chatMessage.actor?.name ?? 'Unknown';
 

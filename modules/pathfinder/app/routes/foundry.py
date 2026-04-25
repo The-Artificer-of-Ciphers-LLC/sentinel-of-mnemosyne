@@ -43,7 +43,7 @@ class FoundryRollEvent(BaseModel):
     roll_type: str
     actor_name: str
     target_name: Optional[str] = None
-    outcome: str
+    outcome: Optional[str] = None  # CR-01: None for hidden-DC rolls where outcome is unknown
     roll_total: int
     dc: Optional[int] = None
     dc_hidden: bool = False
