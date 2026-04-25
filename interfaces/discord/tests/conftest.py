@@ -99,6 +99,46 @@ _discord_stub.app_commands = _app_commands_stub
 sys.modules.setdefault("discord", _discord_stub)
 sys.modules.setdefault("discord.app_commands", _app_commands_stub)
 
+# Phase 34: discord.ui stubs for RecapView testing (Wave 0 gap from RESEARCH.md)
+# Never add discord.ui stubs per-file in test modules — extend centrally here (L-5 prevention).
+
+
+class _ButtonStyleStub:
+    primary = "primary"
+    secondary = "secondary"
+
+
+class _ViewStub:
+    """Minimal discord.ui.View stub for RecapView tests."""
+
+    def __init__(self, timeout=None):
+        self.timeout = timeout
+        self.message = None
+
+    def stop(self):
+        pass
+
+    async def on_timeout(self):
+        pass
+
+    def add_item(self, item):
+        pass
+
+
+def _button_decorator(**kwargs):
+    """Passthrough decorator stub for @discord.ui.button."""
+    return lambda f: f
+
+
+_ui_stub = types.ModuleType("discord.ui")
+_ui_stub.View = _ViewStub
+_ui_stub.Button = object  # used as base class annotation only
+_ui_stub.button = _button_decorator
+
+_discord_stub.ui = _ui_stub
+_discord_stub.ButtonStyle = _ButtonStyleStub
+sys.modules.setdefault("discord.ui", _ui_stub)
+
 # Conftest-level path insertion so `import bot` works in every test file.
 os.environ.setdefault("DISCORD_BOT_TOKEN", "test-token-for-pytest")
 os.environ.setdefault("SENTINEL_API_KEY", "test-key-for-pytest")
