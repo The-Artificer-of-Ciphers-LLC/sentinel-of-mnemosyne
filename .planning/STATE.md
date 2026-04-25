@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
-stopped_at: Phase 33 code complete + reviewed + auto-fixed — all 5 plans landed (Wave 0 RED stubs → Wave 1 pure transforms → Wave 2 LLM adapters + threshold calibration → Wave 3 HTTP routes + lifespan → Wave 4 Discord bot + UAT harness). gsd-verifier: 23/23 must-haves verified at automated layer (status: human_needed). gsd-code-reviewer: 1 BLOCKER + 6 WARNINGS + 4 INFO; all 7 fixed by gsd-code-fixer in 8 atomic commits, IN-01 and IN-02 documented as deferred-to-human in 33-REVIEW-FIX.md. Pathfinder 142/142 GREEN (138 baseline + 4 new regression tests for fixes); Discord 48/48 GREEN. uat_phase33.sh syntax clean. Two human-verify items remain: (1) `./scripts/uat_phase33.sh` live-stack UAT (Docker + LM Studio + Obsidian); (2) in-Discord visual verification of D-08 embed colors / D-11 placeholder-edit UX / D-13/D-14 Obsidian frontmatter.
-last_updated: "2026-04-24T22:00:00.000Z"
-last_activity: 2026-04-24 -- Phase 33 code shipped, reviewed, auto-fixed; awaiting human-verify (live UAT + Discord visual)
+stopped_at: Phase 33 live UAT executed — 16/17 PASS. Stack rebuilt + restarted with Phase 33 code (4 containers: sentinel-core, pf2e-module, discord, ofelia/pentest-agent). pf2e-module lifespan loaded 148 corpus chunks, built embedding index shape (148, 768), 22 topics. UAT exercised PF1 decline + corpus hit + corpus miss + cache hit + bot 4 sub-verbs + D-11 placeholder UX + D-15 Monster-Core-generates-not-declines. Live UAT also caught and fixed two new bugs (commits 9f1f65b + eb364a8): litellm provider-prefix missing in embed_texts (lifespan crashed), and `docker exec` vs `docker compose exec` container name mismatch in uat_phase33.sh. ONE remaining UAT failure: UAT-8 reuse-match ≥0.80 — empirical paraphrase cosine 0.7765 < D-05-locked 0.80 on text-embedding-nomic-embed-text-v1.5; D-05 is user-locked and cannot be changed unilaterally per AI Deferral Ban. Pending: (a) operator decides UAT-8 outcome (accept / re-tune D-05 / different embedding model — see 33-UAT-RESULT.md), (b) Task 33-05-06 in-Discord visual verification still required for D-08 colors / D-11 UX / D-13-14 frontmatter.
+last_updated: "2026-04-25T00:30:00.000Z"
+last_activity: 2026-04-25 -- Phase 33 live UAT 16/17 PASS; UAT-8 awaits D-05 operator decision; Discord visual still pending
 progress:
   total_phases: 35
   completed_phases: 16
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 33 (Rules Engine) — EXECUTING
-Plan: 5 of 5 (Plans 33-01..05 code complete; Plan 33-05 Tasks 5-6 awaiting human-run live UAT + Discord visual verification)
-Next Plan: Human runs `./scripts/uat_phase33.sh` (full live-stack UAT) + Discord visual checks per 33-05-PLAN.md `<how-to-verify>`
+Plan: 5 of 5 (Plans 33-01..05 code complete; live UAT 16/17 PASS; UAT-8 D-05 decision + Task 33-05-06 in-Discord visual remain)
+Next Plan: Operator decides UAT-8 outcome (see 33-UAT-RESULT.md §"UAT-8 — Calibration Failure") + runs in-Discord visual verification (Task 33-05-06)
 Prior Phase: 32 (Monster Harvesting) — ✅ COMPLETE + VERIFIED (5/5 plans, 22/22 must-haves, 89/89 + 38/38 unit, 17/17 live UAT)
-Milestone: v0.5 The Dungeon — IN PROGRESS (5/9 phases — 33 awaiting human-verify)
-Status: Phase 33 code shipped, awaiting human-verify gate
-Last activity: 2026-04-24 -- Phase 33-05 Wave 4 code complete (10 bot stubs GREEN; pathfinder 138/138 + discord 48/48; 6 atomic commits + merge)
+Milestone: v0.5 The Dungeon — IN PROGRESS (5/9 phases — 33 awaiting D-05 decision + Discord visual)
+Status: Phase 33 live UAT 16/17 PASS; awaiting operator on UAT-8 + in-Discord checks
+Last activity: 2026-04-25 -- Phase 33 live UAT executed (16/17 PASS); 2 bugs caught + fixed during UAT (litellm prefix + docker exec name); UAT-8 D-05 reuse threshold blocker
 
 ## Milestone Progress
 
