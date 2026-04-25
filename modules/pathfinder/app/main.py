@@ -80,6 +80,7 @@ REGISTRATION_PAYLOAD = {
         {"path": "npc/say", "description": "In-character NPC dialogue with mood tracking (DLG-01..03)"},
         {"path": "harvest", "description": "Monster harvest report with Medicine/Crafting DCs and vendor values (HRV-01..06)"},
         {"path": "rule", "description": "PF2e Remaster rules RAG engine with Paizo citations (RUL-01..04)"},
+        {"path": "session", "description": "Session notes — start/log/end/show/undo with Obsidian persistence (SES-01..03)"},
     ],
 }
 

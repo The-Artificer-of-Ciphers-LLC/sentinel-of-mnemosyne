@@ -29,6 +29,11 @@ services:
       # without one. Any non-empty string works. Mirrors sentinel-core's
       # LiteLLMProvider(api_key="lmstudio") convention (main.py:91).
       - OPENAI_API_KEY=lmstudio
+      # Session Notes (Phase 34 / SES-01..03, D-10, D-13, D-37)
+      - SESSION_AUTO_RECAP=false
+      - SESSION_TZ=America/New_York
+      # SESSION_RECAP_MODEL: leave unset to fall back to LITELLM_MODEL
+      # - SESSION_RECAP_MODEL=
     depends_on:
       sentinel-core:
         condition: service_healthy
