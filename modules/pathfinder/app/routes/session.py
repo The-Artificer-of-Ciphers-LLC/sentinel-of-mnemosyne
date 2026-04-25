@@ -24,12 +24,11 @@ import re
 import yaml
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.config import settings
 from app.llm import generate_session_recap, generate_story_so_far
 from app.resolve_model import resolve_model
-from app.routes.npc import slugify  # NPC slug normalization — consistent with Phase 29 identity
 from app.session import (
     KNOWN_EVENT_TYPES,
     apply_npc_links,
@@ -38,6 +37,7 @@ from app.session import (
     detect_npc_slug_collision,
     format_event_line,
     session_note_markdown,
+    slugify,
     slugify_location,
     truncate_event_text,
     utc_now_iso,
@@ -98,6 +98,14 @@ class SessionRequest(BaseModel):
         if v not in {"start", "log", "end", "show", "undo"}:
             raise ValueError(f"unknown session verb: {v!r}")
         return v
+
+    @model_validator(mode="after")
+    def _validate_log_args(self) -> "SessionRequest":
+        # CR-02: wire _validate_session_event at the model boundary for the log verb.
+        # Other verbs expect args to be empty or contain flags — validate only when verb=="log".
+        if self.verb == "log":
+            self.args = _validate_session_event(self.args)
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -364,13 +372,15 @@ async def _handle_undo(req: SessionRequest, path: str) -> dict:
     remaining_lines = event_lines[:-1]
     remaining_count = len(remaining_lines)
 
-    # Rebuild Events Log section body.
+    # Rebuild Events Log section body (WR-02: send "\n" when empty so the heading
+    # is preserved; empty string deletes the section content entirely).
     new_events_body = "\n".join(remaining_lines) if remaining_lines else ""
+    body_to_send = new_events_body if new_events_body else "\n"
 
     # Try patch_heading replace first; fall back to GET-then-PUT on failure (D-17).
     try:
         await obsidian.patch_heading(
-            path, "Events Log", new_events_body, operation="replace"
+            path, "Events Log", body_to_send, operation="replace"
         )
     except Exception as patch_exc:
         logger.warning(
@@ -382,7 +392,7 @@ async def _handle_undo(req: SessionRequest, path: str) -> dict:
             r"(## Events Log\s*\n).*?(?=\n## |\Z)", re.DOTALL
         )
         new_note = events_section_re.sub(
-            lambda m: m.group(1) + new_events_body,
+            lambda m: m.group(1) + body_to_send,
             note,
         )
         try:
@@ -462,15 +472,21 @@ async def _handle_end(req: SessionRequest, path: str) -> dict:
         }
 
     date_str = str(fm.get("date", datetime.date.today().isoformat()))
-    started_at = str(fm.get("started_at", utc_now_iso()))
+    raw_started_at = fm.get("started_at")
+    if isinstance(raw_started_at, datetime.datetime):
+        started_at = raw_started_at.isoformat()
+    elif raw_started_at is not None:
+        started_at = str(raw_started_at)
+    else:
+        started_at = utc_now_iso()
 
     event_lines, _section_text = _extract_events_log_section(note)
     events_log = "\n".join(event_lines) if event_lines else "_No events logged._"
 
-    # Collect NPC slugs mentioned in log (scan [[slug]] wikilinks + roster cache).
+    # Collect NPC slugs from wikilinks in events log only (WR-03: roster excluded —
+    # fetching all NPCs inflates LLM context with absent characters).
     wikilink_slugs = set(re.findall(r"\[\[([^\]]+)]]", events_log))
-    roster_slugs = set(npc_roster_cache.keys()) if npc_roster_cache else set()
-    candidate_npc_slugs = list(wikilink_slugs | roster_slugs)
+    candidate_npc_slugs = list(wikilink_slugs)
 
     # Build NPC context block for LLM.
     npc_frontmatter_block = await _build_npc_frontmatter_block(candidate_npc_slugs, obsidian)
@@ -549,10 +565,17 @@ async def _handle_end(req: SessionRequest, path: str) -> dict:
     npc_slugs_set = set(npc_roster_cache.keys()) if npc_roster_cache else set()
     await _create_location_stubs(raw_locations, date_str, npc_slugs_set, obsidian)
 
+    # Apply NPC wikilinks to recap text before building the note (CR-01).
+    if valid_npc_slugs:
+        npc_link_pattern = build_npc_link_pattern(valid_npc_slugs)
+        if npc_link_pattern is not None:
+            slug_map = {s: s for s in valid_npc_slugs}
+            recap_text = apply_npc_links(recap_text, npc_link_pattern, slug_map)
+
     # Build full ended note.
     full_note = session_note_markdown(
         date=date_str,
-        started_at=str(started_at),
+        started_at=started_at,
         ended_at=ended_at,
         status="ended",
         event_count=len(event_lines),
@@ -562,15 +585,6 @@ async def _handle_end(req: SessionRequest, path: str) -> dict:
         npc_notes=npc_notes,
         events_log_lines=event_lines,
     )
-
-    # Inject wikilinks for mentioned NPCs into recap body section.
-    # Build wikilink-rewritten recap for the ## Recap section.
-    if valid_npc_slugs:
-        npc_link_pattern = build_npc_link_pattern(valid_npc_slugs)
-        if npc_link_pattern is not None:
-            slug_map = {s: s for s in valid_npc_slugs}
-            recap_text_linked = apply_npc_links(recap_text, npc_link_pattern, slug_map)
-            full_note = full_note.replace(recap_text, recap_text_linked, 1)
 
     try:
         await obsidian.put_note(path, full_note)
@@ -588,6 +602,7 @@ async def _handle_end(req: SessionRequest, path: str) -> dict:
     return {
         "type": "end",
         "path": path,
+        "date": date_str,
         "recap": recap_text[:500],
         "npcs": valid_npc_slugs,
         "locations": location_slugs,

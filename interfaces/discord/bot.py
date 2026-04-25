@@ -465,7 +465,7 @@ def build_session_embed(data: dict) -> "discord.Embed":
         npcs = ", ".join(f"[[{s}]]" for s in (data.get("npcs") or []))
         locations = ", ".join(f"[[{s}]]" for s in (data.get("locations") or []))
         embed = discord.Embed(
-            title=f"Session ended — {data.get('date', data.get('path', '?'))}",
+            title=f"Session ended — {data.get('date', '?')}",
             description=(recap[:2048] if recap else "_Recap empty._"),
             color=discord.Color.dark_green(),
         )
@@ -1246,7 +1246,7 @@ async def _persist_thread_id(thread_id: int) -> None:
                 content=f"{thread_id}\n".encode("utf-8"),
             )
     except Exception as exc:
-        logger.warning(f"Failed to persist thread ID {thread_id}: {exc}")
+        logger.warning("Failed to persist thread ID %s: %s", thread_id, exc)
 
 
 class SentinelBot(discord.Client):
@@ -1263,8 +1263,9 @@ class SentinelBot(discord.Client):
         synced_commands = await self.tree.sync()
         synced_count = len(synced_commands) if synced_commands else 0
         logger.info(
-            f"Slash commands synced to Discord API: {synced_count} command(s) registered "
-            f"(global sync — up to 1hr propagation to all servers)."
+            "Slash commands synced to Discord API: %d command(s) registered "
+            "(global sync — up to 1hr propagation to all servers).",
+            synced_count,
         )
         if synced_count == 0:
             logger.warning(
@@ -1286,17 +1287,17 @@ class SentinelBot(discord.Client):
                         line = line.strip()
                         if line.isdigit():
                             SENTINEL_THREAD_IDS.add(int(line))
-                    logger.info(f"Loaded {len(SENTINEL_THREAD_IDS)} persisted thread IDs")
+                    logger.info("Loaded %d persisted thread IDs", len(SENTINEL_THREAD_IDS))
                 elif resp.status_code == 404:
                     logger.info("No discord-threads.md yet — starting fresh")
                 else:
                     logger.warning("Unexpected status %d loading thread IDs", resp.status_code)
         except Exception as exc:
-            logger.warning(f"Could not load thread IDs from vault: {exc}")
+            logger.warning("Could not load thread IDs from vault: %s", exc)
 
     async def on_ready(self) -> None:
         user = self.user
-        logger.info(f"Sentinel bot ready: {user} (id={user.id if user else 'unknown'})")
+        logger.info("Sentinel bot ready: %s (id=%s)", user, user.id if user else "unknown")
 
     async def on_message(self, message: discord.Message) -> None:
         """
@@ -1328,7 +1329,7 @@ class SentinelBot(discord.Client):
             asyncio.ensure_future(_persist_thread_id(thread.id))
 
         user_id = str(message.author.id)
-        logger.info(f"Thread reply from {user_id} in thread {message.channel.id}: {message.content[:60]}")
+        logger.info("Thread reply from %s in thread %s: %s", user_id, message.channel.id, message.content[:60])
 
         async with message.channel.typing():
             ai_response = await _route_message(
@@ -1394,11 +1395,11 @@ async def sen(interaction: discord.Interaction, message: str) -> None:
         )
         SENTINEL_THREAD_IDS.add(thread.id)
         await _persist_thread_id(thread.id)
-        logger.info(f"Created thread {thread.id} '{thread_name}' for user {interaction.user.id}")
+        logger.info("Created thread %s '%s' for user %s", thread.id, thread_name, interaction.user.id)
     except discord.Forbidden as exc:
-        logger.error(f"Missing permission to create thread (403): {exc}")
+        logger.error("Missing permission to create thread (403): %s", exc)
     except discord.HTTPException as exc:
-        logger.error(f"Failed to create thread (HTTP {exc.status}, code {exc.code}): {exc}")
+        logger.error("Failed to create thread (HTTP %s, code %s): %s", exc.status, exc.code, exc)
 
     # 3. Route message — subcommand, help-intent, or AI.
     # Phase 31 (WR-01): forward the thread we just created as the channel so the

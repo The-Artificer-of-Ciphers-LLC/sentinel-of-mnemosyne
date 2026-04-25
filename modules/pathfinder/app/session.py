@@ -15,14 +15,23 @@ logger = logging.getLogger(__name__)
 
 
 def _slugify(name: str) -> str:
-    """Slug generator — same normalization as Phase 29 app/routes/npc.py slugify.
+    """Slug generator — inline copy of app/routes/npc.py slugify (last synced Phase 34).
 
     Inlined to avoid importing app.routes.npc (which pulls in reportlab/numpy,
     breaking host-side tests outside the Docker container). The pattern is
     identical: [a-z0-9-] only, longest-runs collapsed to single hyphen.
-    Callers should treat this as 'from app.routes.npc import slugify'.
+    If the normalization rule in npc.py ever changes, update this copy too.
     """
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def slugify(name: str) -> str:
+    """Public alias for NPC slug normalization — same pattern as app/routes/npc.py.
+
+    Use this instead of importing from app.routes.npc to keep the host test
+    import chain free of reportlab/numpy (Docker-only deps).
+    """
+    return _slugify(name)
 
 
 
@@ -309,6 +318,7 @@ async def build_npc_roster_cache(obsidian_client) -> dict:
 
     for path in npc_paths:
         if not path.endswith(".md"):
+            logger.debug("build_npc_roster_cache: skipping non-markdown path %s", path)
             continue
         try:
             note = await obsidian_client.get_note(path)

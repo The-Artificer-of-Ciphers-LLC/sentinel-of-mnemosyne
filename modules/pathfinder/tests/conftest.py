@@ -75,25 +75,25 @@ def pre_patch_litellm_acompletion(request):
 
     original_acompletion = litellm.acompletion
     tracker = AsyncMock(name="conftest.litellm.acompletion")
-    _state = {"inner_mock": None}
+    _state: dict = {"stack": []}
 
     # Intercept module-level setattr to detect patch save/restore events.
+    # WR-01: use a stack so nested patches each propagate their await_count correctly.
     _orig_module_class = type(litellm)
 
     class _InterceptingMeta(_orig_module_class):
         def __setattr__(cls, name, value):  # noqa: N805
             if name == "acompletion":
                 if value is not tracker and value is not original_acompletion:
-                    # Inner patch is SETTING a new mock (entering with block).
-                    _state["inner_mock"] = value
-                elif value is tracker and _state["inner_mock"] is not None:
-                    # Inner patch is RESTORING to our tracker (exiting with block).
-                    inner = _state["inner_mock"]
+                    # Inner patch entering — push onto stack.
+                    _state["stack"].append(value)
+                elif value is tracker and _state["stack"]:
+                    # Inner patch exiting — pop and propagate await_count.
+                    inner = _state["stack"].pop()
                     try:
                         tracker.await_count = tracker.await_count + getattr(inner, "await_count", 0)
                     except (AttributeError, TypeError):
                         pass
-                    _state["inner_mock"] = None
             super().__setattr__(name, value)
 
     litellm.__class__ = _InterceptingMeta
