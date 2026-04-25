@@ -89,6 +89,10 @@ if DISCORD_ALLOWED_CHANNELS_RAW.strip():
         if cid.strip().isdigit()
     }
 
+# WR-04 fix: dedicated Foundry roll notification channel (avoids min()-by-snowflake heuristic)
+_NOTIFY_CHANNEL_ID_RAW = os.environ.get("DISCORD_NOTIFY_CHANNEL_ID", "")
+NOTIFY_CHANNEL_ID: int | None = int(_NOTIFY_CHANNEL_ID_RAW) if _NOTIFY_CHANNEL_ID_RAW.isdigit() else None
+
 # Track thread IDs created by this bot instance so on_message knows which to respond to.
 # Uses the parent channel ID set for allowlist checks on thread replies.
 SENTINEL_THREAD_IDS: set[int] = set()
@@ -1379,7 +1383,7 @@ class SentinelBot(discord.Client):
         except Exception:
             return web.Response(status=400)
 
-        channel_id = min(ALLOWED_CHANNEL_IDS) if ALLOWED_CHANNEL_IDS else None  # WR-02: deterministic
+        channel_id = NOTIFY_CHANNEL_ID or (min(ALLOWED_CHANNEL_IDS) if ALLOWED_CHANNEL_IDS else None)  # WR-04 fix: explicit var first, fallback to oldest allowed
         if channel_id is None:
             logger.warning("_handle_internal_notify: no DISCORD_ALLOWED_CHANNELS configured")
             return web.Response(status=500)
