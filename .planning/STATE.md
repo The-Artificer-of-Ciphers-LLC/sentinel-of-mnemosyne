@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
-status: "Phase 35 planned — 5 plans ready to execute. Run /gsd-execute-phase 35."
-stopped_at: Phase 35 planned (2026-04-25)
-last_updated: "2026-04-25T06:00:00.000Z"
-last_activity: 2026-04-25 -- Phase 35 planned: 5 plans (Wave 0 TDD RED, Wave 1 Python backend + Discord bot, Wave 3 main.py wiring, Wave 4 JS module + UAT)
+status: "Phase 35 in progress — Plan 01 complete (Wave 0 RED stubs). 4 plans remaining."
+stopped_at: Phase 35 Plan 01 complete (2026-04-25)
+last_updated: "2026-04-25T07:00:00.000Z"
+last_activity: 2026-04-25 -- Phase 35 Plan 01 complete: Wave 0 RED stubs (8 tests across test_foundry.py + test_discord_foundry.py, conftest gold() added)
 progress:
   total_phases: 35
   completed_phases: 19
@@ -25,13 +25,13 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 35 (Foundry VTT Event Ingest) — READY TO EXECUTE
-Plan: 0 of 5 (5 plans planned, execution not started)
-Next Plan: /gsd-execute-phase 35
+Phase: 35 (Foundry VTT Event Ingest) — IN PROGRESS
+Plan: 1 of 5 (Plan 01 complete — Wave 0 RED stubs)
+Next Plan: 35-02 (Wave 1 — Foundry route + service implementation)
 Prior Phase: 34 (Session Notes) — ✅ COMPLETE + FULLY VERIFIED (9/9 UAT passed 2026-04-25)
 Milestone: v0.5 The Dungeon — IN PROGRESS (7/9 phases complete: 28, 29, 30, 31, 32, 33, 34)
-Status: Phase 35 planned (5 plans, 5 waves, FVT-01/02/03). Execute with /gsd-execute-phase 35.
-Last activity: 2026-04-25 -- Phase 34 UAT 9/9 passed; RecapView Bug A+B committed; transition complete
+Status: Phase 35 Plan 01 complete. Wave 0 RED stubs: 8 tests (6 pathfinder + 2 discord), conftest gold() added.
+Last activity: 2026-04-25 -- Phase 35 Plan 01 complete: Wave 0 RED stubs committed (37daf84, a015a72, 345f8a8)
 
 ## Milestone Progress
 

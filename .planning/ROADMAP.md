@@ -512,11 +512,11 @@ Plans:
   3. A dice roll result in Foundry chat produces a hit/miss/DC interpretation in the DM's Discord channel
   4. `X-Sentinel-Key` is stored in Foundry world settings (GM-only) and sent on every POST
   5. Module declares explicit `compatibility.verified` for the installed Foundry version
-**Status:** In progress (planning complete 2026-04-25)
-**Plans:** 5 plans
+**Status:** In progress (Plan 01 complete 2026-04-25)
+**Plans:** 5 plans (1/5 complete)
 
 Plans:
-- [ ] 35-01-PLAN.md — Wave 0 RED test stubs (test_foundry.py + test_discord_foundry.py + conftest gold())
+- [x] 35-01-PLAN.md — Wave 0 RED test stubs (test_foundry.py + test_discord_foundry.py + conftest gold())
 - [ ] 35-02-PLAN.md — Wave 1 Python backend (app/foundry.py helpers + app/routes/foundry.py + config.py)
 - [ ] 35-03-PLAN.md — Wave 1 Discord bot internal listener (aiohttp server + build_foundry_roll_embed)
 - [ ] 35-04-PLAN.md — Wave 3 main.py wiring (REGISTRATION_PAYLOAD + StaticFiles + lifespan + compose env)
