@@ -816,7 +816,7 @@ async def _pf_dispatch(
                     if placeholder is not None and hasattr(placeholder, "edit"):
                         try:
                             await placeholder.edit(
-                                content=f"⚠ Rules query failed — {exc}",
+                                content=f"⚠ Rules query failed — {str(exc).splitlines()[0]}",
                                 embed=None,
                             )
                             return {"type": "suppressed", "content": "", "embed": None}

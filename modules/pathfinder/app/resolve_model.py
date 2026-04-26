@@ -37,6 +37,6 @@ async def resolve_model(task_kind: TaskKind, *, force_refresh: bool = False) -> 
         preferences=preferences,
         default=settings.litellm_model,
     )
-    if "/" in chosen:
+    if chosen.startswith(_LITELLM_PROVIDER_PREFIX):
         return chosen
     return f"{_LITELLM_PROVIDER_PREFIX}{chosen}"
