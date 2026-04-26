@@ -5,7 +5,7 @@ milestone_name: — The Dungeon
 status: completed
 stopped_at: context exhaustion at 75% (2026-04-25)
 last_updated: "2026-04-25T18:38:00.113Z"
-last_activity: "2026-04-25 -- Phase 35 Plan 06 complete: Forge connectivity gap closure (webhook-first + PNACORSMiddleware)"
+last_activity: "2026-04-26 -- Phase 36 planned: 3 plans (Wave 0 TDD stubs, Wave 1 Python backend, Wave 2 JS frontend)"
 progress:
   total_phases: 35
   completed_phases: 19
@@ -21,17 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 35 — Foundry VTT Event Ingest
+**Current focus:** Phase 36 — Foundry NPC Pull Import
 
 ## Current Position
 
-Phase: 35 (Foundry VTT Event Ingest) — COMPLETE
-Plan: 6 of 6 (All plans complete — FVT-01..03 requirements satisfied, Forge gap closure applied)
-Next Plan: Phase 36 Plan 01 (Foundry NPC Pull Import)
-Prior Phase: 34 (Session Notes) — ✅ COMPLETE + FULLY VERIFIED (9/9 UAT passed 2026-04-25)
+Phase: 36 (Foundry NPC Pull Import) — READY TO EXECUTE (3 plans)
+Plan: 0 of 3 (Planning complete — FVT-04 requirement covered)
+Next Plan: Phase 36 Plan 01 (Wave 0 RED TDD stubs)
+Prior Phase: 35 (Foundry VTT Event Ingest) — ✅ COMPLETE (FVT-01..03, 6 plans, 2026-04-25)
 Milestone: v0.5 The Dungeon — IN PROGRESS (8/9 phases complete: 28, 29, 30, 31, 32, 33, 34, 35)
-Status: Phase 35 COMPLETE. All 6 plans done. Forge connectivity gap closed: webhook-first fallback, PNACORSMiddleware, .env.example docs.
-Last activity: 2026-04-25 -- Phase 35 Plan 06 complete: Forge connectivity gap closure (webhook-first + PNACORSMiddleware)
+Status: Phase 36 PLANNED. 3 plans created: Wave 0 TDD stubs, Wave 1 Python backend (CORS fix + npcs router), Wave 2 JS frontend (ApplicationV2 import dialog).
+Last activity: 2026-04-26 -- Phase 36 planned: 3 plans (Wave 0 TDD stubs, Wave 1 Python backend, Wave 2 JS frontend)
 
 ## Milestone Progress
 
@@ -64,7 +64,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | 33 | Rules Engine | RUL-01..04 | Phase 28 | ✅ COMPLETE (2026-04-25) |
 | 34 | Session Notes | SES-01..03 | Phase 29 | ✅ COMPLETE (2026-04-25) |
 | 35 | Foundry VTT Event Ingest | FVT-01..03 | Phase 28 | ✅ COMPLETE (2026-04-25) |
-| 36 | Foundry NPC Pull Import | FVT-04 | Phase 30, Phase 35 | Not started |
+| 36 | Foundry NPC Pull Import | FVT-04 | Phase 30, Phase 35 | ○ Ready to execute (3 plans) |
 
 ## Performance Metrics
 
@@ -156,9 +156,9 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-04-26T00:00:00.000Z
-Stopped at: Phase 36 context gathered
-Resume file: .planning/phases/36-foundry-npc-pull-import/36-CONTEXT.md
+Stopped at: Phase 36 planning complete — 3 plans ready
+Resume file: .planning/phases/36-foundry-npc-pull-import/36-01-PLAN.md
 
 **Completed Phase:** 35 (Foundry VTT Event Ingest) — 6 plans — 2026-04-25 — FVT-01..03 shipped; webhook-first fallback + PNACORSMiddleware gap closure
 
-**Next Plan:** 36 Plan 01 (Phase 36: Foundry NPC Pull Import)
+**Next Plan:** 36 Plan 01 — Wave 0 RED TDD stubs for test_npcs.py (7 test functions)

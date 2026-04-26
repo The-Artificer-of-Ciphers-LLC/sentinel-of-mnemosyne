@@ -677,7 +677,7 @@ await existing.update({ name: actorData.name, system: actorData.system });
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **ApplicationV2 `_onRender` render loop risk**
    - What we know: `_onRender` is called after every render cycle; calling `this.render()` inside it is the documented pattern for reactive state.
