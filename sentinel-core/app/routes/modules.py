@@ -107,11 +107,14 @@ async def proxy_module(name: str, path: str, request: Request) -> JSONResponse:
                 "Content-Type": "application/json",
                 "X-Sentinel-Key": sentinel_key,
             },
+            timeout=120.0,
         )
         try:
             content = resp.json()
         except ValueError:
             content = {"body": resp.text}
         return JSONResponse(content=content, status_code=resp.status_code)
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail={"error": "module timed out"})
     except httpx.TransportError:
         raise HTTPException(status_code=503, detail={"error": "module unavailable"})
