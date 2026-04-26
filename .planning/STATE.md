@@ -155,10 +155,10 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-25T19:00:00.000Z
-Stopped at: Session resumed, proceeding to Phase 36 planning
-Resume file: None
+Last session: 2026-04-26T00:00:00.000Z
+Stopped at: Phase 36 context gathered
+Resume file: .planning/phases/36-foundry-npc-pull-import/36-CONTEXT.md
 
-**Completed Phase:** 34 (Session Notes) — 5 plans / 4 waves (Wave 0 RED, Waves 1-3 implementation, Wave 4 Discord wiring) — 2026-04-25 — SES-01..03 shipped; RecapView Bug A+B fixed during UAT; 9/9 UAT passed
+**Completed Phase:** 35 (Foundry VTT Event Ingest) — 6 plans — 2026-04-25 — FVT-01..03 shipped; webhook-first fallback + PNACORSMiddleware gap closure
 
-**Next Plan:** 35-05 (Wave 4 — Discord :pf foundry subcommand + JS client foundry-client/)
+**Next Plan:** 36 Plan 01 (Phase 36: Foundry NPC Pull Import)
