@@ -19,6 +19,8 @@ Endpoints:
   POST /rule/show          — list cached rulings by topic (RUL-03)
   POST /rule/history       — recent rulings across all topics (RUL-03)
   POST /rule/list          — enumerate topic folders (RUL-03)
+  GET /npcs/               — list all Sentinel NPCs (FVT-04)
+  GET /npcs/{slug}/foundry-actor — return PF2e actor JSON for NPC (FVT-04)
 
 Startup:
   lifespan calls POST /modules/register on sentinel-core with exponential backoff retry.
@@ -30,7 +32,8 @@ Startup:
 
 Per D-15 through D-18 in Phase 28 CONTEXT.md; updated in Phase 29 for NPC CRUD,
 extended in Phase 30 for NPC outputs (OUT-01..OUT-04), Phase 31 for dialogue,
-Phase 32 for monster harvesting (HRV-01..06), Phase 33 for rules engine (RUL-01..04).
+Phase 32 for monster harvesting (HRV-01..06), Phase 33 for rules engine (RUL-01..04),
+Phase 36 for Foundry NPC pull import (FVT-04).
 """
 import asyncio
 import logging
@@ -51,11 +54,13 @@ from app.obsidian import ObsidianClient
 import app.routes.foundry as _foundry_module
 import app.routes.harvest as _harvest_module
 import app.routes.npc as _npc_module
+import app.routes.npcs as _npcs_module
 import app.routes.rule as _rule_module
 import app.routes.session as _session_module
 from app.routes.foundry import router as foundry_router
 from app.routes.harvest import router as harvest_router
 from app.routes.npc import router as npc_router
+from app.routes.npcs import router as npcs_router
 from app.routes.rule import router as rule_router
 from app.routes.session import router as session_router
 
@@ -86,6 +91,8 @@ REGISTRATION_PAYLOAD = {
         {"path": "rule", "description": "PF2e Remaster rules RAG engine with Paizo citations (RUL-01..04)"},
         {"path": "session", "description": "Session notes — start/log/end/show/undo with Obsidian persistence (SES-01..03)"},
         {"path": "foundry/event", "description": "Receive Foundry VTT game events (FVT-01..03)"},
+        {"path": "npcs/", "description": "List all Sentinel NPCs (FVT-04)"},
+        {"path": "npcs/{slug}/foundry-actor", "description": "Return PF2e actor JSON for NPC (FVT-04)"},
     ],
 }
 
@@ -193,6 +200,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             _session_module.npc_roster_cache = {}
         # Phase 35: wire foundry route's module-level discord_bot_url singleton (D-14).
         _foundry_module.discord_bot_url = settings.discord_bot_internal_url
+        # Phase 36: wire npcs route's module-level obsidian singleton.
+        _npcs_module.obsidian = obsidian_client
         yield
     # obsidian_http_client closes when the async with block exits (on shutdown)
     _npc_module.obsidian = None
@@ -204,6 +213,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _session_module.obsidian = None
     _session_module.npc_roster_cache = None
     _foundry_module.discord_bot_url = ""
+    _npcs_module.obsidian = None
 
 
 app = FastAPI(
@@ -237,7 +247,7 @@ app.add_middleware(
         "http://127.0.0.1:8000",
     ],
     allow_origin_regex=r"https://[a-zA-Z0-9-]+\.forge-vtt\.com",
-    allow_methods=["POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "X-Sentinel-Key"],
     allow_credentials=False,
     allow_private_network=True,
@@ -263,6 +273,8 @@ app.include_router(session_router)
 # Also mount at /modules/pathfinder/session so integration tests that simulate
 # the sentinel-core proxy path work against the pathfinder app directly.
 app.include_router(session_router, prefix="/modules/pathfinder")
+# Phase 36: NPC listing and Foundry actor export routes (FVT-04).
+app.include_router(npcs_router)
 
 
 @app.get("/healthz")
