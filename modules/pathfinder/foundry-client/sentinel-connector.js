@@ -25,6 +25,166 @@
 const MODULE_ID = 'sentinel-connector';
 
 // ---------------------------------------------------------------------------
+// SentinelNpcImporter — ApplicationV2 dialog for pulling NPCs from Sentinel (Phase 36 — FVT-04)
+//
+// Decisions implemented:
+//   D-01: renderActorDirectory hook injects "Import from Sentinel" button
+//   D-02: <select> shows "Name (Level N, Ancestry)" entries
+//   D-03: offline → "No NPCs found. Is Sentinel running?" + Retry button; dialog stays open
+//   D-04: select → preview (from listing data, no extra fetch) → Import → Actor.create()
+//   D-05: duplicate check via game.actors.getName() → Dialog.confirm() → update or create
+// ---------------------------------------------------------------------------
+const { ApplicationV2 } = foundry.applications.api;
+
+class SentinelNpcImporter extends ApplicationV2 {
+  // Single DEFAULT_OPTIONS literal — MUST NOT spread SentinelNpcImporter.DEFAULT_OPTIONS
+  // (class not defined yet when static initializer runs — Pitfall 3).
+  static DEFAULT_OPTIONS = {
+    id: 'sentinel-npc-importer',
+    tag: 'div',
+    window: { title: 'Import NPC from Sentinel', resizable: false },
+    position: { width: 400, height: 'auto' },
+    actions: {
+      retry:     function(ev, t) { return this._onRetry(ev, t); },
+      importNpc: function(ev, t) { return this._onImport(ev, t); },
+      close:     function(ev, t) { this.close(); },
+    },
+  };
+
+  // Private state — persists across render() calls
+  #npcs = [];
+  #selectedSlug = null;
+  #error = null;
+
+  async _prepareContext(options) {
+    // Fetch listing only on first render (no #npcs yet) or when Retry fires (fetchNpcs: true)
+    if (options.fetchNpcs !== false || !this.#npcs.length) {
+      this.#npcs = [];
+      this.#error = null;
+      const sentinelUrl = game.settings.get(MODULE_ID, 'sentinelBaseUrl');
+      const sentinelKey = game.settings.get(MODULE_ID, 'apiKey');
+      try {
+        const resp = await fetch(`${sentinelUrl}/modules/pathfinder/npcs/`, {
+          headers: { 'X-Sentinel-Key': sentinelKey },
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        this.#npcs = await resp.json();
+        if (!this.#npcs.length) {
+          this.#error = 'No NPCs found. Is Sentinel running?';
+        }
+      } catch (err) {
+        this.#error = 'No NPCs found. Is Sentinel running?';
+        console.warn('[sentinel-connector] NPC listing failed:', err);
+      }
+    }
+    return { npcs: this.#npcs, selectedSlug: this.#selectedSlug, error: this.#error };
+  }
+
+  async _renderHTML(context, options) {
+    const { npcs, selectedSlug, error } = context;
+
+    if (error) {
+      return `
+        <div class="sentinel-npc-importer">
+          <p class="notification error">${error}</p>
+          <div class="form-footer">
+            <button type="button" data-action="retry">Retry</button>
+            <button type="button" data-action="close">Cancel</button>
+          </div>
+        </div>`;
+    }
+
+    const optionsHtml = npcs.map(n =>
+      `<option value="${n.slug}"${n.slug === selectedSlug ? ' selected' : ''}>` +
+      `${n.name} (Level ${n.level}, ${n.ancestry})</option>`
+    ).join('');
+
+    const selected = selectedSlug ? npcs.find(n => n.slug === selectedSlug) : null;
+    const previewHtml = selected
+      ? `<p class="hint">${selected.name} | Level ${selected.level} ${selected.ancestry}</p>`
+      : '<p class="hint">Select an NPC above to preview.</p>';
+
+    return `
+      <div class="sentinel-npc-importer">
+        <div class="form-group">
+          <label>NPC</label>
+          <select name="npc-select">${optionsHtml}</select>
+        </div>
+        ${previewHtml}
+        <div class="form-footer">
+          <button type="button" data-action="importNpc"${selectedSlug ? '' : ' disabled'}>Import</button>
+          <button type="button" data-action="close">Cancel</button>
+        </div>
+      </div>`;
+  }
+
+  _onRender(context, options) {
+    const select = this.element.querySelector('select[name="npc-select"]');
+    if (!select) return;
+
+    // Auto-select first item on initial render so Import button is immediately active
+    if (!this.#selectedSlug && context.npcs.length) {
+      const newSlug = context.npcs[0].slug;
+      if (newSlug !== this.#selectedSlug) {
+        this.#selectedSlug = newSlug;
+        this.render();  // re-render with first item selected; render-loop guard above prevents loop
+      }
+      return;
+    }
+
+    select.addEventListener('change', (ev) => {
+      const newSlug = ev.target.value;
+      if (newSlug === this.#selectedSlug) return;  // render-loop guard (A4 mitigation)
+      this.#selectedSlug = newSlug;
+      this.render();
+    });
+  }
+
+  async _onRetry(ev, t) {
+    this.#npcs = [];
+    this.#selectedSlug = null;
+    await this.render({ fetchNpcs: true });
+  }
+
+  async _onImport(ev, t) {
+    if (!this.#selectedSlug) return;
+    const sentinelUrl = game.settings.get(MODULE_ID, 'sentinelBaseUrl');
+    const sentinelKey = game.settings.get(MODULE_ID, 'apiKey');
+    try {
+      const resp = await fetch(
+        `${sentinelUrl}/modules/pathfinder/npcs/${this.#selectedSlug}/foundry-actor`,
+        { headers: { 'X-Sentinel-Key': sentinelKey } },
+      );
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const actorData = await resp.json();
+
+      const existing = game.actors.getName(actorData.name);
+      if (existing) {
+        const overwrite = await Dialog.confirm({
+          title: 'Overwrite Actor?',
+          content: `<p>${actorData.name} already exists in Foundry. Overwrite with Sentinel data?</p>`,
+        });
+        if (overwrite) {
+          // D-05: replace only name + system — do NOT pass _id, items, effects, prototypeToken
+          await existing.update({ name: actorData.name, system: actorData.system });
+          ui.notifications.info(`${actorData.name} updated from Sentinel.`);
+        } else {
+          await Actor.create(actorData, { renderSheet: false });
+          ui.notifications.info(`${actorData.name} imported from Sentinel (new copy).`);
+        }
+      } else {
+        await Actor.create(actorData, { renderSheet: false });
+        ui.notifications.info(`${actorData.name} imported from Sentinel.`);
+      }
+      this.close();
+    } catch (err) {
+      ui.notifications.error('Import failed. Check Sentinel connection.');
+      console.error('[sentinel-connector] Import error:', err);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Outcome derivation (D-01 amendment — context.outcome may not be populated
 // at preCreateChatMessage time per pf2e-modifiers-matter pattern).
 // PF2e four-degree algorithm: delta = rollTotal - dcValue
@@ -147,6 +307,32 @@ Hooks.once('ready', () => {
     });
 
     return true; // ALWAYS return true — never suppress the Foundry chat message
+  });
+
+  // Phase 36: inject "Import from Sentinel" button into actor directory header (D-01, FVT-04)
+  Hooks.on('renderActorDirectory', (app, html) => {
+    // Idempotency guard — hook fires on every sidebar render (Pitfall 2)
+    const existingBtn = html.find
+      ? html.find('#sentinel-import-btn')
+      : html.querySelector('#sentinel-import-btn');
+    if (html.find ? existingBtn.length : existingBtn) return;
+
+    const actionButtons = html.find
+      ? html.find('.directory-header .action-buttons')
+      : html.querySelector('.directory-header .action-buttons');
+    if (!actionButtons) return;
+
+    const button = document.createElement('button');
+    button.id = 'sentinel-import-btn';
+    button.type = 'button';
+    button.textContent = 'Import from Sentinel';
+    button.addEventListener('click', () => new SentinelNpcImporter().render(true));
+
+    if (html.find) {
+      $(actionButtons).append(button);
+    } else {
+      actionButtons.append(button);
+    }
   });
 });
 
