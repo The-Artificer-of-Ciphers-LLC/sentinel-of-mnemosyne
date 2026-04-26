@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
-status: completed
-stopped_at: context exhaustion at 75% (2026-04-25)
-last_updated: "2026-04-25T18:38:00.113Z"
-last_activity: "2026-04-26 -- Phase 36 planned: 3 plans (Wave 0 TDD stubs, Wave 1 Python backend, Wave 2 JS frontend)"
+status: in_progress
+stopped_at: ""
+last_updated: "2026-04-26T00:00:00.000Z"
+last_activity: "2026-04-26 -- Phase 36 execution started: Wave 0 TDD stubs"
 progress:
   total_phases: 35
   completed_phases: 19

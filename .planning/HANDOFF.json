@@ -1,63 +1,66 @@
 {
   "version": "1.0",
-  "timestamp": "2026-04-25T20:12:00Z",
-  "phase": "34",
-  "phase_name": "session-notes",
-  "phase_dir": ".planning/phases/34-session-notes",
-  "plan": 0,
-  "task": 0,
-  "total_tasks": 0,
+  "timestamp": "2026-04-26T09:45:00Z",
+  "phase": "36",
+  "phase_name": "foundry-npc-pull-import",
+  "phase_dir": ".planning/phases/36-foundry-npc-pull-import",
+  "plan": 3,
+  "task": 3,
+  "total_tasks": 3,
   "status": "paused",
   "completed_tasks": [
-    {"id": 1, "name": "gsd-settings update (pattern_mapper, ai_integration_phase, ui_review, use_worktrees added)", "status": "done"},
-    {"id": 2, "name": "gsd config-set review.lm_studio_host / review.models.lm_studio / workflow.plan_review_convergence", "status": "done"},
-    {"id": 3, "name": "gsd-code-review 35 (standard depth, 11 files, 7 findings)", "status": "done", "commit": "736ba09"},
-    {"id": 4, "name": "gsd-code-review-fix 35 (4 fixed: CR-01/CR-02/WR-03/WR-04, 2 pre-fixed: WR-01/WR-02)", "status": "done", "commit": "d07b4be"},
-    {"id": 5, "name": "gsd-plan-review-convergence 34 --lm-studio (3 cycles, stalled at 3 HIGHs)", "status": "done-stalled"},
-    {"id": 6, "name": "Forensics investigation: gsd-review model/host drift bug", "status": "done"},
-    {"id": 7, "name": "GitHub issue gsd-build/get-shit-done #2721 filed", "status": "done"}
+    {"id": 1, "name": "Plan 36-01: RED test stubs Wave 0 — 7 tests in test_npcs.py", "status": "done", "commit": "f5dcd58 (merged to main)"},
+    {"id": 2, "name": "Plan 36-02: Python backend routes/npcs.py + main.py wiring — 7 tests GREEN", "status": "done", "commit": "540c5f1 (merged to main)"},
+    {"id": 3, "name": "Plan 36-03 Task 1: SentinelNpcImporter class + renderActorDirectory hook", "status": "done", "commit": "0ee8b70 (in worktree, NOT yet merged)"},
+    {"id": 4, "name": "Plan 36-03 Task 2: module.json 1.1.0 + sentinel-connector.zip regenerated", "status": "done", "commit": "df26f7e (in worktree, NOT yet merged)"}
   ],
   "remaining_tasks": [
-    {
-      "id": 8,
-      "name": "DECISION REQUIRED: phase 34 convergence escalation gate — proceed to execution or manual review",
-      "status": "blocked_on_human",
-      "detail": "3 HIGH concerns remain after 3 cycles (all addressed in plan text with pseudocode-level detail). Reviewers re-raise because verification is code-only. User was mid-clarification when session ended."
-    },
-    {
-      "id": 9,
-      "name": "gsd-execute-phase 34 (once decision made)",
-      "status": "not_started"
-    }
+    {"id": 5, "name": "Plan 36-03 Task 3: Human verify checkpoint — Foundry smoke test (6 steps)", "status": "awaiting_human"},
+    {"id": 6, "name": "After approval: merge worktree-agent-a0ab92b421918d07a to main, create 36-03-SUMMARY.md", "status": "not_started"},
+    {"id": 7, "name": "Phase 36 verification (gsd-verifier) + ROADMAP completion", "status": "not_started"}
   ],
   "blockers": [
     {
-      "description": "Phase 34 convergence escalation: proceed vs manual review decision pending",
+      "description": "Human Foundry smoke test required — 6 steps in .continue-here.md",
       "type": "human_action",
-      "workaround": "Run /gsd-execute-phase 34 to proceed, or read 34-REVIEWS.md + 34-03/34-05 PLAN.md to review manually"
+      "workaround": "None — must be done manually with running Sentinel stack + Foundry"
     }
   ],
   "human_actions_pending": [
     {
-      "action": "Decide: /gsd-execute-phase 34 OR read REVIEWS.md and address concerns manually",
-      "context": "3 HIGHs all addressed in plan text (pseudocode level). Will be proven by TDD tests during execution. Convergence stalled 3→3→3 because reviewers can't verify code that hasn't been written yet.",
+      "action": "Run Foundry smoke test (6 steps in .continue-here.md) then type 'approved' or describe failures",
+      "context": "Plan 36-03 JS tasks are committed in worktree-agent-a0ab92b421918d07a. Worktree is still live. Merge happens after approval.",
       "blocking": true
-    },
-    {
-      "action": "If rerunning /gsd-plan-review-convergence: verify qwen3.6-35b-a3b is loaded at localhost:1234 first (curl -s http://localhost:1234/v1/models | jq '.data[].id')",
-      "context": "Bug #2721 in gsd-wired: review agent ignores configured model and picks arbitrary model when multiple are loaded",
-      "blocking": false
     }
   ],
   "decisions": [
-    {"decision": "review.lm_studio_host=http://192.168.0.50:1234, review.models.lm_studio=qwen3.6-35b-a3b", "rationale": "Mac Mini LM Studio for reviews", "phase": "session"},
-    {"decision": "workflow.plan_review_convergence=true enabled", "rationale": "User explicitly enabled this session", "phase": "session"},
-    {"decision": "Filed gsd-build/get-shit-done #2721 for gsd-review model/host drift bugs (4 bugs: no model identity check, silent host fallback, error output as content, agent model rotation)", "rationale": "Forensics confirmed bugs during cycle 2/3 review", "phase": "session"}
+    {
+      "decision": "FVT-04f test uses INVALID_SLUG (uppercase+underscore) instead of ..%2Fetc%2Fpasswd",
+      "rationale": "Starlette decodes %2F to / before routing — %2F-encoded traversal slug returns 404 (route non-match), not 400. Guard is equally exercised by any slug with chars outside [a-z0-9-].",
+      "phase": "36"
+    },
+    {
+      "decision": "Tests must run via 'uv run python3 -m pytest' not 'python3 -m pytest'",
+      "rationale": "rapidfuzz and other module deps are in the uv venv, not system Python.",
+      "phase": "36"
+    },
+    {
+      "decision": "Worktree merge skips ROADMAP.md bash cp backup/restore",
+      "rationale": "PreToolUse hook blocks bash cp that overwrites ROADMAP.md. Executors don't modify it, so no restore needed. Use Edit/Write tools if ROADMAP.md needs updating after merge.",
+      "phase": "36"
+    }
   ],
   "uncommitted_files": [
-    ".planning/STATE.md",
-    ".planning/config.json"
+    ".planning/STATE.md (status set to in_progress this session)"
   ],
-  "next_action": "Answer the phase 34 escalation gate: run /gsd-execute-phase 34 (recommended — all 3 HIGHs are addressed in plan text and will be verified by TDD) OR manually review .planning/phases/34-session-notes/34-REVIEWS.md",
-  "context_notes": "Phase 35 is fully done (complete + reviewed + 4 fixes committed). Phase 34 is replanned and ready for execution — the convergence loop stalled not because the plans are bad but because external AI reviewers can only verify plan text, not running code. All 3 HIGHs have pseudocode-level implementation detail in the PLAN.md files."
+  "active_worktree": {
+    "path": ".claude/worktrees/agent-a0ab92b421918d07a",
+    "branch": "worktree-agent-a0ab92b421918d07a",
+    "status": "locked — live, has 2 committed tasks",
+    "commits": [
+      "0ee8b70 feat(36-03): add SentinelNpcImporter class and actor directory import hook",
+      "df26f7e feat(36-03): bump module.json to 1.1.0, regenerate zip"
+    ]
+  },
+  "next_action": "User runs Foundry smoke test. Type 'approved' to proceed. On approval: git merge worktree-agent-a0ab92b421918d07a --no-ff (skip ROADMAP bash cp), create 36-03-SUMMARY.md, run phase verifier, mark phase complete in ROADMAP.md."
 }
