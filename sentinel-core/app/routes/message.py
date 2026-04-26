@@ -6,12 +6,13 @@ Flow:
   2. Retrieve hot-tier session summaries (last 3, graceful skip on failure)
   3. Build hot-tier context pair (self_contents + sessions, truncated to SESSIONS_BUDGET_RATIO=0.15)
   4. Search vault for relevant notes (warm tier, fires on every exchange — MEM-08)
-  5. Build warm-tier context pair (top-3 vault results, truncated to SEARCH_BUDGET_RATIO=0.10)
-     — skipped entirely if search_vault() returns empty list
-  6. Apply injection filter (SEC-01) to BOTH context blocks before appending to messages
-  7. Token guard on full messages array
-  8. Call AI provider via ProviderRouter (primary with fallback per PROV-05)
-  9. Write session summary to Obsidian via BackgroundTasks (best-effort, D-2/MEM-06)
+  5. Filter search results to those with score >= SEARCH_SCORE_THRESHOLD (MEM-08b: relevance gate)
+  6. Build warm-tier context pair (top-3 high-relevance vault results, truncated to SEARCH_BUDGET_RATIO=0.10)
+     — skipped entirely if no results pass the relevance gate (D-05)
+  7. Apply injection filter (SEC-01) to BOTH context blocks before appending to messages
+  8. Token guard on full messages array
+  9. Call AI provider via ProviderRouter (primary with fallback per PROV-05)
+  10. Write session summary to Obsidian via BackgroundTasks (best-effort, D-2/MEM-06)
 
 Note: Pi harness is NOT used in the message route. Pi is a coding agent that makes multiple
 LLM calls per request (tool use loop), which spams LM Studio with stacked requests at 0%.
@@ -36,6 +37,13 @@ router = APIRouter()
 SESSIONS_BUDGET_RATIO = 0.15  # hot tier: user_context + recent_sessions (D-08)
 SEARCH_BUDGET_RATIO = 0.10    # warm tier: vault search results (D-08)
 # Combined = 0.25 (unchanged total ceiling)
+
+# MEM-08b: minimum relevance score for vault search results to be injected as context.
+# Obsidian simple search scores are unbounded floats; results are already sorted descending.
+# A score below this threshold indicates a low-confidence keyword match from an unrelated
+# domain (e.g. pf2e notes matching on "sing" when the user mentions "singing course").
+# Without this gate, garbled or off-topic vault content pollutes the LLM prompt context.
+SEARCH_SCORE_THRESHOLD = 0.5
 
 
 def _truncate_to_tokens(text: str, max_tokens: int) -> str:
@@ -137,16 +145,28 @@ async def post_message(
         messages.append({"role": "user", "content": filtered_context})
         messages.append({"role": "assistant", "content": "Understood."})
 
-    # [WARM TIER] MEM-08: search vault on every exchange, inject top-3 results (D-03, D-04)
+    # [WARM TIER] MEM-08: search vault on every exchange, inject top-3 high-relevance results
     # search_vault uses raw envelope.content — search happens before injection filtering (D-06)
     search_results = await obsidian.search_vault(envelope.content)
-    if search_results:  # D-05: skip entirely if empty — no empty block injected
-        vault_block = _format_search_results(search_results[:3])  # D-07: top-3 hardcoded
+
+    # MEM-08b: filter to results with score >= SEARCH_SCORE_THRESHOLD before slicing.
+    # This prevents low-confidence cross-domain keyword matches (e.g. pf2e gaming notes
+    # matching on a word that also appears in an unrelated 2nd-brain query) from being
+    # injected as context. Without this gate, garbled vault content poisons the LLM prompt.
+    relevant_results = [r for r in search_results if r.get("score", 0.0) >= SEARCH_SCORE_THRESHOLD]
+
+    if relevant_results:  # D-05: skip entirely if no high-relevance results
+        vault_block = _format_search_results(relevant_results[:3])  # D-07: top-3 hardcoded
         safe_vault = _truncate_to_tokens(vault_block, search_budget)  # D-09: independent budget
         # Apply SEC-01 injection guard — vault content is untrusted user-controlled data
         filtered_vault = injection_filter.wrap_context(safe_vault)
         messages.append({"role": "user", "content": filtered_vault})
         messages.append({"role": "assistant", "content": "Understood."})
+    elif search_results:
+        logger.debug(
+            f"Warm tier: {len(search_results)} vault result(s) returned but all scored below "
+            f"threshold {SEARCH_SCORE_THRESHOLD} — skipping injection"
+        )
 
     # Apply injection filter to user input (SEC-01: same code path as vault content)
     safe_input, _input_modified = injection_filter.filter_input(envelope.content)

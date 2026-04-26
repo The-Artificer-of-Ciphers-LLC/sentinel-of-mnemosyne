@@ -254,6 +254,8 @@ async def test_no_injection_when_obsidian_down():
     obsidian_down.get_user_context.return_value = None  # graceful — returns None not raises
     obsidian_down.get_recent_sessions.return_value = []
     obsidian_down.write_session_summary.return_value = None
+    obsidian_down.search_vault.return_value = []
+    obsidian_down.read_self_context.return_value = ""
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         app.state.obsidian_client = obsidian_down
@@ -703,6 +705,147 @@ async def test_warm_tier_both_tiers_five_messages(obsidian_with_context_and_sear
     assert captured_messages[4]["content"] == "Understood."
     assert captured_messages[5]["role"] == "user"   # actual user message
     assert captured_messages[5]["content"] == "hello"
+
+
+# ---------------------------------------------------------------------------
+# Wave 5 tests — MEM-08b relevance score threshold (score gate)
+# Bug: "Finished the sing better course" matched pf2e notes at low score,
+# injecting garbled phoneme content into the LLM prompt.
+# ---------------------------------------------------------------------------
+
+
+async def test_warm_tier_skipped_when_all_results_below_threshold(mock_ai_provider):
+    """When all search results have score < SEARCH_SCORE_THRESHOLD, no vault pair is injected (MEM-08b)."""
+    from app.routes.message import SEARCH_SCORE_THRESHOLD
+
+    low_score_obsidian = AsyncMock()
+    low_score_obsidian.get_user_context.return_value = None
+    low_score_obsidian.get_recent_sessions.return_value = []
+    low_score_obsidian.write_session_summary.return_value = None
+    # Score just below threshold — should be filtered out entirely
+    low_score_obsidian.search_vault.return_value = [
+        {
+            "filename": "pf2e/harvest/wolf-lord.md",
+            "score": SEARCH_SCORE_THRESHOLD - 0.01,
+            "matches": [{"match": {"start": 0, "end": 50}, "context": "Sh says: You Are Not Yourself"}],
+        },
+        {
+            "filename": "pf2e/harvest/orc.md",
+            "score": SEARCH_SCORE_THRESHOLD - 0.1,
+            "matches": [{"match": {"start": 0, "end": 40}, "context": "sound rules for you get said"}],
+        },
+    ]
+    captured_messages = []
+
+    async def capturing_complete(messages):
+        captured_messages.extend(messages)
+        return "Got it"
+
+    mock_ai_provider.complete.side_effect = capturing_complete
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.obsidian_client = low_score_obsidian
+        app.state.ai_provider = mock_ai_provider
+        resp = await client.post(
+            "/message",
+            json={"content": "Finished the sing better course", "user_id": "trekkie"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+    # Only system + user message — no vault pair injected
+    assert len(captured_messages) == 2
+    assert captured_messages[0]["role"] == "system"
+    assert captured_messages[1]["content"] == "Finished the sing better course"
+    # Confirm no garbled pf2e content leaked into context
+    all_content = " ".join(m["content"] for m in captured_messages)
+    assert "You Are Not Yourself" not in all_content
+    assert "sound rules" not in all_content
+
+
+async def test_warm_tier_injected_when_score_meets_threshold(mock_ai_provider):
+    """When at least one result meets score >= SEARCH_SCORE_THRESHOLD, vault pair is injected (MEM-08b)."""
+    from app.routes.message import SEARCH_SCORE_THRESHOLD
+
+    mixed_score_obsidian = AsyncMock()
+    mixed_score_obsidian.get_user_context.return_value = None
+    mixed_score_obsidian.get_recent_sessions.return_value = []
+    mixed_score_obsidian.write_session_summary.return_value = None
+    mixed_score_obsidian.search_vault.return_value = [
+        {
+            "filename": "memory/courses/sing-better.md",
+            "score": SEARCH_SCORE_THRESHOLD + 0.1,
+            "matches": [{"match": {"start": 0, "end": 30}, "context": "Completed the Sing Better course"}],
+        },
+        {
+            "filename": "pf2e/harvest/wolf-lord.md",
+            "score": SEARCH_SCORE_THRESHOLD - 0.1,
+            "matches": [{"match": {"start": 0, "end": 20}, "context": "garbled pf2e content"}],
+        },
+    ]
+    captured_messages = []
+
+    async def capturing_complete(messages):
+        captured_messages.extend(messages)
+        return "Great, noted!"
+
+    mock_ai_provider.complete.side_effect = capturing_complete
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.obsidian_client = mixed_score_obsidian
+        app.state.ai_provider = mock_ai_provider
+        resp = await client.post(
+            "/message",
+            json={"content": "Finished the sing better course", "user_id": "trekkie"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+    # system + vault pair (only high-score result) + user message = 4
+    assert len(captured_messages) == 4
+    # The high-score result should be in the injected context
+    vault_content = captured_messages[1]["content"]
+    assert "sing-better.md" in vault_content or "Completed the Sing Better" in vault_content
+    # The low-score pf2e result should NOT be in the context
+    assert "wolf-lord.md" not in vault_content
+    assert "garbled pf2e content" not in vault_content
+
+
+async def test_warm_tier_result_missing_score_defaults_to_zero(mock_ai_provider):
+    """Results without a 'score' key default to 0.0 and are excluded by the threshold gate (MEM-08b)."""
+    no_score_obsidian = AsyncMock()
+    no_score_obsidian.get_user_context.return_value = None
+    no_score_obsidian.get_recent_sessions.return_value = []
+    no_score_obsidian.write_session_summary.return_value = None
+    # Result with no score field — should be treated as 0.0 and filtered out
+    no_score_obsidian.search_vault.return_value = [
+        {
+            "filename": "some/note.md",
+            "matches": [{"match": {"start": 0, "end": 10}, "context": "some content"}],
+            # 'score' key absent
+        }
+    ]
+    captured_messages = []
+
+    async def capturing_complete(messages):
+        captured_messages.extend(messages)
+        return "OK"
+
+    mock_ai_provider.complete.side_effect = capturing_complete
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.obsidian_client = no_score_obsidian
+        app.state.ai_provider = mock_ai_provider
+        resp = await client.post(
+            "/message",
+            json={"content": "test query", "user_id": "trekkie"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+    # No vault pair injected — missing score treated as 0.0, below threshold
+    assert len(captured_messages) == 2
+    assert captured_messages[1]["content"] == "test query"
 
 
 # ---------------------------------------------------------------------------
