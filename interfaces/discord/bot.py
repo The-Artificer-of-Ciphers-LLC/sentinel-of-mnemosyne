@@ -1452,6 +1452,7 @@ class SentinelBot(discord.Client):
         user_id = str(message.author.id)
         logger.info("Thread reply from %s in thread %s: %s", user_id, message.channel.id, message.content[:60])
 
+        # typing() auto-renews the typing indicator every 10s while the event loop is responsive.
         async with message.channel.typing():
             ai_response = await _route_message(
                 user_id,
@@ -1511,70 +1512,78 @@ async def sen(interaction: discord.Interaction, message: str) -> None:
     # 1. Defer within 3 seconds — shows "Bot is thinking..." to user (IFACE-03)
     await interaction.response.defer(thinking=True)
 
-    # 2. Create public thread from the channel (IFACE-04)
-    thread_name = message[:50] if message else "Sentinel response"
-    thread = None
     try:
-        thread = await interaction.channel.create_thread(
-            name=thread_name,
-            type=discord.ChannelType.public_thread,
-            auto_archive_duration=60,
+        # 2. Create public thread from the channel (IFACE-04)
+        thread_name = message[:50] if message else "Sentinel response"
+        thread = None
+        try:
+            thread = await interaction.channel.create_thread(
+                name=thread_name,
+                type=discord.ChannelType.public_thread,
+                auto_archive_duration=60,
+            )
+            SENTINEL_THREAD_IDS.add(thread.id)
+            await _persist_thread_id(thread.id)
+            logger.info("Created thread %s '%s' for user %s", thread.id, thread_name, interaction.user.id)
+        except discord.Forbidden as exc:
+            logger.error("Missing permission to create thread (403): %s", exc)
+        except discord.HTTPException as exc:
+            logger.error("Failed to create thread (HTTP %s, code %s): %s", exc.status, exc.code, exc)
+
+        # 3. Route message — subcommand, help-intent, or AI.
+        # Phase 31 (WR-01): forward the thread we just created as the channel so the
+        # `:pf npc say` branch can walk its history. First turn in a fresh thread has
+        # no prior messages, so history ends up empty — still correct.
+        user_id = str(interaction.user.id)
+        ai_response = await _route_message(
+            user_id, message, channel=thread if thread is not None else interaction.channel
         )
-        SENTINEL_THREAD_IDS.add(thread.id)
-        await _persist_thread_id(thread.id)
-        logger.info("Created thread %s '%s' for user %s", thread.id, thread_name, interaction.user.id)
-    except discord.Forbidden as exc:
-        logger.error("Missing permission to create thread (403): %s", exc)
-    except discord.HTTPException as exc:
-        logger.error("Failed to create thread (HTTP %s, code %s): %s", exc.status, exc.code, exc)
 
-    # 3. Route message — subcommand, help-intent, or AI.
-    # Phase 31 (WR-01): forward the thread we just created as the channel so the
-    # `:pf npc say` branch can walk its history. First turn in a fresh thread has
-    # no prior messages, so history ends up empty — still correct.
-    user_id = str(interaction.user.id)
-    ai_response = await _route_message(
-        user_id, message, channel=thread if thread is not None else interaction.channel
-    )
+        # 4. Send AI response — into thread if created, fallback to channel
+        if thread:
+            if isinstance(ai_response, str):
+                await thread.send(ai_response)
+            elif isinstance(ai_response, dict):
+                rtype = ai_response.get("type")
+                if rtype == "file":
+                    df = discord.File(
+                        io.BytesIO(ai_response["file_bytes"]),
+                        filename=ai_response["filename"],
+                    )
+                    await thread.send(content=ai_response.get("content", ""), file=df)
+                elif rtype == "embed":
+                    await thread.send(
+                        content=ai_response.get("content", ""),
+                        embed=ai_response["embed"],
+                    )
+                else:
+                    await thread.send(ai_response.get("content", str(ai_response)))
+            await interaction.followup.send(f"Response ready in {thread.mention}", ephemeral=True)
+        else:
+            if isinstance(ai_response, str):
+                await interaction.followup.send(ai_response)
+            elif isinstance(ai_response, dict):
+                rtype = ai_response.get("type")
+                if rtype == "file":
+                    df = discord.File(
+                        io.BytesIO(ai_response["file_bytes"]),
+                        filename=ai_response["filename"],
+                    )
+                    await interaction.followup.send(content=ai_response.get("content", ""), file=df)
+                elif rtype == "embed":
+                    await interaction.followup.send(
+                        content=ai_response.get("content", ""),
+                        embed=ai_response["embed"],
+                    )
+                else:
+                    await interaction.followup.send(ai_response.get("content", str(ai_response)))
 
-    # 4. Send AI response — into thread if created, fallback to channel
-    if thread:
-        if isinstance(ai_response, str):
-            await thread.send(ai_response)
-        elif isinstance(ai_response, dict):
-            rtype = ai_response.get("type")
-            if rtype == "file":
-                df = discord.File(
-                    io.BytesIO(ai_response["file_bytes"]),
-                    filename=ai_response["filename"],
-                )
-                await thread.send(content=ai_response.get("content", ""), file=df)
-            elif rtype == "embed":
-                await thread.send(
-                    content=ai_response.get("content", ""),
-                    embed=ai_response["embed"],
-                )
-            else:
-                await thread.send(ai_response.get("content", str(ai_response)))
-        await interaction.followup.send(f"Response ready in {thread.mention}", ephemeral=True)
-    else:
-        if isinstance(ai_response, str):
-            await interaction.followup.send(ai_response)
-        elif isinstance(ai_response, dict):
-            rtype = ai_response.get("type")
-            if rtype == "file":
-                df = discord.File(
-                    io.BytesIO(ai_response["file_bytes"]),
-                    filename=ai_response["filename"],
-                )
-                await interaction.followup.send(content=ai_response.get("content", ""), file=df)
-            elif rtype == "embed":
-                await interaction.followup.send(
-                    content=ai_response.get("content", ""),
-                    embed=ai_response["embed"],
-                )
-            else:
-                await interaction.followup.send(ai_response.get("content", str(ai_response)))
+    except Exception as exc:
+        logger.exception("Unhandled error in /sen after defer — sending error followup: %s", exc)
+        await interaction.followup.send(
+            "Something went wrong — the Sentinel encountered an error.",
+            ephemeral=True,
+        )
 
 
 def main() -> None:
