@@ -66,6 +66,8 @@ __all__ = [
     "render_citation_label",
     "retrieve",
     "slugify",
+    "check_ruling_answer_sanity",
+    "keyword_classify_topic",
     "strip_rule_html",
 ]
 
@@ -260,6 +262,72 @@ def coerce_topic(slug: str) -> str:
     return "misc"
 
 
+# --- Keyword-based topic pre-classifier (pre-LLM fast path) ---
+
+# Maps each closed-vocabulary topic slug to a list of keyword phrases that
+# unambiguously signal that topic. Checked BEFORE the LLM classifier so that
+# a local model that returns 'misc' for well-known PF2e terms doesn't cause a
+# corpus-miss and an uncached LLM fallback. Phrases are matched case-insensitively
+# against the normalized query. Order within each list is irrelevant.
+_TOPIC_KEYWORDS: dict[str, list[str]] = {
+    "off-guard": [
+        "off guard", "off-guard", "offguard",
+        "flanking", "flank",  # flanking causes off-guard; user intent is off-guard
+    ],
+    "flanking": [],   # covered by off-guard above; dedicated only if query explicitly differs
+    "grapple": ["grapple", "grappling", "grabbed", "restrained"],
+    "trip": ["trip", "tripping", "prone"],
+    "shove": ["shove", "shoving", "push"],
+    "falling": ["fall", "falls", "falling", "fall damage"],
+    "conditions": ["condition", "conditions", "blinded", "confused", "dazzled",
+                    "deafened", "doomed", "drained", "dying", "enfeebled",
+                    "fatigued", "frightened", "immobilized", "paralyzed",
+                    "petrified", "sickened", "slowed", "stunned", "stupefied",
+                    "unconscious"],
+    "dying": ["dying", "death", "dead", "recover", "recovery check"],
+    "healing": ["heal", "healing", "hit points", "hp", "restore hp", "treat wounds"],
+    "spellcasting": ["cast", "casting", "spell", "spells", "cantrip", "focus",
+                       "prepared", "spontaneous", "spell slot"],
+    "detection": ["hidden", "undetected", "concealed", "observed", "seek",
+                    "stealth", "perception", "detect"],
+    "senses": ["darkvision", "low-light vision", "scent", "tremorsense",
+                 "echolocation", "precise sense", "imprecise sense"],
+    "skills": ["skill", "athletics", "acrobatics", "arcana", "crafting",
+                 "deception", "diplomacy", "intimidation", "medicine",
+                 "nature", "occultism", "performance", "religion",
+                 "society", "survival", "thievery"],
+    "actions": ["action", "actions", "reaction", "free action", "two action",
+                  "three action", "move action", "activity"],
+    "hero-points": ["hero point", "hero-point", "heroic"],
+    "dcs": ["dc", "difficulty class", "check dc", "skill dc"],
+}
+
+_TOPIC_KEYWORD_PATTERN: dict[str, re.Pattern] = {
+    slug: re.compile("|".join(r"\b" + re.escape(kw) + r"\b" for kw in kws), re.IGNORECASE)
+    for slug, kws in _TOPIC_KEYWORDS.items()
+    if kws  # skip empty keyword lists
+}
+
+
+def keyword_classify_topic(query: str) -> str | None:
+    """Return a topic slug if the query unambiguously matches a keyword, else None.
+
+    Called BEFORE the LLM classifier as a fast-path. Returning None means
+    "fall through to LLM classification". First match wins in _TOPIC_KEYWORDS
+    definition order.
+
+    Rationale: local LLMs sometimes return 'misc' for well-known PF2e terms
+    (observed: 'off guard apply between two party members and a monster' -> 'misc').
+    Keyword classification catches these cases with zero LLM cost.
+    """
+    if not isinstance(query, str) or not query:
+        return None
+    for slug, pattern in _TOPIC_KEYWORD_PATTERN.items():
+        if pattern.search(query):
+            return slug
+    return None
+
+
 # --- Corpus + URL map loaders ---
 
 def load_rules_corpus(path: Path) -> list[RuleChunk]:
@@ -405,6 +473,57 @@ def _validate_ruling_shape(parsed: dict) -> None:
     topic = parsed.get("topic")
     if topic is not None and not isinstance(topic, str):
         raise ValueError("ruling shape: 'topic' must be a str or None")
+
+
+
+# --- Ruling answer sanity gate (garble/injection detector) ---
+
+# Patterns that indicate the LLM produced hallucinated or injection-poisoned
+# content rather than a legitimate PF2e ruling. Any match causes the salvage
+# path in llm.py to raise ValueError instead of caching the garbage.
+# These are deliberately broad: a PF2e rules answer would never contain JSON
+# timestamp objects, "entry point" injection markers, or nonsense phrases.
+_GARBLE_PATTERNS = re.compile(
+    r'"timestamp"\s*:\s*\d+'          # embedded JSON with timestamp
+    r'|entry point'                      # injection marker phrases
+    r'|\[Develer'                        # specific garble marker seen in production
+    r'|big smooch'                       # nonsense phrase from LLM hallucination
+    r'|aphrod'                           # hallucinated non-PF2e terms
+    r'|likeliness.*-1'                   # embedded JSON fragment from garble
+    r'|March \d{1,2},\s*20[3-9]\d'  # future dates (2030+) in answers
+    r'|"comment_likelihood"',          # embedded JSON key fragment
+    re.IGNORECASE | re.DOTALL,
+)
+
+# Minimum word count for a salvaged answer. An answer shorter than this is
+# almost certainly a failure to produce meaningful content.
+_MIN_SALVAGE_WORDS = 8
+
+
+def check_ruling_answer_sanity(answer: str, *, allow_empty: bool = False) -> None:
+    """Raise ValueError if the answer text looks garbled or injection-poisoned.
+
+    Called from the salvage paths in llm.py BEFORE accepting non-JSON LLM
+    output as a ruling. A ValueError here causes the route layer to return
+    HTTP 500 instead of caching garbage.
+
+    Checks:
+    - Non-empty (unless allow_empty=True).
+    - Not matching _GARBLE_PATTERNS (injection markers, embedded JSON, nonsense).
+    - At least _MIN_SALVAGE_WORDS words (rules answers must be prose, not a fragment).
+    """
+    if not isinstance(answer, str):
+        raise ValueError(f"ruling answer sanity: expected str, got {type(answer).__name__}")
+    if not answer and not allow_empty:
+        raise ValueError("ruling answer sanity: answer is empty")
+    if _GARBLE_PATTERNS.search(answer):
+        raise ValueError(
+            f"ruling answer sanity: answer contains injection/garble markers — "            f"refusing to cache. answer_head={answer[:120]!r}"
+        )
+    word_count = len(answer.split())
+    if word_count < _MIN_SALVAGE_WORDS and not allow_empty:
+        raise ValueError(
+            f"ruling answer sanity: answer too short ({word_count} words < {_MIN_SALVAGE_WORDS} minimum)"        )
 
 
 def _normalize_ruling_output(

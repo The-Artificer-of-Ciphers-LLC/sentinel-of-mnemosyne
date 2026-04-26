@@ -51,6 +51,7 @@ from app.rules import (
     build_ruling_markdown,
     check_pf1_scope,
     coerce_topic,
+    keyword_classify_topic,
     normalize_query,
     query_hash,
     retrieve,
@@ -259,8 +260,14 @@ async def rule_query(req: RuleQueryRequest) -> JSONResponse:
     model_structured = await resolve_model("structured")
     api_base = settings.litellm_api_base or None
 
-    topic = await classify_rule_topic(query, model=model_structured, api_base=api_base)
-    topic = coerce_topic(topic)  # belt + suspenders — classify_rule_topic already coerces
+    # Keyword fast-path: if the query unambiguously contains a known topic term
+    # (e.g. "off guard", "flanking", "grapple"), classify without an LLM call.
+    # This prevents local models from returning "misc" for well-known PF2e terms,
+    # which causes a corpus miss and an uncached LLM fallback.
+    topic = keyword_classify_topic(query)
+    if topic is None:
+        topic = await classify_rule_topic(query, model=model_structured, api_base=api_base)
+    topic = coerce_topic(topic)  # belt + suspenders — coerce any stray output to valid slug
 
     # Step 4: exact-hash cache check.
     cache_path = f"{RULING_CACHE_PATH_PREFIX}/{topic}/{q_hash}.md"

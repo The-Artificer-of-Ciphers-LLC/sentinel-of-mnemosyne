@@ -716,13 +716,19 @@ async def generate_ruling_from_passages(
         # Salvage: treat the prose as the 'answer', let the normalizer fill
         # the rest (T-31-SEC-03 precedent). This keeps the DM-facing flow
         # usable when a smaller model forgets JSON syntax.
+        # Sanity-gate the salvaged text before accepting it: garbled/injected
+        # output must raise ValueError here so the route layer returns 500
+        # and skips the cache write. Never cache poison.
         logger.warning(
             "generate_ruling_from_passages: JSON parse failed; salvaging prose. raw_head=%r",
             raw[:200],
         )
+        from app.rules import check_ruling_answer_sanity
+        salvaged_answer = stripped[:_RULING_MAX_ANSWER_CHARS] or "_(no answer)_"
+        check_ruling_answer_sanity(salvaged_answer, allow_empty=(not stripped))
         parsed = {
             "question": query,
-            "answer": (stripped[:_RULING_MAX_ANSWER_CHARS] or "_(no answer)_"),
+            "answer": salvaged_answer,
             "why": "",
         }
     if not isinstance(parsed, dict):
@@ -951,13 +957,19 @@ async def generate_ruling_fallback(
         parsed = json.loads(stripped)
     except json.JSONDecodeError:
         # Salvage: prose → answer. Same precedent as generate_ruling_from_passages.
+        # Sanity-gate the salvaged text before accepting it: garbled/injected
+        # output must raise ValueError here so the route layer returns 500
+        # and skips the cache write. Never cache poison.
         logger.warning(
             "generate_ruling_fallback: JSON parse failed; salvaging prose. raw_head=%r",
             raw[:200],
         )
+        from app.rules import check_ruling_answer_sanity
+        salvaged_answer = stripped[:_RULING_MAX_ANSWER_CHARS] or "_(no answer)_"
+        check_ruling_answer_sanity(salvaged_answer, allow_empty=(not stripped))
         parsed = {
             "question": query,
-            "answer": (stripped[:_RULING_MAX_ANSWER_CHARS] or "_(no answer)_"),
+            "answer": salvaged_answer,
             "why": "",
         }
     if not isinstance(parsed, dict):

@@ -140,6 +140,7 @@ async def test_first_query_writes_cache_second_reads_cache():
          patch("app.routes.rule.aon_url_map", stub_map), \
          patch("app.routes.rule.generate_ruling_from_passages", new=mock_llm_pass), \
          patch("app.routes.rule.generate_ruling_fallback", new=mock_llm_fall), \
+         patch("app.routes.rule.keyword_classify_topic", return_value=None), \
          patch("app.routes.rule.classify_rule_topic", new=AsyncMock(return_value="flanking")), \
          patch("app.routes.rule.embed_texts", new=mock_embed):
         from app.main import app
@@ -201,6 +202,7 @@ async def test_corpus_hit_writes_cache_with_marker_source():
          patch("app.routes.rule.aon_url_map", stub_map), \
          patch("app.routes.rule.generate_ruling_from_passages", new=mock_llm_pass), \
          patch("app.routes.rule.generate_ruling_fallback", new=mock_llm_fall), \
+         patch("app.routes.rule.keyword_classify_topic", return_value=None), \
          patch("app.routes.rule.classify_rule_topic", new=AsyncMock(return_value="flanking")), \
          patch("app.routes.rule.embed_texts", new=mock_embed):
         from app.main import app
@@ -353,6 +355,7 @@ async def test_reuse_match_above_0_80_returns_cached_note():
          patch("app.routes.rule.aon_url_map", stub_map), \
          patch("app.routes.rule.generate_ruling_from_passages", new=mock_llm_pass), \
          patch("app.routes.rule.generate_ruling_fallback", new=mock_llm_fall), \
+         patch("app.routes.rule.keyword_classify_topic", return_value=None), \
          patch("app.routes.rule.classify_rule_topic", new=AsyncMock(return_value="flanking")), \
          patch("app.routes.rule.embed_texts", new=mock_embed):
         from app.main import app
@@ -423,6 +426,7 @@ async def test_reuse_match_below_0_80_composes_fresh():
          patch("app.routes.rule.aon_url_map", stub_map), \
          patch("app.routes.rule.generate_ruling_from_passages", new=mock_llm_pass), \
          patch("app.routes.rule.generate_ruling_fallback", new=AsyncMock()), \
+         patch("app.routes.rule.keyword_classify_topic", return_value=None), \
          patch("app.routes.rule.classify_rule_topic", new=AsyncMock(return_value="flanking")), \
          patch("app.routes.rule.embed_texts", new=mock_embed):
         from app.main import app
@@ -474,6 +478,7 @@ async def test_rule_reuse_note_survives_cache_roundtrip():
          patch("app.routes.rule.aon_url_map", stub_map), \
          patch("app.routes.rule.generate_ruling_from_passages", new=mock_llm_pass), \
          patch("app.routes.rule.generate_ruling_fallback", new=AsyncMock()), \
+         patch("app.routes.rule.keyword_classify_topic", return_value=None), \
          patch("app.routes.rule.classify_rule_topic", new=AsyncMock(return_value="flanking")), \
          patch("app.routes.rule.embed_texts", new=mock_embed):
         from app.main import app
@@ -537,6 +542,7 @@ async def test_last_reused_at_updated_on_cache_hit():
          patch("app.routes.rule.aon_url_map", stub_map), \
          patch("app.routes.rule.generate_ruling_from_passages", new=mock_llm_pass), \
          patch("app.routes.rule.generate_ruling_fallback", new=AsyncMock()), \
+         patch("app.routes.rule.keyword_classify_topic", return_value=None), \
          patch("app.routes.rule.classify_rule_topic", new=AsyncMock(return_value="flanking")), \
          patch("app.routes.rule.embed_texts", new=mock_embed):
         from app.main import app
