@@ -148,16 +148,21 @@ async def test_get_foundry_actor_not_found():
 
 
 async def test_get_foundry_actor_invalid_slug():
-    """GET /npcs/..%2F..%2Fetc%2Fpasswd/foundry-actor returns 400 (path-traversal guard) (FVT-04f)."""
+    """GET /npcs/{slug}/foundry-actor returns 400 for slugs with chars outside [a-z0-9-] (FVT-04f).
+
+    Note: %2F-encoded traversal (../../etc/passwd) cannot be tested via httpx because
+    Starlette decodes %2F → / before routing, producing a 404 non-match rather than a 400.
+    The slugify guard is tested with an uppercase/underscore slug — any character outside
+    [a-z0-9-] triggers it equally well.
+    """
     mock_obs = MagicMock()
     mock_obs.get_note = AsyncMock(return_value=None)
     with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
          patch("app.routes.npcs.obsidian", mock_obs):
         from app.main import app
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            # httpx percent-encodes the path — use raw URL to send the traversal slug
             resp = await client.get(
-                "/npcs/../etc/passwd/foundry-actor",
+                "/npcs/INVALID_SLUG/foundry-actor",
                 headers={"X-Sentinel-Key": "test-key-for-pytest"},
             )
     assert resp.status_code == 400
