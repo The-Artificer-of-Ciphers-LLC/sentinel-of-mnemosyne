@@ -97,6 +97,28 @@ REGISTRATION_PAYLOAD = {
 }
 
 
+async def _registration_heartbeat() -> None:
+    """Re-register with Sentinel Core every 30 s so a sentinel-core restart self-heals.
+
+    Non-fatal: a failed heartbeat logs a warning and retries on the next tick.
+    Cancelled cleanly by the lifespan on shutdown.
+    """
+    while True:
+        await asyncio.sleep(30)
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{settings.sentinel_core_url}/modules/register",
+                    json=REGISTRATION_PAYLOAD,
+                    headers={"X-Sentinel-Key": os.environ.get("SENTINEL_API_KEY", "")},
+                    timeout=10.0,
+                )
+                resp.raise_for_status()
+                logger.debug("Heartbeat: re-registered with Sentinel Core")
+        except Exception as exc:
+            logger.warning("Heartbeat: re-registration failed: %s", exc)
+
+
 async def _register_with_retry(client: httpx.AsyncClient) -> None:
     """Register with Sentinel Core — 5 attempts, exponential backoff 1s->2s->4s->8s->16s.
 
@@ -202,7 +224,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         _foundry_module.discord_bot_url = settings.discord_bot_internal_url
         # Phase 36: wire npcs route's module-level obsidian singleton.
         _npcs_module.obsidian = obsidian_client
-        yield
+        heartbeat_task = asyncio.create_task(_registration_heartbeat())
+        try:
+            yield
+        finally:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
     # obsidian_http_client closes when the async with block exits (on shutdown)
     _npc_module.obsidian = None
     _harvest_module.obsidian = None
