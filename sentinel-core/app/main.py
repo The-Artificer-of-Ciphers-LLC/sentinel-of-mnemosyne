@@ -30,6 +30,7 @@ from app.routes.modules import router as modules_router
 from app.routes.status import router as status_router
 from app.services.injection_filter import InjectionFilter
 from app.services.model_registry import build_model_registry
+from app.services.model_selector import discover_active_model
 from app.services.output_scanner import OutputScanner
 from app.services.provider_router import ProviderRouter
 
