@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
-status: in_progress
-stopped_at: ""
-last_updated: "2026-04-26T00:00:00.000Z"
-last_activity: "2026-04-26 -- Phase 36 execution started: Wave 0 TDD stubs"
+status: "Phase 36 PLANNED. 3 plans created: Wave 0 TDD stubs, Wave 1 Python backend (CORS fix + npcs router), Wave 2 JS frontend (ApplicationV2 import dialog)."
+stopped_at: context exhaustion at 75% (2026-04-26)
+last_updated: "2026-04-26T17:51:58.832Z"
+last_activity: "2026-04-26 -- Completed quick task 260426-lcl: model-agnostic LLM endpoint discovery wired into sentinel-core"
 progress:
   total_phases: 35
   completed_phases: 19
-  total_plans: 66
-  completed_plans: 73
+  total_plans: 69
+  completed_plans: 75
   percent: 100
 ---
 
@@ -152,12 +152,13 @@ Recent decisions affecting current work:
 | 260423-mdl | registry-aware LLM model selector — query LM Studio /v1/models + litellm.get_model_info to pick best model per task kind (chat/structured/fast); pathfinder-only scope | 2026-04-23 | 0f80c42 | [260423-mdl-llm-model-selector-registry-aware](.planning/quick/260423-mdl-llm-model-selector-registry-aware/) |
 | 260423-tki | npc token image upload (OUT-02 ext) + PDF embed — `:pf npc token-image <name>` stores PNG at mnemosyne/pf2e/tokens/<slug>.png and updates frontmatter; `:pf npc pdf` embeds it in header; 42/42 tests pass | 2026-04-23 | (this commit) | [260423-tki-npc-token-image-pdf-embed](.planning/quick/260423-tki-npc-token-image-pdf-embed/) |
 | 260425-k9r | Foundry module connectivity design options — surfaces 5 options (Tailscale, Cloudflare Tunnel, nginx proxy, Discord webhook, WireGuard) to address Phase 35 internet-exposure gap; recommends Tailscale + webhook fallback mode | 2026-04-25 | — | [260425-k9r-foundry-connectivity-design-options](.planning/quick/260425-k9r-foundry-connectivity-design-options/) |
+| 260426-lcl | model-agnostic LLM endpoint discovery — wire /v1/models discovery into sentinel-core startup; model_selector.py ported from pathfinder; config.py extended with model_auto_discover + model_preferred; 156 tests pass | 2026-04-26 | 88483d6 | [260426-lcl-model-agnostic-llm-endpoint-discovery](.planning/quick/260426-lcl-model-agnostic-llm-endpoint-discovery/) |
 
 ## Session Continuity
 
-Last session: 2026-04-26T00:00:00.000Z
-Stopped at: Phase 36 planning complete — 3 plans ready
-Resume file: .planning/phases/36-foundry-npc-pull-import/36-01-PLAN.md
+Last session: 2026-04-26T17:51:58.824Z
+Stopped at: context exhaustion at 75% (2026-04-26)
+Resume file: None
 
 **Completed Phase:** 35 (Foundry VTT Event Ingest) — 6 plans — 2026-04-25 — FVT-01..03 shipped; webhook-first fallback + PNACORSMiddleware gap closure
 

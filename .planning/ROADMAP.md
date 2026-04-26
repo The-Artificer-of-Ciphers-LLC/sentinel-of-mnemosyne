@@ -1,18 +1,21 @@
 # Roadmap: Sentinel of Mnemosyne v1.0
 
 <!--
-⚠️  IMMUTABLE PLANNING ARTIFACT — DO NOT DELETE
-This file is protected at three layers:
-1. macOS immutable flag (chflags uchg) — rm will fail
-2. PreToolUse hook blocks any Bash command that deletes this file
-3. CLAUDE.md explicitly bans its deletion
+⚠️  PLANNING ARTIFACT — DO NOT DELETE / RENAME / MOVE / OVERWRITE
+This file is protected by a PreToolUse Bash hook that blocks any
+rm / mv / cp-overwrite / git rm / worktree-move operation targeting
+this path. Editing the file in place via Edit/Write tools IS allowed
+(and required — phase status here is load-bearing for the rest of the
+workflow, including STATE.md, /gsd-progress, and milestone advancement).
 
-To legitimately UPDATE this file:
-  chflags nouchg .planning/ROADMAP.md
-  # edit the file
-  chflags uchg .planning/ROADMAP.md
+Deletion incidents (recovered manually): three before 2026-04-23 by AI
+agents running worktree merges that touched this file. The hook is the
+prevention. The chflags-uchg layer that previously sat alongside the
+hook was removed 2026-04-25 because it blocked legitimate edits and
+the hook is sufficient on its own.
 
-AI agents: you are NOT authorised to remove this file or comment out its contents.
+AI agents: you ARE authorised to edit this file in place. You are NOT
+authorised to delete, rename, move, or overwrite it.
 -->
 
 ## Overview
@@ -47,6 +50,15 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 24: Pentest Agent Wire + Missing Verification Artifacts** — Wire pentest-agent compose include (SEC-04); generate VERIFICATION.md for Phases 02, 05, 07 (completed 2026-04-11)
 - [x] **Phase 25: v0.40 Pre-Beta Refactoring** — Eliminate duplicates (DUP-01–05), complete stubs (STUB-01–08), fix architecture contradictions (CONTRA-01–04), implement RD-01–RD-10 (completed 2026-04-11)
 - [x] **Phase 26: Nyquist Validation Cleanup** — Create/repair VALIDATION.md for Phases 04, 06, 07, 10; add missing Discord subcommand test stubs (completed 2026-04-21)
+- [x] **Phase 28: pf2e-module Skeleton + CORS** — pf2e-module FastAPI scaffold, sentinel-core proxy include, CORS for Foundry VTT (completed 2026-04-21)
+- [x] **Phase 29: NPC CRUD + Obsidian Persistence** — `:pf npc create/update/show/relate/import` with Obsidian PUT/PATCH persistence (completed 2026-04-22)
+- [x] **Phase 30: NPC Outputs** — Token-image generation, dialogue prompt extraction, NPC export (completed 2026-04-23)
+- [x] **Phase 31: Dialogue Engine** — `:pf say` + multi-turn history, conversation persistence (completed 2026-04-23)
+- [x] **Phase 32: Monster Harvesting** — `:pf harvest` with components, Medicine DCs, craftable item rendering (completed 2026-04-24)
+- [x] **Phase 33: Rules Engine** — `:pf rule` PF2e Remaster rules Q&A with citation, generation, decline, and reuse-cache. D-05 reuse threshold calibrated 0.80→0.70 in Phase 33.1. (completed 2026-04-25)
+- [x] **Phase 34: Session Notes** — Structured session-end notes to Obsidian with NPC/location auto-tagging, real-time event log, RecapView Discord button, LLM recap with skeleton fallback (completed 2026-04-25)
+- [x] **Phase 35: Foundry VTT Event Ingest** — Live event stream from Foundry → Sentinel for context awareness (completed 2026-04-25)
+- [ ] **Phase 36: Foundry NPC Pull Import** — Import existing Foundry NPCs into the Sentinel vault
 
 ## Phase Details
 
@@ -97,7 +109,7 @@ Plans:
 Plans:
 - [x] 03-01-PLAN.md — Wave 1: APIKeyMiddleware in sentinel-core, test_auth.py (4 tests), update 31 existing tests with X-Sentinel-Key header
 - [x] 03-02-PLAN.md — Wave 2: Discord bot container — bot.py, Dockerfile, compose.yml, /sentask slash command with defer+thread+Core call
-- [x] 03-03-PLAN.md — Wave 2: Apple Messages bridge — bridge.py (SQLite ROWID polling), launch.sh, README.md (Full Disk Access docs)
+- [x] 03-03-PLAN.md — Wave 3: Apple Messages bridge — bridge.py (SQLite ROWID polling), launch.sh, README.md (Full Disk Access docs)
 
 ### Phase 4: AI Provider
 **Goal**: Provider configuration via env vars. Multiple providers switchable. Retry logic and fallback.
@@ -385,3 +397,145 @@ Plans:
 - [x] 26-01-PLAN.md — Discord test suite expansion (4 unit tests + 1 integration stub, conftest fixture)
 - [x] 26-02-PLAN.md — Repair 07-VALIDATION.md and 10-VALIDATION.md (Nyquist compliance)
 - [x] 26-03-PLAN.md — Create 04-VALIDATION.md and 06-VALIDATION.md from scratch
+
+---
+
+## Milestone v0.5 — The Dungeon
+
+### Phase 28: pf2e-module Skeleton + CORS
+**Goal:** Stand up the pf2e-module FastAPI container, register it with Sentinel Core's module gateway, and add CORS middleware to Core — proving the Path B module pattern with a health check and unlocking all downstream phases.
+**Depends on:** Phase 26 / Phase 27
+**Requirements:** MOD-01, MOD-02
+**Success Criteria** (what must be TRUE):
+  1. `docker compose --profile pf2e up` starts pf2e-module container without errors
+  2. `POST /modules/register` from pf2e-module succeeds at startup; `GET /modules` returns `pathfinder` in the list
+  3. `GET /modules/pathfinder/healthz` returns 200 via Core proxy
+  4. Foundry browser `fetch()` to Sentinel Core with `X-Sentinel-Key` does not fail with a CORS error
+  5. `allow_origins` in CORSMiddleware uses an explicit LAN IP list (not wildcard — wildcard blocks credential headers)
+**Status:** ✅ COMPLETE (2026-04-21)
+**Plans:** 3 plans (28-01 module skeleton + register, 28-02 CORS, 28-03 healthz proxy)
+
+### Phase 29: NPC CRUD + Obsidian Persistence
+**Goal:** Create, update, query, relate, and bulk-import NPCs via Discord commands, with all NPC data persisted as structured YAML-frontmatter notes under `mnemosyne/pf2e/npcs/`.
+**Depends on:** Phase 28
+**Requirements:** NPC-01, NPC-02, NPC-03, NPC-04, NPC-05
+**Success Criteria** (what must be TRUE):
+  1. `/pf npc create` creates an Obsidian note at `mnemosyne/pf2e/npcs/{slug}.md` with YAML frontmatter
+  2. `/pf npc update` surgically PATCHes the note frontmatter without overwriting prose sections
+  3. `/pf npc show` returns a Discord embed with NPC summary
+  4. NPC note includes a `relationships:` frontmatter block after `/pf npc relate`
+  5. Bulk import from a Foundry actor list JSON creates corresponding Obsidian notes for each actor
+**Status:** ✅ COMPLETE (2026-04-22)
+**Plans:** 5 plans (29-01..05 covering CRUD endpoints, Discord wiring, relations, bulk import)
+
+### Phase 30: NPC Outputs
+**Goal:** Produce all four NPC output formats from a stored Obsidian NPC profile: Foundry VTT PF2e actor JSON, Midjourney token prompt text, formatted stat block, and PDF stat card.
+**Depends on:** Phase 29
+**Requirements:** OUT-01, OUT-02, OUT-03, OUT-04
+**Success Criteria** (what must be TRUE):
+  1. `:pf npc export <name>` attaches a `.json` file; imported into Foundry VTT without errors
+  2. Exported JSON passes Foundry PF2e actor schema validation (schema derived from live actor export)
+  3. `:pf npc token <name>` returns a copyable `/imagine` prompt string in Discord
+  4. `:pf npc stat <name>` returns a formatted stat block as a Discord embed
+  5. `:pf npc pdf <name>` attaches a printable PDF stat card
+**Status:** ✅ COMPLETE (2026-04-23)
+**Plans:** 3 plans (30-01 helper modules + RED tests, 30-02 endpoints + REGISTRATION_PAYLOAD, 30-03 Discord bot wiring)
+**Tests:** 23 module tests + 19 Discord subcommand tests + 12 shared client tests, all green
+
+### Phase 31: Dialogue Engine
+**Goal:** Enable in-character NPC dialogue grounded in Obsidian profiles, with persistent mood state and support for multi-NPC scenes.
+**Depends on:** Phase 29
+**Requirements:** DLG-01, DLG-02, DLG-03
+**Success Criteria** (what must be TRUE):
+  1. `/pf say [npc] party says [X]` returns an in-character reply that reflects the NPC's documented personality
+  2. Mood state is stored in NPC frontmatter and updated after significant interactions
+  3. An aggressive encounter shifts mood toward hostile; a successful persuasion shifts toward friendly
+  4. `/pf scene [npc1] [npc2] party says [X]` returns distinct replies from each NPC in their own voice
+**Status:** ✅ COMPLETE (2026-04-23)
+**Plans:** 5 plans (31-01..05 covering dialogue endpoint, mood persistence, multi-NPC scenes, Discord wiring)
+
+### Phase 32: Monster Harvesting
+**Goal:** Given a killed monster, produce a complete harvest report: components, Medicine DCs, craftable items with Crafting DCs, and PF2e vendor values — with batch support for multi-monster encounters.
+**Depends on:** Phase 28
+**Requirements:** HRV-01, HRV-02, HRV-03, HRV-04, HRV-05, HRV-06
+**Success Criteria** (what must be TRUE):
+  1. `/pf harvest [monster]` returns at least one harvestable component with a Medicine DC
+  2. Each component lists craftable outputs (potion/poison/armor) with item level and gp/sp/cp value
+  3. Each craftable item includes a Crafting skill DC
+  4. For monsters not in the harvest tables, AI-generated components are marked `[GENERATED — verify]`
+  5. `/pf harvest [m1] [m2] [m3]` returns an aggregated report covering all monsters
+**Status:** ✅ COMPLETE (2026-04-24)
+**Plans:** 5 plans (32-01..05 covering harvest engine, Medicine DC, craftable items, Discord dispatch, live UAT)
+**Tests:** 89 unit + 38 module + 17/17 live UAT, all green
+
+### Phase 33: Rules Engine
+**Goal:** Answer PF2e Remaster rules questions with sourced citations, reason from rules when no direct source exists, persist every ruling to Obsidian, and decline pre-Remaster or PF1 queries.
+**Depends on:** Phase 28
+**Requirements:** RUL-01, RUL-02, RUL-03, RUL-04
+**Success Criteria** (what must be TRUE):
+  1. `/pf rules [question]` returns a ruling with a `[SOURCED: ...]` citation for a documented mechanic
+  2. An edge-case question returns a ruling marked `[GENERATED — verify]` with reasoning shown
+  3. The ruling is saved to `mnemosyne/pf2e/rulings/` with `verified: false` frontmatter
+  4. A second identical question returns the cached ruling from Obsidian, not a new LLM call
+  5. A PF1 or pre-Remaster query returns a clear decline message explaining the scope constraint
+**Status:** ✅ COMPLETE (2026-04-25)
+**Plans:** 5 plans (33-01 RED scaffolding, 33-02 pure transforms + corpus, 33-03 LLM adapters + threshold calibration, 33-04 HTTP routes + lifespan, 33-05 Discord bot + live UAT) + Phase 33.1 D-05 calibration gap-closure
+**Tests:** 142/142 pathfinder pytest + 48/48 discord pytest + 17/17 live UAT + 16/16 in-Discord visual UAT, all green
+**Notes:** D-05 reuse threshold calibrated 0.80→0.70 (F1-max) in Phase 33.1 after live UAT-8 surfaced empirical mismatch. Two bugs caught + fixed by live UAT (litellm provider prefix in embed_texts, docker compose exec name resolution).
+
+### Phase 34: Session Notes
+**Goal:** Capture structured session notes to Obsidian at session end, with auto-tagging of NPC and location links and a real-time event log with timestamps.
+**Depends on:** Phase 29
+**Requirements:** SES-01, SES-02, SES-03
+**Success Criteria** (what must be TRUE):
+  1. `/pf session end` writes a note to `mnemosyne/pf2e/sessions/YYYY-MM-DD.md` with recap, NPCs, decisions
+  2. NPC names in the session note are wiki-linked to their `mnemosyne/pf2e/npcs/` pages
+  3. `/pf session log [event]` appends a timestamped entry to the active session log
+  4. Session notes use a consistent template structure across multiple sessions
+**Status:** ✅ COMPLETE (2026-04-25)
+**Plans:** 5/5 plans complete
+**Tests:** 22/22 session unit + 8/8 integration + 50/50 Discord + 9/9 live UAT, all green
+Plans:
+- [x] 34-01-PLAN.md — Wave 0 RED test scaffolding (unit stubs, integration stubs, conftest, UAT)
+- [x] 34-02-PLAN.md — Wave 1 session pure helpers + ObsidianClient.patch_heading + config settings
+- [x] 34-03-PLAN.md — Wave 2 FastAPI session route (5-verb router) + LLM helpers
+- [x] 34-04-PLAN.md — Wave 3 main.py registration + lifespan wiring + compose.yml env vars
+- [x] 34-05-PLAN.md — Wave 4 bot.py Discord wiring (_PF_NOUNS, session branch, RecapView)
+
+### Phase 35: Foundry VTT Event Ingest
+**Goal:** A Foundry VTT JavaScript module hooks into chat messages and dice rolls, POSTs events to Sentinel Core, and receives Discord responses with roll interpretations.
+**Depends on:** Phase 28
+**Requirements:** FVT-01, FVT-02, FVT-03
+**Success Criteria** (what must be TRUE):
+  1. Foundry module installs from a zip and activates without console errors in Foundry v14+
+  2. A chat message with the trigger prefix POSTs to `POST /modules/pathfinder/foundry/event` successfully
+  3. A dice roll result in Foundry chat produces a hit/miss/DC interpretation in the DM's Discord channel
+  4. `X-Sentinel-Key` is stored in Foundry world settings (GM-only) and sent on every POST
+  5. Module declares explicit `compatibility.verified` for the installed Foundry version
+**Status:** COMPLETE (2026-04-25) — all 6 plans done, FVT-01..03 requirements satisfied
+**Plans:** 6 plans (6/6 complete)
+
+Plans:
+- [x] 35-01-PLAN.md — Wave 0 RED test stubs (test_foundry.py + test_discord_foundry.py + conftest gold())
+- [x] 35-02-PLAN.md — Wave 1 Python backend (app/foundry.py helpers + app/routes/foundry.py + config.py)
+- [x] 35-03-PLAN.md — Wave 1 Discord bot internal listener (aiohttp server + build_foundry_roll_embed)
+- [x] 35-04-PLAN.md — Wave 3 main.py wiring (REGISTRATION_PAYLOAD + StaticFiles + lifespan + compose env)
+- [x] 35-05-PLAN.md — Wave 4 Foundry JS module (module.json + sentinel-connector.js + package.sh + UAT)
+- [x] 35-06-PLAN.md — Wave 5 Forge connectivity gap closure (webhook-first fallback + PNACORSMiddleware)
+
+### Phase 36: Foundry NPC Pull Import
+**Goal:** Enable the Foundry VTT module to pull NPC actor JSON directly from Sentinel — one click imports the actor into the world with no file attachment or copy-paste.
+**Depends on:** Phase 30, Phase 35
+**Requirements:** FVT-04
+**Success Criteria** (what must be TRUE):
+  1. `GET /modules/pathfinder/npcs/{slug}/foundry-actor` returns valid PF2e actor JSON
+  2. The Foundry module presents an "Import from Sentinel" button in the actor directory
+  3. Clicking the button imports the NPC actor directly into the Foundry world without errors
+  4. The imported actor is identical in content to the Phase 30 file-attachment export
+**Status:** In progress
+**Plans:** 3 plans
+
+Plans:
+- [ ] 36-01-PLAN.md — Wave 0 RED test stubs (test_npcs.py, 7 tests covering FVT-04a..f)
+- [ ] 36-02-PLAN.md — Wave 1 Python backend (routes/npcs.py + main.py wiring — CORS fix, router, REGISTRATION_PAYLOAD, lifespan)
+- [ ] 36-03-PLAN.md — Wave 2 Foundry JS module (SentinelNpcImporter dialog + renderActorDirectory hook + module.json 1.1.0 + zip)
