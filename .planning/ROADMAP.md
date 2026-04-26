@@ -532,5 +532,10 @@ Plans:
   2. The Foundry module presents an "Import from Sentinel" button in the actor directory
   3. Clicking the button imports the NPC actor directly into the Foundry world without errors
   4. The imported actor is identical in content to the Phase 30 file-attachment export
-**Status:** Not started
-**Plans:** 0 plans
+**Status:** In progress
+**Plans:** 3 plans
+
+Plans:
+- [ ] 36-01-PLAN.md — Wave 0 RED test stubs (test_npcs.py, 7 tests covering FVT-04a..f)
+- [ ] 36-02-PLAN.md — Wave 1 Python backend (routes/npcs.py + main.py wiring — CORS fix, router, REGISTRATION_PAYLOAD, lifespan)
+- [ ] 36-03-PLAN.md — Wave 2 Foundry JS module (SentinelNpcImporter dialog + renderActorDirectory hook + module.json 1.1.0 + zip)
