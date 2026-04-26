@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
 status: completed
-stopped_at: context exhaustion at 78% (2026-04-25)
-last_updated: "2026-04-25T17:00:00.000Z"
+stopped_at: context exhaustion at 75% (2026-04-25)
+last_updated: "2026-04-25T18:38:00.113Z"
 last_activity: "2026-04-25 -- Phase 35 Plan 06 complete: Forge connectivity gap closure (webhook-first + PNACORSMiddleware)"
 progress:
   total_phases: 35
@@ -155,11 +155,9 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-25T16:34:54.076Z
-Stopped at: context exhaustion at 78% (2026-04-25)
+Last session: 2026-04-25T19:00:00.000Z
+Stopped at: Session resumed, proceeding to Phase 36 planning
 Resume file: None
-
-**In-Progress Phase:** 35 (Foundry VTT Event Ingest) — Plan 04 complete (2026-04-25)
 
 **Completed Phase:** 34 (Session Notes) — 5 plans / 4 waves (Wave 0 RED, Waves 1-3 implementation, Wave 4 Discord wiring) — 2026-04-25 — SES-01..03 shipped; RecapView Bug A+B fixed during UAT; 9/9 UAT passed
 

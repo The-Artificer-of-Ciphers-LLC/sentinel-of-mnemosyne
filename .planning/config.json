@@ -12,23 +12,34 @@
     "milestone_branch_template": "gsd/{milestone}-{slug}",
     "quick_branch_template": null
   },
+  "review": {
+    "lm_studio_host": "http://192.168.0.50:1234",
+    "models": {
+      "lm_studio": "qwen3.6-35b-a3b"
+    }
+  },
   "workflow": {
     "research": true,
     "plan_check": true,
     "verifier": true,
     "nyquist_validation": true,
+    "pattern_mapper": true,
+    "plan_review_convergence": true,
     "auto_advance": false,
     "node_repair": true,
     "node_repair_budget": 2,
     "ui_phase": true,
     "ui_safety_gate": true,
+    "ai_integration_phase": true,
+    "tdd_mode": true,
+    "code_review": true,
+    "code_review_depth": "standard",
+    "ui_review": true,
+    "use_worktrees": true,
     "text_mode": false,
     "research_before_questions": true,
     "discuss_mode": "discuss",
     "skip_discuss": false,
-    "code_review": true,
-    "code_review_depth": "standard",
-    "tdd_mode": true,
     "_auto_chain_active": false
   },
   "intel": {

@@ -1,35 +1,63 @@
 {
   "version": "1.0",
-  "timestamp": "2026-04-25T18:36:41Z",
-  "phase": "35",
-  "phase_name": "foundry-vtt-event-ingest",
-  "phase_dir": ".planning/phases/35-foundry-vtt-event-ingest",
-  "plan": 6,
-  "task": null,
-  "total_tasks": null,
-  "status": "complete",
+  "timestamp": "2026-04-25T20:12:00Z",
+  "phase": "34",
+  "phase_name": "session-notes",
+  "phase_dir": ".planning/phases/34-session-notes",
+  "plan": 0,
+  "task": 0,
+  "total_tasks": 0,
+  "status": "paused",
   "completed_tasks": [
-    {"id": 1, "name": "Plan 35-06 Task A — sentinel-connector.js webhook-first rewrite", "status": "done", "commit": "0e5b5a5"},
-    {"id": 2, "name": "Plan 35-06 Task B — native CORSMiddleware + .env.example docs", "status": "done", "commit": "371ea7b"},
-    {"id": 3, "name": "Code review fixes CR-01/CR-02/WR-01/WR-02/WR-03/IN-01/IN-02", "status": "done", "commit": "b52773f"},
-    {"id": 4, "name": "Re-verification 18/18 automated truths", "status": "done", "commit": "14ab9d4"},
-    {"id": 5, "name": "docs/foundry-setup.md end-user installation guide", "status": "done", "commit": "65146bf"}
+    {"id": 1, "name": "gsd-settings update (pattern_mapper, ai_integration_phase, ui_review, use_worktrees added)", "status": "done"},
+    {"id": 2, "name": "gsd config-set review.lm_studio_host / review.models.lm_studio / workflow.plan_review_convergence", "status": "done"},
+    {"id": 3, "name": "gsd-code-review 35 (standard depth, 11 files, 7 findings)", "status": "done", "commit": "736ba09"},
+    {"id": 4, "name": "gsd-code-review-fix 35 (4 fixed: CR-01/CR-02/WR-03/WR-04, 2 pre-fixed: WR-01/WR-02)", "status": "done", "commit": "d07b4be"},
+    {"id": 5, "name": "gsd-plan-review-convergence 34 --lm-studio (3 cycles, stalled at 3 HIGHs)", "status": "done-stalled"},
+    {"id": 6, "name": "Forensics investigation: gsd-review model/host drift bug", "status": "done"},
+    {"id": 7, "name": "GitHub issue gsd-build/get-shit-done #2721 filed", "status": "done"}
   ],
-  "remaining_tasks": [],
-  "blockers": [],
+  "remaining_tasks": [
+    {
+      "id": 8,
+      "name": "DECISION REQUIRED: phase 34 convergence escalation gate — proceed to execution or manual review",
+      "status": "blocked_on_human",
+      "detail": "3 HIGH concerns remain after 3 cycles (all addressed in plan text with pseudocode-level detail). Reviewers re-raise because verification is code-only. User was mid-clarification when session ended."
+    },
+    {
+      "id": 9,
+      "name": "gsd-execute-phase 34 (once decision made)",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [
+    {
+      "description": "Phase 34 convergence escalation: proceed vs manual review decision pending",
+      "type": "human_action",
+      "workaround": "Run /gsd-execute-phase 34 to proceed, or read 34-REVIEWS.md + 34-03/34-05 PLAN.md to review manually"
+    }
+  ],
   "human_actions_pending": [
     {
-      "action": "Run 5 live UAT tests in Foundry VTT v14",
-      "context": "Requires live Foundry + LM Studio + Discord bot. Saved in 35-HUMAN-UAT.md. Tests: attack roll embed, hidden-DC footer, apiKey not in settings panel, webhook-only mode, Sentinel timeout fallback.",
+      "action": "Decide: /gsd-execute-phase 34 OR read REVIEWS.md and address concerns manually",
+      "context": "3 HIGHs all addressed in plan text (pseudocode level). Will be proven by TDD tests during execution. Convergence stalled 3→3→3 because reviewers can't verify code that hasn't been written yet.",
+      "blocking": true
+    },
+    {
+      "action": "If rerunning /gsd-plan-review-convergence: verify qwen3.6-35b-a3b is loaded at localhost:1234 first (curl -s http://localhost:1234/v1/models | jq '.data[].id')",
+      "context": "Bug #2721 in gsd-wired: review agent ignores configured model and picks arbitrary model when multiple are loaded",
       "blocking": false
     }
   ],
   "decisions": [
-    {"decision": "Drop PNACORSMiddleware; use Starlette native allow_private_network=True", "rationale": "Starlette 1.0 supports it; subclass incorrectly injected PNA header on non-OPTIONS responses (spec violation)", "phase": "35"},
-    {"decision": "allow_origin_regex for *.forge-vtt.com wildcard", "rationale": "Starlette exact-string matches allow_origins; globs require allow_origin_regex", "phase": "35"},
-    {"decision": "discordWebhookUrl is a Foundry world setting, not a server env var", "rationale": "Stored in Foundry database; .env would mislead users into treating it as a server-side secret", "phase": "35"}
+    {"decision": "review.lm_studio_host=http://192.168.0.50:1234, review.models.lm_studio=qwen3.6-35b-a3b", "rationale": "Mac Mini LM Studio for reviews", "phase": "session"},
+    {"decision": "workflow.plan_review_convergence=true enabled", "rationale": "User explicitly enabled this session", "phase": "session"},
+    {"decision": "Filed gsd-build/get-shit-done #2721 for gsd-review model/host drift bugs (4 bugs: no model identity check, silent host fallback, error output as content, agent model rotation)", "rationale": "Forensics confirmed bugs during cycle 2/3 review", "phase": "session"}
   ],
-  "uncommitted_files": [],
-  "next_action": "Phase 35 complete. Start Phase 36 (Foundry NPC Pull Import) with /gsd-discuss-phase 36 or /gsd-plan-phase 36.",
-  "context_notes": "Phase 35 gap-closure plan 35-06 executed. All 6 plans done, 18/18 automated, 7 code review findings fixed, end-user docs written. Only 5 live-Foundry UAT items remain."
+  "uncommitted_files": [
+    ".planning/STATE.md",
+    ".planning/config.json"
+  ],
+  "next_action": "Answer the phase 34 escalation gate: run /gsd-execute-phase 34 (recommended — all 3 HIGHs are addressed in plan text and will be verified by TDD) OR manually review .planning/phases/34-session-notes/34-REVIEWS.md",
+  "context_notes": "Phase 35 is fully done (complete + reviewed + 4 fixes committed). Phase 34 is replanned and ready for execution — the convergence loop stalled not because the plans are bad but because external AI reviewers can only verify plan text, not running code. All 3 HIGHs have pseudocode-level implementation detail in the PLAN.md files."
 }
