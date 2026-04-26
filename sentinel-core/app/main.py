@@ -63,9 +63,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     model_registry = await build_model_registry(settings, http_client)
     app.state.model_registry = model_registry
 
+    # Discover active model for the configured provider (non-fatal)
+    _lmstudio_model_str = await discover_active_model(settings, http_client)
+    _lmstudio_model_name = _lmstudio_model_str.split("/", 1)[-1]
+
     # Determine active model id for context window lookup
     _active_model = (
-        settings.model_name
+        _lmstudio_model_name
         if settings.ai_provider == "lmstudio"
         else settings.claude_model
         if settings.ai_provider == "claude"
@@ -86,7 +90,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # All 4 backends route through LiteLLMProvider (RD-02 — eliminate stub providers)
     _provider_map = {
         "lmstudio": LiteLLMProvider(
-            model_string=f"openai/{settings.model_name}",
+            model_string=_lmstudio_model_str,  # discovered, not hardcoded
             api_base=settings.lmstudio_base_url,
             api_key="lmstudio",
         ),

@@ -26,6 +26,9 @@ APP_DIR = Path(__file__).parent.parent / "app"
 EXCLUDED_PATHS = {
     APP_DIR / "config.py",
     APP_DIR / "clients",
+    # model_selector.py uses litellm.get_model_info for capability metadata scoring only —
+    # it does not make AI calls. All actual AI calls still route through app.state.ai_provider.
+    APP_DIR / "services" / "model_selector.py",
 }
 
 # Vendor SDK import patterns that are forbidden in app/ business logic.

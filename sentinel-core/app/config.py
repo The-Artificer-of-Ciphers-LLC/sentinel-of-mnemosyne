@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     # LM Studio API key (optional — only if LM Studio auth is enabled)
     lmstudio_api_key: str = ""
 
+    # Model auto-discovery (lcl-model-agnostic)
+    model_auto_discover: bool = True
+    model_preferred: str | None = None
+    model_task_chat: str | None = None
+    model_task_structured: str | None = None
+    model_task_fast: str | None = None
+
     # Alpaca trading keys (optional — trading module only)
     alpaca_paper_api_key: str = ""
     alpaca_paper_secret_key: str = ""

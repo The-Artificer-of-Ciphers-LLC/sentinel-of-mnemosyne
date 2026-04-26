@@ -78,3 +78,64 @@ async def test_unknown_provider_returns_seed_only(monkeypatch):
     async with httpx.AsyncClient() as client:
         registry = await build_model_registry(s, client)
     assert len(registry) >= 1  # at least seed data
+
+
+async def test_lmstudio_registry_uses_discovered_model_name(monkeypatch):
+    """When /v1/models returns a model, the registry key uses the discovered name, not MODEL_NAME."""
+    monkeypatch.setenv("AI_PROVIDER", "lmstudio")
+    monkeypatch.setenv("MODEL_NAME", "static-name")
+    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
+    monkeypatch.setenv("LMSTUDIO_BASE_URL", "http://test-lmstudio/v1")
+    from app.config import Settings
+    s = Settings()
+
+    def handler(request):
+        if "/v1/models" in str(request.url):
+            return httpx.Response(200, json={"data": [{"id": "discovered-model"}]})
+        if "/api/v0/models" in str(request.url):
+            return httpx.Response(200, json={"max_context_length": 65536, "id": "discovered-model"})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        registry = await build_model_registry(s, client)
+    assert "discovered-model" in registry
+    assert registry["discovered-model"].context_window == 65536
+
+
+async def test_lmstudio_registry_fallback_when_discovery_fails(monkeypatch):
+    """When /v1/models fails, registry falls back to MODEL_NAME key."""
+    monkeypatch.setenv("AI_PROVIDER", "lmstudio")
+    monkeypatch.setenv("MODEL_NAME", "static-name")
+    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
+    monkeypatch.setenv("LMSTUDIO_BASE_URL", "http://test-lmstudio/v1")
+    from app.config import Settings
+    s = Settings()
+
+    def raise_connect(request):
+        raise httpx.ConnectError("refused")
+
+    transport = httpx.MockTransport(raise_connect)
+    async with httpx.AsyncClient(transport=transport) as client:
+        registry = await build_model_registry(s, client)
+    assert "static-name" in registry
+
+
+async def test_lmstudio_registry_no_discovery_when_disabled(monkeypatch):
+    """When MODEL_AUTO_DISCOVER=false, registry uses MODEL_NAME key without attempting discovery."""
+    monkeypatch.setenv("AI_PROVIDER", "lmstudio")
+    monkeypatch.setenv("MODEL_NAME", "static-name")
+    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "false")
+    monkeypatch.setenv("LMSTUDIO_BASE_URL", "http://test-lmstudio/v1")
+    from app.config import Settings
+    s = Settings()
+
+    def handler(request):
+        if "/api/v0/models" in str(request.url):
+            return httpx.Response(200, json={"max_context_length": 8192, "id": "static-name"})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        registry = await build_model_registry(s, client)
+    assert "static-name" in registry
