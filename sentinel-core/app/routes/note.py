@@ -262,6 +262,7 @@ from app.services.vault_sweeper import (  # noqa: E402
 class SweepStartRequest(BaseModel):
     user_id: str
     force_reclassify: bool = False
+    dry_run: bool = False  # preview moves without modifying the vault
 
 
 def _is_admin_route(user_id: str) -> bool:
@@ -283,6 +284,35 @@ async def vault_sweep_start(req: SweepStartRequest, request: Request):
     embedder = request.app.state.note_embedder_fn
 
     sweep_id = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Dry-run runs SYNCHRONOUSLY and returns the proposed moves in the
+    # response. The operator previews these before authorizing a live sweep.
+    # No status mutation, no _set_status — dry-run leaves the global status
+    # untouched so a concurrent live sweep's status is preserved.
+    if req.dry_run:
+        try:
+            report = await run_sweep(
+                obsidian,
+                classifier,
+                embedder,
+                force_reclassify=req.force_reclassify,
+                dry_run=True,
+            )
+        except SweepInProgressError:
+            raise HTTPException(status_code=409, detail="a sweep is already running")
+        return {
+            "sweep_id": report.sweep_id,
+            "status": "dry-run-complete",
+            "files_total": report.files_total,
+            "files_processed": report.files_processed,
+            "topic_moves": report.topic_moves,
+            "noise_moved": report.noise_moved,
+            "duplicates_moved": report.duplicates_moved,
+            "proposed_moves": report.proposed_moves,
+            "errors": report.errors,
+        }
+
+    # Live run: kick off background task, return immediately.
     # Update status immediately so callers see "running" before the task starts.
     _set_status(
         type(
@@ -295,6 +325,7 @@ async def vault_sweep_start(req: SweepStartRequest, request: Request):
                 "files_total": 0,
                 "duplicates_moved": 0,
                 "noise_moved": 0,
+                "topic_moves": 0,
             },
         )()
     )

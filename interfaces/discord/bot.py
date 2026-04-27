@@ -288,10 +288,16 @@ async def _call_core_inbox_discard(user_id: str, entry_n: int) -> str:
     )
 
 
-async def _call_core_sweep_start(user_id: str, force_reclassify: bool = False) -> str:
-    payload = {"user_id": user_id, "force_reclassify": force_reclassify}
+async def _call_core_sweep_start(
+    user_id: str, force_reclassify: bool = False, dry_run: bool = False
+) -> str:
+    payload = {
+        "user_id": user_id,
+        "force_reclassify": force_reclassify,
+        "dry_run": dry_run,
+    }
     try:
-        async with httpx.AsyncClient() as http_client:
+        async with httpx.AsyncClient(timeout=120.0) as http_client:
             data = await _sentinel_client.post_to_module(
                 "vault/sweep/start", payload, http_client
             )
@@ -299,6 +305,36 @@ async def _call_core_sweep_start(user_id: str, force_reclassify: bool = False) -
         logger.warning("vault sweep start failed: %s", exc)
         return f"Vault sweep failed to start: {exc}"
     sweep_id = data.get("sweep_id", "?")
+    if dry_run:
+        # Render a compact preview the operator can scan. The full proposed_moves
+        # list may be long, so limit to first 10 of each kind in the chat reply.
+        proposed = data.get("proposed_moves", [])
+        topic_moves = [m for m in proposed if m.get("kind") == "topic"]
+        trash_moves = [m for m in proposed if m.get("kind") == "trash"]
+        lines = [
+            f"**Dry-run complete** — `{sweep_id}`",
+            f"Files scanned: {data.get('files_processed', '?')}/{data.get('files_total', '?')}",
+            f"Proposed: {len(topic_moves)} topic-relocations, {len(trash_moves)} trash-moves",
+            "",
+        ]
+        if topic_moves:
+            lines.append("**Topic relocations** (first 10):")
+            for m in topic_moves[:10]:
+                lines.append(f"- `{m['src']}` → `{m['dst']}` ({m.get('reason', '')})")
+            if len(topic_moves) > 10:
+                lines.append(f"- … and {len(topic_moves) - 10} more")
+            lines.append("")
+        if trash_moves:
+            lines.append("**Trash moves** (first 10):")
+            for m in trash_moves[:10]:
+                lines.append(f"- `{m['src']}` → `{m['dst']}` ({m.get('reason', '')})")
+            if len(trash_moves) > 10:
+                lines.append(f"- … and {len(trash_moves) - 10} more")
+            lines.append("")
+        if data.get("errors"):
+            lines.append(f"⚠ {len(data['errors'])} errors encountered during preview")
+        lines.append("Run `:vault-sweep` (no args) to execute these moves.")
+        return "\n".join(lines)
     return f"Vault sweep started: `{sweep_id}`. Use `:vault-sweep status` to check progress."
 
 
@@ -1438,6 +1474,10 @@ async def handle_sentask_subcommand(
         verb = (args.strip().split(maxsplit=1) or [""])[0]
         if verb == "status":
             return await _call_core_sweep_status(user_id)
+        if verb == "dry-run":
+            return await _call_core_sweep_start(
+                user_id, force_reclassify=False, dry_run=True
+            )
         force = verb == "force"
         return await _call_core_sweep_start(user_id, force_reclassify=force)
 
