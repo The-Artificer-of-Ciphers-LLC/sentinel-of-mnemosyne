@@ -173,9 +173,9 @@ async def _resolve_model_for_classification() -> tuple[str, object | None, str |
         logger.warning("note_classifier: select_model failed (%s); falling back to first loaded", exc)
         model_id = loaded[0] if loaded else (settings.model_name or "openai/local-model")
 
-    # Ensure litellm provider prefix
-    if "/" not in model_id:
-        model_id = f"openai/{model_id}"
+    # Ensure litellm provider prefix — HF-style namespaces (qwen/qwen2.5-coder-14b)
+    # are NOT litellm provider tags, so '/' alone is not a sufficient guard.
+    model_id = ensure_litellm_prefix(model_id)
 
     try:
         profile = await get_profile(model_id, api_base=api_base)
