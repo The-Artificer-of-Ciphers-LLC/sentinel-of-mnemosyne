@@ -20,7 +20,7 @@ import httpx
 
 from app.clients.litellm_provider import get_context_window_from_lmstudio
 from app.config import Settings
-from app.services.model_profiles import get_profile
+from sentinel_shared.model_profiles import get_profile
 from app.services.model_selector import discover_active_model, strip_litellm_prefix
 
 logger = logging.getLogger(__name__)

@@ -5,6 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      additional_contexts:
+        shared: ../shared
     ports:
       - "8000:8000"
     env_file:

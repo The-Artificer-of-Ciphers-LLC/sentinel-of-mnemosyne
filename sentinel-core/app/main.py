@@ -29,7 +29,7 @@ from app.routes.message import router as message_router
 from app.routes.modules import router as modules_router
 from app.routes.status import router as status_router
 from app.services.injection_filter import InjectionFilter
-from app.services.model_profiles import get_profile
+from sentinel_shared.model_profiles import get_profile
 from app.services.model_registry import build_model_registry
 from app.services.model_selector import discover_active_model, strip_litellm_prefix
 from app.services.output_scanner import OutputScanner

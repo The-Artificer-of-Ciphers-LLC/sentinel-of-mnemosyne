@@ -12,7 +12,7 @@ import logging
 import httpx
 
 from app.llm_call import acompletion_with_profile
-from app.model_profiles import ModelProfile
+from sentinel_shared.model_profiles import ModelProfile
 
 logger = logging.getLogger(__name__)
 

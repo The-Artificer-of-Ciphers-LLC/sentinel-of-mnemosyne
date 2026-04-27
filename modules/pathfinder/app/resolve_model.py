@@ -10,7 +10,7 @@ value for LiteLLM's ``provider/model`` naming convention.
 from dataclasses import dataclass
 
 from app.config import settings
-from app.model_profiles import ModelProfile, get_profile
+from sentinel_shared.model_profiles import ModelProfile, get_profile
 from app.model_selector import TaskKind, get_loaded_models, select_model
 
 # LM Studio exposes an OpenAI-compatible API, so bare names from /v1/models

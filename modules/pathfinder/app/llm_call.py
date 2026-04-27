@@ -16,7 +16,7 @@ from typing import Any
 
 import litellm
 
-from app.model_profiles import ModelProfile
+from sentinel_shared.model_profiles import ModelProfile
 
 
 async def acompletion_with_profile(
