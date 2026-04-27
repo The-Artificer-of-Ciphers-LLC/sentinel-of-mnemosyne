@@ -39,7 +39,7 @@ from app.llm import (
     update_npc_fields,
 )
 from app.pdf import build_npc_pdf
-from app.resolve_model import resolve_model
+from app.resolve_model import resolve_model, resolve_model_profile
 
 logger = logging.getLogger(__name__)
 

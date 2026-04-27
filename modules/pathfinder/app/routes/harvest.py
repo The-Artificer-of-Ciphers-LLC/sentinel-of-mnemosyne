@@ -33,7 +33,7 @@ from app.harvest import (
     lookup_seed,
 )
 from app.llm import generate_harvest_fallback
-from app.resolve_model import resolve_model
+from app.resolve_model import resolve_model, resolve_model_profile
 from app.routes.npc import slugify  # Don't Hand-Roll — reuse the existing slug fn
 
 logger = logging.getLogger(__name__)

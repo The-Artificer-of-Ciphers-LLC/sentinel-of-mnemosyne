@@ -39,7 +39,7 @@ from app.llm import (
     generate_ruling_fallback,
     generate_ruling_from_passages,
 )
-from app.resolve_model import resolve_model
+from app.resolve_model import resolve_model, resolve_model_profile
 from app.rules import (
     D_07_DECLINE_TEMPLATE,
     MAX_QUERY_CHARS,
