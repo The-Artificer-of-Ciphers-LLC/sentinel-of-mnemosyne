@@ -163,6 +163,78 @@ class ObsidianClient:
         )
         resp.raise_for_status()
 
+    async def list_directory(self, path: str = "") -> list[str]:
+        """GET /vault/{path}/ — return mixed list of filenames and subdir names.
+
+        Subdir names end with '/'. Returns [] on 404 or any error (graceful degrade).
+        """
+
+        async def _inner():
+            url = (
+                f"{self._base_url}/vault/{path}/" if path else f"{self._base_url}/vault/"
+            )
+            resp = await self._client.get(url, headers=self._headers, timeout=10.0)
+            if resp.status_code == 404:
+                return []
+            resp.raise_for_status()
+            data = resp.json()
+            files = data if isinstance(data, list) else data.get("files", [])
+            return [f if isinstance(f, str) else f.get("path", "") for f in files]
+
+        return await self._safe_request(_inner(), [], "list_directory")
+
+    async def read_note(self, path: str) -> str:
+        """GET /vault/{path} — return body on 200, "" on 404 or error."""
+
+        async def _inner():
+            resp = await self._client.get(
+                f"{self._base_url}/vault/{path}",
+                headers=self._headers,
+                timeout=10.0,
+            )
+            if resp.status_code == 404:
+                return ""
+            resp.raise_for_status()
+            return resp.text
+
+        return await self._safe_request(_inner(), "", "read_note")
+
+    async def write_note(self, path: str, body: str) -> None:
+        """PUT /vault/{path} with text/markdown content-type. Raises on non-2xx."""
+        resp = await self._client.put(
+            f"{self._base_url}/vault/{path}",
+            headers={**self._headers, "Content-Type": "text/markdown"},
+            content=body.encode("utf-8"),
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+
+    async def delete_note(self, path: str) -> None:
+        """DELETE /vault/{path}. Raises on non-2xx."""
+        resp = await self._client.delete(
+            f"{self._base_url}/vault/{path}",
+            headers=self._headers,
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+
+    async def patch_append(self, path: str, body: str) -> None:
+        """PATCH /vault/{path} with `Obsidian-API-Content-Insertion-Position: end`.
+
+        Mirrors the bot.py:1303 `_persist_thread_id` pattern. Raises on non-2xx.
+        """
+        resp = await self._client.patch(
+            f"{self._base_url}/vault/{path}",
+            headers={
+                **self._headers,
+                "Content-Type": "text/markdown",
+                "Obsidian-API-Content-Insertion-Position": "end",
+            },
+            content=body.encode("utf-8"),
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+
     async def search_vault(self, query: str) -> list[dict]:
         """
         POST /search/simple/?query={query} — keyword search abstraction.

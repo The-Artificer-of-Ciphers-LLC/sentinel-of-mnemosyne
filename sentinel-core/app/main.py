@@ -244,6 +244,7 @@ app.add_middleware(
 app.include_router(message_router)
 app.include_router(status_router)
 app.include_router(modules_router)
+app.include_router(note_router)
 
 
 @app.get("/health")

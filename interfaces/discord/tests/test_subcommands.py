@@ -890,3 +890,38 @@ async def test_pf_session_unknown_verb_returns_usage():
         assert "session" in result.lower() or "usage" in result.lower() or result != ""
     else:
         assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# 260427-vl1 — :note subcommand dispatch tests (Task 5)
+# ---------------------------------------------------------------------------
+
+
+async def test_note_empty_args_returns_usage():
+    result = await bot.handle_sentask_subcommand("note", "", "user123")
+    assert "Usage" in result and ":note" in result
+
+
+async def test_note_with_explicit_topic_calls_helper_with_topic():
+    """`:note learning Finished course` → topic='learning', content='Finished course'."""
+    with patch.object(bot, "_call_core_note", new=AsyncMock(return_value="Filed to `learning/x.md`")) as mock_note:
+        result = await bot.handle_sentask_subcommand(
+            "note", "learning Finished the sing-better course", "user123"
+        )
+    mock_note.assert_called_once()
+    call_kwargs = mock_note.await_args.kwargs
+    assert call_kwargs.get("topic") == "learning"
+    assert "Finished the sing-better" in call_kwargs.get("content", "")
+    assert "Filed" in result
+
+
+async def test_note_without_topic_calls_helper_with_none():
+    """`:note <content>` without topic prefix → topic=None."""
+    with patch.object(bot, "_call_core_note", new=AsyncMock(return_value="Inboxed (low confidence). `:inbox` to review.")) as mock_note:
+        result = await bot.handle_sentask_subcommand(
+            "note", "Some ambiguous text without explicit topic", "user123"
+        )
+    mock_note.assert_called_once()
+    call_kwargs = mock_note.await_args.kwargs
+    assert call_kwargs.get("topic") is None
+    assert "Inboxed" in result

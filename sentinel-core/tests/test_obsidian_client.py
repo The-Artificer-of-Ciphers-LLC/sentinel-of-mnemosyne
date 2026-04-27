@@ -314,3 +314,127 @@ async def test_write_session_summary_propagates_exception(mock_obsidian_client):
     mock_obsidian_client._client.put = AsyncMock(side_effect=httpx.ConnectError("down"))
     with pytest.raises(Exception):
         await mock_obsidian_client.write_session_summary("ops/sessions/test.md", "content")
+
+
+# --- 260427-vl1 Task 5: list_directory / read_note / write_note / delete_note / patch_append ---
+
+
+@pytest.fixture
+def obsidian_list_dir_mock():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/vault/foo/" and request.method == "GET":
+            return httpx.Response(200, json=["a.md", "b.md", "subdir/"])
+        if request.url.path == "/vault/missing/":
+            return httpx.Response(404)
+        return httpx.Response(500)
+    return httpx.MockTransport(handler)
+
+
+async def test_list_directory_returns_entries(obsidian_list_dir_mock):
+    async with AsyncClient(transport=obsidian_list_dir_mock, base_url="http://test") as client:
+        obsidian = ObsidianClient(client, "http://test", "k")
+        entries = await obsidian.list_directory("foo")
+    assert entries == ["a.md", "b.md", "subdir/"]
+
+
+async def test_list_directory_404_returns_empty(obsidian_list_dir_mock):
+    async with AsyncClient(transport=obsidian_list_dir_mock, base_url="http://test") as client:
+        obsidian = ObsidianClient(client, "http://test", "k")
+        entries = await obsidian.list_directory("missing")
+    assert entries == []
+
+
+async def test_list_directory_5xx_returns_empty(obsidian_list_dir_mock):
+    """Non-404 errors degrade to [] via _safe_request."""
+    async with AsyncClient(transport=obsidian_list_dir_mock, base_url="http://test") as client:
+        obsidian = ObsidianClient(client, "http://test", "k")
+        entries = await obsidian.list_directory("anywhere")
+    assert entries == []
+
+
+@pytest.fixture
+def obsidian_read_note_mock():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and request.url.path == "/vault/foo.md":
+            return httpx.Response(200, text="# foo\nbody here")
+        if request.method == "GET" and request.url.path == "/vault/missing.md":
+            return httpx.Response(404)
+        return httpx.Response(500)
+    return httpx.MockTransport(handler)
+
+
+async def test_read_note_returns_body(obsidian_read_note_mock):
+    async with AsyncClient(transport=obsidian_read_note_mock, base_url="http://test") as client:
+        obsidian = ObsidianClient(client, "http://test", "k")
+        body = await obsidian.read_note("foo.md")
+    assert body == "# foo\nbody here"
+
+
+async def test_read_note_404_returns_empty(obsidian_read_note_mock):
+    async with AsyncClient(transport=obsidian_read_note_mock, base_url="http://test") as client:
+        obsidian = ObsidianClient(client, "http://test", "k")
+        body = await obsidian.read_note("missing.md")
+    assert body == ""
+
+
+@pytest.fixture
+def obsidian_write_capture_mock():
+    captured: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append({
+            "method": request.method,
+            "path": request.url.path,
+            "content_type": request.headers.get("Content-Type", ""),
+            "auth": request.headers.get("Authorization", ""),
+            "patch_pos": request.headers.get("Obsidian-API-Content-Insertion-Position", ""),
+            "content": request.content.decode("utf-8") if request.content else "",
+        })
+        return httpx.Response(200)
+
+    transport = httpx.MockTransport(handler)
+    transport.captured = captured  # type: ignore[attr-defined]
+    return transport
+
+
+async def test_write_note_puts_with_markdown_content_type(obsidian_write_capture_mock):
+    async with AsyncClient(transport=obsidian_write_capture_mock, base_url="http://test") as client:
+        obsidian = ObsidianClient(client, "http://test", "k")
+        await obsidian.write_note("references/x.md", "# x\nbody")
+    cap = obsidian_write_capture_mock.captured[0]  # type: ignore[attr-defined]
+    assert cap["method"] == "PUT"
+    assert cap["path"] == "/vault/references/x.md"
+    assert "text/markdown" in cap["content_type"]
+    assert cap["auth"] == "Bearer k"
+    assert cap["content"] == "# x\nbody"
+
+
+async def test_write_note_raises_on_5xx():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    transport = httpx.MockTransport(handler)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        obsidian = ObsidianClient(client, "http://test", "k")
+        with pytest.raises(Exception):
+            await obsidian.write_note("x.md", "body")
+
+
+async def test_delete_note_issues_delete(obsidian_write_capture_mock):
+    async with AsyncClient(transport=obsidian_write_capture_mock, base_url="http://test") as client:
+        obsidian = ObsidianClient(client, "http://test", "k")
+        await obsidian.delete_note("x.md")
+    cap = obsidian_write_capture_mock.captured[0]  # type: ignore[attr-defined]
+    assert cap["method"] == "DELETE"
+    assert cap["path"] == "/vault/x.md"
+
+
+async def test_patch_append_sets_end_position_header(obsidian_write_capture_mock):
+    async with AsyncClient(transport=obsidian_write_capture_mock, base_url="http://test") as client:
+        obsidian = ObsidianClient(client, "http://test", "k")
+        await obsidian.patch_append("ops/log.md", "new line\n")
+    cap = obsidian_write_capture_mock.captured[0]  # type: ignore[attr-defined]
+    assert cap["method"] == "PATCH"
+    assert cap["path"] == "/vault/ops/log.md"
+    assert cap["patch_pos"] == "end"
+    assert cap["content"] == "new line\n"
