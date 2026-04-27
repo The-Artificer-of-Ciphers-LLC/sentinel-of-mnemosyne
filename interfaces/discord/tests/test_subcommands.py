@@ -925,3 +925,36 @@ async def test_note_without_topic_calls_helper_with_none():
     call_kwargs = mock_note.await_args.kwargs
     assert call_kwargs.get("topic") is None
     assert "Inboxed" in result
+
+
+# ---------------------------------------------------------------------------
+# 260427-vl1 — :inbox subcommand dispatch tests (Task 6)
+# ---------------------------------------------------------------------------
+
+
+async def test_inbox_no_args_calls_list():
+    with patch.object(bot, "_call_core_inbox_list", new=AsyncMock(return_value="(inbox is empty)")) as mock_list:
+        result = await bot.handle_sentask_subcommand("inbox", "", "user123")
+    mock_list.assert_called_once_with("user123")
+    assert "(inbox is empty)" in result
+
+
+async def test_inbox_classify_dispatches_with_entry_and_topic():
+    with patch.object(bot, "_call_core_inbox_classify", new=AsyncMock(return_value="Filed entry 2")) as mock_cls:
+        result = await bot.handle_sentask_subcommand(
+            "inbox", "classify 2 reference", "user123"
+        )
+    mock_cls.assert_called_once_with("user123", 2, "reference")
+    assert "Filed entry 2" in result
+
+
+async def test_inbox_discard_dispatches_with_entry():
+    with patch.object(bot, "_call_core_inbox_discard", new=AsyncMock(return_value="Discarded entry 1")) as mock_dis:
+        result = await bot.handle_sentask_subcommand("inbox", "discard 1", "user123")
+    mock_dis.assert_called_once_with("user123", 1)
+    assert "Discarded entry 1" in result
+
+
+async def test_inbox_unknown_verb_returns_usage():
+    result = await bot.handle_sentask_subcommand("inbox", "bogus 7", "user123")
+    assert "Usage" in result

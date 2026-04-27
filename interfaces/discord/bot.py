@@ -1410,6 +1410,26 @@ async def handle_sentask_subcommand(
             return await _call_core_note(user_id, content=rest.strip(), topic=topic)
         return await _call_core_note(user_id, content=args.strip(), topic=None)
 
+    # 260427-vl1: pending-classification inbox
+    if subcmd == "inbox":
+        parts = args.strip().split(maxsplit=2)
+        if not args.strip():
+            return await _call_core_inbox_list(user_id)
+        verb = parts[0]
+        if verb == "classify" and len(parts) >= 3:
+            try:
+                entry_n = int(parts[1])
+            except ValueError:
+                return "Usage: `:inbox classify <n> <topic>` — n must be an integer."
+            return await _call_core_inbox_classify(user_id, entry_n, parts[2])
+        if verb == "discard" and len(parts) >= 2:
+            try:
+                entry_n = int(parts[1])
+            except ValueError:
+                return "Usage: `:inbox discard <n>` — n must be an integer."
+            return await _call_core_inbox_discard(user_id, entry_n)
+        return "Usage: `:inbox` | `:inbox classify <n> <topic>` | `:inbox discard <n>`"
+
     if subcmd == "revisit":
         if not args.strip():
             return "Usage: `:revisit <note title>` — revisit and update a note."
