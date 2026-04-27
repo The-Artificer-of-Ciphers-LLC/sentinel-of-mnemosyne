@@ -25,13 +25,13 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 36 (Foundry NPC Pull Import) — READY TO EXECUTE (3 plans)
-Plan: 0 of 3 (Planning complete — FVT-04 requirement covered)
-Next Plan: Phase 36 Plan 01 (Wave 0 RED TDD stubs)
+Phase: 36 (Foundry NPC Pull Import) — ✅ COMPLETE (3 plans merged, smoke test deferred per main-only workflow)
+Plan: 3 of 3 (Wave 2 JS frontend merged via worktree-agent-a0ab92b421918d07a)
+Next: Quick task 260427-5kl (litellm helpers consolidation refactor)
 Prior Phase: 35 (Foundry VTT Event Ingest) — ✅ COMPLETE (FVT-01..03, 6 plans, 2026-04-25)
-Milestone: v0.5 The Dungeon — IN PROGRESS (8/9 phases complete: 28, 29, 30, 31, 32, 33, 34, 35)
-Status: Phase 36 PLANNED. 3 plans created: Wave 0 TDD stubs, Wave 1 Python backend (CORS fix + npcs router), Wave 2 JS frontend (ApplicationV2 import dialog).
-Last activity: 2026-04-26 -- Phase 36 planned: 3 plans (Wave 0 TDD stubs, Wave 1 Python backend, Wave 2 JS frontend)
+Milestone: v0.5 The Dungeon — ✅ COMPLETE (9/9 phases complete: 28, 29, 30, 31, 32, 33, 34, 35, 36)
+Status: v0.5 milestone complete. Refactor task 260427-5kl in flight (8 tasks, plan checked).
+Last activity: 2026-04-27 -- Phase 36 worktree merged to main; v0.5 milestone complete
 
 ## Milestone Progress
 
