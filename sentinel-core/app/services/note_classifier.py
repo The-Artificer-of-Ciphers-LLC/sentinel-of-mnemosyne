@@ -316,12 +316,30 @@ async def classify_note(
         )
 
     # Extract content (litellm response shape: choices[0].message.content)
+    #
+    # Qwen3 thinking-mode + LM Studio bug #1773: when response_format is
+    # json_schema, the schema constraint is applied to `reasoning_content`
+    # (the <think> block) instead of the assistant `content` stream. The
+    # actual JSON is in reasoning_content; content is empty. Defensively
+    # fall back to reasoning_content when content is empty.
+    # Verified 2026-04-27 in LM Studio server log:
+    #   Accumulated 31 tokens in reasoning content { "topic": "learning", ...
     raw_content: str = ""
     try:
         if isinstance(response, dict):
-            raw_content = response["choices"][0]["message"]["content"]
+            msg = response["choices"][0]["message"]
+            raw_content = (
+                msg.get("content")
+                or msg.get("reasoning_content")
+                or ""
+            )
         else:
-            raw_content = response.choices[0].message.content  # type: ignore[attr-defined]
+            msg = response.choices[0].message  # type: ignore[attr-defined]
+            raw_content = (
+                getattr(msg, "content", None)
+                or getattr(msg, "reasoning_content", None)
+                or ""
+            )
     except Exception as exc:
         logger.warning("note_classifier: response shape unexpected: %s", exc)
         raw_content = ""
