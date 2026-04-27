@@ -27,6 +27,7 @@ from app.clients.obsidian import ObsidianClient
 from app.config import settings
 from app.routes.message import router as message_router
 from app.routes.modules import router as modules_router
+from app.routes.note import router as note_router
 from app.routes.status import router as status_router
 from app.services.injection_filter import InjectionFilter
 from sentinel_shared.model_profiles import get_profile
@@ -211,6 +212,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Module registry — in-memory; populated by POST /modules/register at runtime (Phase 27)
     app.state.module_registry = {}
+
+    # 260427-vl1: note classifier + embedder for the vault sweeper
+    from app.clients.embeddings import embed_texts as _embed_texts
+    from app.services.note_classifier import classify_note as _classify_note
+
+    async def _embedder_fn(texts: list[str]) -> list[list[float]]:
+        api_base = settings.lmstudio_base_url or "http://host.docker.internal:1234"
+        if not api_base.rstrip("/").endswith("/v1"):
+            api_base = f"{api_base.rstrip('/')}/v1"
+        return await _embed_texts(texts, api_base=api_base)
+
+    app.state.note_classifier_fn = _classify_note
+    app.state.note_embedder_fn = _embedder_fn
 
     logger.info("Sentinel Core ready.")
     yield

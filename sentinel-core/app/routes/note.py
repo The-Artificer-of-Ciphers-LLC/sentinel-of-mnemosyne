@@ -5,14 +5,18 @@ Endpoints:
   GET  /inbox                   — list pending entries with discord-rendered string
   POST /inbox/classify          — file an existing inbox entry under a topic
   POST /inbox/discard           — drop an entry from inbox without filing
+  POST /vault/sweep/start       — admin-gated; spawns a sweep task and returns sweep_id
+  GET  /vault/sweep/status      — current sweep progress (idle/running/complete)
 
 All Obsidian I/O goes through `request.app.state.obsidian_client`. The
 classifier is a pure function (no app.state singleton needed).
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
+import os
 import secrets
 from datetime import datetime, timezone
 
@@ -241,3 +245,82 @@ async def inbox_discard(req: InboxDiscardRequest, request: Request):
     new_inbox = remove_entry(body, req.entry_n)
     await obsidian.write_note(INBOX_PATH, new_inbox)
     return {"action": "discarded", "entry_n": req.entry_n}
+
+
+# --- 260427-vl1 Task 7: vault sweeper routes ---
+
+
+from app.services.vault_sweeper import (  # noqa: E402
+    SweepInProgressError,
+    _set_status,
+    get_status,
+    run_sweep,
+    reset_status_for_tests,  # noqa: F401
+)
+
+
+class SweepStartRequest(BaseModel):
+    user_id: str
+    force_reclassify: bool = False
+
+
+def _is_admin_route(user_id: str) -> bool:
+    """Defense-in-depth admin gate at the route layer (Task 8 also gates at bot)."""
+    raw = os.environ.get("SENTINEL_ADMIN_USER_IDS", "")
+    if raw.strip() == "*":
+        return True
+    allowed = {u.strip() for u in raw.split(",") if u.strip()}
+    return bool(allowed) and user_id in allowed
+
+
+@router.post("/vault/sweep/start")
+async def vault_sweep_start(req: SweepStartRequest, request: Request):
+    if not _is_admin_route(req.user_id):
+        raise HTTPException(status_code=403, detail="admin only")
+
+    obsidian = request.app.state.obsidian_client
+    classifier = request.app.state.note_classifier_fn  # injected at startup
+    embedder = request.app.state.note_embedder_fn
+
+    sweep_id = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Update status immediately so callers see "running" before the task starts.
+    _set_status(
+        type(
+            "S",
+            (),
+            {
+                "sweep_id": sweep_id,
+                "status": "running",
+                "files_processed": 0,
+                "files_total": 0,
+                "duplicates_moved": 0,
+                "noise_moved": 0,
+            },
+        )()
+    )
+
+    async def _runner():
+        try:
+            report = await run_sweep(
+                obsidian,
+                classifier,
+                embedder,
+                force_reclassify=req.force_reclassify,
+                status_callback=_set_status,
+            )
+            _set_status(report)
+        except SweepInProgressError:
+            cur = get_status()
+            cur["status"] = "blocked"
+        except Exception as exc:
+            logger.exception("vault sweep crashed: %s", exc)
+            cur = get_status()
+            cur["status"] = "error"
+
+    asyncio.create_task(_runner())
+    return {"sweep_id": sweep_id, "status": "running"}
+
+
+@router.get("/vault/sweep/status")
+async def vault_sweep_status():
+    return get_status()

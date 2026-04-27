@@ -255,3 +255,61 @@ def test_inbox_discard_removes_entry():
     assert len(after) == 1
     assert after[0].candidate_text == "second"
     assert after[0].entry_n == 1  # renumbered
+
+
+# --- 260427-vl1 Task 7: vault sweep route tests ---
+
+
+def test_sweep_start_admin_only(monkeypatch):
+    monkeypatch.setenv("SENTINEL_ADMIN_USER_IDS", "")
+    obsidian = FakeObsidian()
+    app = _make_app(obsidian)
+    app.state.note_classifier_fn = AsyncMock()
+    app.state.note_embedder_fn = AsyncMock(return_value=[])
+    client = TestClient(app)
+    resp = client.post("/vault/sweep/start", json={"user_id": "789", "force_reclassify": False})
+    assert resp.status_code == 403
+
+
+def test_sweep_start_admin_returns_running(monkeypatch):
+    monkeypatch.setenv("SENTINEL_ADMIN_USER_IDS", "123,456")
+
+    obsidian = FakeObsidian()
+    app = _make_app(obsidian)
+
+    async def _classifier(_text):
+        return ClassificationResult(
+            topic="reference", confidence=0.9, title_slug="x", reasoning="r"
+        )
+
+    async def _embedder(_texts):
+        return []
+
+    app.state.note_classifier_fn = _classifier
+    app.state.note_embedder_fn = _embedder
+    client = TestClient(app)
+    resp = client.post(
+        "/vault/sweep/start", json={"user_id": "123", "force_reclassify": False}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "running"
+    assert "sweep_id" in data
+
+
+def test_sweep_status_returns_dict():
+    obsidian = FakeObsidian()
+    app = _make_app(obsidian)
+    client = TestClient(app)
+    resp = client.get("/vault/sweep/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    for key in (
+        "sweep_id",
+        "status",
+        "files_processed",
+        "files_total",
+        "duplicates_moved",
+        "noise_moved",
+    ):
+        assert key in data
