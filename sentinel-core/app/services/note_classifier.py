@@ -65,6 +65,32 @@ TOPIC_VAULT_PATH: dict[str, str] = {
 }
 
 
+def topic_dir_for(topic: str, *, today: str | None = None) -> str:
+    """Return the vault directory for ``topic``.
+
+    Single source of truth for "where does a note of topic X belong"
+    used by both the explicit `:note` filer (which appends a slug+date
+    filename) and the vault sweeper (which preserves the original
+    filename when relocating).
+
+    Returns empty string for topics that have no canonical filing
+    location: ``noise`` (drop or trash) and ``unsure`` (handled via
+    the pending-classification inbox, not a normal directory).
+
+    For ``journal``, returns ``journal/{YYYY-MM-DD}`` so each day's
+    entries are grouped. Pass ``today`` to override (used by tests).
+    """
+    base = TOPIC_VAULT_PATH.get(topic, "")
+    if not base:
+        return ""
+    if topic == "journal":
+        if today is None:
+            from datetime import datetime, timezone
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return f"journal/{today}"
+    return base
+
+
 class ClassificationResult(BaseModel):
     """Verdict from the classifier — pure, route-agnostic."""
 

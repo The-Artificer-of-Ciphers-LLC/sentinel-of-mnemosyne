@@ -46,7 +46,11 @@ class SweepReport(BaseModel):
     files_total: int = 0
     duplicates_moved: int = 0
     noise_moved: int = 0
+    topic_moves: int = 0  # misplaced→topic-folder relocations
     errors: list[str] = Field(default_factory=list)
+    # In dry_run mode, populated with {kind, src, dst, reason} dicts
+    # describing every move the sweeper WOULD make. Empty for live runs.
+    proposed_moves: list[dict] = Field(default_factory=list)
 
 
 class SweepInProgressError(RuntimeError):
@@ -273,6 +277,107 @@ async def move_to_trash(
     return dst
 
 
+# --- Topic-folder move (misplaced note → correct topic dir) ---
+
+
+def is_in_topic_dir(path: str, topic_dir: str) -> bool:
+    """True when ``path`` is already within ``topic_dir``.
+
+    Handles the journal nested-date case: ``journal/2026-04-27/foo.md`` is
+    considered in-dir for any ``journal/...`` topic_dir, not just exact
+    same-day match. The sweeper does not relocate journal entries between
+    days — only flags a wrong-topic placement.
+    """
+    if not topic_dir:
+        return False
+    # Same dir or any subdirectory of topic_dir's root family.
+    # For journal/2026-04-27, the family root is "journal/"; so journal/.../
+    # is considered "in topic_dir family".
+    family_root = topic_dir.split("/", 1)[0] + "/"
+    return path.startswith(family_root)
+
+
+async def move_to_topic_folder(
+    client,
+    src_path: str,
+    topic: str,
+    sweep_at: str | None = None,
+    *,
+    today: str | None = None,
+) -> str:
+    """PUT to ``{topic_dir}/{original_filename}``, then DELETE src.
+
+    Preserves the source filename — the sweeper relocates existing notes
+    rather than renaming them. Mirrors ``move_to_trash`` shape: collision
+    handler appends an 8-char hex suffix; provenance frontmatter records
+    ``original_path`` and ``topic_moved_at``.
+
+    Returns the destination path. Caller must have already classified
+    ``src_path`` as ``topic`` and confirmed the path is misplaced via
+    ``is_in_topic_dir``.
+    """
+    from app.services.note_classifier import topic_dir_for
+
+    topic_dir = topic_dir_for(topic, today=today)
+    if not topic_dir:
+        # noise/unsure shouldn't reach here; defensive guard
+        raise ValueError(f"topic {topic!r} has no canonical directory")
+
+    filename = src_path.rsplit("/", 1)[-1]
+    dst = f"{topic_dir}/{filename}"
+
+    # Collision check
+    existing = await client.read_note(dst)
+    if existing:
+        suffix = secrets.token_hex(4)
+        stem, _, ext = filename.rpartition(".")
+        if ext:
+            dst = f"{topic_dir}/{stem}-{suffix}.{ext}"
+        else:
+            dst = f"{topic_dir}/{filename}-{suffix}"
+
+    body = await client.read_note(src_path)
+    fm, rest = split_frontmatter(body)
+    fm = dict(fm or {})
+    fm["original_path"] = src_path
+    fm["topic_moved_at"] = sweep_at or _iso_utc()
+    annotated = join_frontmatter(fm, rest)
+
+    await client.write_note(dst, annotated)
+    try:
+        await client.delete_note(src_path)
+    except Exception as exc:
+        # Per move_to_trash precedent: copy succeeded, delete failed.
+        # Log + continue; duplicate is recoverable, lost data is not.
+        logger.warning(
+            "move_to_topic_folder: delete failed for %s after copy to %s: %s",
+            src_path,
+            dst,
+            exc,
+        )
+    return dst
+
+
+def propose_topic_move(
+    src_path: str, topic: str, *, today: str | None = None
+) -> str | None:
+    """Return the destination path a topic-move WOULD use, or None if no
+    move is needed (already in topic family) or topic has no canonical dir.
+
+    Used by ``run_sweep(dry_run=True)`` to populate ``proposed_moves``
+    without touching the vault.
+    """
+    from app.services.note_classifier import topic_dir_for
+
+    topic_dir = topic_dir_for(topic, today=today)
+    if not topic_dir:
+        return None
+    if is_in_topic_dir(src_path, topic_dir):
+        return None
+    filename = src_path.rsplit("/", 1)[-1]
+    return f"{topic_dir}/{filename}"
+
+
 # --- Lockfile ---
 
 
@@ -317,8 +422,9 @@ async def run_sweep(
     *,
     force_reclassify: bool = False,
     status_callback: Callable[[SweepReport], None] | None = None,
+    dry_run: bool = False,
 ) -> SweepReport:
-    """Walk vault, classify, embed, de-dup, move-to-trash, write log.
+    """Walk vault, classify, embed, de-dup, relocate-misplaced, move-to-trash.
 
     Args:
         client: ObsidianClient (or fake) with list_directory/read_note/
@@ -329,6 +435,11 @@ async def run_sweep(
             current LLM endpoint. Failure raises and degrades de-dup.
         force_reclassify: re-classify already-marked notes.
         status_callback: optional progress hook called after each file.
+        dry_run: when True, populate ``report.proposed_moves`` with every
+            move the sweeper WOULD make and write nothing to the vault.
+            Operator runs this first to preview before authorizing a real
+            sweep. Lockfile is still acquired/released (one preview at a
+            time is correct semantics).
     """
     sweep_id = _iso_utc()
     report = SweepReport(sweep_id=sweep_id, status="running")
@@ -359,14 +470,63 @@ async def run_sweep(
                 result = await classifier(rest if rest.strip() else body)
 
                 if getattr(result, "topic", None) == "noise":
-                    await move_to_trash(
-                        client, path, reason="cheap-filter:noise", sweep_at=sweep_id
-                    )
+                    if dry_run:
+                        today = _today_str()
+                        report.proposed_moves.append({
+                            "kind": "trash",
+                            "src": path,
+                            "dst": f"_trash/{today}/{path.rsplit('/', 1)[-1]}",
+                            "reason": "cheap-filter:noise",
+                        })
+                    else:
+                        await move_to_trash(
+                            client, path, reason="cheap-filter:noise", sweep_at=sweep_id
+                        )
                     report.noise_moved += 1
                     report.files_processed += 1
                     if status_callback:
                         status_callback(report)
                     continue
+
+                # Misplaced-note relocation: if classified topic has a canonical
+                # directory and the current path isn't already in that family,
+                # move (or propose to move) the note to {topic_dir}/{filename}.
+                topic = getattr(result, "topic", None)
+                proposed_dst = (
+                    propose_topic_move(path, topic) if topic else None
+                )
+                if proposed_dst is not None:
+                    if dry_run:
+                        report.proposed_moves.append({
+                            "kind": "topic",
+                            "src": path,
+                            "dst": proposed_dst,
+                            "reason": f"topic={topic} (confidence={result.confidence:.2f})",
+                        })
+                        # Don't add to survivors in dry-run — we're not writing
+                        # frontmatter or computing embeddings. Just report.
+                        report.files_processed += 1
+                        if status_callback:
+                            status_callback(report)
+                        continue
+                    else:
+                        try:
+                            new_path = await move_to_topic_folder(
+                                client, path, topic, sweep_at=sweep_id
+                            )
+                            report.topic_moves += 1
+                            # Continue processing using the new path so
+                            # frontmatter + embedding land at the right location.
+                            path = new_path
+                            # Re-read body from new location for survivors entry
+                            body = await client.read_note(path)
+                            fm, rest = split_frontmatter(body)
+                        except Exception as exc:
+                            report.errors.append(f"topic_move {path}: {exc}")
+                            report.files_processed += 1
+                            if status_callback:
+                                status_callback(report)
+                            continue
 
                 # Write back classification frontmatter (preserve extras)
                 new_fm = dict(fm)
@@ -396,16 +556,18 @@ async def run_sweep(
                 logger.warning("sweep: embedding endpoint failed (%s); skipping de-dup", exc)
                 embeddings = None
 
-        # 3. Write classification + (optional) embedding back to each note
-        for idx, (path, fm, rest, _) in enumerate(survivors):
-            try:
-                if embeddings and idx < len(embeddings):
-                    fm["embedding_model"] = EMBEDDING_MODEL
-                    fm["embedding_b64"] = encode_embedding(embeddings[idx])
-                new_body = join_frontmatter(fm, rest)
-                await client.write_note(path, new_body)
-            except Exception as exc:
-                report.errors.append(f"write_back {path}: {exc}")
+        # 3. Write classification + (optional) embedding back to each note.
+        # Skipped entirely in dry_run — no vault mutations are allowed.
+        if not dry_run:
+            for idx, (path, fm, rest, _) in enumerate(survivors):
+                try:
+                    if embeddings and idx < len(embeddings):
+                        fm["embedding_model"] = EMBEDDING_MODEL
+                        fm["embedding_b64"] = encode_embedding(embeddings[idx])
+                    new_body = join_frontmatter(fm, rest)
+                    await client.write_note(path, new_body)
+                except Exception as exc:
+                    report.errors.append(f"write_back {path}: {exc}")
 
         # 4. De-dup
         moves: list[tuple[str, str, str]] = []  # (src, dst, reason)
@@ -424,11 +586,23 @@ async def run_sweep(
                         continue
                     src = survivors[i][0]
                     conf = float(survivors[i][3].confidence)
+                    keeper_path = survivors[keeper_idx][0]
+                    if dry_run:
+                        today = _today_str()
+                        proposed = f"_trash/{today}/{src.rsplit('/', 1)[-1]}"
+                        report.proposed_moves.append({
+                            "kind": "trash",
+                            "src": src,
+                            "dst": proposed,
+                            "reason": f"duplicate of {keeper_path} (cosine≥0.92, conf={conf:.1f})",
+                        })
+                        report.duplicates_moved += 1
+                        continue
                     try:
                         dst = await move_to_trash(
                             client,
                             src,
-                            reason=f"duplicate of {survivors[keeper_idx][0]}",
+                            reason=f"duplicate of {keeper_path}",
                             sweep_at=sweep_id,
                         )
                         moves.append((src, dst, f"duplicate (cosine≥0.92, conf={conf:.1f})"))
@@ -436,8 +610,8 @@ async def run_sweep(
                     except Exception as exc:
                         report.errors.append(f"trash {src}: {exc}")
 
-        # 5. Per-sweep log
-        if moves or report.noise_moved:
+        # 5. Per-sweep log — never written in dry-run
+        if not dry_run and (moves or report.noise_moved):
             log_path = f"ops/sweeps/{_today_str()}.md"
             log_lines = [f"\n## Sweep {sweep_id}\n"]
             for src, dst, reason in moves:
