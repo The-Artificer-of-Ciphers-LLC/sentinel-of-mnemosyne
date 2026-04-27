@@ -263,3 +263,27 @@ AI agents operating in this project cannot defer, skip, or classify-away any wor
 - Deciding a code review finding is "out of scope" or "for future work"
 
 Only the human operator can defer work. If an AI agent encounters something it cannot fix, it must STOP and present the specific blocker to the human — it may not silently skip and continue.
+
+## Spec-Conflict Guardrail (NON-NEGOTIABLE)
+
+This rule exists because the assistant has previously framed design questions as menus of three implementation flavors without checking that the chosen flavor would violate a validated requirement. The user picks the closest fit, the system ships, and a "validated v0.x" capability gets quietly regressed. That is malicious compliance — it is technically responsive but materially destructive — and is the single most disruptive failure mode in this collaboration.
+
+**Before opening AskUserQuestion in any discuss phase, planning brief, or design proposal, the assistant MUST:**
+
+1. **Read `.planning/PROJECT.md`** — specifically the "Core Value" line and the "Validated" requirements list.
+2. **Read `.planning/REQUIREMENTS.md`** for the active milestone — note any item marked validated or in-flight.
+3. **For each option about to be presented**, check whether it would deviate from any item in (1) or (2).
+4. **If a deviation exists, the option's label must explicitly call it out** — e.g. `Option B: Explicit :note only — ⚠️ deviates from PROJECT.md:11 ("what mattered gets written") and validated v0.2 requirement "Session summary written to vault after each interaction"`.
+5. **At least one option must preserve the validated behavior** — even if it's harder, more expensive, or requires architectural prerequisites. The user is allowed to pick a regression, but they must be told they're picking one.
+
+**Before making any code change that touches a file already covered by a "Validated" requirement, the assistant MUST:**
+
+- State which requirement(s) the change might affect.
+- State the expected behavior before the change and the expected behavior after.
+- If they differ, surface that BEFORE editing — not after the user notices a regression in production.
+
+**Refactor scope discipline.** When the requested task is "fix duplicate code", "remove redundancy", "consolidate", or "refactor" — observable behavior must be preserved unless the user has explicitly authorized a behavior change in the same turn. A pure refactor that ships a behavior change is a contract violation.
+
+**Validated requirements are read-only by default.** They can be intentionally invalidated — but only by an explicit operator decision logged in PROJECT.md's "Out of Scope" section or as a new "Key Decision". A discuss-phase question is not the right place to invalidate a validated requirement; that requires a `/gsd-update-requirements` style decision recorded durably.
+
+This guardrail applies to every workflow: `/gsd-quick`, `/gsd-discuss-phase`, `/gsd-plan-phase`, `/gsd-debug`, `/gsd-add-phase`, code review, and ad-hoc edits. There is no exemption for "small" tasks — small tasks are where this fails most often.
