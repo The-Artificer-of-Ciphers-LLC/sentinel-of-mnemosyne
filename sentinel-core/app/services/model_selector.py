@@ -243,7 +243,13 @@ async def discover_active_model(
     preferences = {}
     preferred = settings.model_preferred or settings.model_name
     if preferred:
+        # MODEL_PREFERRED pins the model for ALL task kinds, not just chat.
+        # Operators set this when they want one specific model for everything
+        # (e.g. avoiding TTL-unloads of multiple models or pinning to a known-
+        # working model after a problem with auto-selection).
         preferences["chat"] = preferred
+        preferences["structured"] = preferred
+        preferences["fast"] = preferred
 
     try:
         chosen = select_model("chat", loaded, preferences=preferences, default=settings.model_name)

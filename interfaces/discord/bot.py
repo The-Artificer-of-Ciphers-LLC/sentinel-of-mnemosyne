@@ -306,35 +306,15 @@ async def _call_core_sweep_start(
         return f"Vault sweep failed to start: {exc}"
     sweep_id = data.get("sweep_id", "?")
     if dry_run:
-        # Render a compact preview the operator can scan. The full proposed_moves
-        # list may be long, so limit to first 10 of each kind in the chat reply.
-        proposed = data.get("proposed_moves", [])
-        topic_moves = [m for m in proposed if m.get("kind") == "topic"]
-        trash_moves = [m for m in proposed if m.get("kind") == "trash"]
-        lines = [
-            f"**Dry-run complete** — `{sweep_id}`",
-            f"Files scanned: {data.get('files_processed', '?')}/{data.get('files_total', '?')}",
-            f"Proposed: {len(topic_moves)} topic-relocations, {len(trash_moves)} trash-moves",
-            "",
-        ]
-        if topic_moves:
-            lines.append("**Topic relocations** (first 10):")
-            for m in topic_moves[:10]:
-                lines.append(f"- `{m['src']}` → `{m['dst']}` ({m.get('reason', '')})")
-            if len(topic_moves) > 10:
-                lines.append(f"- … and {len(topic_moves) - 10} more")
-            lines.append("")
-        if trash_moves:
-            lines.append("**Trash moves** (first 10):")
-            for m in trash_moves[:10]:
-                lines.append(f"- `{m['src']}` → `{m['dst']}` ({m.get('reason', '')})")
-            if len(trash_moves) > 10:
-                lines.append(f"- … and {len(trash_moves) - 10} more")
-            lines.append("")
-        if data.get("errors"):
-            lines.append(f"⚠ {len(data['errors'])} errors encountered during preview")
-        lines.append("Run `:vault-sweep` (no args) to execute these moves.")
-        return "\n".join(lines)
+        # Async dispatch: sweep runs in background, proposed_moves get written
+        # to a vault markdown file. Report path is in the response.
+        report_path = data.get("report_path", "ops/sweeps/dry-run-?.md")
+        return (
+            f"Dry-run started: `{sweep_id}`. "
+            f"Report will be written to `{report_path}` when complete. "
+            f"Use `:vault-sweep status` to check progress; open the report file in "
+            f"Obsidian once status is `dry-run-complete`."
+        )
     return f"Vault sweep started: `{sweep_id}`. Use `:vault-sweep status` to check progress."
 
 

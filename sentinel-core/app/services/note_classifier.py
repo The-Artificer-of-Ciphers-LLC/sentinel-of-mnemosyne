@@ -198,8 +198,21 @@ async def _resolve_model_for_classification() -> tuple[str, object | None, str |
         logger.warning("note_classifier: get_loaded_models failed: %s", exc)
         loaded = []
 
+    # Honor MODEL_PREFERRED for the structured task kind too — operators set
+    # this when they want one specific model for everything (avoids LM Studio
+    # TTL-unloading multiple models, pinning to known-working ones).
+    preferences: dict[str, str] = {}
+    preferred = settings.model_preferred or settings.model_name
+    if preferred:
+        preferences["structured"] = preferred
+
     try:
-        model_id = select_model("structured", loaded, default=settings.model_name or None)
+        model_id = select_model(
+            "structured",
+            loaded,
+            preferences=preferences,
+            default=settings.model_name or None,
+        )
     except Exception as exc:
         logger.warning("note_classifier: select_model failed (%s); falling back to first loaded", exc)
         model_id = loaded[0] if loaded else (settings.model_name or "openai/local-model")

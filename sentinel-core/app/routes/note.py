@@ -285,31 +285,108 @@ async def vault_sweep_start(req: SweepStartRequest, request: Request):
 
     sweep_id = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Dry-run runs SYNCHRONOUSLY and returns the proposed moves in the
-    # response. The operator previews these before authorizing a live sweep.
-    # No status mutation, no _set_status — dry-run leaves the global status
-    # untouched so a concurrent live sweep's status is preserved.
+    # Dry-run dispatches as a background task (sync HTTP can't hold open for
+    # 200+ classification calls). The proposed_moves are written to a vault
+    # file at ops/sweeps/dry-run-{sweep_id}.md when the sweep finishes. The
+    # response returns immediately with the future path so the caller knows
+    # where to look.
     if req.dry_run:
-        try:
-            report = await run_sweep(
-                obsidian,
-                classifier,
-                embedder,
-                force_reclassify=req.force_reclassify,
-                dry_run=True,
-            )
-        except SweepInProgressError:
-            raise HTTPException(status_code=409, detail="a sweep is already running")
+        date_part = sweep_id.split("T")[0]
+        # Sweep_id contains colons; sanitize for use in a filename.
+        id_part = sweep_id.replace(":", "-")
+        report_path = f"ops/sweeps/dry-run-{id_part}.md"
+
+        # Mirror live-sweep status updates so polling /vault/sweep/status works
+        # the same way for both kinds.
+        _set_status(
+            type(
+                "S",
+                (),
+                {
+                    "sweep_id": sweep_id,
+                    "status": "dry-running",
+                    "files_processed": 0,
+                    "files_total": 0,
+                    "duplicates_moved": 0,
+                    "noise_moved": 0,
+                    "topic_moves": 0,
+                },
+            )()
+        )
+
+        async def _dry_runner():
+            try:
+                report = await run_sweep(
+                    obsidian,
+                    classifier,
+                    embedder,
+                    force_reclassify=req.force_reclassify,
+                    status_callback=_set_status,
+                    dry_run=True,
+                )
+                # Write the proposed-moves report to the vault as markdown.
+                lines = [
+                    f"# Dry-run sweep report — {sweep_id}",
+                    "",
+                    f"- Files scanned: {report.files_processed}/{report.files_total}",
+                    f"- Topic relocations proposed: {report.topic_moves}",
+                    f"- Noise→trash proposed: {report.noise_moved}",
+                    f"- Duplicates→trash proposed: {report.duplicates_moved}",
+                    f"- Errors: {len(report.errors)}",
+                    "",
+                ]
+                topic_moves = [
+                    m for m in report.proposed_moves if m.get("kind") == "topic"
+                ]
+                trash_moves = [
+                    m for m in report.proposed_moves if m.get("kind") == "trash"
+                ]
+                if topic_moves:
+                    lines.append("## Topic relocations")
+                    lines.append("")
+                    for m in topic_moves:
+                        lines.append(
+                            f"- `{m['src']}` → `{m['dst']}` — {m.get('reason', '')}"
+                        )
+                    lines.append("")
+                if trash_moves:
+                    lines.append("## Trash moves")
+                    lines.append("")
+                    for m in trash_moves:
+                        lines.append(
+                            f"- `{m['src']}` → `{m['dst']}` — {m.get('reason', '')}"
+                        )
+                    lines.append("")
+                if report.errors:
+                    lines.append("## Errors")
+                    lines.append("")
+                    for e in report.errors[:50]:
+                        lines.append(f"- {e}")
+                    lines.append("")
+                body = "\n".join(lines)
+                await obsidian.write_note(report_path, body)
+                # Stash report path on status so callers can find it.
+                cur = get_status()
+                cur["status"] = "dry-run-complete"
+                cur["report_path"] = report_path
+                cur["topic_moves"] = report.topic_moves
+                cur["noise_moved"] = report.noise_moved
+                cur["duplicates_moved"] = report.duplicates_moved
+                cur["files_processed"] = report.files_processed
+                cur["files_total"] = report.files_total
+            except SweepInProgressError:
+                cur = get_status()
+                cur["status"] = "blocked"
+            except Exception as exc:
+                logger.exception("dry-run sweep crashed: %s", exc)
+                cur = get_status()
+                cur["status"] = "error"
+
+        asyncio.create_task(_dry_runner())
         return {
-            "sweep_id": report.sweep_id,
-            "status": "dry-run-complete",
-            "files_total": report.files_total,
-            "files_processed": report.files_processed,
-            "topic_moves": report.topic_moves,
-            "noise_moved": report.noise_moved,
-            "duplicates_moved": report.duplicates_moved,
-            "proposed_moves": report.proposed_moves,
-            "errors": report.errors,
+            "sweep_id": sweep_id,
+            "status": "dry-running",
+            "report_path": report_path,
         }
 
     # Live run: kick off background task, return immediately.
