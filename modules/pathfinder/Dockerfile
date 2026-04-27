@@ -16,7 +16,8 @@ RUN pip install --no-cache-dir \
     "rapidfuzz>=3.14.0" \
     "reportlab>=4.4.0" \
     "beautifulsoup4>=4.12.0" \
-    "numpy>=1.26.0"
+    "numpy>=1.26.0" \
+    "pillow>=11.0.0"
 
 COPY . .
 
