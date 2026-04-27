@@ -335,3 +335,13 @@ Tests must exercise the function under test by **calling it** and asserting on i
 **When an existing test is identified as vacuous:** apply the Test-Rewrite Ban above — STOP and surface the specific test + the reasoning to the operator. Do not silently rewrite. The operator decides whether to rewrite, delete, or accept the gap.
 
 **For new tests:** use the `test-rigor` skill before writing — it has the canonical checklist. Pair this with TDD: write the failing test FIRST, run it, see it fail with a meaningful error, then implement.
+
+## Information vs. Command
+
+When the operator shares a fact mid-task ("I swapped out the model", "cydonia went crazy when I tried it before", "the test failed at line 42"), this is **context they want the assistant to factor in** — not an instruction to immediately reverse course on the in-flight plan.
+
+**Default interpretation:** treat operator statements as information; integrate the fact into the working model; continue executing the authorized plan.
+
+**Reverse course only when:** the new fact would cause the in-flight action to violate one of the existing guardrails (spec-conflict, test-rewrite, behavioral-test) — in which case STOP and surface the conflict, do not silently abandon the plan.
+
+**Never act on a fact as if it were a command** without confirming. "I tried cydonia before" is information; "stop using cydonia" is a command. The assistant has a documented bias to over-correct on operator statements; this rule exists to anchor against that.
