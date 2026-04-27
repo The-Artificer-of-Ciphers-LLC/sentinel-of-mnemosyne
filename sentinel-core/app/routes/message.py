@@ -45,6 +45,26 @@ SEARCH_BUDGET_RATIO = 0.10    # warm tier: vault search results (D-08)
 # Without this gate, garbled or off-topic vault content pollutes the LLM prompt context.
 SEARCH_SCORE_THRESHOLD = 0.5
 
+# Substrings that indicate a litellm BadRequestError really IS about context length
+# (as opposed to a misconfigured provider tag, missing model, malformed payload, etc.).
+# Matched case-insensitively against str(exc).
+_CONTEXT_LENGTH_MARKERS: tuple[str, ...] = (
+    "context length",
+    "context_length",
+    "maximum context",
+    "context window",
+    "too many tokens",
+    "tokens. however",        # OpenAI-style "Requested N tokens. However, ..."
+    "reduce the length",
+    "prompt is too long",
+)
+
+
+def _is_context_length_error(exc: BaseException) -> bool:
+    """True iff the litellm BadRequest message looks like a real context-overflow."""
+    msg = str(exc).lower()
+    return any(marker in msg for marker in _CONTEXT_LENGTH_MARKERS)
+
 
 def _truncate_to_tokens(text: str, max_tokens: int) -> str:
     """Truncate text to fit within max_tokens. Appends truncation marker if cut."""
@@ -80,9 +100,10 @@ async def post_message(
     Receive a user message, inject Obsidian memory context, call AI provider, write session summary.
 
     Error responses:
-      422 — message + context exceeds context window after truncation, or model rejected request
+      422 — message + context exceeds context window after truncation
+      502 — AI provider misconfiguration (bad provider tag, model not found, malformed request)
+            or unexpected error
       503 — AI provider (primary and fallback) unavailable
-      502 — unexpected AI provider error
     """
     obsidian = request.app.state.obsidian_client
     ai_provider = request.app.state.ai_provider
@@ -189,10 +210,25 @@ async def post_message(
         logger.error(f"All AI providers unavailable: {exc}")
         raise HTTPException(status_code=503, detail=str(exc))
     except LiteLLMBadRequestError as exc:
-        logger.warning(f"AI provider rejected request (BadRequestError): {exc}")
+        # litellm raises BadRequestError for many distinct conditions:
+        #   - genuine context-length overflow (the only one users can fix by shortening input)
+        #   - missing/invalid provider prefix ("LLM Provider NOT provided")
+        #   - unknown model id, malformed messages, schema violations
+        # Only the first deserves the "shorten your message" guidance — the rest
+        # are server-side configuration faults and must surface as 502 so the
+        # operator notices, not be hidden behind a misleading user-facing 422.
+        if _is_context_length_error(exc):
+            logger.warning(f"AI provider rejected request — context overflow: {exc}")
+            raise HTTPException(
+                status_code=422,
+                detail="Message plus context exceeds model capacity. Try a shorter message.",
+            )
+        logger.error(
+            f"AI provider rejected request — configuration error (BadRequestError): {exc}"
+        )
         raise HTTPException(
-            status_code=422,
-            detail="Message plus context exceeds model capacity. Try a shorter message.",
+            status_code=502,
+            detail="AI provider configuration error. Check sentinel-core logs.",
         )
     except Exception as exc:
         logger.error(f"Unexpected AI provider error: {type(exc).__name__}: {exc}")

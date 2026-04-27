@@ -39,6 +39,30 @@ logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.I
 logger = logging.getLogger(__name__)
 
 
+# LiteLLM provider tags. Stripping these (and only these) from a discovered
+# model string yields the "bare" model id used by LM Studio's /api/v0 endpoints.
+# A HuggingFace-style namespace inside the bare id (e.g. "qwen/qwen2.5-coder-14b")
+# must be preserved — naive split("/", 1)[-1] would mangle it and the resulting
+# half-id makes LM Studio's /api/v0/models/{id} return 400, falling the registry
+# back to a useless 4096-token context default.
+_LITELLM_PROVIDER_PREFIXES_TO_STRIP: tuple[str, ...] = (
+    "openai/",
+    "ollama/",
+    "anthropic/",
+)
+
+
+def _strip_litellm_prefix(model_str: str) -> str:
+    """Return ``model_str`` with any leading litellm provider tag removed.
+
+    Preserves HuggingFace-style namespaces inside the bare model id.
+    """
+    for prefix in _LITELLM_PROVIDER_PREFIXES_TO_STRIP:
+        if model_str.startswith(prefix):
+            return model_str[len(prefix):]
+    return model_str
+
+
 class APIKeyMiddleware(BaseHTTPMiddleware):
     """Require X-Sentinel-Key header on all non-health endpoints (IFACE-06)."""
 
@@ -67,7 +91,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Discover active model for the configured provider (non-fatal)
     _lmstudio_model_str = await discover_active_model(settings, http_client)
-    _lmstudio_model_name = _lmstudio_model_str.split("/", 1)[-1]
+    # Strip ONLY the litellm provider tag — keep any HF-style namespace inside
+    # the bare id (e.g. "qwen/qwen2.5-coder-14b" must round-trip verbatim).
+    _lmstudio_model_name = _strip_litellm_prefix(_lmstudio_model_str)
 
     # Determine active model id for context window lookup
     _active_model = (

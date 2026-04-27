@@ -20,6 +20,7 @@ import httpx
 
 from app.clients.litellm_provider import get_context_window_from_lmstudio
 from app.config import Settings
+from app.services.model_profiles import get_profile
 from app.services.model_selector import discover_active_model
 
 logger = logging.getLogger(__name__)
@@ -64,14 +65,51 @@ def _load_seed() -> dict[str, "ModelInfo"]:
 async def _fetch_lmstudio(
     settings: Settings, client: httpx.AsyncClient, discovered_name: str
 ) -> dict[str, "ModelInfo"]:
-    """Fetch context window from LM Studio. Returns partial dict (discovered_name → ModelInfo)."""
+    """Fetch context window from LM Studio. Returns partial dict (discovered_name → ModelInfo).
+
+    On failure, falls back to model_profiles family-based context window
+    (e.g. qwen2.5 → 32768) before resorting to the conservative 4096 default —
+    a 14B+ modern model is virtually never an honest 4K context model and
+    using 4096 there causes aggressive context truncation downstream.
+    """
     ctx = await get_context_window_from_lmstudio(
         client, settings.lmstudio_base_url, discovered_name
     )
+    notes = "Fetched from LM Studio at startup"
     if ctx == 4096:
-        logger.warning(
-            f"LM Studio context window fetch failed — using 4096 default for model '{discovered_name}'"
-        )
+        # Sentinel value: LM Studio fetch failed (or the model genuinely
+        # advertises 4096 — rare on modern releases). Try the model_profiles
+        # substring database for a family-aware default before giving up.
+        try:
+            profile = await get_profile(
+                discovered_name, api_base=settings.lmstudio_base_url
+            )
+            if profile.context_window and profile.context_window != 4096:
+                logger.warning(
+                    "LM Studio context window fetch failed for '%s' — using "
+                    "%d from model_profiles family '%s'",
+                    discovered_name,
+                    profile.context_window,
+                    profile.family,
+                )
+                ctx = profile.context_window
+                notes = (
+                    f"LM Studio fetch failed; context inferred from model_profiles "
+                    f"family '{profile.family}'"
+                )
+            else:
+                logger.warning(
+                    "LM Studio context window fetch failed — using 4096 default for model '%s' "
+                    "(model_profiles also has no better value)",
+                    discovered_name,
+                )
+        except Exception as exc:
+            logger.warning(
+                "LM Studio context window fetch failed and model_profiles fallback "
+                "errored (%s) — using 4096 default for model '%s'",
+                exc,
+                discovered_name,
+            )
     else:
         logger.info(
             f"LM Studio: model '{discovered_name}' has {ctx} token context window"
@@ -82,7 +120,7 @@ async def _fetch_lmstudio(
             provider="lmstudio",
             context_window=ctx,
             capabilities={"chat": True},
-            notes="Fetched from LM Studio at startup",
+            notes=notes,
         )
     }
 
@@ -122,10 +160,17 @@ async def build_model_registry(
     registry = _load_seed()
 
     if settings.ai_provider == "lmstudio":
-        # Discover active model name (non-fatal; falls back to settings.model_name)
+        # Discover active model name (non-fatal; falls back to settings.model_name).
+        # discover_active_model returns a litellm-prefixed string such as
+        # "openai/qwen/qwen2.5-coder-14b". Strip ONLY the provider tag — NOT
+        # any HuggingFace-style namespace within the model id, which LM Studio's
+        # /api/v0/models/{id} endpoint requires verbatim to avoid a 400.
         model_str = await discover_active_model(settings, http_client)
-        # Strip provider prefix for registry key (e.g. "openai/Qwen2.5" → "Qwen2.5")
-        discovered_lmstudio_name = model_str.split("/", 1)[-1]
+        discovered_lmstudio_name = model_str
+        for prefix in ("openai/", "ollama/", "anthropic/"):
+            if discovered_lmstudio_name.startswith(prefix):
+                discovered_lmstudio_name = discovered_lmstudio_name[len(prefix):]
+                break
         live = await _fetch_lmstudio(settings, http_client, discovered_lmstudio_name)
         registry.update(live)
     elif settings.ai_provider == "claude":

@@ -36,6 +36,28 @@ TaskKind = Literal["chat", "structured", "fast"]
 _model_cache: dict[str, list[str]] = {}
 _cache_lock = asyncio.Lock()
 
+# LiteLLM provider prefixes recognised by litellm.acompletion(). A model id that
+# already begins with one of these is left untouched; anything else (including
+# HuggingFace-style namespaces such as ``qwen/qwen2.5-coder-14b``) MUST be
+# prefixed with the active provider's tag, otherwise litellm raises
+# "LLM Provider NOT provided" with a 400/BadRequest.
+_LITELLM_PROVIDER_PREFIXES: tuple[str, ...] = (
+    "openai/",
+    "ollama/",
+    "anthropic/",
+    "azure/",
+    "bedrock/",
+    "cohere/",
+    "gemini/",
+    "groq/",
+    "huggingface/",
+    "mistral/",
+    "perplexity/",
+    "replicate/",
+    "together_ai/",
+    "vertex_ai/",
+)
+
 
 class ModelSelectorError(RuntimeError):
     """Raised when no model can be resolved: empty discovery AND no default."""
@@ -157,7 +179,11 @@ async def discover_active_model(
     Never raises — startup must not fail due to discovery issues.
     """
     def _prefixed(name: str) -> str:
-        if "/" in name:
+        # Already provider-prefixed for LiteLLM — leave untouched.
+        # NOTE: a bare slash in the name (e.g. "qwen/qwen2.5-coder-14b") is a
+        # HuggingFace-style namespace, NOT a litellm provider tag. Returning it
+        # unchanged would cause litellm.BadRequestError("LLM Provider NOT provided").
+        if name.startswith(_LITELLM_PROVIDER_PREFIXES):
             return name
         if settings.ai_provider == "ollama":
             return f"ollama/{name}"
