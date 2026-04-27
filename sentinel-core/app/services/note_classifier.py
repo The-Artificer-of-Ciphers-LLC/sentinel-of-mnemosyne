@@ -26,7 +26,11 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.services.model_selector import get_loaded_models, select_model
+from app.services.model_selector import (
+    ensure_litellm_prefix,
+    get_loaded_models,
+    select_model,
+)
 from sentinel_shared.llm_call import acompletion_with_profile
 from sentinel_shared.model_profiles import get_profile
 
