@@ -468,3 +468,124 @@ def test_sweep_skip_prefixes_constant():
     assert "ops/sessions/" in SWEEP_SKIP_PREFIXES
     assert "ops/sweeps/" in SWEEP_SKIP_PREFIXES
     assert "inbox/" in SWEEP_SKIP_PREFIXES
+
+
+# --- 260427-cza tests: structural-awareness skip-prefix expansion +
+#     dry-run topic_moves counter fix.
+# Behavioral tests — call the real walker / run_sweep and assert on
+# observable outputs (not source-grep). Per CLAUDE.md.
+
+
+@pytest.mark.asyncio
+async def test_skip_prefixes_block_module_dirs():
+    """Default skip-prefix tuple must keep walk_vault out of every
+    module-managed subtree we know about today: mnemosyne/, core/, self/,
+    templates/, archive/, security/, .obsidian/. Only `notes/real.md`
+    should survive the walk.
+    """
+    fake = FakeObsidian()
+    # Vault root containing one allowed dir (`notes/`) plus one entry
+    # per protected subtree.
+    fake.dirs[""] = [
+        "notes/",
+        "mnemosyne/",
+        "core/",
+        "self/",
+        "templates/",
+        "archive/",
+        "security/",
+        ".obsidian/",
+    ]
+    fake.dirs["notes"] = ["real.md"]
+    # If the walker descended into any of these, it would see these files.
+    fake.dirs["mnemosyne"] = ["pf2e/"]
+    fake.dirs["mnemosyne/pf2e"] = ["npcs/"]
+    fake.dirs["mnemosyne/pf2e/npcs"] = ["jareth.md"]
+    fake.dirs["core"] = ["foo.md"]
+    fake.dirs["self"] = ["bar.md"]
+    fake.dirs["templates"] = ["x.md"]
+    fake.dirs["archive"] = ["cartosia/"]
+    fake.dirs["archive/cartosia"] = ["y.md"]
+    fake.dirs["security"] = ["z.md"]
+    fake.dirs[".obsidian"] = ["config.json", "ignore.md"]
+
+    paths: list[str] = []
+    async for p in walk_vault(fake):
+        paths.append(p)
+
+    assert paths == ["notes/real.md"], (
+        f"only notes/real.md should survive; got {paths}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_dry_run_topic_moves_counter_matches_proposed_moves():
+    """run_sweep(dry_run=True) on a vault with N misplaced notes must report
+    report.topic_moves == N (matching the count of `kind=='topic'` entries
+    in proposed_moves). Currently the dry-run branch never increments the
+    counter — this test FAILS on main.
+    """
+    fake = FakeObsidian()
+    fake.dirs[""] = ["random/"]
+    fake.dirs["random"] = ["a.md", "b.md", "c.md"]
+    fake.store["random/a.md"] = "alpha body"
+    fake.store["random/b.md"] = "beta body"
+    fake.store["random/c.md"] = "gamma body"
+
+    classifier = AsyncMock(
+        return_value=ClassificationResult(
+            topic="accomplishment",
+            confidence=0.95,
+            title_slug="x",
+            reasoning="r",
+        )
+    )
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    report = await run_sweep(
+        fake, classifier, _emb, force_reclassify=True, dry_run=True
+    )
+
+    topic_proposals = [m for m in report.proposed_moves if m.get("kind") == "topic"]
+    assert len(topic_proposals) == 3, (
+        f"expected 3 topic proposals; got {len(topic_proposals)}: {report.proposed_moves}"
+    )
+    assert report.topic_moves == 3, (
+        f"report.topic_moves should equal len(topic-kind proposed_moves); "
+        f"got topic_moves={report.topic_moves}, proposals={len(topic_proposals)}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_skip_prefixes_configurable_via_settings(monkeypatch):
+    """walk_vault must consult settings.sweep_skip_prefixes at runtime so
+    operators can extend the denylist via env without code change. Override
+    the setting to add `custom-skip/`, place a file under it, assert it's
+    skipped.
+    """
+    from app import config as config_module
+
+    # Override settings to add a custom prefix; keep the defaults so the
+    # rest of the protections still apply.
+    custom_prefixes = tuple(config_module.settings.sweep_skip_prefixes) + (
+        "custom-skip/",
+    )
+    monkeypatch.setattr(
+        config_module.settings, "sweep_skip_prefixes", custom_prefixes
+    )
+
+    fake = FakeObsidian()
+    fake.dirs[""] = ["notes/", "custom-skip/"]
+    fake.dirs["notes"] = ["keep.md"]
+    fake.dirs["custom-skip"] = ["skipme.md"]
+
+    paths: list[str] = []
+    async for p in walk_vault(fake):
+        paths.append(p)
+
+    assert "notes/keep.md" in paths
+    assert not any(p.startswith("custom-skip") for p in paths), (
+        f"custom-skip/ entries should be skipped; got {paths}"
+    )
