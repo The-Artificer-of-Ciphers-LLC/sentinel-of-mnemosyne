@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-04-26T09:45:00Z",
+  "timestamp": "2026-04-27T00:13:59Z",
   "phase": "36",
   "phase_name": "foundry-npc-pull-import",
   "phase_dir": ".planning/phases/36-foundry-npc-pull-import",
@@ -9,58 +9,77 @@
   "total_tasks": 3,
   "status": "paused",
   "completed_tasks": [
-    {"id": 1, "name": "Plan 36-01: RED test stubs Wave 0 — 7 tests in test_npcs.py", "status": "done", "commit": "f5dcd58 (merged to main)"},
-    {"id": 2, "name": "Plan 36-02: Python backend routes/npcs.py + main.py wiring — 7 tests GREEN", "status": "done", "commit": "540c5f1 (merged to main)"},
+    {"id": 1, "name": "Plan 36-01: RED test stubs Wave 0 — 7 tests in test_npcs.py", "status": "done", "commit": "f5dcd58"},
+    {"id": 2, "name": "Plan 36-02: Python backend routes/npcs.py + main.py wiring — 7 tests GREEN", "status": "done", "commit": "540c5f1"},
     {"id": 3, "name": "Plan 36-03 Task 1: SentinelNpcImporter class + renderActorDirectory hook", "status": "done", "commit": "0ee8b70 (in worktree, NOT yet merged)"},
     {"id": 4, "name": "Plan 36-03 Task 2: module.json 1.1.0 + sentinel-connector.zip regenerated", "status": "done", "commit": "df26f7e (in worktree, NOT yet merged)"}
   ],
   "remaining_tasks": [
     {"id": 5, "name": "Plan 36-03 Task 3: Human verify checkpoint — Foundry smoke test (6 steps)", "status": "awaiting_human"},
-    {"id": 6, "name": "After approval: merge worktree-agent-a0ab92b421918d07a to main, create 36-03-SUMMARY.md", "status": "not_started"},
+    {"id": 6, "name": "After smoke test approval: merge worktree-agent-a0ab92b421918d07a to main, create 36-03-SUMMARY.md", "status": "not_started"},
     {"id": 7, "name": "Phase 36 verification (gsd-verifier) + ROADMAP completion", "status": "not_started"}
   ],
   "blockers": [
     {
-      "description": "Human Foundry smoke test required — 6 steps in .continue-here.md",
+      "description": "Human Foundry smoke test required before worktree can be merged. 6 steps in .continue-here.md.",
       "type": "human_action",
-      "workaround": "None — must be done manually with running Sentinel stack + Foundry"
+      "workaround": "None — requires running Foundry + live Sentinel stack"
     }
   ],
   "human_actions_pending": [
     {
       "action": "Run Foundry smoke test (6 steps in .continue-here.md) then type 'approved' or describe failures",
-      "context": "Plan 36-03 JS tasks are committed in worktree-agent-a0ab92b421918d07a. Worktree is still live. Merge happens after approval.",
+      "context": "Worktree-agent-a0ab92b421918d07a is still live. Merge happens after approval.",
       "blocking": true
     }
   ],
   "decisions": [
     {
-      "decision": "FVT-04f test uses INVALID_SLUG (uppercase+underscore) instead of ..%2Fetc%2Fpasswd",
-      "rationale": "Starlette decodes %2F to / before routing — %2F-encoded traversal slug returns 404 (route non-match), not 400. Guard is equally exercised by any slug with chars outside [a-z0-9-].",
+      "decision": "FVT-04f test uses INVALID_SLUG (uppercase+underscore) not ..%2Fetc%2Fpasswd",
+      "rationale": "Starlette decodes %2F→/ before routing so %2F traversal gives 404 not 400. Guard works correctly for all non-[a-z0-9-] chars.",
       "phase": "36"
     },
     {
       "decision": "Tests must run via 'uv run python3 -m pytest' not 'python3 -m pytest'",
-      "rationale": "rapidfuzz and other module deps are in the uv venv, not system Python.",
+      "rationale": "rapidfuzz and other deps are in the uv venv, not system Python.",
       "phase": "36"
     },
     {
       "decision": "Worktree merge skips ROADMAP.md bash cp backup/restore",
-      "rationale": "PreToolUse hook blocks bash cp that overwrites ROADMAP.md. Executors don't modify it, so no restore needed. Use Edit/Write tools if ROADMAP.md needs updating after merge.",
+      "rationale": "PreToolUse hook blocks bash cp that overwrites ROADMAP.md. Use Edit/Write tools instead.",
       "phase": "36"
+    },
+    {
+      "decision": "resolve_model prefix guard changed to startswith('openai/')",
+      "rationale": "Model IDs like qwen/qwen2.5-coder-14b have family slashes that fooled the '/' in chosen guard.",
+      "phase": "quick-260426-2x1"
+    },
+    {
+      "decision": "Vault search score threshold = 0.5 — results below filtered before LLM context injection",
+      "rationale": "Low-relevance results were causing cross-domain hallucination (pf2e notes polluting 2nd brain responses).",
+      "phase": "debug-2nd-brain"
+    },
+    {
+      "decision": "model_profiles.py shipped separately in both containers — not a shared library",
+      "rationale": "Separate containers with no shared volume. Code duplication is intentional.",
+      "phase": "quick-260426-2x1"
     }
   ],
-  "uncommitted_files": [
-    ".planning/STATE.md (status set to in_progress this session)"
-  ],
+  "uncommitted_files": [],
   "active_worktree": {
     "path": ".claude/worktrees/agent-a0ab92b421918d07a",
     "branch": "worktree-agent-a0ab92b421918d07a",
-    "status": "locked — live, has 2 committed tasks",
+    "status": "locked — live, has 2 committed tasks, awaiting human smoke test",
     "commits": [
       "0ee8b70 feat(36-03): add SentinelNpcImporter class and actor directory import hook",
       "df26f7e feat(36-03): bump module.json to 1.1.0, regenerate zip"
     ]
   },
-  "next_action": "User runs Foundry smoke test. Type 'approved' to proceed. On approval: git merge worktree-agent-a0ab92b421918d07a --no-ff (skip ROADMAP bash cp), create 36-03-SUMMARY.md, run phase verifier, mark phase complete in ROADMAP.md."
+  "session_quick_tasks": [
+    "260426-pjv — Discord /sen try/except guard (thinking indicator always resolves)",
+    "debug/pf2e-garbled-llm-response — pf2e keyword fast-path + sanity gate + poisoned cache deleted",
+    "debug/2nd-brain-garbled-response — vault search score threshold 0.5",
+    "260426-2x1 — model profile library + stop sequences wired into all litellm call sites"
+  ],
+  "next_action": "Run Foundry smoke test. On approval: merge worktree-agent-a0ab92b421918d07a (skip ROADMAP bash cp), create 36-03-SUMMARY.md, run /gsd-verify-work for phase 36, mark complete in ROADMAP.md."
 }
