@@ -83,8 +83,16 @@ class RouteDecision:
 _SLUG_NON_ALNUM = re.compile(r"[^a-z0-9]+")
 _CREATURE_RE = re.compile(r"\*\*Creature\s+\d+\*\*")
 _AC_RE = re.compile(r"\*\*AC\*\*\s+\d+")
+# "Level N NPC" / "Level N NPCs" appearing in a title or first 200 chars of
+# the file is a creature-level cue (real archive uses this in lieu of the
+# **Creature N** marker — e.g. "Veela & Tarek, the Street Hood Twins (Level 2 NPCs)").
+_LEVEL_NPC_RE = re.compile(r"\bLevel\s+\d+\s+NPCs?\b", re.IGNORECASE)
 _BIO_RE = re.compile(r"###\s+Biography\b", re.IGNORECASE)
 _APPEAR_RE = re.compile(r"###\s+Appearance\b", re.IGNORECASE)
+# Real archive often uses **Appearance:** (bold prefix) instead of an
+# `### Appearance` header — pair it with `### Biography` as a Format B
+# alternate signal. Same body-length rule applies.
+_APPEAR_BOLD_RE = re.compile(r"\*\*Appearance:\*\*", re.IGNORECASE)
 
 # Filename keyword tokens for dialogue detection — matched case-insensitively
 # against the *stem* (no .md extension) anywhere in the name.
@@ -116,32 +124,76 @@ def slugify(text: str) -> str:
 def _has_pf2e_stat_block(content: str) -> bool:
     """Format A sniff: PF2e stat block markers.
 
-    Requires both ``**Creature N**`` AND ``**AC** N`` somewhere in the body.
-    Two markers are necessary because the archive uses ``**AC** N`` in pure
-    rule snippets too — the Creature line is what makes it an NPC stat block.
+    Requires ``**AC** N`` AND a creature-level cue. The cue can be either
+    the strict ``**Creature N**`` marker OR a ``Level N NPC[s]`` token
+    appearing in the first 400 chars (titles in the real archive often use
+    the latter form, e.g. "Veela & Tarek, the Street Hood Twins (Level 2
+    NPCs)").
     """
-    return bool(_CREATURE_RE.search(content) and _AC_RE.search(content))
+    if not _AC_RE.search(content):
+        return False
+    if _CREATURE_RE.search(content):
+        return True
+    head = content[:400]
+    return bool(_LEVEL_NPC_RE.search(head))
 
 
 def _has_format_b_sections(content: str) -> bool:
-    """Format B sniff: `### Biography` AND `### Appearance` headers, each
-    followed by ≥10 chars of body within the next 200 chars.
+    """Format B sniff.
+
+    Strong signal: ``### Biography`` AND ``### Appearance`` headers each
+    followed by >=10 chars of body within the next 200 chars.
+
+    Real-archive alternate: ``### Biography`` paired with ``**Appearance:**``
+    (bold prefix instead of header) — same body-length rule on the
+    Biography side; the Appearance bold prefix only needs to exist.
 
     Defends against empty stub headers (research §Edge cases — empty
     Biography sections are valid per LegendKeeper's template).
     """
     bio = _BIO_RE.search(content)
-    app = _APPEAR_RE.search(content)
-    if not (bio and app):
+    if not bio:
         return False
-    for match in (bio, app):
-        # Window starts after the matched header line.
-        start = match.end()
-        window = content[start : start + 200]
-        body_chars = len(window.strip())
-        if body_chars < 10:
+    app_header = _APPEAR_RE.search(content)
+    app_bold = _APPEAR_BOLD_RE.search(content)
+    if not (app_header or app_bold):
+        return False
+    # Biography side must have body.
+    bio_window = content[bio.end() : bio.end() + 200]
+    if len(bio_window.strip()) < 10:
+        return False
+    # Appearance-header side must have body too. Bold form is treated as
+    # sufficient on its own (the bold prefix runs inline with body text).
+    if app_header is not None:
+        win = content[app_header.end() : app_header.end() + 200]
+        if len(win.strip()) < 10 and not app_bold:
             return False
     return True
+
+
+_PERSONAL_NPC_RES = (
+    re.compile(r"\*\*Role:\*\*", re.IGNORECASE),
+    re.compile(r"\*\*Function:\*\*", re.IGNORECASE),
+    re.compile(r"\*\*Class:\*\*", re.IGNORECASE),
+    re.compile(r"\*\*Player:\*\*", re.IGNORECASE),
+    re.compile(r"\*\*Status:\*\*\s+(Gone|Active|Captured|Missing)", re.IGNORECASE),
+    re.compile(r"###\s+Personality\b", re.IGNORECASE),
+    re.compile(r"###\s+Habits\b", re.IGNORECASE),
+    re.compile(r"###\s+Goals\b", re.IGNORECASE),
+    re.compile(r"###\s+Flaws\b", re.IGNORECASE),
+    re.compile(r"###\s+Fears\b", re.IGNORECASE),
+)
+
+
+def _has_personal_npc_markers(content: str) -> bool:
+    """True if the body has at least one personal-NPC structural marker.
+
+    Used as a Format-B alternate when neither the strict header pair nor
+    a PF2e stat block fires. Disambiguates personal NPC sheets like
+    `Apprentice Aldric.md` (has `**Role:**` + `**Function:**`) from true
+    factions like `Talons of the Claw.md` (organisational descriptor only).
+    """
+    return any(pat.search(content) for pat in _PERSONAL_NPC_RES)
 
 
 def _is_dialogue_filename(stem: str) -> bool:
@@ -362,17 +414,29 @@ def route(
         )
 
     # ------------------------------------------------------------------
-    # No NPC sniff. If parent chain includes "The NPCs/" but neither sniff
-    # fired, treat as faction (research §Edge case 4 — Talons of the Claw).
+    # No strict NPC sniff. If parent chain includes "The NPCs/", look for
+    # personal-NPC markers in the body — `**Role:**`, `**Function:**`,
+    # first-person quote blocks, or a `### Personality` / `### Goals` /
+    # `### Habits` header — and route as npc_b. Otherwise (no markers
+    # AND filename feels factional), faction. Research §Edge case 4 keeps
+    # `Talons of the Claw.md` as faction; the markers prevent
+    # `Apprentice Aldric.md` and similar character sheets being misrouted.
     # ------------------------------------------------------------------
     parent_lower = [p.lower() for p in parts[:-1]]
     if any(p == "the npcs" for p in parent_lower):
         slug = slugify(_strip_npc_quotes(stem))
+        if _has_personal_npc_markers(content):
+            return RouteDecision(
+                bucket="npc_b",
+                slug=slug,
+                dest=f"mnemosyne/pf2e/npcs/{slug}.md",
+                reason="under The NPCs/ + personal NPC markers (Role/Function/Personality/Goals)",
+            )
         return RouteDecision(
             bucket="faction",
             slug=slug,
             dest=f"mnemosyne/pf2e/lore/factions/{slug}.md",
-            reason="under The NPCs/ but no PF2e/Format-B sniff → faction",
+            reason="under The NPCs/ but no PF2e/Format-B/personal-NPC sniff → faction",
         )
 
     # ------------------------------------------------------------------
@@ -408,13 +472,23 @@ def route(
         )
 
     if top == "Cartosia":
-        # Anything under Cartosia/** that didn't sniff as NPC = location.
         slug = slugify(_strip_npc_quotes(stem))
+        # Personal NPC markers under Cartosia/** → npc_b (e.g. Provost
+        # Marshall Silas with bold-prefix Appearance + ### Biography that
+        # the strict Format-B detector now also catches; this is the
+        # belt-and-braces fallback for files with weaker structure).
+        if _has_personal_npc_markers(content):
+            return RouteDecision(
+                bucket="npc_b",
+                slug=slug,
+                dest=f"mnemosyne/pf2e/npcs/{slug}.md",
+                reason="under Cartosia/** + personal NPC markers (Role/Personality/Goals)",
+            )
         return RouteDecision(
             bucket="location",
             slug=slug,
             dest=f"mnemosyne/pf2e/locations/{slug}.md",
-            reason="path prefix 'Cartosia/' (no NPC sniff) → location",
+            reason="path prefix 'Cartosia/' (no NPC/personal-marker sniff) → location",
         )
 
     # ------------------------------------------------------------------

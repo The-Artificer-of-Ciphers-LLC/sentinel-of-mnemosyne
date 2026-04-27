@@ -235,3 +235,88 @@ def test_route_returns_stable_slug_for_same_input():
     assert a.slug == b.slug
     assert a.dest == b.dest
     assert a.bucket == b.bucket
+
+
+# ---------------------------------------------------------------------------
+# Real-archive corner cases discovered in Task 5 dry-run.
+# ---------------------------------------------------------------------------
+
+
+def test_format_a_accepts_level_n_npc_title_in_lieu_of_creature_marker(tmp_path):
+    """Real archive uses 'Level N NPC[s]' in titles instead of '**Creature N**'.
+
+    `Veela & Tarek` is the canonical example — has `**AC** 18` and
+    'Level 2 NPCs' in the H1, but no '**Creature N**' marker. Must
+    classify as npc_a, not faction.
+    """
+    p = tmp_path / "The NPCs" / "Veela and Tarek - Street Hood Twins.md"
+    p.parent.mkdir(parents=True)
+    p.write_text(
+        "# Veela & Tarek, the Street Hood Twins (Level 2 NPCs)\n\n"
+        "*Identical Tricksters & Local Shadows*\n\n"
+        "**AC** 18 | **HP** 32 (each) | **Speed** 30 ft.\n\n"
+        + ("body " * 60)
+    )
+    decision = route(p, p.read_text(), archive_root=tmp_path, known_npc_slugs=set())
+    assert decision.bucket == "npc_a"
+    assert decision.slug == "veela-and-tarek"
+
+
+def test_format_b_accepts_bold_appearance_paired_with_biography(tmp_path):
+    """Real archive uses `### Biography` + `**Appearance:**` (bold prefix,
+    not header). Provost Marshall Silas is the canonical example.
+    """
+    p = tmp_path / "Cartosia" / "Otari" / "Silas.md"
+    p.parent.mkdir(parents=True)
+    p.write_text(
+        "Main\n====\n\n### Biography\n\n"
+        "**Appearance:** Silas is gnarled and weathered, with a salt-and-pepper beard.\n\n"
+        "Personality\n===========\n"
+        + ("body text " * 40)
+    )
+    decision = route(p, p.read_text(), archive_root=tmp_path, known_npc_slugs=set())
+    assert decision.bucket == "npc_b"
+    assert decision.slug == "silas"
+
+
+def test_personal_npc_markers_under_the_npcs_route_to_npc_b(tmp_path):
+    """Under `The NPCs/` with no Biography/Appearance/stat-block but with
+    Role/Function/Personality markers → npc_b, NOT faction.
+    """
+    p = tmp_path / "Cartosia" / "X" / "The NPCs" / "Apprentice Aldric.md"
+    p.parent.mkdir(parents=True)
+    p.write_text(
+        "# Apprentice Aldric\n\n"
+        "**Role:** Front-shop contact at the Viremount\n"
+        "**Function:** Gatekeeper\n\n"
+        + ("body " * 60)
+    )
+    decision = route(p, p.read_text(), archive_root=tmp_path, known_npc_slugs=set())
+    assert decision.bucket == "npc_b"
+    assert decision.slug == "apprentice-aldric"
+
+
+def test_factional_file_under_the_npcs_still_routes_to_faction(tmp_path):
+    """`Talons of the Claw.md` lacks personal-NPC markers → still faction."""
+    p = tmp_path / "The NPCs" / "Talons of the Claw.md"
+    p.parent.mkdir(parents=True)
+    p.write_text(
+        "# Talons of the Claw\n\nA clandestine faction of dragon cultists.\n"
+        + ("body " * 80)
+    )
+    decision = route(p, p.read_text(), archive_root=tmp_path, known_npc_slugs=set())
+    assert decision.bucket == "faction"
+
+
+def test_personal_npc_markers_under_cartosia_route_to_npc_b(tmp_path):
+    """Under Cartosia/** with personal-NPC markers but no Biography/stat-block
+    → npc_b, NOT location."""
+    p = tmp_path / "Cartosia" / "Otari" / "Some Person.md"
+    p.parent.mkdir(parents=True)
+    p.write_text(
+        "# Some Person\n\n### Personality\n\n"
+        "She is cheerful.\n\n### Goals\n\nFind the lost ring.\n"
+        + ("body " * 50)
+    )
+    decision = route(p, p.read_text(), archive_root=tmp_path, known_npc_slugs=set())
+    assert decision.bucket == "npc_b"
