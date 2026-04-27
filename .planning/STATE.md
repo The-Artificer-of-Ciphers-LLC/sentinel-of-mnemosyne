@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
-status: "Phase 36 PLANNED. 3 plans created: Wave 0 TDD stubs, Wave 1 Python backend (CORS fix + npcs router), Wave 2 JS frontend (ApplicationV2 import dialog)."
-stopped_at: context exhaustion at 75% (2026-04-26)
-last_updated: "2026-04-26T17:51:58.832Z"
-last_activity: "2026-04-27 -- Quick task 260427-vl1 note import + vault sweeper feature live; 4 LM Studio interop hotfixes after initial verifier failure"
+status: completed
+stopped_at: context exhaustion at 75% (2026-04-27)
+last_updated: "2026-04-27T13:55:18.811Z"
+last_activity: 2026-04-27 -- Phase 36 worktree merged to main; v0.5 milestone complete
 progress:
   total_phases: 35
   completed_phases: 19
@@ -160,8 +160,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-26T17:51:58.824Z
-Stopped at: context exhaustion at 75% (2026-04-26)
+Last session: 2026-04-27T13:55:18.783Z
+Stopped at: context exhaustion at 75% (2026-04-27)
 Resume file: None
 
 **Completed Phase:** 35 (Foundry VTT Event Ingest) — 6 plans — 2026-04-25 — FVT-01..03 shipped; webhook-first fallback + PNACORSMiddleware gap closure
