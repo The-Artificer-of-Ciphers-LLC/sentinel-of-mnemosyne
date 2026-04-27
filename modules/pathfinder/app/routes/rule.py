@@ -259,6 +259,8 @@ async def rule_query(req: RuleQueryRequest) -> JSONResponse:
     model_chat = await resolve_model("chat")
     model_structured = await resolve_model("structured")
     api_base = settings.litellm_api_base or None
+    profile_chat = await resolve_model_profile("chat")
+    profile_structured = await resolve_model_profile("structured")
 
     # Keyword fast-path: if the query unambiguously contains a known topic term
     # (e.g. "off guard", "flanking", "grapple"), classify without an LLM call.
@@ -266,7 +268,9 @@ async def rule_query(req: RuleQueryRequest) -> JSONResponse:
     # which causes a corpus miss and an uncached LLM fallback.
     topic = keyword_classify_topic(query)
     if topic is None:
-        topic = await classify_rule_topic(query, model=model_structured, api_base=api_base)
+        topic = await classify_rule_topic(
+            query, model=model_structured, api_base=api_base, profile=profile_structured
+        )
     topic = coerce_topic(topic)  # belt + suspenders — coerce any stray output to valid slug
 
     # Step 4: exact-hash cache check.
@@ -387,6 +391,7 @@ async def rule_query(req: RuleQueryRequest) -> JSONResponse:
                 topic=topic,
                 model=model_chat,
                 api_base=api_base,
+                profile=profile_chat,
             )
         else:
             # D-03: corpus-miss falls through to fallback — NEVER decline for non-PF1 queries.
@@ -395,6 +400,7 @@ async def rule_query(req: RuleQueryRequest) -> JSONResponse:
                 topic=topic,
                 model=model_chat,
                 api_base=api_base,
+                profile=profile_chat,
             )
     except Exception as exc:
         logger.error(

@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.config import settings
 from app.llm import generate_session_recap, generate_story_so_far
-from app.resolve_model import resolve_model
+from app.resolve_model import resolve_model, resolve_model_profile
 from app.session import (
     KNOWN_EVENT_TYPES,
     apply_npc_links,
@@ -438,9 +438,12 @@ async def _handle_show(req: SessionRequest, path: str) -> dict:
     events_log = "\n".join(event_lines) if event_lines else "_No events logged yet._"
 
     model = await resolve_model("chat")
+    profile_chat = await resolve_model_profile("chat")
     api_base = settings.litellm_api_base or None
 
-    narrative = await generate_story_so_far(events_log, model=model, api_base=api_base)
+    narrative = await generate_story_so_far(
+        events_log, model=model, api_base=api_base, profile=profile_chat
+    )
 
     # Patch Story So Far section (D-19).
     try:
@@ -504,6 +507,7 @@ async def _handle_end(req: SessionRequest, path: str) -> dict:
     npc_frontmatter_block = await _build_npc_frontmatter_block(candidate_npc_slugs, obsidian)
 
     model = await resolve_model("chat")
+    profile_chat = await resolve_model_profile("chat")
     api_base = settings.litellm_api_base or None
     ended_at = utc_now_iso()
 
@@ -513,6 +517,7 @@ async def _handle_end(req: SessionRequest, path: str) -> dict:
             npc_frontmatter_block=npc_frontmatter_block,
             model=model,
             api_base=api_base,
+            profile=profile_chat,
         )
     except Exception as exc:
         # D-31: LLM failure → write skeleton note; hint --retry-recap.

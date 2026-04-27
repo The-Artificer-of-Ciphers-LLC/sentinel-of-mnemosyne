@@ -93,6 +93,9 @@ async def _handle_roll(event: FoundryRollEvent) -> JSONResponse:
     """Process a roll event: narrate via LLM, dispatch to Discord bot (FVT-02, FVT-03)."""
     model = settings.foundry_narration_model or settings.litellm_model
     api_base = settings.litellm_api_base or None
+    # Strip openai/ prefix if present — get_profile expects the bare model name.
+    bare_model = model.removeprefix("openai/")
+    profile = await get_profile(bare_model, api_base=api_base or "http://host.docker.internal:1234")
 
     # D-11: LLM narrative (max 20 words)
     narrative = await _foundry.generate_foundry_narrative(
@@ -104,6 +107,7 @@ async def _handle_roll(event: FoundryRollEvent) -> JSONResponse:
         dc=event.dc,
         model=model,
         api_base=api_base,
+        profile=profile,
     )
     # D-13: LLM failure fallback — plain-text summary
     if not narrative:

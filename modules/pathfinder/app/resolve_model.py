@@ -7,6 +7,7 @@ is the thin adapter that reads ``app.config.settings`` and normalises the return
 value for LiteLLM's ``provider/model`` naming convention.
 """
 from app.config import settings
+from app.model_profiles import ModelProfile, get_profile
 from app.model_selector import TaskKind, get_loaded_models, select_model
 
 # LM Studio exposes an OpenAI-compatible API, so bare names from /v1/models
@@ -40,3 +41,21 @@ async def resolve_model(task_kind: TaskKind, *, force_refresh: bool = False) -> 
     if chosen.startswith(_LITELLM_PROVIDER_PREFIX):
         return chosen
     return f"{_LITELLM_PROVIDER_PREFIX}{chosen}"
+
+
+async def resolve_model_profile(
+    task_kind: TaskKind, *, force_refresh: bool = False
+) -> ModelProfile:
+    """Return the ModelProfile for the best model for task_kind.
+
+    Calls resolve_model() to pick the best loaded model, strips the openai/
+    provider prefix, then fetches arch from LM Studio at settings.litellm_api_base.
+    Results are cached in model_profiles._profile_cache — no repeated network
+    calls per process.
+    """
+    model_id = await resolve_model(task_kind, force_refresh=force_refresh)
+    # Strip openai/ prefix before looking up profile — LM Studio /api/v0/models
+    # endpoint uses the bare model name, not the provider-prefixed form.
+    bare_id = model_id.removeprefix("openai/")
+    api_base = settings.litellm_api_base or "http://host.docker.internal:1234"
+    return await get_profile(bare_id, api_base=api_base, force_refresh=force_refresh)
