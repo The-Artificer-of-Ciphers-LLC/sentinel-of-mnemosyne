@@ -53,16 +53,29 @@ FAMILY_PROFILES: dict[str, ModelProfile] = {
     ),
     "llama": ModelProfile(
         family="llama",
-        stop_sequences=["[INST]", "[/INST]", "</s>"],
+        # Same fix as the mistral profile: [INST]/[/INST] are template
+        # delimiters, not stop tokens. Llama 2's EOS is </s>; LM Studio
+        # applies the chat template server-side, so the model output never
+        # contains [INST]/[/INST] legitimately.
+        stop_sequences=["</s>"],
         context_window=4096,
         supports_system_prompt=False,
         chat_template_format="llama2",
     ),
     "mistral": ModelProfile(
         family="mistral",
-        stop_sequences=["[INST]", "[/INST]", "</s>"],
+        # ONLY </s> — [INST] and [/INST] are template DELIMITERS in the input
+        # prompt, not output stop tokens. Including them as stops causes
+        # mid-generation truncation and garbage output (observed with
+        # cydonia-v1.2-magnum-v4-22b-mlx on 2026-04-27). LM Studio applies
+        # the chat template server-side; the model's output never legitimately
+        # contains [INST] / [/INST].
+        stop_sequences=["</s>"],
         context_window=32768,
-        supports_system_prompt=False,
+        # Mistral Small 3+ and recent Mistral fine-tunes (Magnum-v4 etc.)
+        # support system prompts via the chat template. Older Mistral 7B v0.1
+        # did not, but those are not in current circulation in LM Studio.
+        supports_system_prompt=True,
         chat_template_format="mistral",
     ),
     "gemma2": ModelProfile(
