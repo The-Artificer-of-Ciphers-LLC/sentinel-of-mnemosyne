@@ -1,6 +1,6 @@
 """LLM helpers for pathfinder module — NPC field extraction via LiteLLM.
 
-Calls litellm.acompletion() directly (no wrapper class).
+Calls litellm via app.llm_call.acompletion_with_profile() wrapper.
 Uses the project's configured LITELLM_MODEL + LITELLM_API_BASE from settings.
 
 Phase 33 (Wave 2) adds four rules-engine helpers:
