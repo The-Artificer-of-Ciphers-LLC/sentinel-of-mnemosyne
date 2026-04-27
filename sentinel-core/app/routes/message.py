@@ -134,10 +134,19 @@ async def post_message(
         {
             "role": "system",
             "content": (
-                "You are the Sentinel, a personal AI assistant. "
-                "You help the user with tasks, answer questions, and maintain context "
-                "about their goals and projects via an Obsidian vault. "
-                "Respond naturally and helpfully. "
+                "You are the Sentinel — the user's 2nd brain. "
+                "You maintain their context via an Obsidian vault that the system "
+                "writes to automatically; the user does not need to manage it. "
+                "\n\n"
+                "Respond like a friend who has been listening. When the user shares "
+                "a fact, milestone, status update, or reflection, acknowledge it "
+                "naturally and briefly — usually one or two sentences. Ask a relevant "
+                "follow-up only if it would feel natural. Match their tone and length.\n\n"
+                "Never lecture the user about how to file, organize, link, tag, "
+                "document, summarize, follow up on, plan, or process information. "
+                "The system handles persistence and structure. You only respond. "
+                "Do not produce numbered procedural how-to lists unless the user "
+                "explicitly asks for instructions.\n\n"
                 "Do not describe internal tools, system internals, or implementation details."
             ),
         }
@@ -204,8 +213,15 @@ async def post_message(
     # tool-use loop and issues multiple LLM calls per request, stacking requests at
     # LM Studio. Chat completion must go directly to LiteLLMProvider.
     _stop_sequences: list[str] | None = getattr(request.app.state, "lmstudio_stop_sequences", None) or None
+    # Pin chat-path temperature to bound reply-style variance. The chat-tuned
+    # local model has multiple attractor states (friend-mode vs lecture-mode);
+    # litellm's default temperature (~1.0) lets it bounce between them
+    # message-to-message. 0.4 keeps responses warm but consistent.
+    _CHAT_TEMPERATURE = 0.4
     try:
-        content = await ai_provider.complete(messages, stop=_stop_sequences)
+        content = await ai_provider.complete(
+            messages, stop=_stop_sequences, temperature=_CHAT_TEMPERATURE
+        )
     except ProviderUnavailableError as exc:
         logger.error(f"All AI providers unavailable: {exc}")
         raise HTTPException(status_code=503, detail=str(exc))

@@ -57,7 +57,12 @@ class LiteLLMProvider:
         wait=RETRY_WAIT,
         reraise=True,
     )
-    async def complete(self, messages: list[dict], stop: list[str] | None = None) -> str:
+    async def complete(
+        self,
+        messages: list[dict],
+        stop: list[str] | None = None,
+        temperature: float | None = None,
+    ) -> str:
         """
         Submit messages to the configured provider via LiteLLM.
         Retries 3x on transient errors. Raises immediately on 401/422/404.
@@ -66,6 +71,11 @@ class LiteLLMProvider:
         stop: optional list of stop sequences for the model family (from ModelProfile).
               Passed through to litellm.acompletion when non-empty so the LLM halts
               at the correct end-of-turn token for the loaded model architecture.
+
+        temperature: optional sampling temperature. Pinned by callers (e.g. the
+              chat path uses 0.4) to bound message-to-message reply-style variance
+              when the underlying model has multiple attractor states (lecture-mode
+              vs friend-mode). Pass None to use litellm's default.
         """
         kwargs: dict = {
             "model": self._model_string,
@@ -78,6 +88,8 @@ class LiteLLMProvider:
             kwargs["api_key"] = self._api_key
         if stop:
             kwargs["stop"] = stop
+        if temperature is not None:
+            kwargs["temperature"] = temperature
 
         logger.debug(f"LiteLLMProvider.complete: model={self._model_string}")
         response = await litellm.acompletion(**kwargs)
