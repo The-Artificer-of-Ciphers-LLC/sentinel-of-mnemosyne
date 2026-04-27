@@ -1,5 +1,12 @@
 """Pytest configuration and shared fixtures for pathfinder module tests.
 
+Test-time sys.path setup: the pathfinder Dockerfile copies shared/sentinel_shared
+into /app at build time, but local pytest runs from the host where the
+repo's `shared/` dir is at ../../shared/ relative to this module. Insert
+that path before any other test code imports from sentinel_shared
+(otherwise tests that touch app.llm / app.foundry / app.cartosia_npc_extract
+fail at import time).
+
 Two autouse fixtures for test_session_integration.py:
 
 1. freeze_session_date — patches datetime.date.today() in app.routes.session
@@ -13,9 +20,17 @@ Two autouse fixtures for test_session_integration.py:
    tracker, we set the tracker's await_count to reflect the inner mock's calls.
 """
 import datetime
+import os
+import sys
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
+# Make the repo's shared/ package importable for local pytest runs.
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+_SHARED = os.path.join(_REPO_ROOT, "shared")
+if _SHARED not in sys.path:
+    sys.path.insert(0, _SHARED)
 
 # Fixed date used throughout test_session_integration.py
 _TEST_SESSION_DATE = datetime.date(2026, 4, 25)
