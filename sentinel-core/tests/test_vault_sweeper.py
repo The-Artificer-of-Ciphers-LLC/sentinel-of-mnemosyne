@@ -308,6 +308,157 @@ async def test_run_sweep_idempotent_skips_marked():
     ) == bool(fm.get("embedding_b64"))
 
 
+# --- RED tests for missing behavior (operator authorized 2026-04-27) ---
+#
+# Gap #1: sweeper classifies in place but does not move misplaced notes
+#         to their topic-appropriate folder. The whole point of the
+#         operator's import/cleanup ask is to physically relocate
+#         misclassified notes, not just tag them with frontmatter.
+#
+# Gap #2: no dry-run mode. Operator wants to preview moves before
+#         committing them.
+#
+# Both tests will FAIL on the current implementation; that is the point.
+
+
+@pytest.mark.asyncio
+async def test_sweep_moves_misplaced_note_to_topic_folder():
+    """A note classified `accomplishment` but living at a non-accomplishment
+    path must be moved to ``accomplishments/<original-filename>``.
+
+    The original path must no longer exist in the store after the sweep,
+    and the destination path must contain the note's body with updated
+    frontmatter (`topic: accomplishment`, `original_path: <old>`).
+    """
+    fake = FakeObsidian()
+    # Misplaced: an accomplishment-shaped note living in a random folder
+    fake.dirs[""] = ["random-folder/"]
+    fake.dirs["random-folder"] = ["finished-bass-day-19.md"]
+    fake.store["random-folder/finished-bass-day-19.md"] = (
+        "Finished day 19 of the 30-day bass level 2 course."
+    )
+
+    classifier = AsyncMock(
+        return_value=ClassificationResult(
+            topic="accomplishment",
+            confidence=0.95,
+            title_slug="finished-bass-day-19",
+            reasoning="course completion milestone",
+        )
+    )
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    report = await run_sweep(fake, classifier, _emb, force_reclassify=True)
+
+    # The misplaced original is gone
+    assert "random-folder/finished-bass-day-19.md" not in fake.store, (
+        "expected the original path to be removed after the move"
+    )
+
+    # The note now lives under the topic folder, keeping its filename
+    expected_dst = "accomplishments/finished-bass-day-19.md"
+    assert expected_dst in fake.store, (
+        f"expected the note to be moved to {expected_dst}; "
+        f"current paths: {sorted(fake.store.keys())}"
+    )
+
+    # The moved note carries classification + provenance
+    moved_body = fake.store[expected_dst]
+    assert "topic: accomplishment" in moved_body
+    assert "original_path: random-folder/finished-bass-day-19.md" in moved_body
+
+    # Report counts the move
+    assert getattr(report, "topic_moves", 0) == 1, (
+        "report.topic_moves should track misplaced→topic-folder relocations"
+    )
+
+
+@pytest.mark.asyncio
+async def test_sweep_dry_run_produces_proposed_moves_no_file_writes():
+    """With ``dry_run=True``, run_sweep must:
+
+      1. Walk and classify normally.
+      2. Populate ``report.proposed_moves`` with every move it WOULD make
+         (noise→trash, dup→trash, misplaced→topic-folder).
+      3. NOT write or delete a single file in the store.
+
+    This is the safety preview the operator runs before authorizing a
+    real sweep.
+    """
+    fake = FakeObsidian()
+    fake.dirs[""] = ["random-folder/", "stale/"]
+    fake.dirs["random-folder"] = ["finished-bass-day-19.md"]
+    fake.dirs["stale"] = ["hello.md"]
+    fake.store["random-folder/finished-bass-day-19.md"] = (
+        "Finished day 19 of the 30-day bass level 2 course."
+    )
+    fake.store["stale/hello.md"] = "hello"  # cheap-filter noise
+
+    # Snapshot the store before running
+    pre_paths = set(fake.store.keys())
+    pre_bodies = dict(fake.store)
+
+    async def _classifier(text: str) -> ClassificationResult:
+        if text.strip().lower() == "hello":
+            return ClassificationResult(
+                topic="noise",
+                confidence=1.0,
+                title_slug="hello",
+                reasoning="cheap-filter:noise",
+            )
+        return ClassificationResult(
+            topic="accomplishment",
+            confidence=0.95,
+            title_slug="finished-bass-day-19",
+            reasoning="course completion",
+        )
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    report = await run_sweep(
+        fake,
+        _classifier,
+        _emb,
+        force_reclassify=True,
+        dry_run=True,
+    )
+
+    # Store is byte-for-byte unchanged
+    post_paths = set(fake.store.keys())
+    assert post_paths == pre_paths, (
+        f"dry_run must not add or remove paths; "
+        f"added={post_paths - pre_paths}, removed={pre_paths - post_paths}"
+    )
+    for path in pre_paths:
+        assert fake.store[path] == pre_bodies[path], (
+            f"dry_run must not modify {path}"
+        )
+
+    # Proposed moves include both kinds: misplaced→topic and noise→trash
+    proposed = getattr(report, "proposed_moves", None)
+    assert proposed is not None, "report.proposed_moves must be populated in dry-run"
+    assert len(proposed) >= 2, (
+        f"expected at least 2 proposed moves (1 misplaced + 1 noise); got {len(proposed)}"
+    )
+
+    # The misplaced→topic move is in the list
+    topic_moves = [m for m in proposed if m.get("kind") == "topic"]
+    assert any(
+        m.get("src") == "random-folder/finished-bass-day-19.md"
+        and m.get("dst") == "accomplishments/finished-bass-day-19.md"
+        for m in topic_moves
+    ), f"expected misplaced→accomplishments move in proposed_moves; got {proposed}"
+
+    # The noise→trash move is in the list
+    trash_moves = [m for m in proposed if m.get("kind") == "trash"]
+    assert any(
+        m.get("src") == "stale/hello.md" for m in trash_moves
+    ), f"expected stale/hello.md→_trash in proposed_moves; got {proposed}"
+
+
 # --- skip prefix sanity ---
 
 
