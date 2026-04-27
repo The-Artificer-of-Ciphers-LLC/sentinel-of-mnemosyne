@@ -2,7 +2,7 @@
   "id": "sentinel-connector",
   "title": "Sentinel Connector",
   "description": "Sends PF2e roll events and chat messages to the Sentinel of Mnemosyne AI assistant.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "compatibility": {
     "minimum": "12",
     "verified": "14"
