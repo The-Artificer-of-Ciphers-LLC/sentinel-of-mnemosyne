@@ -15,6 +15,18 @@ from app.model_selector import TaskKind, get_loaded_models, select_model
 # LiteLLM errors with "LLM Provider NOT provided" when model lacks a provider.
 _LITELLM_PROVIDER_PREFIX = "openai/"
 
+# Strip set used by strip_litellm_prefix(): the 3 provider tags that pathfinder
+# may see prepended to a discovered model id.
+_LITELLM_STRIP_PREFIXES: tuple[str, ...] = ("openai/", "ollama/", "anthropic/")
+
+
+def strip_litellm_prefix(model_str: str) -> str:
+    """Strip leading litellm provider tag, preserving HF-style namespaces."""
+    for prefix in _LITELLM_STRIP_PREFIXES:
+        if model_str.startswith(prefix):
+            return model_str[len(prefix):]
+    return model_str
+
 
 async def resolve_model(task_kind: TaskKind, *, force_refresh: bool = False) -> str:
     """Return the best model id for ``task_kind`` in LiteLLM-compatible form.
@@ -56,6 +68,6 @@ async def resolve_model_profile(
     model_id = await resolve_model(task_kind, force_refresh=force_refresh)
     # Strip openai/ prefix before looking up profile — LM Studio /api/v0/models
     # endpoint uses the bare model name, not the provider-prefixed form.
-    bare_id = model_id.removeprefix("openai/")
+    bare_id = strip_litellm_prefix(model_id)
     api_base = settings.litellm_api_base or "http://host.docker.internal:1234"
     return await get_profile(bare_id, api_base=api_base, force_refresh=force_refresh)
