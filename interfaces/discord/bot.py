@@ -89,6 +89,25 @@ if DISCORD_ALLOWED_CHANNELS_RAW.strip():
         if cid.strip().isdigit()
     }
 
+# 260427-vl1: admin-only gate for destructive ops (:vault-sweep). Fail-closed.
+# Empty/unset env → no admins. "*" → open to all. Otherwise comma-separated
+# Discord user IDs.
+SENTINEL_ADMIN_USER_IDS_RAW = os.environ.get("SENTINEL_ADMIN_USER_IDS", "")
+ADMIN_USER_IDS: "frozenset[str] | str"
+if SENTINEL_ADMIN_USER_IDS_RAW.strip() == "*":
+    ADMIN_USER_IDS = "*"
+else:
+    ADMIN_USER_IDS = frozenset(
+        uid.strip() for uid in SENTINEL_ADMIN_USER_IDS_RAW.split(",") if uid.strip()
+    )
+
+
+def _is_admin(user_id: str) -> bool:
+    """Fail-closed admin gate: empty allowlist refuses all."""
+    if ADMIN_USER_IDS == "*":
+        return True
+    return bool(ADMIN_USER_IDS) and user_id in ADMIN_USER_IDS
+
 # WR-04 fix: dedicated Foundry roll notification channel (avoids min()-by-snowflake heuristic)
 _NOTIFY_CHANNEL_ID_RAW = os.environ.get("DISCORD_NOTIFY_CHANNEL_ID", "")
 NOTIFY_CHANNEL_ID: int | None = int(_NOTIFY_CHANNEL_ID_RAW) if _NOTIFY_CHANNEL_ID_RAW.isdigit() else None
@@ -1409,6 +1428,18 @@ async def handle_sentask_subcommand(
         if topic in _NOTE_CLOSED_VOCAB and rest.strip():
             return await _call_core_note(user_id, content=rest.strip(), topic=topic)
         return await _call_core_note(user_id, content=args.strip(), topic=None)
+
+    # 260427-vl1: admin-only vault sweep
+    if subcmd == "vault-sweep":
+        if not _is_admin(user_id):
+            return (
+                "Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command."
+            )
+        verb = (args.strip().split(maxsplit=1) or [""])[0]
+        if verb == "status":
+            return await _call_core_sweep_status(user_id)
+        force = verb == "force"
+        return await _call_core_sweep_start(user_id, force_reclassify=force)
 
     # 260427-vl1: pending-classification inbox
     if subcmd == "inbox":
