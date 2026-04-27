@@ -287,3 +287,51 @@ This rule exists because the assistant has previously framed design questions as
 **Validated requirements are read-only by default.** They can be intentionally invalidated — but only by an explicit operator decision logged in PROJECT.md's "Out of Scope" section or as a new "Key Decision". A discuss-phase question is not the right place to invalidate a validated requirement; that requires a `/gsd-update-requirements` style decision recorded durably.
 
 This guardrail applies to every workflow: `/gsd-quick`, `/gsd-discuss-phase`, `/gsd-plan-phase`, `/gsd-debug`, `/gsd-add-phase`, code review, and ad-hoc edits. There is no exemption for "small" tasks — small tasks are where this fails most often.
+
+## Test-Rewrite Ban on Shipped Features
+
+The assistant **may not rewrite, weaken, delete, or skip a test that protects a shipped feature** without explicit operator consent in the same turn.
+
+**Definition of "shipped feature":** anything listed under PROJECT.md "Validated", marked `[x]` in REQUIREMENTS.md, or referenced by a phase whose SUMMARY.md is committed to main.
+
+**What counts as rewriting:**
+- Changing assertions so a previously-failing test now passes
+- Adding `pytest.skip`, `xfail`, or `@pytest.mark.skip` to a previously-passing test
+- Replacing a strict assertion with a looser one (e.g. `assert x == 5` → `assert x is not None`)
+- Deleting a test entirely
+- Replacing a real call with a stricter mock that hides the contract
+
+**What is fine without consent:**
+- ADDING new tests
+- Updating tests in lockstep with a feature change the user explicitly approved
+- Renaming tests, moving them between files, or refactoring fixture wiring as long as the assertions and call paths are preserved
+
+**When the assistant believes a shipped-feature test is wrong:** STOP and surface the specific assertion + the reasoning to the operator. Wait for explicit "yes, change it" before editing. Never silently weaken a test to make a feature change pass.
+
+**Verifier responsibility:** when running `/gsd-verify-work` or any post-execution test pass, if a previously-passing test now fails, this is a regression to surface — not a test to fix.
+
+This rule sits alongside the Spec-Conflict Guardrail above. Together they enforce: shipped behavior is read-only by default; intentional change requires explicit operator authorization at the turn it happens.
+
+## Behavioral-Test-Only Rule (No Echo-Chamber Tests)
+
+Tests must exercise the function under test by **calling it** and asserting on its inputs, outputs, side effects, or raised exceptions. Tests that only inspect source code (grep/regex on file contents), assert tautologies (`assert True`, `assert x == x`), or echo back literal values from the implementation are **echo-chamber tests** and provide zero coverage.
+
+**Banned test patterns:**
+
+- `assert "def foo" in open("src.py").read()` — source-grep, doesn't run `foo`
+- `assert re.search(r"pattern", source)` — regex on source code is not a behavior test
+- `assert True` / `assert 1 == 1` / `assert obj is obj` — vacuous truth
+- `mock.assert_called_with(...)` as the *only* assertion in a test (the production code's contract isn't verified, only the call shape)
+- `try: foo(); except: pass` followed by `assert True` — pass-always swallowed exception
+- Tests that import the module and only assert it imported (`assert numpy is not None` after `import numpy`) — covered by Python's import system already; adds no behavioral coverage
+
+**Required for a test to count as a test:**
+
+1. Calls the function under test (or an entry point that calls it)
+2. Asserts on the **observable result** — return value, side effect, raised exception, or state change in a real fixture (in-memory DB, fake filesystem, recorded HTTP)
+3. Has at least one assertion that would fail if the function's behavior changed in a meaningful way
+4. The assertion is **strict enough to detect the bug it claims to prevent** — `assert response is not None` does not protect against a wrong return value; `assert response.topic == "accomplishment"` does
+
+**When an existing test is identified as vacuous:** apply the Test-Rewrite Ban above — STOP and surface the specific test + the reasoning to the operator. Do not silently rewrite. The operator decides whether to rewrite, delete, or accept the gap.
+
+**For new tests:** use the `test-rigor` skill before writing — it has the canonical checklist. Pair this with TDD: write the failing test FIRST, run it, see it fail with a meaningful error, then implement.
