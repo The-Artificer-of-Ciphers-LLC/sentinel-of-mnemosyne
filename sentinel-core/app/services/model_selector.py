@@ -59,6 +59,33 @@ _LITELLM_PROVIDER_PREFIXES: tuple[str, ...] = (
 )
 
 
+def strip_litellm_prefix(
+    model_str: str,
+    *,
+    prefixes: tuple[str, ...] = _LITELLM_PROVIDER_PREFIXES,
+) -> str:
+    """Strip a leading litellm provider tag from model_str.
+
+    Preserves HuggingFace-style namespaces (e.g. "qwen/qwen2.5-coder-14b")
+    inside the bare id — naive split("/", 1)[-1] would mangle them.
+
+    The `prefixes` parameter lets callers preserve the exact strip set their
+    pre-refactor code used (e.g. main.py and model_registry.py only stripped
+    the original 3 — they pass `prefixes=_ORIGINAL_PREFIXES`).
+    """
+    for prefix in prefixes:
+        if model_str.startswith(prefix):
+            return model_str[len(prefix):]
+    return model_str
+
+
+def ensure_litellm_prefix(model_str: str, default_provider: str = "openai/") -> str:
+    """Return model_str with a litellm provider tag, prepending default_provider if missing."""
+    if model_str.startswith(_LITELLM_PROVIDER_PREFIXES):
+        return model_str
+    return f"{default_provider}{model_str}"
+
+
 class ModelSelectorError(RuntimeError):
     """Raised when no model can be resolved: empty discovery AND no default."""
 

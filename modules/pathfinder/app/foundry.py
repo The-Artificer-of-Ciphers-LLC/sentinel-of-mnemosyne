@@ -1,6 +1,6 @@
 """Foundry VTT event helpers — LLM narration and Discord notification dispatch (Phase 35).
 
-Calls litellm.acompletion() for roll narration (D-11).
+Calls acompletion_with_profile() for roll narration (D-11).
 POSTs to Discord bot internal endpoint via httpx.AsyncClient (D-14).
 
 Never raises on LLM or HTTP failure — D-13 fallback policy.
@@ -10,19 +10,12 @@ from __future__ import annotations
 import logging
 
 import httpx
-import litellm
 
-from app.model_profiles import ModelProfile
+from app.llm_call import acompletion_with_profile
+from sentinel_shared.model_profiles import ModelProfile
 
 logger = logging.getLogger(__name__)
 
-
-def _stop_for(profile: ModelProfile | None) -> list[str] | None:
-    """Return stop sequences for profile, or None if empty/unknown."""
-    if profile is None:
-        return None
-    seqs = profile.stop_sequences
-    return seqs if seqs else None
 
 # Outcome display maps (shared by generate_foundry_narrative and build_narrative_fallback)
 OUTCOME_EMOJIS: dict[str, str] = {
@@ -71,21 +64,17 @@ async def generate_foundry_narrative(
         f"Roll total: {roll_total}. "
         f"DC: {dc_str}."
     )
-    kwargs: dict = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": _NARRATOR_SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
-        "timeout": 15.0,
-    }
-    if api_base:
-        kwargs["api_base"] = api_base
-    stop = _stop_for(profile)
-    if stop:
-        kwargs["stop"] = stop
     try:
-        response = await litellm.acompletion(**kwargs)
+        response = await acompletion_with_profile(
+            model=model,
+            messages=[
+                {"role": "system", "content": _NARRATOR_SYSTEM_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            profile=profile,
+            api_base=api_base,
+            timeout=15.0,
+        )
         content = response.choices[0].message.content or ""
         return content.strip()
     except Exception as exc:

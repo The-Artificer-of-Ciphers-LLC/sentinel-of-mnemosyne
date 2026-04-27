@@ -33,13 +33,13 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from app.config import settings
+from app.resolve_model import resolve
 from app.llm import (
     classify_rule_topic,
     embed_texts,
     generate_ruling_fallback,
     generate_ruling_from_passages,
 )
-from app.resolve_model import resolve_model, resolve_model_profile
 from app.rules import (
     D_07_DECLINE_TEMPLATE,
     MAX_QUERY_CHARS,
@@ -256,11 +256,13 @@ async def rule_query(req: RuleQueryRequest) -> JSONResponse:
     # Step 3: compute query hash + topic classification.
     q_norm = normalize_query(query)
     q_hash = query_hash(query)
-    model_chat = await resolve_model("chat")
-    model_structured = await resolve_model("structured")
+    r_chat = await resolve("chat")
+    r_structured = await resolve("structured")
+    model_chat = r_chat.model
+    model_structured = r_structured.model
     api_base = settings.litellm_api_base or None
-    profile_chat = await resolve_model_profile("chat")
-    profile_structured = await resolve_model_profile("structured")
+    profile_chat = r_chat.profile
+    profile_structured = r_structured.profile
 
     # Keyword fast-path: if the query unambiguously contains a known topic term
     # (e.g. "off guard", "flanking", "grapple"), classify without an LLM call.

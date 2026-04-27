@@ -6,14 +6,39 @@ their task kind. Discovery and scoring live in ``app.model_selector``; this modu
 is the thin adapter that reads ``app.config.settings`` and normalises the return
 value for LiteLLM's ``provider/model`` naming convention.
 """
+
+from dataclasses import dataclass
+
 from app.config import settings
-from app.model_profiles import ModelProfile, get_profile
+from sentinel_shared.model_profiles import ModelProfile, get_profile
 from app.model_selector import TaskKind, get_loaded_models, select_model
 
 # LM Studio exposes an OpenAI-compatible API, so bare names from /v1/models
 # must be prefixed with "openai/" for litellm.acompletion to accept them.
 # LiteLLM errors with "LLM Provider NOT provided" when model lacks a provider.
 _LITELLM_PROVIDER_PREFIX = "openai/"
+
+# Strip set used by strip_litellm_prefix(): the 3 provider tags that pathfinder
+# may see prepended to a discovered model id.
+_LITELLM_STRIP_PREFIXES: tuple[str, ...] = ("openai/", "ollama/", "anthropic/")
+
+
+def strip_litellm_prefix(model_str: str) -> str:
+    """Strip leading litellm provider tag, preserving HF-style namespaces."""
+    for prefix in _LITELLM_STRIP_PREFIXES:
+        if model_str.startswith(prefix):
+            return model_str[len(prefix):]
+    return model_str
+
+
+@dataclass(frozen=True)
+class ResolvedModel:
+    """Bundles the litellm-prefixed model id, its ModelProfile, and the api_base
+    override used for that model's calls. Returned by resolve()."""
+
+    model: str
+    profile: ModelProfile
+    api_base: str | None
 
 
 async def resolve_model(task_kind: TaskKind, *, force_refresh: bool = False) -> str:
@@ -56,6 +81,25 @@ async def resolve_model_profile(
     model_id = await resolve_model(task_kind, force_refresh=force_refresh)
     # Strip openai/ prefix before looking up profile — LM Studio /api/v0/models
     # endpoint uses the bare model name, not the provider-prefixed form.
-    bare_id = model_id.removeprefix("openai/")
+    bare_id = strip_litellm_prefix(model_id)
     api_base = settings.litellm_api_base or "http://host.docker.internal:1234"
     return await get_profile(bare_id, api_base=api_base, force_refresh=force_refresh)
+
+
+async def resolve(task_kind: TaskKind, *, force_refresh: bool = False) -> ResolvedModel:
+    """Unified entry point — returns model + profile + api_base in one call.
+
+    Internally calls resolve_model() then get_profile() (the same path
+    resolve_model_profile takes), then bundles everything into a ResolvedModel
+    so callers don't have to await two coroutines + remember the api_base
+    convention separately.
+    """
+    model = await resolve_model(task_kind, force_refresh=force_refresh)
+    bare = strip_litellm_prefix(model)
+    api_base_for_profile = settings.litellm_api_base or "http://host.docker.internal:1234"
+    profile = await get_profile(bare, api_base=api_base_for_profile, force_refresh=force_refresh)
+    return ResolvedModel(
+        model=model,
+        profile=profile,
+        api_base=settings.litellm_api_base or None,
+    )

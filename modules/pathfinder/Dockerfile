@@ -20,5 +20,10 @@ RUN pip install --no-cache-dir \
 
 COPY . .
 
+# Copy shared package from the `shared` build context (declared in compose.yml
+# additional_contexts). Lands at /app/sentinel_shared/ so existing PYTHONPATH
+# (WORKDIR /app) makes `import sentinel_shared.<module>` resolve.
+COPY --from=shared sentinel_shared/ /app/sentinel_shared/
+
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

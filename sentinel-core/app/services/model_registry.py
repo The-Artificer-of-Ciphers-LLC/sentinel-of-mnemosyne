@@ -20,10 +20,14 @@ import httpx
 
 from app.clients.litellm_provider import get_context_window_from_lmstudio
 from app.config import Settings
-from app.services.model_profiles import get_profile
-from app.services.model_selector import discover_active_model
+from sentinel_shared.model_profiles import get_profile
+from app.services.model_selector import discover_active_model, strip_litellm_prefix
 
 logger = logging.getLogger(__name__)
+
+# Pre-refactor strip set (preserved verbatim). model_registry.py historically only
+# stripped the original 3 litellm provider tags.
+_ORIGINAL_PREFIXES: tuple[str, ...] = ("openai/", "ollama/", "anthropic/")
 
 # Path to seed file — relative to sentinel-core/ project root
 _SEED_PATH = Path(__file__).parent.parent.parent / "models-seed.json"
@@ -166,11 +170,7 @@ async def build_model_registry(
         # any HuggingFace-style namespace within the model id, which LM Studio's
         # /api/v0/models/{id} endpoint requires verbatim to avoid a 400.
         model_str = await discover_active_model(settings, http_client)
-        discovered_lmstudio_name = model_str
-        for prefix in ("openai/", "ollama/", "anthropic/"):
-            if discovered_lmstudio_name.startswith(prefix):
-                discovered_lmstudio_name = discovered_lmstudio_name[len(prefix):]
-                break
+        discovered_lmstudio_name = strip_litellm_prefix(model_str, prefixes=_ORIGINAL_PREFIXES)
         live = await _fetch_lmstudio(settings, http_client, discovered_lmstudio_name)
         registry.update(live)
     elif settings.ai_provider == "claude":
