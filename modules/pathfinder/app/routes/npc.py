@@ -39,7 +39,7 @@ from app.llm import (
     update_npc_fields,
 )
 from app.pdf import build_npc_pdf
-from app.resolve_model import resolve_model, resolve_model_profile
+from app.resolve_model import resolve
 
 logger = logging.getLogger(__name__)
 
@@ -362,12 +362,13 @@ async def create_npc(req: NPCCreateRequest) -> JSONResponse:
     # LLM field extraction — D-06, D-07
     # Task kind "structured" — requires function-calling-capable model for reliable JSON
     try:
+        r = await resolve("structured")
         fields = await extract_npc_fields(
             name=req.name,
             description=req.description,
-            model=await resolve_model("structured"),
+            model=r.model,
             api_base=settings.litellm_api_base or None,
-            profile=await resolve_model_profile("structured"),
+            profile=r.profile,
         )
     except Exception as exc:
         logger.error("LLM extraction failed for NPC %s: %s", req.name, exc)
@@ -415,12 +416,13 @@ async def update_npc(req: NPCUpdateRequest) -> JSONResponse:
     # LLM extracts changed fields from correction string (D-10)
     # Task kind "structured" — same JSON-extraction profile as /create
     try:
+        r = await resolve("structured")
         changed = await update_npc_fields(
             current_note=note_text,
             correction=req.correction,
-            model=await resolve_model("structured"),
+            model=r.model,
             api_base=settings.litellm_api_base or None,
-            profile=await resolve_model_profile("structured"),
+            profile=r.profile,
         )
     except Exception as exc:
         logger.error("LLM update extraction failed for NPC %s: %s", req.name, exc)
@@ -705,11 +707,12 @@ async def token_prompt(req: NPCOutputRequest) -> JSONResponse:
         raise HTTPException(status_code=404, detail={"error": "NPC not found", "slug": slug})
     fields = _parse_frontmatter(note_text)
     # Task kind "fast" — max_tokens=40, prefers smaller/cheaper model above 4K ctx
+    r = await resolve("fast")
     description = await generate_mj_description(
         fields=fields,
-        model=await resolve_model("fast"),
+        model=r.model,
         api_base=settings.litellm_api_base or None,
-        profile=await resolve_model_profile("fast"),
+        profile=r.profile,
     )
     prompt = build_mj_prompt(fields, description)
     return JSONResponse({"prompt": prompt, "slug": slug})
@@ -904,8 +907,9 @@ async def say_npc(req: NPCSayRequest) -> JSONResponse:
     )
 
     # Step 4: Resolve chat-tier model and profile (D-27). Single call up front; same model used per turn.
-    model = await resolve_model("chat")
-    profile_chat = await resolve_model_profile("chat")
+    r_chat = await resolve("chat")
+    model = r_chat.model
+    profile_chat = r_chat.profile
     api_base = settings.litellm_api_base or None
 
     # Step 5: Serial round-robin (D-19) — each NPC sees prior NPCs' replies in this turn.

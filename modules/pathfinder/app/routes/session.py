@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.config import settings
 from app.llm import generate_session_recap, generate_story_so_far
-from app.resolve_model import resolve_model, resolve_model_profile
+from app.resolve_model import resolve
 from app.session import (
     KNOWN_EVENT_TYPES,
     apply_npc_links,
@@ -437,8 +437,9 @@ async def _handle_show(req: SessionRequest, path: str) -> dict:
     event_lines, events_section_text = _extract_events_log_section(note)
     events_log = "\n".join(event_lines) if event_lines else "_No events logged yet._"
 
-    model = await resolve_model("chat")
-    profile_chat = await resolve_model_profile("chat")
+    r_chat = await resolve("chat")
+    model = r_chat.model
+    profile_chat = r_chat.profile
     api_base = settings.litellm_api_base or None
 
     narrative = await generate_story_so_far(
@@ -506,8 +507,9 @@ async def _handle_end(req: SessionRequest, path: str) -> dict:
     # Build NPC context block for LLM.
     npc_frontmatter_block = await _build_npc_frontmatter_block(candidate_npc_slugs, obsidian)
 
-    model = await resolve_model("chat")
-    profile_chat = await resolve_model_profile("chat")
+    r_chat = await resolve("chat")
+    model = r_chat.model
+    profile_chat = r_chat.profile
     api_base = settings.litellm_api_base or None
     ended_at = utc_now_iso()
 

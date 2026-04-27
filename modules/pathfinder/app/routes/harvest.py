@@ -33,7 +33,7 @@ from app.harvest import (
     lookup_seed,
 )
 from app.llm import generate_harvest_fallback
-from app.resolve_model import resolve_model, resolve_model_profile
+from app.resolve_model import resolve
 from app.routes.npc import slugify  # Don't Hand-Roll — reuse the existing slug fn
 
 logger = logging.getLogger(__name__)
@@ -183,8 +183,9 @@ async def harvest(req: HarvestRequest) -> JSONResponse:
         )
 
     per_monster_results: list[dict] = []
-    model_chat = await resolve_model("chat")
-    profile_chat = await resolve_model_profile("chat")
+    r_chat = await resolve("chat")
+    model_chat = r_chat.model
+    profile_chat = r_chat.profile
     api_base = settings.litellm_api_base or None
 
     for name in req.names:
