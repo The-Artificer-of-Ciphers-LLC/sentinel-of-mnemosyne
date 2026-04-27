@@ -242,7 +242,29 @@ async def classify_note(
             profile=profile,
             api_base=api_base,
             api_key="lmstudio",  # LM Studio dummy key — litellm requires this even though LM Studio ignores it
-            response_format={"type": "json_object"},
+            # LM Studio's OpenAI-compatible API rejects {"type": "json_object"};
+            # use json_schema with explicit shape instead. Falls back to JSON parse + coerce-to-unsure.
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "classification",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "topic": {
+                                "type": "string",
+                                "enum": list(CLOSED_VOCAB),
+                            },
+                            "confidence": {"type": "number"},
+                            "title_slug": {"type": "string"},
+                            "reasoning": {"type": "string"},
+                        },
+                        "required": ["topic", "confidence", "title_slug", "reasoning"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
             temperature=0.0,
         )
     except Exception as exc:
