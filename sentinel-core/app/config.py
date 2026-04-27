@@ -91,6 +91,27 @@ class Settings(BaseSettings):
     cors_allow_origins: str = "http://localhost:30000"
     cors_allow_origin_regex: str = r"https://.*\.forge-vtt\.com"
 
+    # Vault sweeper skip-prefix denylist (260427-cza). Any vault path that
+    # startswith one of these prefixes is excluded from sweep walks. Defaults
+    # cover every module-managed subtree as of 2026-04-27. Override via env
+    # SWEEP_SKIP_PREFIXES (JSON list) when a new module mounts a curated dir.
+    sweep_skip_prefixes: tuple[str, ...] = (
+        "_trash/",
+        "pf2e/",            # legacy entry — covered by `mnemosyne/` for the
+                            # actual NPC path; kept for defense-in-depth and
+                            # to avoid weakening the shipped denylist.
+        "mnemosyne/",       # covers mnemosyne/pf2e/, mnemosyne/self/, etc.
+        "core/",
+        "self/",
+        "templates/",
+        "archive/",
+        "security/",
+        "ops/sessions/",
+        "ops/sweeps/",
+        "inbox/",
+        ".obsidian/",
+    )
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

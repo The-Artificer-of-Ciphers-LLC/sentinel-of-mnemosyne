@@ -33,6 +33,23 @@ SWEEP_SKIP_PREFIXES: tuple[str, ...] = (
     "ops/sweeps/",
     "inbox/",
 )
+"""Module-level fallback default. The runtime denylist is read from
+``settings.sweep_skip_prefixes`` via ``_active_skip_prefixes()`` so operators
+can extend it via env without code change. This constant is preserved as a
+backstop in case settings import fails (and to keep the existing public
+import surface stable for callers that referenced it directly)."""
+
+
+def _active_skip_prefixes() -> tuple[str, ...]:
+    """Return the live skip-prefix tuple from settings, falling back to the
+    module-level default if settings is unimportable (e.g. during isolated
+    unit tests of the helpers).
+    """
+    try:
+        from app.config import settings
+        return tuple(settings.sweep_skip_prefixes)
+    except Exception:
+        return SWEEP_SKIP_PREFIXES
 
 LOCKFILE_PATH = "ops/sweeps/_in-progress.md"
 STALE_LOCK_SECONDS = 3600  # 1 hour
@@ -194,7 +211,7 @@ def find_dup_clusters(matrix: np.ndarray, threshold: float = 0.92) -> list[list[
 
 def _should_skip(path: str, frontmatter: dict, current_pass: str) -> bool:
     """True when this path should be left alone in the current pass."""
-    if any(path.startswith(p) for p in SWEEP_SKIP_PREFIXES):
+    if any(path.startswith(p) for p in _active_skip_prefixes()):
         return True
     if not isinstance(frontmatter, dict):
         return False
@@ -215,9 +232,10 @@ async def walk_vault(client, root: str = "") -> AsyncIterator[str]:
     should collect into a list before mutating the vault.
     """
     queue: list[str] = [root]
+    skip_prefixes = _active_skip_prefixes()
     while queue:
         dir_path = queue.pop(0)
-        if any(dir_path.startswith(p.rstrip("/")) and dir_path != "" for p in SWEEP_SKIP_PREFIXES):
+        if any(dir_path.startswith(p.rstrip("/")) and dir_path != "" for p in skip_prefixes):
             continue
         listing = await client.list_directory(dir_path)
         for entry in listing:
@@ -225,7 +243,7 @@ async def walk_vault(client, root: str = "") -> AsyncIterator[str]:
                 continue
             full = f"{dir_path}/{entry}".strip("/") if dir_path else entry.strip("/")
             # Re-check skip prefixes against the candidate
-            if any(full.startswith(p.rstrip("/")) for p in SWEEP_SKIP_PREFIXES):
+            if any(full.startswith(p.rstrip("/")) for p in skip_prefixes):
                 continue
             if entry.endswith("/"):
                 queue.append(full.rstrip("/"))
@@ -503,6 +521,10 @@ async def run_sweep(
                             "dst": proposed_dst,
                             "reason": f"topic={topic} (confidence={result.confidence:.2f})",
                         })
+                        # 260427-cza: parity with the live `else` branch below
+                        # which increments topic_moves. Without this, dry-run
+                        # reports `topic_moves: 0` while listing N proposals.
+                        report.topic_moves += 1
                         # Don't add to survivors in dry-run — we're not writing
                         # frontmatter or computing embeddings. Just report.
                         report.files_processed += 1
