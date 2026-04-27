@@ -184,6 +184,7 @@ async def harvest(req: HarvestRequest) -> JSONResponse:
 
     per_monster_results: list[dict] = []
     model_chat = await resolve_model("chat")
+    profile_chat = await resolve_model_profile("chat")
     api_base = settings.litellm_api_base or None
 
     for name in req.names:
@@ -230,6 +231,7 @@ async def harvest(req: HarvestRequest) -> JSONResponse:
                     monster_name=name,
                     model=model_chat,
                     api_base=api_base,
+                    profile=profile_chat,
                 )
             except Exception as exc:
                 logger.error("LLM harvest fallback failed for %s: %s", name, exc)

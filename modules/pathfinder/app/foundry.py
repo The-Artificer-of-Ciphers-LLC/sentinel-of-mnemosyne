@@ -12,7 +12,17 @@ import logging
 import httpx
 import litellm
 
+from app.model_profiles import ModelProfile
+
 logger = logging.getLogger(__name__)
+
+
+def _stop_for(profile: ModelProfile | None) -> list[str] | None:
+    """Return stop sequences for profile, or None if empty/unknown."""
+    if profile is None:
+        return None
+    seqs = profile.stop_sequences
+    return seqs if seqs else None
 
 # Outcome display maps (shared by generate_foundry_narrative and build_narrative_fallback)
 OUTCOME_EMOJIS: dict[str, str] = {
@@ -44,6 +54,7 @@ async def generate_foundry_narrative(
     dc: int | None,
     model: str,
     api_base: str | None = None,
+    profile: ModelProfile | None = None,
 ) -> str:
     """Generate a max-20-word dramatic narrative for a PF2e roll result (D-11).
 
@@ -70,6 +81,9 @@ async def generate_foundry_narrative(
     }
     if api_base:
         kwargs["api_base"] = api_base
+    stop = _stop_for(profile)
+    if stop:
+        kwargs["stop"] = stop
     try:
         response = await litellm.acompletion(**kwargs)
         content = response.choices[0].message.content or ""

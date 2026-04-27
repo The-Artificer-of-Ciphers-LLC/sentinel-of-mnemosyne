@@ -57,11 +57,15 @@ class LiteLLMProvider:
         wait=RETRY_WAIT,
         reraise=True,
     )
-    async def complete(self, messages: list[dict]) -> str:
+    async def complete(self, messages: list[dict], stop: list[str] | None = None) -> str:
         """
         Submit messages to the configured provider via LiteLLM.
         Retries 3x on transient errors. Raises immediately on 401/422/404.
         Hard 30-second timeout per call enforces PROV-03 ceiling.
+
+        stop: optional list of stop sequences for the model family (from ModelProfile).
+              Passed through to litellm.acompletion when non-empty so the LLM halts
+              at the correct end-of-turn token for the loaded model architecture.
         """
         kwargs: dict = {
             "model": self._model_string,
@@ -72,6 +76,8 @@ class LiteLLMProvider:
             kwargs["api_base"] = self._api_base
         if self._api_key:
             kwargs["api_key"] = self._api_key
+        if stop:
+            kwargs["stop"] = stop
 
         logger.debug(f"LiteLLMProvider.complete: model={self._model_string}")
         response = await litellm.acompletion(**kwargs)

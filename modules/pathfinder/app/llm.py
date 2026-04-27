@@ -20,7 +20,22 @@ import logging
 
 import litellm
 
+from app.model_profiles import ModelProfile
+
 logger = logging.getLogger(__name__)
+
+
+def _stop_for(profile: ModelProfile | None) -> list[str] | None:
+    """Return stop sequences for the given profile, or None if empty/unknown.
+
+    litellm.acompletion accepts stop=None (no override) or stop=list[str].
+    Passing an empty list is equivalent to None for most backends, but we
+    return None explicitly to avoid sending an empty array over the wire.
+    """
+    if profile is None:
+        return None
+    seqs = profile.stop_sequences
+    return seqs if seqs else None
 
 # Suppress litellm's verbose startup logs
 litellm.suppress_debug_info = True
@@ -53,6 +68,7 @@ async def extract_npc_fields(
     description: str,
     model: str,
     api_base: str | None = None,
+    profile: ModelProfile | None = None,
 ) -> dict:
     """Call LLM to extract NPC frontmatter fields from a freeform description.
 
@@ -85,6 +101,9 @@ async def extract_npc_fields(
     }
     if api_base:
         kwargs["api_base"] = api_base
+    stop = _stop_for(profile)
+    if stop:
+        kwargs["stop"] = stop
 
     response = await litellm.acompletion(**kwargs)
     content = response.choices[0].message.content
@@ -96,6 +115,7 @@ async def generate_npc_reply(
     user_prompt: str,
     model: str,
     api_base: str | None = None,
+    profile: ModelProfile | None = None,
 ) -> dict:
     """LLM dialogue call — returns {reply: str, mood_delta: int} for one NPC turn (DLG-01, DLG-02).
 
@@ -116,6 +136,9 @@ async def generate_npc_reply(
     }
     if api_base:
         kwargs["api_base"] = api_base
+    stop = _stop_for(profile)
+    if stop:
+        kwargs["stop"] = stop
 
     response = await litellm.acompletion(**kwargs)
     raw = response.choices[0].message.content or ""
@@ -141,6 +164,7 @@ async def generate_mj_description(
     fields: dict,
     model: str,
     api_base: str | None = None,
+    profile: ModelProfile | None = None,
 ) -> str:
     """Generate a comma-separated visual description for a Midjourney token prompt (OUT-02).
 
@@ -179,6 +203,9 @@ async def generate_mj_description(
     }
     if api_base:
         kwargs["api_base"] = api_base
+    stop = _stop_for(profile)
+    if stop:
+        kwargs["stop"] = stop
 
     response = await litellm.acompletion(**kwargs)
     return response.choices[0].message.content.strip()
@@ -204,6 +231,7 @@ async def update_npc_fields(
     correction: str,
     model: str,
     api_base: str | None = None,
+    profile: ModelProfile | None = None,
 ) -> dict:
     """Call LLM to extract changed fields from a freeform correction string.
 
@@ -232,6 +260,9 @@ async def update_npc_fields(
     }
     if api_base:
         kwargs["api_base"] = api_base
+    stop = _stop_for(profile)
+    if stop:
+        kwargs["stop"] = stop
 
     response = await litellm.acompletion(**kwargs)
     content = response.choices[0].message.content
@@ -242,6 +273,7 @@ async def generate_harvest_fallback(
     monster_name: str,
     model: str,
     api_base: str | None = None,
+    profile: ModelProfile | None = None,
 ) -> dict:
     """Generate a harvest table for an unseeded monster (D-02 LLM fallback).
 
@@ -311,6 +343,9 @@ async def generate_harvest_fallback(
     }
     if api_base:
         kwargs["api_base"] = api_base
+    stop = _stop_for(profile)
+    if stop:
+        kwargs["stop"] = stop
 
     response = await litellm.acompletion(**kwargs)
     content = response.choices[0].message.content
@@ -486,6 +521,7 @@ async def classify_rule_topic(
     query: str,
     model: str,
     api_base: str | None = None,
+    profile: ModelProfile | None = None,
 ) -> str:
     """Classify a rule query into one of the closed-vocabulary topic slugs.
 
@@ -533,6 +569,9 @@ async def classify_rule_topic(
     }
     if api_base:
         kwargs["api_base"] = api_base
+    stop = _stop_for(profile)
+    if stop:
+        kwargs["stop"] = stop
 
     try:
         response = await litellm.acompletion(**kwargs)
@@ -607,6 +646,7 @@ async def generate_ruling_from_passages(
     topic: str,
     model: str,
     api_base: str | None = None,
+    profile: ModelProfile | None = None,
 ) -> dict:
     """Compose a ruling from corpus-retrieved passages (D-02 step 4).
 
@@ -705,6 +745,9 @@ async def generate_ruling_from_passages(
     }
     if api_base:
         kwargs["api_base"] = api_base
+    stop = _stop_for(profile)
+    if stop:
+        kwargs["stop"] = stop
 
     response = await litellm.acompletion(**kwargs)
     raw = response.choices[0].message.content or ""
@@ -792,6 +835,7 @@ async def generate_session_recap(
     npc_frontmatter_block: str,
     model: str,
     api_base: str | None = None,
+    profile: ModelProfile | None = None,
 ) -> dict:
     """Generate structured session recap from events log and NPC context.
 
@@ -818,6 +862,9 @@ async def generate_session_recap(
     }
     if api_base:
         kwargs["api_base"] = api_base
+    stop = _stop_for(profile)
+    if stop:
+        kwargs["stop"] = stop
 
     response = await litellm.acompletion(**kwargs)
     content = response.choices[0].message.content
@@ -856,6 +903,7 @@ async def generate_story_so_far(
     events_log: str,
     model: str,
     api_base: str | None = None,
+    profile: ModelProfile | None = None,
 ) -> str:
     """Generate a brief mid-session narrative summary from the events log.
 
@@ -876,6 +924,9 @@ async def generate_story_so_far(
     }
     if api_base:
         kwargs["api_base"] = api_base
+    stop = _stop_for(profile)
+    if stop:
+        kwargs["stop"] = stop
 
     try:
         response = await litellm.acompletion(**kwargs)
@@ -891,6 +942,7 @@ async def generate_ruling_fallback(
     topic: str,
     model: str,
     api_base: str | None = None,
+    profile: ModelProfile | None = None,
 ) -> dict:
     """Compose a ruling from LLM training data when corpus retrieval missed (RUL-02).
 
@@ -948,6 +1000,9 @@ async def generate_ruling_fallback(
     }
     if api_base:
         kwargs["api_base"] = api_base
+    stop = _stop_for(profile)
+    if stop:
+        kwargs["stop"] = stop
 
     response = await litellm.acompletion(**kwargs)
     raw = response.choices[0].message.content or ""

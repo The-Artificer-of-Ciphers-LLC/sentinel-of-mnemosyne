@@ -367,6 +367,7 @@ async def create_npc(req: NPCCreateRequest) -> JSONResponse:
             description=req.description,
             model=await resolve_model("structured"),
             api_base=settings.litellm_api_base or None,
+            profile=await resolve_model_profile("structured"),
         )
     except Exception as exc:
         logger.error("LLM extraction failed for NPC %s: %s", req.name, exc)
@@ -419,6 +420,7 @@ async def update_npc(req: NPCUpdateRequest) -> JSONResponse:
             correction=req.correction,
             model=await resolve_model("structured"),
             api_base=settings.litellm_api_base or None,
+            profile=await resolve_model_profile("structured"),
         )
     except Exception as exc:
         logger.error("LLM update extraction failed for NPC %s: %s", req.name, exc)
@@ -707,6 +709,7 @@ async def token_prompt(req: NPCOutputRequest) -> JSONResponse:
         fields=fields,
         model=await resolve_model("fast"),
         api_base=settings.litellm_api_base or None,
+        profile=await resolve_model_profile("fast"),
     )
     prompt = build_mj_prompt(fields, description)
     return JSONResponse({"prompt": prompt, "slug": slug})
@@ -900,8 +903,9 @@ async def say_npc(req: NPCSayRequest) -> JSONResponse:
         scene_id, scene_roster, len(req.party_line), len(capped_history),
     )
 
-    # Step 4: Resolve chat-tier model (D-27). Single call up front; same model used per turn.
+    # Step 4: Resolve chat-tier model and profile (D-27). Single call up front; same model used per turn.
     model = await resolve_model("chat")
+    profile_chat = await resolve_model_profile("chat")
     api_base = settings.litellm_api_base or None
 
     # Step 5: Serial round-robin (D-19) — each NPC sees prior NPCs' replies in this turn.
@@ -929,6 +933,7 @@ async def say_npc(req: NPCSayRequest) -> JSONResponse:
             user_prompt=usr_prompt,
             model=model,
             api_base=api_base,
+            profile=profile_chat,
         )
 
         # Mood math (D-07): zero or clamped no-op skips the vault write.

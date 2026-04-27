@@ -88,6 +88,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info(f"Context window: {context_window} tokens (model: {_active_model})")
     app.state.context_window = context_window
 
+    # Fetch model profile for stop sequences — non-fatal; defaults to no stop sequences.
+    # Only meaningful for lmstudio provider (local models need explicit stop tokens).
+    # Cloud providers (Claude) manage termination via their own chat templates.
+    _lmstudio_api_base = settings.lmstudio_base_url or "http://host.docker.internal:1234"
+    try:
+        _profile = await get_profile(
+            _lmstudio_model_name,
+            api_base=_lmstudio_api_base,
+        )
+        app.state.lmstudio_stop_sequences = _profile.stop_sequences or []
+        logger.info(
+            "Model stop sequences: %s (arch: %s)",
+            _profile.stop_sequences,
+            _profile.arch if hasattr(_profile, "arch") else _profile.family,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Model profile fetch failed for %r — no stop sequences will be sent: %s",
+            _lmstudio_model_name,
+            exc,
+        )
+        app.state.lmstudio_stop_sequences = []
+
     # All 4 backends route through LiteLLMProvider (RD-02 — eliminate stub providers)
     _provider_map = {
         "lmstudio": LiteLLMProvider(

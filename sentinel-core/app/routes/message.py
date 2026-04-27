@@ -182,8 +182,9 @@ async def post_message(
     # Pi harness is intentionally bypassed here: Pi is a coding agent that runs a
     # tool-use loop and issues multiple LLM calls per request, stacking requests at
     # LM Studio. Chat completion must go directly to LiteLLMProvider.
+    _stop_sequences: list[str] | None = getattr(request.app.state, "lmstudio_stop_sequences", None) or None
     try:
-        content = await ai_provider.complete(messages)
+        content = await ai_provider.complete(messages, stop=_stop_sequences)
     except ProviderUnavailableError as exc:
         logger.error(f"All AI providers unavailable: {exc}")
         raise HTTPException(status_code=503, detail=str(exc))
