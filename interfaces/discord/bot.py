@@ -345,7 +345,7 @@ _VALID_RELATIONS = frozenset({"knows", "trusts", "hostile-to", "allied-with", "f
 # the noun guard in _pf_dispatch and the usage/unknown-noun error strings
 # so adding a new noun (e.g. `spell`) is a one-line change rather than a
 # scavenger hunt through two mirrored literals.
-_PF_NOUNS = frozenset({"npc", "harvest", "rule", "session"})  # Phase 34: session added (D-02)
+_PF_NOUNS = frozenset({"npc", "harvest", "rule", "session", "cartosia"})  # 260427-czb: cartosia added
 
 
 class RecapView(discord.ui.View):
@@ -816,6 +816,13 @@ async def _pf_dispatch(
     thread) get empty history — the branch degrades gracefully.
     """
     parts = args.strip().split(" ", 2)
+    # 260427-czb: bare `:pf cartosia` returns its own usage string (the
+    # generic usage doesn't mention this verb because it's admin-gated).
+    if len(parts) >= 1 and parts[0].lower() == "cartosia" and len(parts) < 2:
+        return (
+            "Usage: `:pf cartosia <archive_path> [--live] [--dry-run] "
+            "[--limit N] [--force] [--confirm-large]` (admin-only)"
+        )
     if len(parts) < 2:
         # IN-01: derive the usage message from _PF_NOUNS so new nouns show up
         # automatically. `npc` retains its verb list because it's the only
@@ -823,7 +830,8 @@ async def _pf_dispatch(
         return (
             "Usage: `:pf npc <create|update|show|relate|import|say> ...` "
             "or `:pf harvest <Name>[,<Name>...]` "
-            "or `:pf rule <question>|show <topic>|history [N]|list`"
+            "or `:pf rule <question>|show <topic>|history [N]|list` "
+            "or `:pf cartosia <archive_path> [--live] [--limit N]` (admin-only)"
         )
     noun, verb = parts[0].lower(), parts[1].lower()
     rest = parts[2] if len(parts) > 2 else ""
@@ -863,6 +871,86 @@ async def _pf_dispatch(
                     "content": "",
                     "embed": build_harvest_embed(result),
                 }
+
+            if noun == "cartosia":
+                # 260427-czb: bulk import from /Users/trekkie/projects/2ndbrain/archive/cartosia/.
+                # Admin-only: this writes ~50+ vault files. Reuses the same fail-closed gate
+                # that `:vault-sweep` uses (vl1 task T8).
+                if not _is_admin(user_id):
+                    return (
+                        "Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command."
+                    )
+                # Re-tokenise the entire tail so flags can come in any order; the
+                # noun/verb/rest split above lost the boundary between flags.
+                tail = " ".join(parts[1:]).strip()
+                tokens = [t for t in tail.split() if t]
+                # First non-flag token is the archive path; everything starting
+                # with `--` is a flag (with --limit consuming the next token).
+                archive_path: str | None = None
+                live = False
+                force_flag = False
+                confirm_large = False
+                limit_val: int | None = None
+                i = 0
+                while i < len(tokens):
+                    tok = tokens[i]
+                    if tok == "--live":
+                        live = True
+                    elif tok == "--dry-run":
+                        live = False
+                    elif tok == "--force":
+                        force_flag = True
+                    elif tok == "--confirm-large":
+                        confirm_large = True
+                    elif tok == "--limit":
+                        if i + 1 >= len(tokens) or not tokens[i + 1].lstrip("-").isdigit():
+                            return "Usage: `--limit N` requires an integer argument."
+                        limit_val = int(tokens[i + 1])
+                        i += 1
+                    elif tok.startswith("--"):
+                        return f"Unknown flag `{tok}`."
+                    else:
+                        if archive_path is None:
+                            archive_path = tok
+                        else:
+                            archive_path = f"{archive_path} {tok}"
+                    i += 1
+                if not archive_path:
+                    return (
+                        "Usage: `:pf cartosia <archive_path> [--live] [--dry-run] "
+                        "[--limit N] [--force] [--confirm-large]` (admin-only)"
+                    )
+                payload = {
+                    "archive_root": archive_path,
+                    "dry_run": not live,
+                    "limit": limit_val,
+                    "force": force_flag,
+                    "confirm_large": confirm_large,
+                    "user_id": user_id,
+                }
+                result = await _sentinel_client.post_to_module(
+                    "modules/pathfinder/cartosia", payload, http_client
+                )
+                if not isinstance(result, dict):
+                    return f"Cartosia import returned unexpected response: {result!r}"
+                report_path = result.get("report_path", "?")
+                summary = (
+                    f"Cartosia {'live import' if live else 'dry-run'} complete.\n"
+                    f"Report: `{report_path}`\n"
+                    f"NPCs: {result.get('npc_count', 0)} "
+                    f"(skipped existing: {result.get('skipped_existing', 0)}) | "
+                    f"Locations: {result.get('location_count', 0)} | "
+                    f"Homebrew: {result.get('homebrew_count', 0)} | "
+                    f"Harvest: {result.get('harvest_count', 0)} | "
+                    f"Lore: {result.get('lore_count', 0)} | "
+                    f"Sessions: {result.get('session_count', 0)} | "
+                    f"Arcs: {result.get('arc_count', 0)} | "
+                    f"Factions: {result.get('faction_count', 0)} | "
+                    f"Dialogue: {result.get('dialogue_count', 0)} | "
+                    f"Skipped: {result.get('skip_count', 0)} | "
+                    f"Errors: {len(result.get('errors', []) or [])}"
+                )
+                return summary
 
             if noun == "rule":
                 # D-10 sub-verbs: <free text> (default) | show <topic> | history [N] | list.

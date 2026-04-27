@@ -958,3 +958,128 @@ async def test_inbox_discard_dispatches_with_entry():
 async def test_inbox_unknown_verb_returns_usage():
     result = await bot.handle_sentask_subcommand("inbox", "bogus 7", "user123")
     assert "Usage" in result
+
+
+# ---------------------------------------------------------------------------
+# 260427-czb — :pf cartosia dispatch tests
+# ---------------------------------------------------------------------------
+
+
+async def test_pf_nouns_includes_cartosia():
+    """_PF_NOUNS membership check via import (NOT source-grep)."""
+    assert "cartosia" in bot._PF_NOUNS
+
+
+async def test_pf_dispatch_cartosia_bare_returns_usage():
+    """`:pf cartosia` with no archive_path returns the usage string."""
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock()) as mock_ptm:
+        result = await bot._pf_dispatch("cartosia", "admin-user")
+
+    mock_ptm.assert_not_called()
+    assert isinstance(result, str)
+    assert "cartosia" in result.lower()
+    assert "--live" in result
+
+
+async def test_pf_dispatch_cartosia_non_admin_denied():
+    """Non-admin user gets the admin-gate denial; no post_to_module call."""
+    # Default ADMIN_USER_IDS in test env is empty → fail-closed.
+    with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock()) as mock_ptm:
+        result = await bot._pf_dispatch("cartosia /tmp/fake", "non-admin")
+
+    mock_ptm.assert_not_called()
+    assert isinstance(result, str)
+    assert "Admin only" in result or "admin" in result.lower()
+
+
+async def test_pf_dispatch_cartosia_admin_dry_run_default():
+    """Admin user `:pf cartosia /tmp/fake` calls post_to_module with dry_run=True."""
+    mock_result = {
+        "report_path": "ops/sweeps/cartosia-dry-run-x.md",
+        "npc_count": 3,
+        "location_count": 1,
+        "homebrew_count": 1,
+        "harvest_count": 1,
+        "lore_count": 1,
+        "session_count": 1,
+        "arc_count": 0,
+        "faction_count": 0,
+        "dialogue_count": 0,
+        "skip_count": 0,
+        "skipped_existing": 0,
+        "errors": [],
+    }
+    with patch.object(bot, "ADMIN_USER_IDS", new=frozenset({"admin-user"})), \
+         patch.object(bot._sentinel_client, "post_to_module",
+                      new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch("cartosia /tmp/fake", "admin-user")
+
+    mock_ptm.assert_called_once()
+    args = mock_ptm.call_args
+    assert args[0][0] == "modules/pathfinder/cartosia"
+    payload = args[0][1]
+    assert payload == {
+        "archive_root": "/tmp/fake",
+        "dry_run": True,
+        "limit": None,
+        "force": False,
+        "confirm_large": False,
+        "user_id": "admin-user",
+    }
+    assert "ops/sweeps/cartosia-dry-run-x.md" in result
+    assert "NPCs: 3" in result
+
+
+async def test_pf_dispatch_cartosia_live_with_limit():
+    """`:pf cartosia /tmp/fake --live --limit 5` sends dry_run=False, limit=5."""
+    mock_result = {
+        "report_path": "ops/sweeps/cartosia-import-x.md",
+        "npc_count": 5,
+        "location_count": 0,
+        "homebrew_count": 0,
+        "harvest_count": 0,
+        "lore_count": 0,
+        "session_count": 0,
+        "arc_count": 0,
+        "faction_count": 0,
+        "dialogue_count": 0,
+        "skip_count": 0,
+        "skipped_existing": 0,
+        "errors": [],
+    }
+    with patch.object(bot, "ADMIN_USER_IDS", new=frozenset({"admin-user"})), \
+         patch.object(bot._sentinel_client, "post_to_module",
+                      new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        result = await bot._pf_dispatch(
+            "cartosia /tmp/fake --live --limit 5", "admin-user"
+        )
+
+    mock_ptm.assert_called_once()
+    payload = mock_ptm.call_args[0][1]
+    assert payload["archive_root"] == "/tmp/fake"
+    assert payload["dry_run"] is False
+    assert payload["limit"] == 5
+    assert payload["force"] is False
+    assert "live import" in result.lower()
+
+
+async def test_pf_dispatch_cartosia_force_and_confirm_large():
+    """All flags can be combined."""
+    mock_result = {
+        "report_path": "p.md", "npc_count": 0, "location_count": 0,
+        "homebrew_count": 0, "harvest_count": 0, "lore_count": 0,
+        "session_count": 0, "arc_count": 0, "faction_count": 0,
+        "dialogue_count": 0, "skip_count": 0, "skipped_existing": 0,
+        "errors": [],
+    }
+    with patch.object(bot, "ADMIN_USER_IDS", new=frozenset({"admin-user"})), \
+         patch.object(bot._sentinel_client, "post_to_module",
+                      new=AsyncMock(return_value=mock_result)) as mock_ptm:
+        await bot._pf_dispatch(
+            "cartosia /tmp/x --live --force --confirm-large", "admin-user"
+        )
+
+    payload = mock_ptm.call_args[0][1]
+    assert payload["force"] is True
+    assert payload["confirm_large"] is True
+    assert payload["dry_run"] is False
