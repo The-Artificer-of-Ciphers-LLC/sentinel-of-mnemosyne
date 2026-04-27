@@ -5,7 +5,7 @@ milestone_name: — The Dungeon
 status: "Phase 36 PLANNED. 3 plans created: Wave 0 TDD stubs, Wave 1 Python backend (CORS fix + npcs router), Wave 2 JS frontend (ApplicationV2 import dialog)."
 stopped_at: context exhaustion at 75% (2026-04-26)
 last_updated: "2026-04-26T17:51:58.832Z"
-last_activity: "2026-04-27 -- Quick task 260427-5kl litellm helpers consolidation merged + verified passed (12/12 must-haves)"
+last_activity: "2026-04-27 -- Quick task 260427-vl1 note import + vault sweeper feature live; 4 LM Studio interop hotfixes after initial verifier failure"
 progress:
   total_phases: 35
   completed_phases: 19
@@ -156,6 +156,7 @@ Recent decisions affecting current work:
 | 260426-pjv | Discord keep-alive research — both paths already correct; added try/except guard in /sen so "Bot is thinking..." always resolves even on exception | 2026-04-26 | f258ebb | [260426-pjv-discord-keep-alive-thinking-indicator](.planning/quick/260426-pjv-discord-keep-alive-thinking-indicator/) |
 | 260426-2x1 | Model profile library — auto-discovers arch from LM Studio /api/v0/models/{id}, table of 7 family profiles (qwen2/llama3/mistral/etc), stop sequences wired into all 10 pathfinder acompletion sites + sentinel-core LLM provider | 2026-04-26 | ba0a680 | [260426-2x1-model-profile-library](.planning/quick/260426-2x1-model-profile-library/) |
 | 260427-5kl | LiteLLM helpers consolidation refactor — DRY audit H-1/H-2/H-3/H-4: shared/sentinel_shared/model_profiles.py replaces dual copies, ResolvedModel + resolve() unifies pathfinder model resolution, acompletion_with_profile wrapper kills 11 boilerplate sites, strip_litellm_prefix consolidated | 2026-04-27 | 6f3e3f5 | [260427-5kl-litellm-helpers-consolidation](.planning/quick/260427-5kl-litellm-helpers-consolidation/) |
+| 260427-vl1 | 2nd-brain note import + vault sweeper — :note/:inbox/:vault-sweep subcommands, classifier service with 7-topic taxonomy, embedding-similarity de-dup ≥0.92, fail-closed admin gate, acompletion_with_profile promoted to sentinel_shared, json_schema strict-mode classifier output | 2026-04-27 | (see SUMMARY) | [260427-vl1-note-import-vault-sweeper](.planning/quick/260427-vl1-note-import-vault-sweeper/) |
 
 ## Session Continuity
 
