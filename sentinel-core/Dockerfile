@@ -17,7 +17,9 @@ RUN pip install --no-cache-dir \
     "tiktoken" \
     "litellm>=1.83.0,<2.0" \
     "tenacity>=8.2.0,<10.0" \
-    "anthropic>=0.93.0,<1.0"
+    "anthropic>=0.93.0,<1.0" \
+    "numpy>=1.26,<3.0" \
+    "PyYAML>=6.0,<7.0"
 
 COPY . .
 
