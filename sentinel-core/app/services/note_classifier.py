@@ -30,6 +30,7 @@ from app.services.model_selector import (
     ensure_litellm_prefix,
     get_loaded_models,
     select_model,
+    strip_litellm_prefix,
 )
 from sentinel_shared.llm_call import acompletion_with_profile
 from sentinel_shared.model_profiles import get_profile
@@ -179,15 +180,19 @@ async def _resolve_model_for_classification() -> tuple[str, object | None, str |
 
     # Ensure litellm provider prefix — HF-style namespaces (qwen/qwen2.5-coder-14b)
     # are NOT litellm provider tags, so '/' alone is not a sufficient guard.
-    model_id = ensure_litellm_prefix(model_id)
+    prefixed_model_id = ensure_litellm_prefix(model_id)
+
+    # get_profile hits LM Studio's /api/v0/models/{id} which needs the BARE id,
+    # not the litellm-prefixed form. Strip the openai/ prefix back off.
+    bare_model_id = strip_litellm_prefix(prefixed_model_id)
 
     try:
-        profile = await get_profile(model_id, api_base=api_base)
+        profile = await get_profile(bare_model_id, api_base=api_base)
     except Exception as exc:
         logger.warning("note_classifier: get_profile failed (%s); using None", exc)
         profile = None
 
-    return model_id, profile, api_base
+    return prefixed_model_id, profile, api_base
 
 
 async def classify_note(
@@ -236,6 +241,7 @@ async def classify_note(
             messages=messages,
             profile=profile,
             api_base=api_base,
+            api_key="lmstudio",  # LM Studio dummy key — litellm requires this even though LM Studio ignores it
             response_format={"type": "json_object"},
             temperature=0.0,
         )
