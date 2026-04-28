@@ -17,7 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-from app.cartosia_router import RouteDecision, route
+from app.pf_archive_router import RouteDecision, route
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "cartosia"

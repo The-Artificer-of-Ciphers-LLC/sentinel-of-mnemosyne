@@ -1,7 +1,7 @@
 """Cartosia archive importer orchestrator (260427-czb Task 3).
 
 Walks an on-disk archive root, classifies each .md via
-:mod:`app.cartosia_router`, and writes the results into the vault under
+:mod:`app.pf_archive_router`, and writes the results into the vault under
 ``mnemosyne/pf2e/`` using the Phase 29 NPC frontmatter contract.
 
 Behaviour summary (must_haves from PLAN.md):
@@ -38,8 +38,8 @@ from typing import Iterable, Protocol
 
 import yaml
 
-from app.cartosia_npc_extract import NpcExtractionError, extract_npc
-from app.cartosia_router import RouteDecision, route, slugify
+from app.pf_npc_extract import NpcExtractionError, extract_npc
+from app.pf_archive_router import RouteDecision, route, slugify
 from app.legendkeeper_image import download_token
 
 logger = logging.getLogger(__name__)

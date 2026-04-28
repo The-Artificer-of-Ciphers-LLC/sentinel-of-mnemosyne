@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.cartosia_npc_extract import (
+from app.pf_npc_extract import (
     NPC_EXTRACTION_SCHEMA,
     NpcExtractionError,
     extract_npc,
@@ -60,7 +60,7 @@ async def test_format_a_extraction_returns_expected_fields():
         "traits": [],
     })
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(return_value=fake),
     ) as mock:
         fields = await extract_npc(fixture, "The NPCs/Fenn the Beggar.md", format="A")
@@ -112,7 +112,7 @@ async def test_format_b_extraction_preserves_default_level():
         "traits": [],
     })
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(return_value=fake),
     ):
         fields = await extract_npc(
@@ -144,7 +144,7 @@ async def test_out_of_schema_mood_raises_extraction_error():
         "traits": [],
     })
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(return_value=fake),
     ):
         with pytest.raises(NpcExtractionError) as exc_info:
@@ -161,7 +161,7 @@ async def test_out_of_schema_mood_raises_extraction_error():
 async def test_truncated_json_raises_extraction_error_with_raw_response():
     fake = {"choices": [{"message": {"content": '{"name": "X", "ance', "reasoning_content": ""}}]}
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(return_value=fake),
     ):
         with pytest.raises(NpcExtractionError) as exc_info:
@@ -188,7 +188,7 @@ async def test_missing_required_field_raises_extraction_error():
         "traits": [],
     })
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(return_value=fake),
     ):
         with pytest.raises(NpcExtractionError):

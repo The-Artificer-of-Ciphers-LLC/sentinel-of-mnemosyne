@@ -4,7 +4,7 @@ Test-time sys.path setup: the pathfinder Dockerfile copies shared/sentinel_share
 into /app at build time, but local pytest runs from the host where the
 repo's `shared/` dir is at ../../shared/ relative to this module. Insert
 that path before any other test code imports from sentinel_shared
-(otherwise tests that touch app.llm / app.foundry / app.cartosia_npc_extract
+(otherwise tests that touch app.llm / app.foundry / app.pf_npc_extract
 fail at import time).
 
 Two autouse fixtures for test_session_integration.py:

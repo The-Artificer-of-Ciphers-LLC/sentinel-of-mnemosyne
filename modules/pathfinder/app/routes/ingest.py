@@ -1,6 +1,6 @@
 """POST /cartosia route — bulk archive importer (260427-czb Task 3).
 
-Wraps :func:`app.cartosia_import.run_import` in a FastAPI POST handler.
+Wraps :func:`app.pf_archive_import.run_import` in a FastAPI POST handler.
 Mounts at /cartosia (proxied as /modules/pathfinder/cartosia by sentinel-core).
 
 Body shape:
@@ -37,7 +37,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.cartosia_import import ImportCostGuardError, run_import
+from app.pf_archive_import import ImportCostGuardError, run_import
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ router = APIRouter()
 obsidian = None  # type: ignore[assignment]
 
 
-class CartosiaImportRequest(BaseModel):
+class IngestRequest(BaseModel):
     archive_root: str
     dry_run: bool = True
     limit: int | None = None
@@ -56,12 +56,12 @@ class CartosiaImportRequest(BaseModel):
     user_id: str = Field(default="")
 
 
-@router.post("/cartosia")
-async def cartosia_import(req: CartosiaImportRequest) -> dict:
+@router.post("/ingest")
+async def ingest(req: IngestRequest) -> dict:
     if obsidian is None:
         raise HTTPException(
             status_code=503,
-            detail="cartosia route not initialised (obsidian client missing)",
+            detail="ingest route not initialised (obsidian client missing)",
         )
     try:
         report = await run_import(
@@ -77,6 +77,6 @@ async def cartosia_import(req: CartosiaImportRequest) -> dict:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:  # surface unexpected errors
-        logger.exception("cartosia import failed")
-        raise HTTPException(status_code=500, detail=f"cartosia import failed: {exc}")
+        logger.exception("pathfinder ingest failed")
+        raise HTTPException(status_code=500, detail=f"pathfinder ingest failed: {exc}")
     return report.asdict()

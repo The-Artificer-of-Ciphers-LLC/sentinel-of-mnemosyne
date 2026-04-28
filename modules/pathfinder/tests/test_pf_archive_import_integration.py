@@ -22,7 +22,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.cartosia_import import (
+from app.pf_archive_import import (
     ImportCostGuardError,
     ImportReport,
     run_import,
@@ -107,7 +107,7 @@ def _llm_dispatcher(call_log: list[dict]):
 async def test_dry_run_writes_only_report_and_returns_bucket_counts():
     obs = FakeObsidian()
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile", new=AsyncMock(return_value=None)
+        "app.pf_npc_extract.acompletion_with_profile", new=AsyncMock(return_value=None)
     ) as mock_llm:
         report = await run_import(
             archive_root=str(FIXTURES),
@@ -146,10 +146,10 @@ async def test_live_run_with_limit_caps_npc_writes():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
-        "app.cartosia_import.download_token", new=AsyncMock(return_value=None)
+        "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
     ):
         report = await run_import(
             archive_root=str(FIXTURES),
@@ -176,10 +176,10 @@ async def test_rerun_skips_existing_npcs_by_default():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
-        "app.cartosia_import.download_token", new=AsyncMock(return_value=None)
+        "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
     ):
         first = await run_import(
             archive_root=str(FIXTURES),
@@ -223,10 +223,10 @@ async def test_force_overwrites_existing_npcs():
 
     call_log: list = []
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
-        "app.cartosia_import.download_token", new=AsyncMock(return_value=None)
+        "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
     ):
         report = await run_import(
             archive_root=str(FIXTURES),
@@ -268,9 +268,9 @@ async def test_cost_guard_blocks_large_live_run_without_confirm(tmp_path):
 
     obs = FakeObsidian()
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile", new=AsyncMock()
+        "app.pf_npc_extract.acompletion_with_profile", new=AsyncMock()
     ) as mock_llm, patch(
-        "app.cartosia_import.download_token", new=AsyncMock(return_value=None)
+        "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
     ):
         with pytest.raises(ImportCostGuardError):
             await run_import(
@@ -296,10 +296,10 @@ async def test_two_npc_file_imports_as_single_combined_record():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
-        "app.cartosia_import.download_token", new=AsyncMock(return_value=None)
+        "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
     ):
         await run_import(
             archive_root=str(FIXTURES),
@@ -329,10 +329,10 @@ async def test_format_b_secret_block_preserved_in_body():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
-        "app.cartosia_import.download_token", new=AsyncMock(return_value=None)
+        "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
     ):
         await run_import(
             archive_root=str(FIXTURES),
@@ -366,10 +366,10 @@ async def test_adventure_hooks_routes_to_lore_arcs_not_npcs():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
-        "app.cartosia_import.download_token", new=AsyncMock(return_value=None)
+        "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
     ):
         await run_import(
             archive_root=str(FIXTURES),
@@ -398,10 +398,10 @@ async def test_npc_frontmatter_includes_phase29_required_fields():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
-        "app.cartosia_import.download_token", new=AsyncMock(return_value=None)
+        "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
     ):
         await run_import(
             archive_root=str(FIXTURES),
@@ -450,10 +450,10 @@ async def test_dialogue_files_concatenate_per_owner():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
-        "app.cartosia_import.download_token", new=AsyncMock(return_value=None)
+        "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
     ):
         await run_import(
             archive_root=str(FIXTURES),
@@ -486,10 +486,10 @@ async def test_homebrew_lands_at_sibling_of_rulings():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.cartosia_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract.acompletion_with_profile",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
-        "app.cartosia_import.download_token", new=AsyncMock(return_value=None)
+        "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
     ):
         await run_import(
             archive_root=str(FIXTURES),

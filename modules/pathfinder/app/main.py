@@ -93,7 +93,7 @@ REGISTRATION_PAYLOAD = {
         {"path": "foundry/event", "description": "Receive Foundry VTT game events (FVT-01..03)"},
         {"path": "npcs/", "description": "List all Sentinel NPCs (FVT-04)"},
         {"path": "npcs/{slug}/foundry-actor", "description": "Return PF2e actor JSON for NPC (FVT-04)"},
-        {"path": "cartosia", "description": "Bulk import cartosia archive (260427-czb)"},
+        {"path": "ingest", "description": "Bulk import PF2e archive subfolder (260427-cui)"},
     ],
 }
 
@@ -225,9 +225,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         _foundry_module.discord_bot_url = settings.discord_bot_internal_url
         # Phase 36: wire npcs route's module-level obsidian singleton.
         _npcs_module.obsidian = obsidian_client
-        # 260427-czb: wire cartosia route's module-level obsidian singleton.
-        import app.routes.cartosia as _cartosia_module
-        _cartosia_module.obsidian = obsidian_client
+        # 260427-cui: wire ingest route's module-level obsidian singleton.
+        import app.routes.ingest as _ingest_module
+        _ingest_module.obsidian = obsidian_client
         heartbeat_task = asyncio.create_task(_registration_heartbeat())
         try:
             yield
@@ -248,8 +248,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _session_module.npc_roster_cache = None
     _foundry_module.discord_bot_url = ""
     _npcs_module.obsidian = None
-    import app.routes.cartosia as _cartosia_module_shutdown
-    _cartosia_module_shutdown.obsidian = None
+    import app.routes.ingest as _ingest_module_shutdown
+    _ingest_module_shutdown.obsidian = None
 
 
 app = FastAPI(
@@ -311,9 +311,9 @@ app.include_router(session_router)
 app.include_router(session_router, prefix="/modules/pathfinder")
 # Phase 36: NPC listing and Foundry actor export routes (FVT-04).
 app.include_router(npcs_router)
-# Quick task 260427-czb: cartosia archive importer.
-from app.routes.cartosia import router as cartosia_router  # noqa: E402
-app.include_router(cartosia_router)
+# Quick task 260427-cui: PF2e archive ingester (generalised from cartosia importer).
+from app.routes.ingest import router as ingest_router  # noqa: E402
+app.include_router(ingest_router)
 
 
 @app.get("/healthz")
