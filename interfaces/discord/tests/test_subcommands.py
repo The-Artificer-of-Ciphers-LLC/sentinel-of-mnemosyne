@@ -1083,3 +1083,103 @@ async def test_pf_dispatch_cartosia_force_and_confirm_large():
     assert payload["force"] is True
     assert payload["confirm_large"] is True
     assert payload["dry_run"] is False
+
+
+# ---------------------------------------------------------------------------
+# 260427-cui — :pf ingest verb + :pf cartosia deprecation alias parity
+# ---------------------------------------------------------------------------
+
+
+_INGEST_MOCK_REPORT = {
+    "report_path": "ops/sweeps/archive-cartosia-dry-run-x.md",
+    "npc_count": 3, "location_count": 2, "homebrew_count": 1,
+    "harvest_count": 0, "lore_count": 1, "session_count": 0,
+    "arc_count": 0, "faction_count": 0, "dialogue_count": 0,
+    "skip_count": 0, "skipped_existing": 0, "errors": [],
+}
+
+
+async def test_pf_nouns_includes_ingest():
+    assert "ingest" in bot._PF_NOUNS
+
+
+async def test_pf_dispatch_ingest_admin_dry_run_default():
+    """`:pf ingest archive/cartosia` POSTs to modules/pathfinder/ingest with
+    subfolder=archive/cartosia and dry_run=True by default.
+    """
+    with patch.object(bot, "ADMIN_USER_IDS", new=frozenset({"admin-user"})), \
+         patch.object(bot._sentinel_client, "post_to_module",
+                      new=AsyncMock(return_value=_INGEST_MOCK_REPORT)) as mock_ptm:
+        result = await bot._pf_dispatch("ingest archive/cartosia", "admin-user")
+
+    mock_ptm.assert_called_once()
+    args = mock_ptm.call_args
+    assert args[0][0] == "modules/pathfinder/ingest"
+    payload = args[0][1]
+    assert payload["subfolder"] == "archive/cartosia"
+    assert payload["archive_root"] == "archive/cartosia"
+    assert payload["dry_run"] is True
+    assert payload["limit"] is None
+    assert payload["force"] is False
+    assert payload["confirm_large"] is False
+    assert payload["user_id"] == "admin-user"
+    assert isinstance(result, str)
+    # No deprecation warning on the new verb.
+    assert not result.lstrip().lower().startswith("deprecated")
+
+
+async def test_pf_dispatch_ingest_non_admin_denied():
+    with patch.object(bot._sentinel_client, "post_to_module",
+                      new=AsyncMock()) as mock_ptm:
+        result = await bot._pf_dispatch("ingest archive/cartosia", "non-admin")
+    mock_ptm.assert_not_called()
+    assert "admin" in result.lower()
+
+
+async def test_pf_dispatch_cartosia_alias_prints_deprecation_and_forwards_to_ingest():
+    """`:pf cartosia /tmp/fake --dry-run` prints the deprecation warning,
+    POSTs to modules/pathfinder/ingest (NOT /cartosia — gone), and pins
+    subfolder='archive/cartosia' regardless of the archive_root token.
+    """
+    with patch.object(bot, "ADMIN_USER_IDS", new=frozenset({"admin-user"})), \
+         patch.object(bot._sentinel_client, "post_to_module",
+                      new=AsyncMock(return_value=_INGEST_MOCK_REPORT)) as mock_ptm:
+        result = await bot._pf_dispatch("cartosia /tmp/fake --dry-run", "admin-user")
+
+    mock_ptm.assert_called_once()
+    args = mock_ptm.call_args
+    assert args[0][0] == "modules/pathfinder/ingest"
+    payload = args[0][1]
+    assert payload["subfolder"] == "archive/cartosia"
+    assert payload["archive_root"] == "/tmp/fake"
+    assert payload["dry_run"] is True
+
+    assert isinstance(result, str)
+    first_line = result.split("\n", 1)[0]
+    assert "deprecated" in first_line.lower()
+    assert ":pf ingest" in first_line
+
+
+async def test_pf_dispatch_cartosia_and_ingest_archive_cartosia_send_byte_identical_payload():
+    """Alias parity: `:pf cartosia archive/cartosia --dry-run` and
+    `:pf ingest archive/cartosia --dry-run` (same user, same flags) produce
+    byte-identical POST bodies.
+    """
+    captured: list[dict] = []
+
+    async def _capture(path, payload, _client):
+        captured.append((path, dict(payload)))
+        return _INGEST_MOCK_REPORT
+
+    with patch.object(bot, "ADMIN_USER_IDS", new=frozenset({"admin-user"})), \
+         patch.object(bot._sentinel_client, "post_to_module",
+                      new=AsyncMock(side_effect=_capture)):
+        await bot._pf_dispatch("ingest archive/cartosia --dry-run", "admin-user")
+        await bot._pf_dispatch("cartosia archive/cartosia --dry-run", "admin-user")
+
+    assert len(captured) == 2
+    (path_a, payload_a), (path_b, payload_b) = captured
+    assert path_a == path_b == "modules/pathfinder/ingest"
+    assert payload_a == payload_b, (
+        f"alias-parity violated: ingest payload {payload_a} vs cartosia payload {payload_b}"
+    )
