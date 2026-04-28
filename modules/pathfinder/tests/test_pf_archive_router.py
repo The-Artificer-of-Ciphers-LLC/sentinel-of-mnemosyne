@@ -186,7 +186,10 @@ def test_harvest_table_filename_routes_to_harvest_cache():
 def test_codex_lore_routes_to_lore_with_topic_subdir():
     decision = _route("Codex of Elemental Gateways/Codex Contents - Lore and Structure.md")
     assert decision.bucket == "lore"
-    assert decision.dest.startswith("mnemosyne/pf2e/lore/codex/")
+    # 260427-cui (authorized test-swap): post-refactor we no longer pin the
+    # archive-specific 'codex/' subdir; the lore fallback now uses the
+    # slugified top-segment of the archive path as the topic subdir.
+    assert decision.dest.startswith("mnemosyne/pf2e/lore/")
     assert decision.dest.endswith(".md")
 
 

@@ -345,7 +345,7 @@ _VALID_RELATIONS = frozenset({"knows", "trusts", "hostile-to", "allied-with", "f
 # the noun guard in _pf_dispatch and the usage/unknown-noun error strings
 # so adding a new noun (e.g. `spell`) is a one-line change rather than a
 # scavenger hunt through two mirrored literals.
-_PF_NOUNS = frozenset({"npc", "harvest", "rule", "session", "cartosia"})  # 260427-czb: cartosia added
+_PF_NOUNS = frozenset({"npc", "harvest", "rule", "session", "ingest", "cartosia"})  # 260427-cui: ingest added; cartosia kept as deprecation alias
 
 
 class RecapView(discord.ui.View):
@@ -872,20 +872,17 @@ async def _pf_dispatch(
                     "embed": build_harvest_embed(result),
                 }
 
-            if noun == "cartosia":
-                # 260427-czb: bulk import from /Users/trekkie/projects/2ndbrain/archive/cartosia/.
-                # Admin-only: this writes ~50+ vault files. Reuses the same fail-closed gate
-                # that `:vault-sweep` uses (vl1 task T8).
+            if noun in ("cartosia", "ingest"):
+                # 260427-cui: `:pf ingest <subfolder>` is the generic verb; `:pf cartosia`
+                # is preserved as a deprecation alias for one release that pins
+                # subfolder='archive/cartosia' regardless of the archive_path token.
+                # Admin-only: this writes ~50+ vault files.
                 if not _is_admin(user_id):
                     return (
                         "Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command."
                     )
-                # Re-tokenise the entire tail so flags can come in any order; the
-                # noun/verb/rest split above lost the boundary between flags.
                 tail = " ".join(parts[1:]).strip()
                 tokens = [t for t in tail.split() if t]
-                # First non-flag token is the archive path; everything starting
-                # with `--` is a flag (with --limit consuming the next token).
                 archive_path: str | None = None
                 live = False
                 force_flag = False
@@ -916,12 +913,24 @@ async def _pf_dispatch(
                             archive_path = f"{archive_path} {tok}"
                     i += 1
                 if not archive_path:
+                    if noun == "cartosia":
+                        return (
+                            "Usage: `:pf cartosia <archive_path> [--live] [--dry-run] "
+                            "[--limit N] [--force] [--confirm-large]` (admin-only)"
+                        )
                     return (
-                        "Usage: `:pf cartosia <archive_path> [--live] [--dry-run] "
+                        "Usage: `:pf ingest <subfolder> [--live] [--dry-run] "
                         "[--limit N] [--force] [--confirm-large]` (admin-only)"
                     )
+                # Cartosia alias pins subfolder='archive/cartosia'; ingest uses the
+                # archive_path token verbatim as both archive_root AND subfolder.
+                if noun == "cartosia":
+                    subfolder_val = "archive/cartosia"
+                else:
+                    subfolder_val = archive_path
                 payload = {
                     "archive_root": archive_path,
+                    "subfolder": subfolder_val,
                     "dry_run": not live,
                     "limit": limit_val,
                     "force": force_flag,
@@ -929,13 +938,14 @@ async def _pf_dispatch(
                     "user_id": user_id,
                 }
                 result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/cartosia", payload, http_client
+                    "modules/pathfinder/ingest", payload, http_client
                 )
                 if not isinstance(result, dict):
-                    return f"Cartosia import returned unexpected response: {result!r}"
+                    return f"PF2e archive ingest returned unexpected response: {result!r}"
                 report_path = result.get("report_path", "?")
+                kind_word = "live import" if live else "dry-run"
                 summary = (
-                    f"Cartosia {'live import' if live else 'dry-run'} complete.\n"
+                    f"PF2e archive ingest {kind_word} complete.\n"
                     f"Report: `{report_path}`\n"
                     f"NPCs: {result.get('npc_count', 0)} "
                     f"(skipped existing: {result.get('skipped_existing', 0)}) | "
@@ -950,6 +960,11 @@ async def _pf_dispatch(
                     f"Skipped: {result.get('skip_count', 0)} | "
                     f"Errors: {len(result.get('errors', []) or [])}"
                 )
+                if noun == "cartosia":
+                    summary = (
+                        "Deprecated: use `:pf ingest archive/cartosia` instead — "
+                        "forwarding...\n\n" + summary
+                    )
                 return summary
 
             if noun == "rule":

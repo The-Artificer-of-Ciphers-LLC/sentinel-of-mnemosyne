@@ -49,6 +49,7 @@ obsidian = None  # type: ignore[assignment]
 
 class IngestRequest(BaseModel):
     archive_root: str
+    subfolder: str = "archive/cartosia"
     dry_run: bool = True
     limit: int | None = None
     force: bool = False
@@ -66,6 +67,7 @@ async def ingest(req: IngestRequest) -> dict:
     try:
         report = await run_import(
             archive_root=req.archive_root,
+            subfolder=req.subfolder,
             dry_run=req.dry_run,
             limit=req.limit,
             force=req.force,

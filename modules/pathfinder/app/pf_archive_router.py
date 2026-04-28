@@ -1,34 +1,44 @@
-"""Cartosia archive router (260427-czb Task 1).
+"""PF2e archive router (260427-cui — content-first, archive-agnostic).
 
 Pure-function classifier over a single (Path, content) input. Returns a
 :class:`RouteDecision` describing which vault bucket the file belongs in,
 its slug, the destination path, and (for dialogue files) the owner NPC slug.
 
 The router does NOT touch the vault, the LLM, or the network. It is the
-first stage of the cartosia importer pipeline; the orchestrator
-(``cartosia_import.py``) walks the archive, calls :func:`route` per file,
+first stage of the PF2e archive importer pipeline; the orchestrator
+(``pf_archive_import.py``) walks the archive, calls :func:`route` per file,
 and then dispatches to the per-bucket writer.
 
 Bucket precedence — high→low:
 
 1. **Filename keyword overrides** — ``Adventure Hooks.md`` and
-   ``Harvest Table - X.md`` always win over their parent dir. (Research
-   §Edge case 5.)
-2. **Dialogue detection** — filename matches ``things said``, ``dialogue``,
-   or ``acknowledg`` (case-insensitive). Owner inferred from parent dir if
-   that dir is a known NPC slug, else from the filename's leading
-   proper-noun token prefix-matched against ``known_npc_slugs``.
-3. **NPC content sniff** — ``**Creature N**`` + ``**AC** N`` (Format A) or
-   ``### Biography`` + ``### Appearance`` with body (Format B).
-4. **Path prefix** — ``Decided Rules/`` → homebrew, ``Crafting System/``
-   non-harvest → homebrew, ``Codex of Elemental Gateways/`` → lore/codex,
-   ``Cartosia/**`` non-NPC → location.
-5. **Special files** — ``session-log.md`` → session at literal
-   ``_archive-import.md`` (Pitfall 9). Body < 200 chars → skip.
-6. **Fallback** — lore at the deepest non-trivial path segment.
+   ``Harvest Table - X.md`` always win over their parent dir.
+2. **Skip threshold** — body < 200 chars (and not arc/dialogue/harvest
+   filename) → skip.
+3. **Session-log special case** — literal ``session-log.md`` → session.
+4. **Dialogue detection** — filename matches ``things said``, ``dialogue``,
+   or ``acknowledg`` (case-insensitive). Owner inferred via ``known_npc_slugs``.
+5. **PF2e content sniff** — Format A (``**Creature N**`` / ``Level N NPC[s]``
+   + ``**AC** N``) or Format B (``### Biography`` + ``### Appearance``
+   header/bold pair with body).
+6. **Folder-shape NPC routing** — any path segment that is a generic NPC
+   container token (``npcs``, ``characters``) AND personal-NPC markers in
+   body → npc_b; same container without markers → faction.
+7. **Content-first homebrew** — body has homebrew structural markers
+   (``**Rules:**``, ``**Action:**``, ``**Trigger:**``, ``**Effect:**``,
+   ``**Activate**``) → homebrew. Or any path segment is a generic homebrew
+   token (``rules``, ``crafting``, ``homebrew``) → homebrew.
+8. **Folder-shape location** — basename slug equals the immediate parent
+   directory's slug (LegendKeeper "envelope page" pattern) AND a path
+   segment is ``locations`` OR top-segment is the same word as the file's
+   parent → location. Otherwise: any path segment ``locations`` → location.
+9. **Folder-shape faction** — any path segment ``factions`` → faction.
+10. **Fallback** — lore at ``mnemosyne/pf2e/lore/<top-segment-slug>/<slug>.md``.
 
 Slug rule: lowercase, ``[^a-z0-9]+`` collapsed to ``-``, trailing/leading
-``-`` stripped. ``Veela and Tarek`` → ``veela-and-tarek``.
+``-`` stripped. ``Veela and Tarek`` → ``veela-and-tarek``. The leading
+``the-`` is stripped from path-segment topic slugs (so ``The Embercloaks``
+→ ``embercloaks``).
 """
 from __future__ import annotations
 
@@ -83,15 +93,12 @@ class RouteDecision:
 _SLUG_NON_ALNUM = re.compile(r"[^a-z0-9]+")
 _CREATURE_RE = re.compile(r"\*\*Creature\s+\d+\*\*")
 _AC_RE = re.compile(r"\*\*AC\*\*\s+\d+")
-# "Level N NPC" / "Level N NPCs" appearing in a title or first 200 chars of
+# "Level N NPC" / "Level N NPCs" appearing in a title or first 400 chars of
 # the file is a creature-level cue (real archive uses this in lieu of the
-# **Creature N** marker — e.g. "Veela & Tarek, the Street Hood Twins (Level 2 NPCs)").
+# **Creature N** marker).
 _LEVEL_NPC_RE = re.compile(r"\bLevel\s+\d+\s+NPCs?\b", re.IGNORECASE)
 _BIO_RE = re.compile(r"###\s+Biography\b", re.IGNORECASE)
 _APPEAR_RE = re.compile(r"###\s+Appearance\b", re.IGNORECASE)
-# Real archive often uses **Appearance:** (bold prefix) instead of an
-# `### Appearance` header — pair it with `### Biography` as a Format B
-# alternate signal. Same body-length rule applies.
 _APPEAR_BOLD_RE = re.compile(r"\*\*Appearance:\*\*", re.IGNORECASE)
 
 # Filename keyword tokens for dialogue detection — matched case-insensitively
@@ -102,34 +109,52 @@ _DIALOGUE_KEYWORDS = ("things said", "dialogue", "acknowledg")
 _ARC_FILENAME_PREFIXES = ("adventure hooks",)
 _HARVEST_FILENAME_PREFIX = "harvest table - "
 
-# Path prefix → bucket mapping (path segments, case-sensitive on disk).
-_HOMEBREW_PARENT_DIRS = ("Decided Rules", "Crafting System")
-_CODEX_PARENT_DIR = "Codex of Elemental Gateways"
-
 # Skip threshold for stub files (body chars after stripping leading whitespace).
 _SKIP_BODY_CHAR_THRESHOLD = 200
 
-# Session-log filename anchor — Pitfall 9: literal `_archive-import.md`.
+# Session-log filename anchor — literal ``_archive-import.md``.
 _SESSION_LOG_FILENAMES = {"session-log.md", "session_log.md"}
+
+# ---------------------------------------------------------------------------
+# Generic folder-shape tokens (lowercased, whole-word match against any
+# ancestor path segment). These are NOT archive-specific — a token like
+# "rules" matches "Decided Rules" the same as "Homebrew Rules" or any other
+# folder name with that word inside it.
+# ---------------------------------------------------------------------------
+
+_NPC_CONTAINER_TOKENS = ("npcs", "characters", "npc")
+_HOMEBREW_CONTAINER_TOKENS = ("rules", "crafting", "homebrew")
+_FACTION_CONTAINER_TOKENS = ("factions",)
+
+# Homebrew content markers (PF2e-shaped action/rule blocks).
+_HOMEBREW_MARKER_RES = (
+    re.compile(r"\*\*Rules:\*\*", re.IGNORECASE),
+    re.compile(r"\*\*Action:\*\*", re.IGNORECASE),
+    re.compile(r"\*\*Trigger:\*\*", re.IGNORECASE),
+    re.compile(r"\*\*Effect:\*\*", re.IGNORECASE),
+    re.compile(r"\*\*Activate\*\*", re.IGNORECASE),
+)
 
 
 def slugify(text: str) -> str:
-    """Lowercase, collapse non-alphanumerics to single dashes, strip ends.
-
-    Stable across calls — the importer's dedupe pass relies on this.
-    """
+    """Lowercase, collapse non-alphanumerics to single dashes, strip ends."""
     return _SLUG_NON_ALNUM.sub("-", text.lower()).strip("-")
 
 
-def _has_pf2e_stat_block(content: str) -> bool:
-    """Format A sniff: PF2e stat block markers.
-
-    Requires ``**AC** N`` AND a creature-level cue. The cue can be either
-    the strict ``**Creature N**`` marker OR a ``Level N NPC[s]`` token
-    appearing in the first 400 chars (titles in the real archive often use
-    the latter form, e.g. "Veela & Tarek, the Street Hood Twins (Level 2
-    NPCs)").
+def _topic_slug(text: str) -> str:
+    """Slug for path-segment topics. Strips a leading ``the-`` so a top
+    segment like ``The Embercloaks`` becomes ``embercloaks`` (matches the
+    natural human-shorthand for the topic; pre-refactor cartosia importer
+    embedded this same heuristic for its arc and lore subdirs).
     """
+    s = slugify(text)
+    if s.startswith("the-"):
+        s = s[len("the-"):]
+    return s
+
+
+def _has_pf2e_stat_block(content: str) -> bool:
+    """Format A sniff: PF2e stat block markers (``**AC** N`` + creature cue)."""
     if not _AC_RE.search(content):
         return False
     if _CREATURE_RE.search(content):
@@ -139,18 +164,7 @@ def _has_pf2e_stat_block(content: str) -> bool:
 
 
 def _has_format_b_sections(content: str) -> bool:
-    """Format B sniff.
-
-    Strong signal: ``### Biography`` AND ``### Appearance`` headers each
-    followed by >=10 chars of body within the next 200 chars.
-
-    Real-archive alternate: ``### Biography`` paired with ``**Appearance:**``
-    (bold prefix instead of header) — same body-length rule on the
-    Biography side; the Appearance bold prefix only needs to exist.
-
-    Defends against empty stub headers (research §Edge cases — empty
-    Biography sections are valid per LegendKeeper's template).
-    """
+    """Format B sniff: ``### Biography`` + ``### Appearance`` (header or bold)."""
     bio = _BIO_RE.search(content)
     if not bio:
         return False
@@ -158,12 +172,9 @@ def _has_format_b_sections(content: str) -> bool:
     app_bold = _APPEAR_BOLD_RE.search(content)
     if not (app_header or app_bold):
         return False
-    # Biography side must have body.
     bio_window = content[bio.end() : bio.end() + 200]
     if len(bio_window.strip()) < 10:
         return False
-    # Appearance-header side must have body too. Bold form is treated as
-    # sufficient on its own (the bold prefix runs inline with body text).
     if app_header is not None:
         win = content[app_header.end() : app_header.end() + 200]
         if len(win.strip()) < 10 and not app_bold:
@@ -186,14 +197,13 @@ _PERSONAL_NPC_RES = (
 
 
 def _has_personal_npc_markers(content: str) -> bool:
-    """True if the body has at least one personal-NPC structural marker.
-
-    Used as a Format-B alternate when neither the strict header pair nor
-    a PF2e stat block fires. Disambiguates personal NPC sheets like
-    `Apprentice Aldric.md` (has `**Role:**` + `**Function:**`) from true
-    factions like `Talons of the Claw.md` (organisational descriptor only).
-    """
+    """True if the body has at least one personal-NPC structural marker."""
     return any(pat.search(content) for pat in _PERSONAL_NPC_RES)
+
+
+def _has_homebrew_markers(content: str) -> bool:
+    """True if the body has at least one PF2e homebrew action/rule marker."""
+    return any(pat.search(content) for pat in _HOMEBREW_MARKER_RES)
 
 
 def _is_dialogue_filename(stem: str) -> bool:
@@ -211,13 +221,30 @@ def _is_harvest_filename(stem: str) -> bool:
 
 
 def _strip_npc_quotes(name: str) -> str:
-    """`Ashen Gorl "The Singed"` → `Ashen Gorl The Singed`.
-
-    Quotes inside NPC names blow up slugify's collapse rules harmlessly, but
-    stripping them up front makes the resulting slug match what the importer's
-    first pass produces from the directory basename without quotes.
-    """
     return name.replace("“", "").replace("”", "").replace('"', "")
+
+
+def _segment_words(parts: Iterable[str]) -> set[str]:
+    """Return the lowercased word-tokens that appear in any path segment.
+
+    e.g. parts=["Decided Rules", "Whatever"] → {"decided", "rules", "whatever"}.
+    Used by the generic folder-shape detectors so that ``rules`` matches
+    ``Decided Rules``, ``Homebrew Rules``, ``House Rules``, etc.
+    """
+    words: set[str] = set()
+    for part in parts:
+        for tok in re.split(r"[^a-z0-9]+", part.lower()):
+            if tok:
+                words.add(tok)
+    return words
+
+
+def _has_segment_token(parts: Iterable[str], tokens: tuple[str, ...]) -> bool:
+    """True if any path segment contains any of the given lowercase tokens
+    as a whole word (case-insensitive).
+    """
+    words = _segment_words(parts)
+    return any(tok in words for tok in tokens)
 
 
 def _infer_owner_slug(
@@ -225,43 +252,27 @@ def _infer_owner_slug(
     archive_root: Path,
     known_npc_slugs: Iterable[str],
 ) -> str | None:
-    """Resolve the owning NPC for a dialogue file.
-
-    Strategy:
-      1. If the immediate parent directory's slug is in ``known_npc_slugs``,
-         use it (NPC-as-folder pattern).
-      2. Otherwise, walk back through ancestor dirs (up to ``archive_root``)
-         and use the first one whose slug is in ``known_npc_slugs``.
-      3. Otherwise, take the leading proper-noun token from the filename
-         stem (everything up to the first ``-`` or whitespace) and
-         prefix-match against ``known_npc_slugs``.
-      4. Otherwise, return None.
-    """
+    """Resolve the owning NPC for a dialogue file."""
     known = set(known_npc_slugs)
 
-    # 1+2. Walk parents up to (but not including) archive_root.
     rel = file_path.relative_to(archive_root) if file_path.is_absolute() else file_path
     parts = list(rel.parts[:-1])  # exclude the file itself
-    # Skip the special "The NPCs" envelope dir — it's a category, not an NPC.
+    # Skip generic NPC-envelope dirs — they're categories, not NPCs.
     for parent_name in reversed(parts):
-        if parent_name.lower() in {"the npcs", "the npc"}:
+        if parent_name.lower() in {"the npcs", "the npc", "npcs", "characters"}:
             continue
         candidate = slugify(_strip_npc_quotes(parent_name))
         if candidate in known:
             return candidate
 
-    # 3. Leading proper-noun token from filename.
     stem = file_path.stem
-    # Take everything before the first " - " or " Dialogue" / " Things Said" etc.
     head = re.split(r"\s+(?:-|—|–)\s+", stem, maxsplit=1)[0]
-    # Drop a trailing "Dialogue" word if present.
     head = re.sub(r"\s+(Dialogue|Things\s+Said|Acknowledg\w*)\b.*$", "", head, flags=re.IGNORECASE)
     head_slug = slugify(_strip_npc_quotes(head))
     if not head_slug:
         return None
     if head_slug in known:
         return head_slug
-    # Prefix match.
     for s in sorted(known):
         if s.startswith(head_slug + "-") or s == head_slug:
             return s
@@ -289,21 +300,22 @@ def route(
     archive_root: Path,
     known_npc_slugs: Iterable[str] = (),
 ) -> RouteDecision:
-    """Classify a single archive .md file.
+    """Classify a single archive .md file via content-first sniffs.
 
     See module docstring for bucket precedence.
     """
     rel = _archive_relpath(file_path, archive_root)
     parts = list(rel.parts)
+    parent_parts = parts[:-1]
     stem = file_path.stem
     name_lower = file_path.name.lower()
 
     # ------------------------------------------------------------------
     # Skip first — body too short means we don't even classify.
+    # Dialogue/arc/harvest filenames are exempt from skip (they're
+    # legitimately short).
     # ------------------------------------------------------------------
     body_len = len(content.strip())
-    # Dialogue files are legitimately short (a quote line or two). Don't skip
-    # them on body length; let the dialogue branch handle them below.
     if (
         body_len < _SKIP_BODY_CHAR_THRESHOLD
         and not _is_arc_filename(stem)
@@ -318,7 +330,7 @@ def route(
         )
 
     # ------------------------------------------------------------------
-    # Session-log special case (Pitfall 9).
+    # Session-log special case.
     # ------------------------------------------------------------------
     if name_lower in _SESSION_LOG_FILENAMES:
         return RouteDecision(
@@ -332,14 +344,10 @@ def route(
     # Filename-keyword overrides (Adventure Hooks, Harvest Table).
     # ------------------------------------------------------------------
     if _is_arc_filename(stem):
-        # Topic = first non-trivial path segment, default "embercloaks" if
-        # the archive layout puts it under The Embercloaks/.
-        topic_seg = next(
-            (p for p in parts[:-1] if p.lower().startswith("the embercloaks")),
-            None,
-        )
-        topic = "embercloaks" if topic_seg else slugify(parts[0]) if parts else "general"
-        slug = f"{slugify(stem)}-{topic}"
+        # Topic = first non-trivial path segment, slugified with leading-
+        # 'the-' stripped (so 'The Embercloaks' → 'embercloaks').
+        topic = _topic_slug(parts[0]) if parts else "general"
+        slug = f"{slugify(stem)}-{topic}" if topic else slugify(stem)
         return RouteDecision(
             bucket="arc",
             slug=slug,
@@ -348,7 +356,6 @@ def route(
         )
 
     if _is_harvest_filename(stem):
-        # Strip the "Harvest Table - " prefix to get the monster name.
         monster = stem.split(" - ", 1)[1] if " - " in stem else stem
         slug = slugify(monster)
         return RouteDecision(
@@ -364,8 +371,6 @@ def route(
     if _is_dialogue_filename(stem):
         owner_slug = _infer_owner_slug(file_path, archive_root, known_npc_slugs)
         slug = slugify(stem)
-        # Dest is set by the importer (it concatenates dialogue per owner);
-        # router still emits a deterministic dest for the dry-run report.
         dest = (
             f"mnemosyne/pf2e/npcs/{owner_slug}/dialogue.md"
             if owner_slug
@@ -385,26 +390,19 @@ def route(
         )
 
     # ------------------------------------------------------------------
-    # NPC content sniff.
+    # PF2e content sniff (Format A wins over Format B).
     # ------------------------------------------------------------------
-    has_stat = _has_pf2e_stat_block(content)
-    has_format_b = _has_format_b_sections(content)
-
-    # Two-NPC files & normal Format A: stat block wins.
-    if has_stat:
-        # Derive name from filename — strip the trailing "- <subtitle>" if
-        # present so `Veela and Tarek - Street Hood Twins` becomes
-        # `Veela and Tarek` (research §Edge case 2).
+    if _has_pf2e_stat_block(content):
         head = re.split(r"\s+(?:-|—|–)\s+", stem, maxsplit=1)[0]
         slug = slugify(_strip_npc_quotes(head))
         return RouteDecision(
             bucket="npc_a",
             slug=slug,
             dest=f"mnemosyne/pf2e/npcs/{slug}.md",
-            reason="PF2e stat block (Creature + AC) detected",
+            reason="PF2e stat block (Creature/Level + AC) detected",
         )
 
-    if has_format_b:
+    if _has_format_b_sections(content):
         slug = slugify(_strip_npc_quotes(stem))
         return RouteDecision(
             bucket="npc_b",
@@ -414,91 +412,103 @@ def route(
         )
 
     # ------------------------------------------------------------------
-    # No strict NPC sniff. If parent chain includes "The NPCs/", look for
-    # personal-NPC markers in the body — `**Role:**`, `**Function:**`,
-    # first-person quote blocks, or a `### Personality` / `### Goals` /
-    # `### Habits` header — and route as npc_b. Otherwise (no markers
-    # AND filename feels factional), faction. Research §Edge case 4 keeps
-    # `Talons of the Claw.md` as faction; the markers prevent
-    # `Apprentice Aldric.md` and similar character sheets being misrouted.
+    # Folder-shape NPC envelope: any ancestor segment is a generic NPC
+    # container (npcs/characters). Personal-NPC markers → npc_b; sparse
+    # body with org-shape → faction; otherwise faction (matches the
+    # pre-refactor 'under The NPCs/ but no NPC sniff' branch).
     # ------------------------------------------------------------------
-    parent_lower = [p.lower() for p in parts[:-1]]
-    if any(p == "the npcs" for p in parent_lower):
+    if _has_segment_token(parent_parts, _NPC_CONTAINER_TOKENS):
         slug = slugify(_strip_npc_quotes(stem))
         if _has_personal_npc_markers(content):
             return RouteDecision(
                 bucket="npc_b",
                 slug=slug,
                 dest=f"mnemosyne/pf2e/npcs/{slug}.md",
-                reason="under The NPCs/ + personal NPC markers (Role/Function/Personality/Goals)",
+                reason="under generic NPCs/ container + personal NPC markers (Role/Function/Personality/Goals)",
             )
         return RouteDecision(
             bucket="faction",
             slug=slug,
             dest=f"mnemosyne/pf2e/lore/factions/{slug}.md",
-            reason="under The NPCs/ but no PF2e/Format-B/personal-NPC sniff → faction",
+            reason="under generic NPCs/ container, no PF2e/Format-B/personal-NPC sniff → faction",
         )
 
     # ------------------------------------------------------------------
-    # Path-prefix routing.
+    # Content-first homebrew detection — markers in body OR generic
+    # homebrew folder-token (rules/crafting/homebrew). Phase 33 invariant:
+    # destination is a sibling of rulings/, not under it.
     # ------------------------------------------------------------------
-    top = parts[0] if parts else ""
-
-    if top in _HOMEBREW_PARENT_DIRS:
+    has_hb_markers = _has_homebrew_markers(content)
+    has_hb_segment = _has_segment_token(parts, _HOMEBREW_CONTAINER_TOKENS)
+    if has_hb_markers or has_hb_segment:
         slug = slugify(_strip_npc_quotes(stem))
+        if has_hb_markers:
+            reason = "homebrew markers (Rules/Action/Trigger/Effect/Activate) detected"
+        else:
+            reason = "generic homebrew folder-token (rules/crafting/homebrew) in path"
         return RouteDecision(
             bucket="homebrew",
             slug=slug,
             dest=f"mnemosyne/pf2e/homebrew/{slug}.md",
-            reason=f"path prefix '{top}/' → homebrew (sibling of rulings/, NOT under it)",
+            reason=reason,
         )
 
-    if top == _CODEX_PARENT_DIR:
+    # ------------------------------------------------------------------
+    # Folder-shape personal-NPC fallback: any path segment is generic NPC
+    # container OR personal-NPC markers fire even without a container word
+    # (e.g. a top-level 'Some Person.md' with ### Personality / ### Goals).
+    # ------------------------------------------------------------------
+    if _has_personal_npc_markers(content):
         slug = slugify(_strip_npc_quotes(stem))
         return RouteDecision(
-            bucket="lore",
+            bucket="npc_b",
             slug=slug,
-            dest=f"mnemosyne/pf2e/lore/codex/{slug}.md",
-            reason="path prefix 'Codex of Elemental Gateways/' → lore/codex/",
+            dest=f"mnemosyne/pf2e/npcs/{slug}.md",
+            reason="personal NPC markers (Personality/Goals/Role/Function) detected in body",
         )
 
-    if top == "The Embercloaks":
-        slug = slugify(_strip_npc_quotes(stem))
-        return RouteDecision(
-            bucket="lore",
-            slug=slug,
-            dest=f"mnemosyne/pf2e/lore/embercloaks/{slug}.md",
-            reason="path prefix 'The Embercloaks/' → lore/embercloaks/",
-        )
-
-    if top == "Cartosia":
-        slug = slugify(_strip_npc_quotes(stem))
-        # Personal NPC markers under Cartosia/** → npc_b (e.g. Provost
-        # Marshall Silas with bold-prefix Appearance + ### Biography that
-        # the strict Format-B detector now also catches; this is the
-        # belt-and-braces fallback for files with weaker structure).
-        if _has_personal_npc_markers(content):
+    # ------------------------------------------------------------------
+    # Folder-shape location detection: LegendKeeper "envelope page"
+    # pattern — a folder X/ containing X.md is the page that describes
+    # that location. We deliberately do NOT use a generic 'locations'
+    # folder-token here: a flat `Locations/Mossy Cave.md` (no envelope)
+    # is genuinely lore-prose, not a structured location entry, and
+    # belongs under lore/<topic>/. Operators reorganise post-hoc.
+    # ------------------------------------------------------------------
+    if parent_parts:
+        parent_slug = slugify(_strip_npc_quotes(parent_parts[-1]))
+        stem_slug = slugify(_strip_npc_quotes(stem))
+        if parent_slug and parent_slug == stem_slug:
             return RouteDecision(
-                bucket="npc_b",
-                slug=slug,
-                dest=f"mnemosyne/pf2e/npcs/{slug}.md",
-                reason="under Cartosia/** + personal NPC markers (Role/Personality/Goals)",
+                bucket="location",
+                slug=stem_slug,
+                dest=f"mnemosyne/pf2e/locations/{stem_slug}.md",
+                reason="LegendKeeper envelope-page pattern: file basename equals parent dir name → location",
             )
+
+    # ------------------------------------------------------------------
+    # Folder-shape faction detection.
+    # ------------------------------------------------------------------
+    if _has_segment_token(parent_parts, _FACTION_CONTAINER_TOKENS):
+        slug = slugify(_strip_npc_quotes(stem))
         return RouteDecision(
-            bucket="location",
+            bucket="faction",
             slug=slug,
-            dest=f"mnemosyne/pf2e/locations/{slug}.md",
-            reason="path prefix 'Cartosia/' (no NPC/personal-marker sniff) → location",
+            dest=f"mnemosyne/pf2e/lore/factions/{slug}.md",
+            reason="under generic Factions/ container",
         )
 
     # ------------------------------------------------------------------
-    # Fallback: lore at the deepest non-trivial top segment.
+    # Fallback: lore at the slugified top segment as topic subdir.
     # ------------------------------------------------------------------
-    topic = slugify(top) if top else "misc"
+    top = parts[0] if parts else ""
+    topic = _topic_slug(top) if top else "misc"
+    if not topic:
+        topic = "misc"
     slug = slugify(_strip_npc_quotes(stem))
     return RouteDecision(
         bucket="lore",
         slug=slug,
         dest=f"mnemosyne/pf2e/lore/{topic}/{slug}.md",
-        reason=f"fallback: lore by top segment '{top}'",
+        reason=f"fallback: lore by top-segment topic '{topic}'",
     )

@@ -131,10 +131,14 @@ async def run_import(
     force: bool,
     confirm_large: bool,
     obsidian_client: _ObsidianLike,
+    subfolder: str = "archive/cartosia",
 ) -> ImportReport:
-    """Run the cartosia importer over ``archive_root``.
+    """Run the PF2e archive importer over ``archive_root``.
 
-    See module docstring for full behaviour spec.
+    ``subfolder`` is the logical archive identifier — used for the
+    ``imported_from`` frontmatter field and as the slug prefix for the
+    report path. Defaults to ``archive/cartosia`` for backward compat
+    with the original cartosia-only importer.
     """
     root = Path(archive_root).resolve()
     if not root.exists() or not root.is_dir():
@@ -218,6 +222,7 @@ async def run_import(
                 dry_run=dry_run,
                 obsidian=obsidian_client,
                 report=report,
+                subfolder=subfolder,
             )
         elif decision.bucket == "npc_dialogue":
             owner = decision.owner_slug or "_orphan-dialogue"
@@ -240,6 +245,7 @@ async def run_import(
                 dry_run=dry_run,
                 obsidian=obsidian_client,
                 report=report,
+                subfolder=subfolder,
             )
 
     # 8. Flush dialogue buffers (live mode only).
@@ -256,10 +262,10 @@ async def run_import(
             await obsidian_client.put_note(dest, merged)
 
     # 9. Write the report file.
-    report_path = _write_report(report, dry_run=dry_run, iso_now=iso_now)
+    report_path = _write_report(report, dry_run=dry_run, iso_now=iso_now, subfolder=subfolder)
     report.report_path = report_path
     if not dry_run or True:  # always write the report (dry-run too)
-        await obsidian_client.put_note(report_path, _render_report(report))
+        await obsidian_client.put_note(report_path, _render_report(report, subfolder=subfolder))
 
     return report
 
@@ -279,6 +285,7 @@ async def _process_npc(
     dry_run: bool,
     obsidian: _ObsidianLike,
     report: ImportReport,
+    subfolder: str = "archive/cartosia",
 ) -> None:
     report.npc_count += 1
     report.proposed_writes.append({
@@ -326,7 +333,7 @@ async def _process_npc(
         "backstory": fields["backstory"],
         "traits": list(fields["traits"]),
         "relationships": [],
-        "imported_from": "cartosia-archive",
+        "imported_from": subfolder,
         "imported_at": iso_now,
         "source_path": rel_source,
         "token_image": token_image,
@@ -355,6 +362,7 @@ async def _process_passthrough(
     dry_run: bool,
     obsidian: _ObsidianLike,
     report: ImportReport,
+    subfolder: str = "archive/cartosia",
 ) -> None:
     counter_map = {
         "location": "location_count",
@@ -379,7 +387,7 @@ async def _process_passthrough(
 
     body = _strip_existing_frontmatter(content)
     fm = {
-        "imported_from": "cartosia-archive",
+        "imported_from": subfolder,
         "imported_at": iso_now,
         "source_path": rel_source,
         "bucket": decision.bucket,
@@ -452,15 +460,19 @@ def _strip_existing_frontmatter(content: str) -> str:
     return content
 
 
-def _write_report(report: ImportReport, *, dry_run: bool, iso_now: str) -> str:
+def _write_report(
+    report: ImportReport, *, dry_run: bool, iso_now: str, subfolder: str = "archive/cartosia"
+) -> str:
     ts = iso_now.replace(":", "-").replace("+00-00", "Z")
     kind = "dry-run" if dry_run else "import"
-    return f"ops/sweeps/cartosia-{kind}-{ts}.md"
+    sub_slug = slugify(subfolder)
+    return f"ops/sweeps/{sub_slug}-{kind}-{ts}.md"
 
 
-def _render_report(report: ImportReport) -> str:
+def _render_report(report: ImportReport, *, subfolder: str = "archive/cartosia") -> str:
+    kind_word = "Dry-Run" if report.dry_run else "Import"
     lines = [
-        f"# Cartosia {'Dry-Run' if report.dry_run else 'Import'} Report",
+        f"# PF2e Archive {kind_word} Report ({subfolder})",
         "",
         f"- archive_root: `{report.archive_root}`",
         f"- npc_count: {report.npc_count}",

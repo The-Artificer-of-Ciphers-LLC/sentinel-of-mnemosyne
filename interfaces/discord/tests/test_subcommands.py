@@ -1016,10 +1016,13 @@ async def test_pf_dispatch_cartosia_admin_dry_run_default():
 
     mock_ptm.assert_called_once()
     args = mock_ptm.call_args
-    assert args[0][0] == "modules/pathfinder/cartosia"
+    # 260427-cui (authorized lockstep update): cartosia is now a deprecation
+    # alias forwarding to /ingest with subfolder='archive/cartosia' pinned.
+    assert args[0][0] == "modules/pathfinder/ingest"
     payload = args[0][1]
     assert payload == {
         "archive_root": "/tmp/fake",
+        "subfolder": "archive/cartosia",
         "dry_run": True,
         "limit": None,
         "force": False,

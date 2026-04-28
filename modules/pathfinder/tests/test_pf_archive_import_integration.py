@@ -125,7 +125,9 @@ async def test_dry_run_writes_only_report_and_returns_bucket_counts():
     npc_writes = [p for p, _ in obs.put_note_calls if p.startswith("mnemosyne/pf2e/")]
     assert npc_writes == [], f"dry-run leaked vault writes: {npc_writes}"
     # The report itself must have been written.
-    report_writes = [p for p, _ in obs.put_note_calls if "ops/sweeps/cartosia-dry-run-" in p]
+    # 260427-cui (authorized lockstep update): default subfolder slug is
+    # 'archive-cartosia' (was 'cartosia' pre-refactor).
+    report_writes = [p for p, _ in obs.put_note_calls if "ops/sweeps/archive-cartosia-dry-run-" in p]
     assert len(report_writes) == 1, "exactly one dry-run report file expected"
     # Bucket counts must be > 0 across the fixture set.
     assert report.npc_count >= 2  # Fenn + Veela&Tarek + Alice Twoorb
@@ -434,7 +436,9 @@ async def test_npc_frontmatter_includes_phase29_required_fields():
         "imported_at:",
     ):
         assert field in content, f"missing frontmatter field: {field}"
-    assert "imported_from: cartosia-archive" in content
+    # 260427-cui (authorized lockstep update): default subfolder is now
+    # 'archive/cartosia' (was the literal 'cartosia-archive' pre-refactor).
+    assert "imported_from: archive/cartosia" in content
     # Original body markers preserved.
     assert "Fenn the Beggar" in content
     assert "Roleplaying Notes" in content
