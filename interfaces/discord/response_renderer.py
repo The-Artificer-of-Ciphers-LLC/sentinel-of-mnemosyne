@@ -1,0 +1,31 @@
+"""Discord response rendering adapter."""
+
+from __future__ import annotations
+
+import io
+
+import discord
+
+
+async def send_rendered_response(send_fn, response: "str | dict") -> None:
+    """Render router response via provided async send function."""
+    if isinstance(response, str):
+        await send_fn(response)
+        return
+
+    if isinstance(response, dict):
+        rtype = response.get("type")
+        if rtype == "file":
+            df = discord.File(
+                io.BytesIO(response["file_bytes"]),
+                filename=response["filename"],
+            )
+            await send_fn(content=response.get("content", ""), file=df)
+            return
+        if rtype == "embed":
+            await send_fn(content=response.get("content", ""), embed=response["embed"])
+            return
+        await send_fn(response.get("content", str(response)))
+        return
+
+    await send_fn(str(response))

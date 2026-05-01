@@ -41,7 +41,6 @@ Thread per invocation: each /sentask creates a fresh thread (never reuses).
 """
 import asyncio
 import base64
-import io
 import logging
 import os
 import re
@@ -53,6 +52,7 @@ from discord import app_commands
 from shared.sentinel_client import SentinelCoreClient
 
 import command_router
+import response_renderer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -1637,23 +1637,7 @@ class SentinelBot(discord.Client):
                 channel=message.channel,
             )
 
-        if isinstance(ai_response, str):
-            await message.channel.send(ai_response)
-        elif isinstance(ai_response, dict):
-            rtype = ai_response.get("type")
-            if rtype == "file":
-                df = discord.File(
-                    io.BytesIO(ai_response["file_bytes"]),
-                    filename=ai_response["filename"],
-                )
-                await message.channel.send(content=ai_response.get("content", ""), file=df)
-            elif rtype == "embed":
-                await message.channel.send(
-                    content=ai_response.get("content", ""),
-                    embed=ai_response["embed"],
-                )
-            else:
-                await message.channel.send(ai_response.get("content", str(ai_response)))
+        await response_renderer.send_rendered_response(message.channel.send, ai_response)
 
     async def close(self) -> None:
         """Clean up aiohttp internal server before closing discord client (Pitfall 5)."""
@@ -1717,42 +1701,10 @@ async def sen(interaction: discord.Interaction, message: str) -> None:
 
         # 4. Send AI response — into thread if created, fallback to channel
         if thread:
-            if isinstance(ai_response, str):
-                await thread.send(ai_response)
-            elif isinstance(ai_response, dict):
-                rtype = ai_response.get("type")
-                if rtype == "file":
-                    df = discord.File(
-                        io.BytesIO(ai_response["file_bytes"]),
-                        filename=ai_response["filename"],
-                    )
-                    await thread.send(content=ai_response.get("content", ""), file=df)
-                elif rtype == "embed":
-                    await thread.send(
-                        content=ai_response.get("content", ""),
-                        embed=ai_response["embed"],
-                    )
-                else:
-                    await thread.send(ai_response.get("content", str(ai_response)))
+            await response_renderer.send_rendered_response(thread.send, ai_response)
             await interaction.followup.send(f"Response ready in {thread.mention}", ephemeral=True)
         else:
-            if isinstance(ai_response, str):
-                await interaction.followup.send(ai_response)
-            elif isinstance(ai_response, dict):
-                rtype = ai_response.get("type")
-                if rtype == "file":
-                    df = discord.File(
-                        io.BytesIO(ai_response["file_bytes"]),
-                        filename=ai_response["filename"],
-                    )
-                    await interaction.followup.send(content=ai_response.get("content", ""), file=df)
-                elif rtype == "embed":
-                    await interaction.followup.send(
-                        content=ai_response.get("content", ""),
-                        embed=ai_response["embed"],
-                    )
-                else:
-                    await interaction.followup.send(ai_response.get("content", str(ai_response)))
+            await response_renderer.send_rendered_response(interaction.followup.send, ai_response)
 
     except Exception as exc:
         logger.exception("Unhandled error in /sen after defer — sending error followup: %s", exc)
