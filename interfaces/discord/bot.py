@@ -52,6 +52,8 @@ from aiohttp import web
 from discord import app_commands
 from shared.sentinel_client import SentinelCoreClient
 
+import command_router
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -1422,42 +1424,21 @@ async def _pf_dispatch(
         return "An unexpected error occurred in pathfinder dispatch."
 
 
-_HELP_KEYWORDS = frozenset({"commands", "help", "what can you do", "what do you do", "how do i use"})
-
-
 async def _route_message(
     user_id: str,
     message: str,
     attachments: list | None = None,
     channel=None,
 ) -> "str | dict":
-    """
-    Unified message router used by both /sentask and on_message thread replies.
-
-    Routing order:
-    1. Colon-prefixed subcommands (`:help`, `:capture`, etc.)
-    2. Natural-language help intent (short message containing help/commands keywords)
-    3. Everything else → AI via _call_core
-
-    `channel` (Phase 31, WR-01 fix) is forwarded to handle_sentask_subcommand
-    so the `:pf npc say` branch can walk thread history (DLG-03, D-11..D-14).
-    """
-    if message.startswith(":"):
-        parts = message[1:].split(" ", 1)
-        subcmd = parts[0].lower()
-        args = parts[1] if len(parts) > 1 else ""
-        return await handle_sentask_subcommand(
-            subcmd, args, user_id, attachments=attachments, channel=channel
-        )
-
-    # Intercept natural-language help queries locally — never send to AI.
-    # Prevents Obsidian session context from producing leaked/irrelevant responses
-    # when the user is just asking what the bot can do.
-    msg_lower = message.lower()
-    if len(message) < 120 and any(kw in msg_lower for kw in _HELP_KEYWORDS):
-        return SUBCOMMAND_HELP
-
-    return await _call_core(user_id, message)
+    return await command_router.route_message(
+        user_id=user_id,
+        message=message,
+        attachments=attachments,
+        channel=channel,
+        handle_subcommand=handle_sentask_subcommand,
+        call_core=_call_core,
+        subcommand_help=SUBCOMMAND_HELP,
+    )
 
 
 async def handle_sentask_subcommand(
@@ -1467,134 +1448,26 @@ async def handle_sentask_subcommand(
     attachments: list | None = None,
     channel=None,
 ) -> "str | dict":
-    """
-    Route `:subcommand` prefixed messages to the correct handler.
-    Returns a response string in all cases — never raises.
-
-    `channel` (Phase 31, WR-01 fix) is forwarded to `_pf_dispatch` for the
-    `say` verb's thread-history walk (DLG-03, D-11..D-14). Other subcommands
-    ignore it — backward-compatible for every existing call site.
-    """
-    if subcmd == "pf":
-        return await _pf_dispatch(args, user_id, attachments=attachments, channel=channel)
-
-    if subcmd == "help":
-        return SUBCOMMAND_HELP
-
-    # plugin: prefix routing (D-12) — check BEFORE dict lookup
-    if subcmd.startswith("plugin:"):
-        plugin_name = subcmd[7:]  # strip "plugin:" prefix
-        if plugin_name == "ask":
-            if not args.strip():
-                return "Usage: `:plugin:ask <question>` — query the methodology knowledge base."
-            return await _call_core(user_id, f"Answer this question about my 2nd brain methodology: {args.strip()}")
-        if plugin_name == "add-domain":
-            if not args.strip():
-                return "Usage: `:plugin:add-domain <domain>` — extend vault with a new domain area."
-            return await _call_core(user_id, f"Extend my vault with a new domain area: {args.strip()}")
-        fixed_prompt = _PLUGIN_PROMPTS.get(plugin_name)
-        if fixed_prompt:
-            return await _call_core(user_id, fixed_prompt)
-        return f"Unknown plugin command `:{subcmd}`. Try `:plugin:help`."
-
-    # Arg-taking standard commands
-    if subcmd == "capture":
-        if not args.strip():
-            return "Usage: `:capture <text>` — provide something to capture."
-        return await _call_core(user_id, f"Capture this insight to my inbox/ for processing: {args.strip()}")
-
-    if subcmd == "seed":
-        if not args.strip():
-            return "Usage: `:seed <text>` — drop raw content into inbox/."
-        return await _call_core(user_id, f"Add this raw content to my inbox/ without processing: {args.strip()}")
-
-    if subcmd == "connect":
-        if not args.strip():
-            return "Usage: `:connect <note title>` — find connections for a note."
-        return await _call_core(
-            user_id,
-            f"Find connections for the note '{args.strip()}' and add a wikilink to the appropriate hub MOC.",
-        )
-
-    if subcmd == "review":
-        if not args.strip():
-            return "Usage: `:review <note title>` — verify note quality."
-        return await _call_core(
-            user_id,
-            f"Review note quality for '{args.strip()}': check claim title, YAML frontmatter (description, type, topics, status), and wikilinks. Be precise and literal. Do not elaborate beyond the requested format.",
-        )
-
-    if subcmd == "graph":
-        query = args.strip() or "all"
-        prompt = f"Run graph analysis on my vault{': ' + query if query != 'all' else ''}. Report orphans, triangles, link density, and backlinks."
-        return await _call_core(user_id, prompt)
-
-    if subcmd == "learn":
-        if not args.strip():
-            return "Usage: `:learn <topic>` — research a topic."
-        return await _call_core(user_id, f"Research the topic '{args.strip()}' and grow my knowledge graph with new permanent notes.")
-
-    if subcmd == "remember":
-        if not args.strip():
-            return "Usage: `:remember <observation>` — capture a methodology learning."
-        return await _call_core(user_id, f"Capture this operational observation to ops/observations/: {args.strip()}")
-
-    # 260427-vl1: explicit note import — :note <content> | :note <topic> <content>
-    if subcmd == "note":
-        if not args.strip():
-            return "Usage: `:note <content>` or `:note <topic> <content>`"
-        topic, _, rest = args.strip().partition(" ")
-        if topic in _NOTE_CLOSED_VOCAB and rest.strip():
-            return await _call_core_note(user_id, content=rest.strip(), topic=topic)
-        return await _call_core_note(user_id, content=args.strip(), topic=None)
-
-    # 260427-vl1: admin-only vault sweep
-    if subcmd == "vault-sweep":
-        if not _is_admin(user_id):
-            return (
-                "Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command."
-            )
-        verb = (args.strip().split(maxsplit=1) or [""])[0]
-        if verb == "status":
-            return await _call_core_sweep_status(user_id)
-        if verb == "dry-run":
-            return await _call_core_sweep_start(
-                user_id, force_reclassify=False, dry_run=True
-            )
-        force = verb == "force"
-        return await _call_core_sweep_start(user_id, force_reclassify=force)
-
-    # 260427-vl1: pending-classification inbox
-    if subcmd == "inbox":
-        parts = args.strip().split(maxsplit=2)
-        if not args.strip():
-            return await _call_core_inbox_list(user_id)
-        verb = parts[0]
-        if verb == "classify" and len(parts) >= 3:
-            try:
-                entry_n = int(parts[1])
-            except ValueError:
-                return "Usage: `:inbox classify <n> <topic>` — n must be an integer."
-            return await _call_core_inbox_classify(user_id, entry_n, parts[2])
-        if verb == "discard" and len(parts) >= 2:
-            try:
-                entry_n = int(parts[1])
-            except ValueError:
-                return "Usage: `:inbox discard <n>` — n must be an integer."
-            return await _call_core_inbox_discard(user_id, entry_n)
-        return "Usage: `:inbox` | `:inbox classify <n> <topic>` | `:inbox discard <n>`"
-
-    if subcmd == "revisit":
-        if not args.strip():
-            return "Usage: `:revisit <note title>` — revisit and update a note."
-        return await _call_core(user_id, f"Revisit and update the note '{args.strip()}' with current understanding.")
-
-    # No-arg standard commands (dict lookup)
-    fixed_prompt = _SUBCOMMAND_PROMPTS.get(subcmd)
-    if fixed_prompt:
-        return await _call_core(user_id, fixed_prompt)
-
-    return f"Unknown command `:{subcmd}`. Try `:help` for available commands."
+    return await command_router.handle_subcommand(
+        subcmd=subcmd,
+        args=args,
+        user_id=user_id,
+        attachments=attachments,
+        channel=channel,
+        pf_dispatch=_pf_dispatch,
+        call_core=_call_core,
+        call_core_note=_call_core_note,
+        call_core_inbox_list=_call_core_inbox_list,
+        call_core_inbox_classify=_call_core_inbox_classify,
+        call_core_inbox_discard=_call_core_inbox_discard,
+        call_core_sweep_start=_call_core_sweep_start,
+        call_core_sweep_status=_call_core_sweep_status,
+        is_admin=_is_admin,
+        note_closed_vocab=_NOTE_CLOSED_VOCAB,
+        plugin_prompts=_PLUGIN_PROMPTS,
+        subcommand_prompts=_SUBCOMMAND_PROMPTS,
+        subcommand_help=SUBCOMMAND_HELP,
+    )
 
 
 async def _persist_thread_id(thread_id: int) -> None:
