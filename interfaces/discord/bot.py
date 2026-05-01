@@ -53,6 +53,7 @@ from shared.sentinel_client import SentinelCoreClient
 import command_router
 import core_gateway
 import pathfinder_cli
+import pathfinder_dispatch
 import pathfinder_harvest_adapter
 import pathfinder_ingest_adapter
 import pathfinder_npc_basic_adapter
@@ -773,89 +774,37 @@ async def _pf_dispatch(
 
     try:
         async with httpx.AsyncClient() as http_client:
-            if noun == "harvest":
-                # Format: `:pf harvest <Name>[,<Name>...]` — comma-separated batch (D-04, Pitfall 5).
-                # `:pf harvest` with zero args is caught by the generic `len(parts) < 2`
-                # early-return at the top of `_pf_dispatch` — it returns the combined
-                # usage string BEFORE this branch runs. So the `if not names:` fallback
-                # below is defensive (covers `:pf harvest ,` or `:pf harvest  ` where
-                # parts[1] exists but names parses empty), not redundant.
-                # WR-04: rejoin parts[1:] from the already-split noun/verb/rest tuple
-                # rather than slicing the original string by len("harvest"). The slice
-                # approach baked in a whitespace-class assumption — .strip() is the
-                # source of truth for what counts as "whitespace" when the user
-                # provides e.g. a non-breaking space before "harvest", and any
-                # mismatch between that and the fixed-width len() slice silently
-                # corrupted the name. split(" ", 2) already produced the post-noun
-                # remainder cleanly, so use that.
-                return await pathfinder_harvest_adapter.handle_harvest(
-                    parts=parts,
-                    user_id=user_id,
-                    sentinel_client=_sentinel_client,
-                    http_client=http_client,
-                    build_harvest_embed=build_harvest_embed,
-                )
-
-            if noun in ("cartosia", "ingest"):
-                return await pathfinder_ingest_adapter.handle_ingest(
-                    noun=noun,
-                    parts=parts,
-                    user_id=user_id,
-                    is_admin=_is_admin,
-                    sentinel_client=_sentinel_client,
-                    http_client=http_client,
-                )
-
-            if noun == "rule":
-                return await pathfinder_rule_adapter.handle_rule(
-                    verb=verb,
-                    rest=rest,
-                    parts=parts,
-                    user_id=user_id,
-                    channel=channel,
-                    sentinel_client=_sentinel_client,
-                    http_client=http_client,
-                    build_ruling_embed=build_ruling_embed,
-                )
-
-            elif noun == "session":
-                return await pathfinder_session_adapter.handle_session(
-                    verb=verb,
-                    rest=rest,
-                    user_id=user_id,
-                    channel=channel,
-                    sentinel_client=_sentinel_client,
-                    http_client=http_client,
-                    recap_view_cls=RecapView,
-                    build_session_embed=build_session_embed,
-                )
-
-            handled, npc_basic_response = await pathfinder_npc_basic_adapter.handle_npc_basic(
+            return await pathfinder_dispatch.dispatch(
+                noun=noun,
                 verb=verb,
                 rest=rest,
-                user_id=user_id,
-                sentinel_client=_sentinel_client,
-                http_client=http_client,
-                valid_relations=_VALID_RELATIONS,
-            )
-            if handled:
-                return npc_basic_response
-
-            handled, npc_rich_response = await pathfinder_npc_rich_adapter.handle_npc_rich(
-                verb=verb,
-                rest=rest,
+                parts=parts,
                 user_id=user_id,
                 attachments=attachments,
                 channel=channel,
                 bot_user=getattr(bot, "user", None),
                 sentinel_client=_sentinel_client,
                 http_client=http_client,
-                build_stat_embed=build_stat_embed,
-                render_say_response=_render_say_response,
-                extract_thread_history=_extract_thread_history,
+                is_admin=_is_admin,
+                valid_relations=_VALID_RELATIONS,
+                adapters={
+                    "harvest": pathfinder_harvest_adapter,
+                    "ingest": pathfinder_ingest_adapter,
+                    "rule": pathfinder_rule_adapter,
+                    "session": pathfinder_session_adapter,
+                    "npc_basic": pathfinder_npc_basic_adapter,
+                    "npc_rich": pathfinder_npc_rich_adapter,
+                },
+                builders={
+                    "build_harvest_embed": build_harvest_embed,
+                    "build_ruling_embed": build_ruling_embed,
+                    "recap_view_cls": RecapView,
+                    "build_session_embed": build_session_embed,
+                    "build_stat_embed": build_stat_embed,
+                    "render_say_response": _render_say_response,
+                    "extract_thread_history": _extract_thread_history,
+                },
             )
-            if handled:
-                return npc_rich_response
 
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
