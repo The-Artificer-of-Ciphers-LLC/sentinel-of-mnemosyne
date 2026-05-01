@@ -53,6 +53,12 @@ def default_app_state(mock_ai_provider):
         injection_filter=default_injection_filter,
         output_scanner=default_output_scanner,
     )
+    app.state.message_processor_factory = lambda: MessageProcessor(
+        obsidian=app.state.obsidian_client,
+        ai_provider=app.state.ai_provider,
+        injection_filter=app.state.injection_filter,
+        output_scanner=app.state.output_scanner,
+    )
 
     return mock_obsidian
 
@@ -65,6 +71,31 @@ def lmstudio_available_mock(mock_lmstudio_models_response):
             return httpx.Response(200, json=mock_lmstudio_models_response)
         return httpx.Response(404)
     return httpx.MockTransport(handler)
+
+
+async def test_post_message_uses_message_processor_factory_when_present(mock_ai_provider):
+    """Route uses app.state.message_processor_factory seam when provided."""
+    class _FakeProcessor:
+        async def process(self, req):
+            from app.services.message_processing import MessageResult
+            return MessageResult(
+                content="factory response",
+                model="test-model",
+                summary_path="ops/sessions/2026-01-01/u-00-00-00.md",
+                summary_content="x",
+            )
+
+    app.state.message_processor_factory = lambda: _FakeProcessor()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/message",
+            json={"content": "hello", "user_id": "test"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["content"] == "factory response"
 
 
 async def test_post_message_returns_response_envelope(mock_ai_provider):
