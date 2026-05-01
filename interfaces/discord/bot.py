@@ -53,6 +53,7 @@ from shared.sentinel_client import SentinelCoreClient
 
 import command_router
 import core_gateway
+import pathfinder_cli
 import response_renderer
 
 logging.basicConfig(level=logging.INFO)
@@ -279,7 +280,7 @@ _VALID_RELATIONS = frozenset({"knows", "trusts", "hostile-to", "allied-with", "f
 # the noun guard in _pf_dispatch and the usage/unknown-noun error strings
 # so adding a new noun (e.g. `spell`) is a one-line change rather than a
 # scavenger hunt through two mirrored literals.
-_PF_NOUNS = frozenset({"npc", "harvest", "rule", "session", "ingest", "cartosia"})  # 260427-cui: ingest added; cartosia kept as deprecation alias
+_PF_NOUNS = pathfinder_cli.PF_NOUNS  # 260427-cui: ingest added; cartosia kept as deprecation alias
 
 
 class RecapView(discord.ui.View):
@@ -761,18 +762,12 @@ async def _pf_dispatch(
         # IN-01: derive the usage message from _PF_NOUNS so new nouns show up
         # automatically. `npc` retains its verb list because it's the only
         # multi-verb noun in the current surface.
-        return (
-            "Usage: `:pf npc <create|update|show|relate|import|say> ...` "
-            "or `:pf harvest <Name>[,<Name>...]` "
-            "or `:pf rule <question>|show <topic>|history [N]|list` "
-            "or `:pf cartosia <archive_path> [--live] [--limit N]` (admin-only)"
-        )
+        return pathfinder_cli.usage_message()
     noun, verb = parts[0].lower(), parts[1].lower()
     rest = parts[2] if len(parts) > 2 else ""
 
     if noun not in _PF_NOUNS:
-        supported = ", ".join(f"`{n}`" for n in sorted(_PF_NOUNS))
-        return f"Unknown pf category `{noun}`. Currently supported: {supported}."
+        return pathfinder_cli.unknown_noun_message(noun)
 
     try:
         async with httpx.AsyncClient() as http_client:
