@@ -57,6 +57,7 @@ import pathfinder_cli
 import pathfinder_harvest_adapter
 import pathfinder_ingest_adapter
 import pathfinder_rule_adapter
+import pathfinder_session_adapter
 import response_renderer
 
 logging.basicConfig(level=logging.INFO)
@@ -820,75 +821,16 @@ async def _pf_dispatch(
                 )
 
             elif noun == "session":
-                # D-04: session noun dispatch — verbs: start, log, end, show, undo
-                # Flags parsed here and stripped from event text before forwarding to route.
-                force = "--force" in rest
-                recap_flag = "--recap" in rest
-                retry_recap = "--retry-recap" in rest
-
-                # Strip flag tokens from event text so "log" verb gets clean text
-                # T-34-W4-01 mitigation: flags read from rest only; event_text sent in args
-                # so route cannot be tricked by embedding --force in the event body.
-                event_text = rest
-                for flag_token in ("--force", "--recap", "--retry-recap"):
-                    event_text = event_text.replace(flag_token, "").strip()
-
-                payload = {
-                    "verb": verb,
-                    "args": event_text,
-                    "flags": {
-                        "force": force,
-                        "recap": recap_flag,
-                        "retry_recap": retry_recap,
-                    },
-                    "user_id": user_id,
-                }
-
-                # D-20: slow-query placeholder for show and end (LLM calls take 2-15s)
-                needs_placeholder = verb in {"show", "end"}
-                placeholder = None
-                if needs_placeholder and channel is not None and hasattr(channel, "send"):
-                    try:
-                        placeholder = await channel.send("_Generating session narrative..._")
-                    except Exception:
-                        placeholder = None
-
-                try:
-                    result = await _sentinel_client.post_to_module(
-                        "modules/pathfinder/session", payload, http_client
-                    )
-                except Exception as exc:
-                    if placeholder is not None and hasattr(placeholder, "edit"):
-                        try:
-                            await placeholder.edit(
-                                content=f"Session operation failed — {exc}", embed=None
-                            )
-                            return {"type": "suppressed", "content": "", "embed": None}
-                        except Exception:
-                            pass
-                    raise
-
-                # D-08/D-09: start verb — show recap button if prior session recap available
-                if verb == "start" and result.get("recap_text") and not recap_flag:
-                    recap_view = RecapView(recap_text=result["recap_text"])
-                    embed = build_session_embed(result)
-                    if channel is not None and hasattr(channel, "send"):
-                        try:
-                            msg = await channel.send(embed=embed, view=recap_view)
-                            recap_view.message = msg  # D-11: set AFTER send so on_timeout can edit
-                            return {"type": "suppressed", "content": "", "embed": embed}
-                        except Exception:
-                            pass
-                    return {"type": "embed", "content": "", "embed": embed}
-
-                embed = build_session_embed(result)
-                if placeholder is not None and hasattr(placeholder, "edit"):
-                    try:
-                        await placeholder.edit(content="", embed=embed)
-                        return {"type": "suppressed", "content": "", "embed": embed}
-                    except Exception:
-                        pass
-                return {"type": "embed", "content": "", "embed": embed}
+                return await pathfinder_session_adapter.handle_session(
+                    verb=verb,
+                    rest=rest,
+                    user_id=user_id,
+                    channel=channel,
+                    sentinel_client=_sentinel_client,
+                    http_client=http_client,
+                    recap_view_cls=RecapView,
+                    build_session_embed=build_session_embed,
+                )
 
             if verb == "create":
                 # Split name | description on first pipe (D-05, Pitfall 5: maxsplit=1)
