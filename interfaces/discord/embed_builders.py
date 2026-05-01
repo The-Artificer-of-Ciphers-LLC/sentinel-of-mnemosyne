@@ -5,6 +5,159 @@ from __future__ import annotations
 import discord
 
 
+def build_foundry_roll_embed(data: dict) -> "discord.Embed":
+    outcome_emojis = {
+        "criticalSuccess": "🎯",
+        "success": "✅",
+        "failure": "❌",
+        "criticalFailure": "💀",
+    }
+    outcome_labels = {
+        "criticalSuccess": "Critical Hit!",
+        "success": "Success",
+        "failure": "Failure",
+        "criticalFailure": "Critical Failure!",
+    }
+    outcome_colors = {
+        "criticalSuccess": discord.Color.gold(),
+        "success": discord.Color.green(),
+        "failure": discord.Color.orange(),
+        "criticalFailure": discord.Color.red(),
+    }
+    outcome = data.get("outcome", "")
+    actor = data.get("actor_name", "?")
+    target = data.get("target_name")
+    narrative = data.get("narrative", "")
+    roll_total = data.get("roll_total", "?")
+    dc = data.get("dc")
+    dc_hidden = data.get("dc_hidden", False)
+    item_name = data.get("item_name", "")
+    roll_type = data.get("roll_type", "check")
+
+    emoji = outcome_emojis.get(outcome, "🎲")
+    label = outcome_labels.get(outcome, outcome.capitalize() if outcome else "Roll")
+    color = outcome_colors.get(outcome, discord.Color.blue())
+
+    title = f"{emoji} {label} | {actor} vs {target}" if target else f"{emoji} {label} | {actor} ({roll_type})"
+    dc_str = "DC: [hidden]" if dc_hidden else f"DC/AC: {dc}"
+    footer_parts = [f"Roll: {roll_total}", dc_str]
+    if item_name:
+        footer_parts.append(item_name)
+
+    embed = discord.Embed(
+        title=title,
+        description=narrative[:4000] if narrative else None,
+        color=color,
+    )
+    embed.set_footer(text=" | ".join(footer_parts))
+    return embed
+
+
+def build_harvest_embed(data: dict) -> "discord.Embed":
+    monsters = data.get("monsters", []) or []
+    aggregated = data.get("aggregated", []) or []
+    footer_text = data.get("footer", "")
+
+    if len(monsters) == 1:
+        m = monsters[0]
+        title = f"{m.get('monster', '?')} (Level {m.get('level', '?')})"
+        description_parts: list[str] = []
+        if m.get("note"):
+            description_parts.append(f"_{m['note']}_")
+        if not m.get("verified", True):
+            description_parts.append("⚠ Generated — verify against sourcebook")
+        description = "\n".join(description_parts)
+    else:
+        title = f"Harvest report — {len(monsters)} monsters"
+        generated_count = sum(1 for m in monsters if not m.get("verified", True))
+        description = (
+            f"⚠ {generated_count}/{len(monsters)} entries include generated data — verify."
+            if generated_count
+            else ""
+        )
+
+    embed = discord.Embed(title=title, description=description, color=discord.Color.dark_green())
+    for comp in aggregated:
+        craftable_lines = [
+            f"• {c.get('name', '?')} (Crafting DC {c.get('crafting_dc', '?')}, {c.get('value', '?')})"
+            for c in comp.get("craftable", []) or []
+        ]
+        monsters_tally = ", ".join(comp.get("monsters", []) or [])
+        field_value = (
+            f"Medicine DC {comp.get('medicine_dc', '?')}\n"
+            f"From: {monsters_tally}\n"
+            + "\n".join(craftable_lines)
+        )[:1024]
+        embed.add_field(name=comp.get("type", "?"), value=field_value, inline=False)
+    embed.set_footer(text=footer_text)
+    return embed
+
+
+def build_session_embed(data: dict) -> "discord.Embed":
+    verb_type = data.get("type", "")
+
+    if verb_type == "start":
+        embed = discord.Embed(
+            title=f"Session started — {data.get('date', '?')}",
+            description=f"Note: `{data.get('path', '?')}`",
+            color=discord.Color.green(),
+        )
+        if data.get("recap_available") and not data.get("recap_text"):
+            embed.set_footer(text="Use the button below to recap last session.")
+    elif verb_type == "log":
+        embed = discord.Embed(
+            title="Event logged",
+            description=f"`{data.get('line', '?')}`",
+            color=discord.Color.blue(),
+        )
+    elif verb_type == "undo":
+        removed = data.get("removed", "?")
+        remaining = data.get("remaining", "?")
+        embed = discord.Embed(
+            title="Event removed",
+            description=f"Removed: `{removed}`\nEvents remaining: {remaining}",
+            color=discord.Color.orange(),
+        )
+    elif verb_type == "show":
+        embed = discord.Embed(
+            title=f"Story so far — {data.get('date', '?')}",
+            description=data.get("narrative", "_No narrative generated._"),
+            color=discord.Color.blue(),
+        )
+    elif verb_type == "end":
+        recap = data.get("recap", "")
+        npcs = ", ".join(f"[[{s}]]" for s in (data.get("npcs") or []))
+        locations = ", ".join(f"[[{s}]]" for s in (data.get("locations") or []))
+        embed = discord.Embed(
+            title=f"Session ended — {data.get('date', '?')}",
+            description=(recap[:2048] if recap else "_Recap empty._"),
+            color=discord.Color.dark_green(),
+        )
+        if npcs:
+            embed.add_field(name="NPCs", value=npcs[:1024], inline=False)
+        if locations:
+            embed.add_field(name="Locations", value=locations[:1024], inline=False)
+    elif verb_type == "end_skeleton":
+        embed = discord.Embed(
+            title="Session ended (recap failed)",
+            description=(
+                f"Note written: `{data.get('path', '?')}`\n"
+                f"Error: {str(data.get('error', '?'))[:200]}\n\n"
+                "_Use `:pf session end --retry-recap` to regenerate the recap._"
+            ),
+            color=discord.Color.red(),
+        )
+    else:
+        error_msg = data.get("error") or data.get("detail") or str(data)
+        embed = discord.Embed(
+            title="Session",
+            description=str(error_msg)[:2048],
+            color=discord.Color.red(),
+        )
+
+    return embed
+
+
 def build_stat_embed(data: dict) -> "discord.Embed":
     fields = data.get("fields", {})
     stats = data.get("stats") or {}
