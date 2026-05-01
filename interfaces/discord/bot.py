@@ -759,10 +759,7 @@ async def _pf_dispatch(
     # 260427-czb: bare `:pf cartosia` returns its own usage string (the
     # generic usage doesn't mention this verb because it's admin-gated).
     if len(parts) >= 1 and parts[0].lower() == "cartosia" and len(parts) < 2:
-        return (
-            "Usage: `:pf cartosia <archive_path> [--live] [--dry-run] "
-            "[--limit N] [--force] [--confirm-large]` (admin-only)"
-        )
+        return pathfinder_cli.cartosia_usage_message()
     if len(parts) < 2:
         # IN-01: derive the usage message from _PF_NOUNS so new nouns show up
         # automatically. `npc` retains its verb list because it's the only

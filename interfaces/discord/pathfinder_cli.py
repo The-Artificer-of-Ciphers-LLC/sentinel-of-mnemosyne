@@ -14,6 +14,13 @@ def usage_message() -> str:
     )
 
 
+def cartosia_usage_message() -> str:
+    return (
+        "Usage: `:pf cartosia <archive_path> [--live] [--dry-run] "
+        "[--limit N] [--force] [--confirm-large]` (admin-only)"
+    )
+
+
 def unknown_noun_message(noun: str) -> str:
     supported = ", ".join(f"`{n}`" for n in sorted(PF_NOUNS))
     return f"Unknown pf category `{noun}`. Currently supported: {supported}."
