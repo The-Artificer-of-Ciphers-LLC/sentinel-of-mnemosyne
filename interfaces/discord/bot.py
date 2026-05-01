@@ -53,6 +53,7 @@ from shared.sentinel_client import SentinelCoreClient
 import command_router
 import core_gateway
 import discord_internal_notify
+import discord_router_bridge
 import embed_builders
 import pathfinder_bridge
 import pathfinder_cli
@@ -521,11 +522,12 @@ async def _route_message(
     attachments: list | None = None,
     channel=None,
 ) -> "str | dict":
-    return await command_router.route_message(
+    return await discord_router_bridge.route_message(
         user_id=user_id,
         message=message,
         attachments=attachments,
         channel=channel,
+        command_router=command_router,
         handle_subcommand=handle_sentask_subcommand,
         call_core=_call_core,
         subcommand_help=SUBCOMMAND_HELP,
@@ -539,25 +541,28 @@ async def handle_sentask_subcommand(
     attachments: list | None = None,
     channel=None,
 ) -> "str | dict":
-    return await command_router.handle_subcommand(
+    return await discord_router_bridge.handle_subcommand(
         subcmd=subcmd,
         args=args,
         user_id=user_id,
         attachments=attachments,
         channel=channel,
-        pf_dispatch=_pf_dispatch,
-        call_core=_call_core,
-        call_core_note=_call_core_note,
-        call_core_inbox_list=_call_core_inbox_list,
-        call_core_inbox_classify=_call_core_inbox_classify,
-        call_core_inbox_discard=_call_core_inbox_discard,
-        call_core_sweep_start=_call_core_sweep_start,
-        call_core_sweep_status=_call_core_sweep_status,
-        is_admin=_is_admin,
-        note_closed_vocab=_NOTE_CLOSED_VOCAB,
-        plugin_prompts=_PLUGIN_PROMPTS,
-        subcommand_prompts=_SUBCOMMAND_PROMPTS,
-        subcommand_help=SUBCOMMAND_HELP,
+        command_router=command_router,
+        kwargs={
+            "pf_dispatch": _pf_dispatch,
+            "call_core": _call_core,
+            "call_core_note": _call_core_note,
+            "call_core_inbox_list": _call_core_inbox_list,
+            "call_core_inbox_classify": _call_core_inbox_classify,
+            "call_core_inbox_discard": _call_core_inbox_discard,
+            "call_core_sweep_start": _call_core_sweep_start,
+            "call_core_sweep_status": _call_core_sweep_status,
+            "is_admin": _is_admin,
+            "note_closed_vocab": _NOTE_CLOSED_VOCAB,
+            "plugin_prompts": _PLUGIN_PROMPTS,
+            "subcommand_prompts": _SUBCOMMAND_PROMPTS,
+            "subcommand_help": SUBCOMMAND_HELP,
+        },
     )
 
 
