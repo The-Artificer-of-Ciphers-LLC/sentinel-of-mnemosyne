@@ -10,6 +10,7 @@ os.environ.setdefault("SENTINEL_API_KEY", "test-key-for-pytest")
 from app.main import app
 from app.clients.pi_adapter import PiAdapterClient
 from app.config import settings
+from app.services.message_processing import MessageProcessor
 from app.services.provider_router import ProviderUnavailableError
 
 # Auth header required by APIKeyMiddleware for all POST /message requests
@@ -46,6 +47,12 @@ def default_app_state(mock_ai_provider):
     default_output_scanner = AsyncMock()
     default_output_scanner.scan = AsyncMock(return_value=(True, None))
     app.state.output_scanner = default_output_scanner
+    app.state.message_processor = MessageProcessor(
+        obsidian=mock_obsidian,
+        ai_provider=mock_ai_provider,
+        injection_filter=default_injection_filter,
+        output_scanner=default_output_scanner,
+    )
 
     return mock_obsidian
 

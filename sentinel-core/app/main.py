@@ -31,6 +31,7 @@ from app.routes.note import router as note_router
 from app.routes.status import router as status_router
 from app.services.injection_filter import InjectionFilter
 from sentinel_shared.model_profiles import get_profile
+from app.services.message_processing import MessageProcessor
 from app.services.model_registry import build_model_registry
 from app.services.model_selector import discover_active_model, strip_litellm_prefix
 from app.services.output_scanner import OutputScanner
@@ -208,6 +209,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     app.state.injection_filter = InjectionFilter()
     app.state.output_scanner = OutputScanner(_secondary_classifier)
+    app.state.message_processor = MessageProcessor(
+        obsidian=obsidian_client,
+        ai_provider=app.state.ai_provider,
+        injection_filter=app.state.injection_filter,
+        output_scanner=app.state.output_scanner,
+    )
     logger.info("Security services initialized: InjectionFilter, OutputScanner")
 
     # Module registry — in-memory; populated by POST /modules/register at runtime (Phase 27)
