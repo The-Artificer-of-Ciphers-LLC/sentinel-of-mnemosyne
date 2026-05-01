@@ -40,7 +40,6 @@ User identity: str(interaction.user.id) — Discord snowflake as string.
 Thread per invocation: each /sentask creates a fresh thread (never reuses).
 """
 import asyncio
-import base64
 import logging
 import os
 import re
@@ -57,6 +56,7 @@ import pathfinder_cli
 import pathfinder_harvest_adapter
 import pathfinder_ingest_adapter
 import pathfinder_npc_basic_adapter
+import pathfinder_npc_rich_adapter
 import pathfinder_rule_adapter
 import pathfinder_session_adapter
 import response_renderer
@@ -841,168 +841,21 @@ async def _pf_dispatch(
             if handled:
                 return npc_basic_response
 
-            if verb == "import":
-                # Attachment-based import (D-23, Pattern 6)
-                # Attachments come from on_message thread reply — not slash command
-                if not attachments:
-                    return (
-                        "Usage: `:pf npc import` — attach a Foundry actor list JSON file "
-                        "as a reply in this thread."
-                    )
-                attachment = attachments[0]
-                fetch_resp = await http_client.get(str(attachment.url), timeout=10.0)
-                fetch_resp.raise_for_status()
-                actors_json = fetch_resp.text
-                result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/npc/import",
-                    {"actors_json": actors_json, "user_id": user_id},
-                    http_client,
-                )
-                imported = result.get("imported_count", 0)
-                skipped = result.get("skipped", [])
-                lines = [f"Imported **{imported}** NPC(s)."]
-                if skipped:
-                    lines.append(f"Skipped (already exist): {', '.join(skipped)}")
-                return "\n".join(lines)
-
-            elif verb == "export":
-                npc_name = rest.strip()
-                if not npc_name:
-                    return "Usage: `:pf npc export <name>`"
-                result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/npc/export-foundry", {"name": npc_name}, http_client
-                )
-                import json as _json
-                json_bytes = _json.dumps(result["actor"], indent=2).encode("utf-8")
-                return {
-                    "type": "file",
-                    "content": f"Foundry actor JSON for **{npc_name}**:",
-                    "file_bytes": json_bytes,
-                    "filename": result["filename"],
-                }
-
-            elif verb == "token":
-                npc_name = rest.strip()
-                if not npc_name:
-                    return "Usage: `:pf npc token <name>`"
-                result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/npc/token", {"name": npc_name}, http_client
-                )
-                return result.get("prompt", "No prompt generated.")
-
-            elif verb == "token-image":
-                # Close the Midjourney loop (PLAN.md token-image extension).
-                # User replies in a thread with a PNG attached; bot fetches bytes,
-                # base64-encodes, POSTs to /npc/token-image which stores under
-                # mnemosyne/pf2e/tokens/<slug>.png and updates note frontmatter.
-                npc_name = rest.strip()
-                if not npc_name:
-                    return "Usage: `:pf npc token-image <name>` — attach a PNG as a reply in this thread."
-                if not attachments:
-                    return (
-                        f"Usage: `:pf npc token-image {npc_name}` — attach the Midjourney-"
-                        "generated PNG as a reply in this thread."
-                    )
-                attachment = attachments[0]
-                content_type = getattr(attachment, "content_type", "") or ""
-                if not content_type.startswith("image/"):
-                    return (
-                        f"Expected an image attachment (got `{content_type or 'unknown'}`). "
-                        "Midjourney exports PNG — re-attach the PNG and try again."
-                    )
-                fetch_resp = await http_client.get(str(attachment.url), timeout=30.0)
-                fetch_resp.raise_for_status()
-                image_bytes = fetch_resp.content
-                image_b64 = base64.b64encode(image_bytes).decode("ascii")
-                result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/npc/token-image",
-                    {"name": npc_name, "image_b64": image_b64},
-                    http_client,
-                )
-                return (
-                    f"Token image saved for **{npc_name}** "
-                    f"({result.get('size_bytes', len(image_bytes))} bytes) → `{result.get('token_path', '?')}`.\n"
-                    f"Run `:pf npc pdf {npc_name}` to see it embedded in the stat card."
-                )
-
-            elif verb == "stat":
-                npc_name = rest.strip()
-                if not npc_name:
-                    return "Usage: `:pf npc stat <name>`"
-                result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/npc/stat", {"name": npc_name}, http_client
-                )
-                embed = build_stat_embed(result)
-                return {
-                    "type": "embed",
-                    "content": "",
-                    "embed": embed,
-                }
-
-            elif verb == "pdf":
-                npc_name = rest.strip()
-                if not npc_name:
-                    return "Usage: `:pf npc pdf <name>`"
-                result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/npc/pdf", {"name": npc_name}, http_client
-                )
-                pdf_bytes = base64.b64decode(result["data_b64"])
-                return {
-                    "type": "file",
-                    "content": f"PDF stat card for **{npc_name}**:",
-                    "file_bytes": pdf_bytes,
-                    "filename": result["filename"],
-                }
-
-            elif verb == "say":
-                # DLG-01..03: in-character NPC dialogue with mood tracking.
-                # Format: `:pf npc say <Name>[,<Name>...] | <party_line>` (D-01).
-                # Empty party_line after pipe = scene-advance (D-02) — still valid.
-                if "|" not in rest:
-                    return "Usage: `:pf npc say <Name>[,<Name>...] | <party line>`"
-                names_raw, _, party_line = rest.partition("|")
-                names = [n.strip() for n in names_raw.split(",") if n.strip()]
-                if not names:
-                    return "Usage: `:pf npc say <Name>[,<Name>...] | <party line>`"
-
-                # D-11..D-14: walk thread history when channel is a discord.Thread.
-                # In unit tests the discord stub sets discord.Thread = object, so the
-                # isinstance check is False for test SimpleNamespace channels; tests
-                # pass channel=None and get history=[]. In production, channel is the
-                # live Thread and the walker pairs user says with bot quote replies.
-                history: list = []
-                if channel is not None and isinstance(channel, discord.Thread):
-                    try:
-                        bot_user = bot.user
-                        bot_user_id = bot_user.id if bot_user is not None else 0
-                        history = await _extract_thread_history(
-                            thread=channel,
-                            current_npc_names=set(names),
-                            bot_user_id=bot_user_id,
-                            limit=50,
-                        )
-                    except Exception as exc:
-                        logger.warning(
-                            "Thread history walk failed (degrading to empty): %s", exc
-                        )
-                        history = []
-
-                payload = {
-                    "names": names,
-                    "party_line": party_line.strip(),
-                    "user_id": user_id,
-                    "history": history,
-                }
-                result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/npc/say", payload, http_client
-                )
-                return _render_say_response(result)
-
-            else:
-                return (
-                    f"Unknown npc command `{verb}`. "
-                    "Available: `create`, `update`, `show`, `relate`, `import`, `export`, `token`, `token-image`, `stat`, `pdf`, `say`."
-                )
+            handled, npc_rich_response = await pathfinder_npc_rich_adapter.handle_npc_rich(
+                verb=verb,
+                rest=rest,
+                user_id=user_id,
+                attachments=attachments,
+                channel=channel,
+                bot_user=getattr(bot, "user", None),
+                sentinel_client=_sentinel_client,
+                http_client=http_client,
+                build_stat_embed=build_stat_embed,
+                render_say_response=_render_say_response,
+                extract_thread_history=_extract_thread_history,
+            )
+            if handled:
+                return npc_rich_response
 
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
