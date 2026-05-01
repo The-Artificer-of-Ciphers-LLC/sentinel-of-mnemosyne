@@ -5,14 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
-
 import tiktoken
 from litellm import BadRequestError as LiteLLMBadRequestError
 
 from app.services.context_budget_policy import ContextBudgetPolicy
 from app.services.message_prompt import SYSTEM_PROMPT
 from app.services.provider_router import ProviderUnavailableError
+from app.services.session_summary import build_session_summary
 from app.services.token_guard import TokenLimitError, check_token_limit
 
 logger = logging.getLogger(__name__)
@@ -102,7 +101,7 @@ class MessageProcessor:
         if not is_safe:
             raise MessageProcessingError("security_blocked", "Response blocked by security scanner")
 
-        summary_path, summary_content = self._build_session_summary(
+        summary_path, summary_content = build_session_summary(
             req.user_id,
             req.content,
             content,
@@ -179,24 +178,3 @@ class MessageProcessor:
         msg = str(exc).lower()
         return any(marker in msg for marker in _CONTEXT_LENGTH_MARKERS)
 
-    @staticmethod
-    def _build_session_summary(user_id: str, user_msg: str, ai_msg: str, model: str) -> tuple[str, str]:
-        now = datetime.now(timezone.utc)
-        date_str = now.strftime("%Y-%m-%d")
-        time_str = now.strftime("%H-%M-%S")
-        path = f"ops/sessions/{date_str}/{user_id}-{time_str}.md"
-        content = f"""---
-timestamp: {now.isoformat()}
-user_id: {user_id}
-model: {model}
----
-
-## User
-
-{user_msg}
-
-## Sentinel
-
-{ai_msg}
-"""
-        return path, content
