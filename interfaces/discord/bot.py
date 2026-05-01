@@ -56,6 +56,7 @@ import core_gateway
 import pathfinder_cli
 import pathfinder_harvest_adapter
 import pathfinder_ingest_adapter
+import pathfinder_npc_basic_adapter
 import pathfinder_rule_adapter
 import pathfinder_session_adapter
 import response_renderer
@@ -832,90 +833,18 @@ async def _pf_dispatch(
                     build_session_embed=build_session_embed,
                 )
 
-            if verb == "create":
-                # Split name | description on first pipe (D-05, Pitfall 5: maxsplit=1)
-                name, _, description = rest.partition("|")
-                if not name.strip():
-                    return "Usage: `:pf npc create <name> | <description>`"
-                payload = {
-                    "name": name.strip(),
-                    "description": description.strip(),
-                    "user_id": user_id,
-                }
-                result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/npc/create", payload, http_client
-                )
-                return (
-                    f"NPC **{result.get('name', name.strip())}** created.\n"
-                    f"Path: `{result.get('path', '?')}`\n"
-                    f"Ancestry: {result.get('ancestry', '?')} | Class: {result.get('class', '?')} | Level: {result.get('level', '?')}"
-                )
+            handled, npc_basic_response = await pathfinder_npc_basic_adapter.handle_npc_basic(
+                verb=verb,
+                rest=rest,
+                user_id=user_id,
+                sentinel_client=_sentinel_client,
+                http_client=http_client,
+                valid_relations=_VALID_RELATIONS,
+            )
+            if handled:
+                return npc_basic_response
 
-            elif verb == "update":
-                name, _, correction = rest.partition("|")
-                if not name.strip() or not correction.strip():
-                    return "Usage: `:pf npc update <name> | <correction>`"
-                payload = {
-                    "name": name.strip(),
-                    "correction": correction.strip(),
-                    "user_id": user_id,
-                }
-                result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/npc/update", payload, http_client
-                )
-                return f"NPC **{name.strip()}** updated. Fields changed: {', '.join(result.get('changed_fields', []))}"
-
-            elif verb == "show":
-                npc_name = rest.strip()
-                if not npc_name:
-                    return "Usage: `:pf npc show <name>`"
-                result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/npc/show", {"name": npc_name, "user_id": user_id}, http_client
-                )
-                # Build a simple text embed (Discord embed objects not possible in text response)
-                lines = [
-                    f"**{result.get('name', npc_name)}** "
-                    f"(Level {result.get('level', '?')} {result.get('ancestry', '?')} {result.get('class', '?')})",
-                    f"*{result.get('personality', '')}*",
-                    result.get('backstory', '')[:200],
-                ]
-                stats = result.get("stats") or {}
-                if stats:
-                    lines.append(
-                        f"AC {stats.get('ac', '—')} | HP {stats.get('hp', '—')} | "
-                        f"Fort {stats.get('fortitude', '—')} Ref {stats.get('reflex', '—')} Will {stats.get('will', '—')}"
-                    )
-                rels = result.get("relationships") or []
-                if rels:
-                    rel_text = ", ".join(f"{r.get('target')} ({r.get('relation')})" for r in rels)
-                    lines.append(f"Relationships: {rel_text}")
-                lines.append(f"*Mood: {result.get('mood', 'neutral')} | {result.get('path', '')}*")
-                return "\n".join(lines)
-
-            elif verb == "relate":
-                # Format: :pf npc relate <name> | <relation> | <target>
-                # Pipe separator allows multi-word NPC names and targets (CR-01 fix)
-                relate_parts = [p.strip() for p in rest.split("|")]
-                if len(relate_parts) < 3 or not all(relate_parts[:3]):
-                    return (
-                        "Usage: `:pf npc relate <npc-name> | <relation> | <target-npc-name>`\n"
-                        f"Valid relations: {', '.join(sorted(_VALID_RELATIONS))}"
-                    )
-                npc_name, relation, target = relate_parts[0], relate_parts[1], relate_parts[2]
-                # Bot-layer validation (D-13) — fail fast, don't call module
-                if relation not in _VALID_RELATIONS:
-                    return (
-                        f"`{relation}` is not a valid relation type.\n"
-                        f"Valid options: {', '.join(sorted(_VALID_RELATIONS))}"
-                    )
-                result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/npc/relate",
-                    {"name": npc_name, "relation": relation, "target": target},
-                    http_client,
-                )
-                return f"Relationship added: **{npc_name}** {relation} **{target}**."
-
-            elif verb == "import":
+            if verb == "import":
                 # Attachment-based import (D-23, Pattern 6)
                 # Attachments come from on_message thread reply — not slash command
                 if not attachments:
