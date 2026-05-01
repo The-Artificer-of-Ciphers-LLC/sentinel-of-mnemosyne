@@ -5,6 +5,19 @@ from __future__ import annotations
 PF_NOUNS = frozenset({"npc", "harvest", "rule", "session", "ingest", "cartosia"})
 
 
+def parse_pf_args(args: str) -> tuple[tuple[str, str, str, list[str]] | None, str | None]:
+    parts = args.strip().split(" ", 2)
+    if len(parts) >= 1 and parts[0].lower() == "cartosia" and len(parts) < 2:
+        return None, cartosia_usage_message()
+    if len(parts) < 2:
+        return None, usage_message()
+    noun, verb = parts[0].lower(), parts[1].lower()
+    rest = parts[2] if len(parts) > 2 else ""
+    if noun not in PF_NOUNS:
+        return None, unknown_noun_message(noun)
+    return (noun, verb, rest, parts), None
+
+
 def usage_message() -> str:
     return (
         "Usage: `:pf npc <create|update|show|relate|import|say> ...` "

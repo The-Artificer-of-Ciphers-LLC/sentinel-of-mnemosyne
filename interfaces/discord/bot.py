@@ -757,21 +757,11 @@ async def _pf_dispatch(
     (D-11..D-14). Callers that do not pass a channel (tests, slash path without a
     thread) get empty history — the branch degrades gracefully.
     """
-    parts = args.strip().split(" ", 2)
-    # 260427-czb: bare `:pf cartosia` returns its own usage string (the
-    # generic usage doesn't mention this verb because it's admin-gated).
-    if len(parts) >= 1 and parts[0].lower() == "cartosia" and len(parts) < 2:
-        return pathfinder_cli.cartosia_usage_message()
-    if len(parts) < 2:
-        # IN-01: derive the usage message from _PF_NOUNS so new nouns show up
-        # automatically. `npc` retains its verb list because it's the only
-        # multi-verb noun in the current surface.
-        return pathfinder_cli.usage_message()
-    noun, verb = parts[0].lower(), parts[1].lower()
-    rest = parts[2] if len(parts) > 2 else ""
-
-    if noun not in _PF_NOUNS:
-        return pathfinder_cli.unknown_noun_message(noun)
+    parsed, err = pathfinder_cli.parse_pf_args(args)
+    if err:
+        return err
+    assert parsed is not None
+    noun, verb, rest, parts = parsed
 
     try:
         async with httpx.AsyncClient() as http_client:
