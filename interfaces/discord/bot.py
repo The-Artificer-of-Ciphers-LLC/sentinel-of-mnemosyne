@@ -52,6 +52,7 @@ from shared.sentinel_client import SentinelCoreClient
 
 import command_router
 import core_gateway
+import embed_builders
 import pathfinder_cli
 import pathfinder_dispatch
 import pathfinder_error_mapper
@@ -659,81 +660,7 @@ def build_session_embed(data: dict) -> "discord.Embed":
 
 
 def build_ruling_embed(data: dict) -> "discord.Embed":
-    """Build a Discord Embed from POST /modules/pathfinder/rule/query response (D-08, D-09).
-
-    Input shape (D-08):
-      {
-        "question": str, "answer": str, "why": str,
-        "source": str | None, "citations": list[dict],
-        "marker": "source" | "generated" | "declined",
-        "topic": str | None,
-        "reused": bool (optional), "reuse_note": str (optional),
-      }
-
-    Renders four logical fields:
-      * title = question (truncated to 250 chars)
-      * description = (reuse_note italic if reused) + banner + answer
-      * Why field (always, inline=False)
-      * Source field (inline=False, only when source non-null)
-      * Citations field (inline=False, only when citations non-empty)
-      * footer = "topic: <topic> | ORC license (Paizo) — Foundry pf2e"
-
-    Color:
-      * dark_green — marker="source"
-      * dark_gold  — marker="generated"
-      * red        — marker="declined"
-
-    L-5: Colors rely on discord.Color.{dark_green, dark_gold, red} — all three
-    are available in interfaces/discord/tests/conftest.py's Color stub (Wave 0
-    added dark_gold + red). This function does NOT stub or shim colors itself.
-    """
-    marker = data.get("marker", "generated")
-    question = data.get("question", "") or ""
-    answer = data.get("answer", "") or ""
-    why = data.get("why", "") or ""
-    source_str = data.get("source")
-    citations = data.get("citations", []) or []
-    reused = bool(data.get("reused", False))
-    reuse_note = data.get("reuse_note", "") or ""
-    topic = data.get("topic") or "?"
-
-    title = question[:250] if question else "Rules Ruling"
-
-    description_parts: list[str] = []
-    if reused and reuse_note:
-        description_parts.append(f"_{reuse_note}_")
-    if marker == "generated":
-        description_parts.append("⚠ **[GENERATED — verify]**")
-    elif marker == "declined":
-        description_parts.append("🚫 PF1/pre-Remaster query declined")
-    if answer:
-        description_parts.append(answer)
-    description = "\n\n".join(description_parts)[:4000]
-
-    color = {
-        "source": discord.Color.dark_green(),
-        "generated": discord.Color.dark_gold(),
-        "declined": discord.Color.red(),
-    }.get(marker, discord.Color.dark_gold())
-
-    embed = discord.Embed(title=title, description=description, color=color)
-    if why:
-        embed.add_field(name="Why", value=why[:1024], inline=False)
-    if source_str:
-        embed.add_field(name="Source", value=source_str[:1024], inline=False)
-    if citations:
-        cite_lines: list[str] = []
-        for c in citations[:3]:  # cap at 3 for embed space
-            line = f"• {c.get('book', '?')}"
-            if c.get("page"):
-                line += f" p. {c['page']}"
-            line += f" — {c.get('section', '?')}"
-            if c.get("url"):
-                line += f" | {c['url']}"
-            cite_lines.append(line)
-        embed.add_field(name="Citations", value="\n".join(cite_lines)[:1024], inline=False)
-    embed.set_footer(text=f"topic: {topic} | ORC license (Paizo) — Foundry pf2e")
-    return embed
+    return embed_builders.build_ruling_embed(data)
 
 
 async def _pf_dispatch(
