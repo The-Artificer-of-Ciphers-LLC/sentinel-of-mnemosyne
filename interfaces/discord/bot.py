@@ -52,6 +52,7 @@ from shared.sentinel_client import SentinelCoreClient
 
 import command_router
 import core_gateway
+import discord_internal_notify
 import embed_builders
 import pathfinder_cli
 import pathfinder_dispatch
@@ -657,7 +658,7 @@ class SentinelBot(discord.Client):
         except Exception:
             return web.Response(status=400)
 
-        channel_id = NOTIFY_CHANNEL_ID or (min(ALLOWED_CHANNEL_IDS) if ALLOWED_CHANNEL_IDS else None)  # WR-04 fix: explicit var first, fallback to oldest allowed
+        channel_id = discord_internal_notify.resolve_notify_channel_id(NOTIFY_CHANNEL_ID, ALLOWED_CHANNEL_IDS)  # WR-04 fix: explicit var first, fallback to oldest allowed
         if channel_id is None:
             logger.warning("_handle_internal_notify: no DISCORD_ALLOWED_CHANNELS configured")
             return web.Response(status=500)
@@ -674,11 +675,7 @@ class SentinelBot(discord.Client):
             embed = build_foundry_roll_embed(data)
         elif event_type == "chat":
             # WR-03 fix: forward chat events to Discord (Phase 35 MVP)
-            embed = discord.Embed(
-                title=f"[Chat] {data.get('actor_name', 'DM')}",
-                description=(data.get("content") or "")[:4000],
-                color=discord.Color.blue(),
-            )
+            embed = discord_internal_notify.build_chat_embed(data)
         else:
             logger.info("_handle_internal_notify: unsupported event_type %r — ignoring", event_type)
             return web.Response(status=200)
