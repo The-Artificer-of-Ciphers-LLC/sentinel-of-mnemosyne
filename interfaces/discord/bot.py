@@ -54,6 +54,7 @@ from shared.sentinel_client import SentinelCoreClient
 import command_router
 import core_gateway
 import pathfinder_cli
+import pathfinder_harvest_adapter
 import pathfinder_rule_adapter
 import response_renderer
 
@@ -787,20 +788,13 @@ async def _pf_dispatch(
                 # mismatch between that and the fixed-width len() slice silently
                 # corrupted the name. split(" ", 2) already produced the post-noun
                 # remainder cleanly, so use that.
-                harvest_args = " ".join(parts[1:]).strip()
-                names = [n.strip() for n in harvest_args.split(",") if n.strip()]
-                if not names:
-                    return "Usage: `:pf harvest <Name>[,<Name>...]`"
-                result = await _sentinel_client.post_to_module(
-                    "modules/pathfinder/harvest",
-                    {"names": names, "user_id": user_id},
-                    http_client,
+                return await pathfinder_harvest_adapter.handle_harvest(
+                    parts=parts,
+                    user_id=user_id,
+                    sentinel_client=_sentinel_client,
+                    http_client=http_client,
+                    build_harvest_embed=build_harvest_embed,
                 )
-                return {
-                    "type": "embed",
-                    "content": "",
-                    "embed": build_harvest_embed(result),
-                }
 
             if noun in ("cartosia", "ingest"):
                 # 260427-cui: `:pf ingest <subfolder>` is the generic verb; `:pf cartosia`
