@@ -51,6 +51,7 @@ from discord import app_commands
 from shared.sentinel_client import SentinelCoreClient
 
 import command_router
+import core_call_bridge
 import core_gateway
 import discord_internal_notify
 import discord_router_bridge
@@ -209,12 +210,11 @@ _PLUGIN_PROMPTS: dict[str, str] = {
 
 
 async def _call_core(user_id: str, message: str) -> str:
-    """
-    Route message through the shared SentinelCoreClient.
-    Creates a per-call httpx.AsyncClient as the client owns no persistent connection state.
-    """
-    async with httpx.AsyncClient() as http_client:
-        return await _sentinel_client.send_message(user_id, message, http_client)
+    return await core_call_bridge.call_core_message(
+        sent_client=_sentinel_client,
+        user_id=user_id,
+        message=message,
+    )
 
 
 # --- 260427-vl1: note-import + inbox + vault-sweep helpers ---
