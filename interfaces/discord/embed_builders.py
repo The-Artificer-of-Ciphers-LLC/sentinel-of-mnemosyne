@@ -5,6 +5,45 @@ from __future__ import annotations
 import discord
 
 
+def build_stat_embed(data: dict) -> "discord.Embed":
+    fields = data.get("fields", {})
+    stats = data.get("stats") or {}
+    embed = discord.Embed(
+        title=(
+            f"{fields.get('name', '?')} "
+            f"(Level {fields.get('level', '?')} "
+            f"{fields.get('ancestry', '')} {fields.get('class', '')})"
+        ),
+        description=fields.get("personality", ""),
+        color=discord.Color.dark_gold(),
+    )
+    if stats:
+        embed.add_field(name="AC", value=str(stats.get("ac", "—")), inline=True)
+        embed.add_field(name="HP", value=str(stats.get("hp", "—")), inline=True)
+        embed.add_field(name="​", value="​", inline=True)
+        embed.add_field(name="Fort", value=str(stats.get("fortitude", "—")), inline=True)
+        embed.add_field(name="Ref", value=str(stats.get("reflex", "—")), inline=True)
+        embed.add_field(name="Will", value=str(stats.get("will", "—")), inline=True)
+        embed.add_field(name="Speed", value=f"{stats.get('speed', '—')} ft.", inline=False)
+        skills = stats.get("skills") or {}
+        if skills:
+            if isinstance(skills, dict):
+                skill_text = ", ".join(
+                    f"{k.capitalize()} +{v}" for k, v in skills.items()
+                )
+            else:
+                skill_text = str(skills)
+            embed.add_field(
+                name="Skills",
+                value=skill_text[:900] + ("..." if len(skill_text) > 900 else ""),
+                inline=False,
+            )
+        if stats.get("perception") is not None:
+            embed.add_field(name="Perception", value=f"+{stats['perception']}", inline=True)
+    embed.set_footer(text=f"Mood: {fields.get('mood', 'neutral')}")
+    return embed
+
+
 def build_ruling_embed(data: dict) -> "discord.Embed":
     marker = data.get("marker", "generated")
     question = data.get("question", "") or ""
