@@ -17,5 +17,7 @@ async def test_dispatch_pf_returns_parse_error_directly():
         valid_relations=frozenset(),
         adapters={},
         builders={},
+        map_http_status=lambda s, d: f"{s}:{d}",
+        log_error=lambda _m: None,
     )
     assert out == "ERR"
