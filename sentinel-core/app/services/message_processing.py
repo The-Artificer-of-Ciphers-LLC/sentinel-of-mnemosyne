@@ -11,6 +11,7 @@ import tiktoken
 from litellm import BadRequestError as LiteLLMBadRequestError
 
 from app.services.context_budget_policy import ContextBudgetPolicy
+from app.services.message_prompt import SYSTEM_PROMPT
 from app.services.provider_router import ProviderUnavailableError
 from app.services.token_guard import TokenLimitError, check_token_limit
 
@@ -65,27 +66,7 @@ class MessageProcessor:
 
     async def process(self, req: MessageRequest) -> MessageResult:
         budgets = self._budget_policy.allocate(req.context_window)
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are the Sentinel — the user's 2nd brain. "
-                    "You maintain their context via an Obsidian vault that the system "
-                    "writes to automatically; the user does not need to manage it. "
-                    "\n\n"
-                    "Respond like a friend who has been listening. When the user shares "
-                    "a fact, milestone, status update, or reflection, acknowledge it "
-                    "naturally and briefly — usually one or two sentences. Ask a relevant "
-                    "follow-up only if it would feel natural. Match their tone and length.\n\n"
-                    "Never lecture the user about how to file, organize, link, tag, "
-                    "document, summarize, follow up on, plan, or process information. "
-                    "The system handles persistence and structure. You only respond. "
-                    "Do not produce numbered procedural how-to lists unless the user "
-                    "explicitly asks for instructions.\n\n"
-                    "Do not describe internal tools, system internals, or implementation details."
-                ),
-            }
-        ]
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
         await self._append_hot_tier(messages, req, budgets.sessions_budget)
         await self._append_warm_tier(messages, req, budgets.search_budget)
