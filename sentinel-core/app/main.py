@@ -209,8 +209,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     app.state.injection_filter = InjectionFilter()
     app.state.output_scanner = OutputScanner(_secondary_classifier)
-    app.state.message_processor = MessageProcessor(
-        obsidian=obsidian_client,
+    app.state.message_processor_factory = lambda: MessageProcessor(
+        obsidian=app.state.obsidian_client,
         ai_provider=app.state.ai_provider,
         injection_filter=app.state.injection_filter,
         output_scanner=app.state.output_scanner,

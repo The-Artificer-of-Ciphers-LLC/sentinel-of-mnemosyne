@@ -23,12 +23,16 @@ async def post_message(
     request: Request,
     background_tasks: BackgroundTasks,
 ) -> ResponseEnvelope:
-    processor = MessageProcessor(
-        obsidian=request.app.state.obsidian_client,
-        ai_provider=request.app.state.ai_provider,
-        injection_filter=request.app.state.injection_filter,
-        output_scanner=request.app.state.output_scanner,
-    )
+    factory = getattr(request.app.state, "message_processor_factory", None)
+    if callable(factory):
+        processor = factory()
+    else:
+        processor = MessageProcessor(
+            obsidian=request.app.state.obsidian_client,
+            ai_provider=request.app.state.ai_provider,
+            injection_filter=request.app.state.injection_filter,
+            output_scanner=request.app.state.output_scanner,
+        )
     stop_sequences = getattr(request.app.state, "lmstudio_stop_sequences", None) or None
 
     try:
