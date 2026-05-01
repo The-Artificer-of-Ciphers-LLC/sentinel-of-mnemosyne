@@ -54,6 +54,7 @@ import command_router
 import core_gateway
 import pathfinder_cli
 import pathfinder_dispatch
+import pathfinder_error_mapper
 import pathfinder_harvest_adapter
 import pathfinder_ingest_adapter
 import pathfinder_npc_basic_adapter
@@ -812,12 +813,10 @@ async def _pf_dispatch(
             detail = exc.response.json().get("detail", exc.response.text)
         except Exception:
             detail = exc.response.text
-        if status == 409:
-            return f"NPC already exists: {detail}"
-        if status == 404:
-            return "NPC not found."
-        logger.error("Module returned HTTP %d: %s", status, detail)
-        return f"Pathfinder module error (HTTP {status}): {detail}"
+        mapped = pathfinder_error_mapper.map_http_status(status, str(detail))
+        if status not in (404, 409):
+            logger.error("Module returned HTTP %d: %s", status, detail)
+        return mapped
     except httpx.ConnectError:
         logger.error("Cannot reach sentinel-core for pf dispatch")
         return "Cannot reach the Sentinel. Is sentinel-core running?"
