@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from app.models import MessageEnvelope, ResponseEnvelope
+from app.services.message_error_mapper import to_http_status
 from app.services.message_processing import (
     MessageProcessingError,
     MessageRequest,
@@ -46,15 +47,7 @@ async def post_message(
             )
         )
     except MessageProcessingError as exc:
-        if exc.code == "context_overflow":
-            raise HTTPException(status_code=422, detail=str(exc))
-        if exc.code == "provider_unavailable":
-            raise HTTPException(status_code=503, detail=str(exc))
-        if exc.code == "provider_misconfigured":
-            raise HTTPException(status_code=502, detail=str(exc))
-        if exc.code == "security_blocked":
-            raise HTTPException(status_code=500, detail=str(exc))
-        raise HTTPException(status_code=502, detail=str(exc))
+        raise HTTPException(status_code=to_http_status(exc.code), detail=str(exc))
 
     _schedule_session_summary(background_tasks, request, result)
     return ResponseEnvelope(content=result.content, model=result.model)
