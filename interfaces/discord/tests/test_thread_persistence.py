@@ -223,8 +223,7 @@ async def test_on_message_owner_id_fallback():
 
     try:
         with patch("bot._route_message", new=AsyncMock(return_value="response")):
-            with patch("bot.asyncio") as mock_asyncio:
-                mock_asyncio.ensure_future = MagicMock()
+            with patch("bot.asyncio.create_task", new=MagicMock(side_effect=lambda c: c.close())):
                 await bot.bot.on_message(mock_message)
     finally:
         bot.bot.user = original_user

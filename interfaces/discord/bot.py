@@ -1550,7 +1550,7 @@ class SentinelBot(discord.Client):
         # restarts populate SENTINEL_THREAD_IDS from the Obsidian cache.
         if thread.id not in SENTINEL_THREAD_IDS:
             SENTINEL_THREAD_IDS.add(thread.id)
-            asyncio.ensure_future(_persist_thread_id(thread.id))
+            asyncio.create_task(_persist_thread_id(thread.id))
 
         user_id = str(message.author.id)
         logger.info("Thread reply from %s in thread %s: %s", user_id, message.channel.id, message.content[:60])
