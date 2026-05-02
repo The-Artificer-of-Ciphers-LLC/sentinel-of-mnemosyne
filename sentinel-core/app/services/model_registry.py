@@ -18,6 +18,7 @@ from pathlib import Path
 
 import httpx
 
+from app.clients.anthropic_registry import fetch_anthropic_models
 from app.clients.litellm_provider import get_context_window_from_lmstudio
 from app.config import Settings
 from sentinel_shared.model_profiles import get_profile
