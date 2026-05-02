@@ -33,7 +33,11 @@ from app.services.injection_filter import InjectionFilter
 from sentinel_shared.model_profiles import get_profile
 from app.services.message_processing import MessageProcessor
 from app.services.model_registry import build_model_registry
-from app.services.model_selector import discover_active_model, strip_litellm_prefix
+from app.services.model_selector import (
+    discover_active_model,
+    probe_embedding_model_loaded,
+    strip_litellm_prefix,
+)
 from app.services.output_scanner import OutputScanner
 from app.services.provider_router import ProviderRouter
 
@@ -264,6 +268,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.note_classifier_fn = _classify_note
     app.state.note_embedder_fn = _embedder_fn
 
+    # 260502-1zv D-02: probe LM Studio for the embedding model state at startup.
+    # Graceful degrade — never raises. Surfaces via /health and via WARNING log
+    # so operators see the problem at boot rather than via opaque
+    # BadRequestError when the vault sweeper / note classifier first runs.
+    embedding_loaded = await probe_embedding_model_loaded(
+        http_client,
+        settings.lmstudio_base_url,
+        settings.embedding_model,
+    )
+    app.state.embedding_model_loaded = embedding_loaded
+    if embedding_loaded:
+        logger.info("Embedding model `%s` loaded ✓", settings.embedding_model)
+    else:
+        logger.warning(
+            "Embedding model `%s` NOT loaded on LM Studio — vault sweeper / "
+            "note classifier will fail until you `lms load %s`.",
+            settings.embedding_model,
+            settings.embedding_model,
+        )
+
     logger.info("Sentinel Core ready.")
     yield
 
@@ -301,15 +325,32 @@ app.include_router(note_router)
 
 @app.get("/health")
 async def health(request: Request) -> JSONResponse:
-    """Health check — always 200. Reports obsidian status as non-blocking field."""
+    """Health check — always 200. Reports obsidian + embedding-model state
+    as non-blocking fields. (260502-1zv D-02 — embedding_model field added.)"""
     obsidian_ok = False
     try:
         obsidian_ok = await request.app.state.obsidian_client.check_health()
     except Exception:
         pass
+
+    # Re-run the probe on each /health call rather than serving a cached
+    # boot-time result — operators may load the model after startup, and a
+    # stale "not_loaded" would mislead them. The probe itself is graceful
+    # and bounded by a 5s timeout in probe_embedding_model_loaded.
+    embedding_loaded = False
+    try:
+        embedding_loaded = await probe_embedding_model_loaded(
+            request.app.state.http_client,
+            settings.lmstudio_base_url,
+            settings.embedding_model,
+        )
+    except Exception:
+        pass
+
     return JSONResponse(
         {
             "status": "ok",
             "obsidian": "ok" if obsidian_ok else "degraded",
+            "embedding_model": "loaded" if embedding_loaded else "not_loaded",
         }
     )

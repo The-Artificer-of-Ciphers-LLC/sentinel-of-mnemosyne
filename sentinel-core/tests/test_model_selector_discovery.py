@@ -2,7 +2,11 @@
 import pytest
 import httpx
 
-from app.services.model_selector import discover_active_model, _reset_cache_for_tests
+from app.services.model_selector import (  # noqa: F401 — probe used in tests below
+    _reset_cache_for_tests,
+    discover_active_model,
+    probe_embedding_model_loaded,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -157,3 +161,143 @@ async def test_discovery_no_double_prefix_with_slash_in_discovered(monkeypatch):
         result = await discover_active_model(s, client)
     assert result == "openai/already-prefixed"
     assert result.count("openai/") == 1
+
+
+# --- 260502-1zv D-02: probe_embedding_model_loaded ---
+
+
+async def test_probe_embedding_loaded_true_when_state_loaded():
+    """LM Studio /api/v0/models returns the configured embedding model with
+    state="loaded" and type="embeddings" → probe returns True."""
+    captured: dict[str, str] = {}
+
+    def handler(request):
+        captured["url"] = str(request.url)
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": "some-llm",
+                        "type": "llm",
+                        "state": "loaded",
+                    },
+                    {
+                        "id": "text-embedding-nomic-embed-text-v1.5",
+                        "type": "embeddings",
+                        "state": "loaded",
+                    },
+                ]
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await probe_embedding_model_loaded(
+            client,
+            "http://test-lmstudio/v1",
+            "text-embedding-nomic-embed-text-v1.5",
+        )
+
+    assert result is True
+    # Probe hits /api/v0/models, not /v1/models
+    assert captured["url"].endswith("/api/v0/models")
+
+
+async def test_probe_embedding_loaded_false_when_state_not_loaded():
+    """Same fixture but state="not-loaded" → probe returns False."""
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": "text-embedding-nomic-embed-text-v1.5",
+                        "type": "embeddings",
+                        "state": "not-loaded",
+                    },
+                ]
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await probe_embedding_model_loaded(
+            client,
+            "http://test-lmstudio/v1",
+            "text-embedding-nomic-embed-text-v1.5",
+        )
+
+    assert result is False
+
+
+async def test_probe_embedding_loaded_false_on_http_error():
+    """httpx.RequestError during probe → False (graceful degrade — never raises)."""
+    def raise_connect(request):
+        raise httpx.ConnectError("refused")
+
+    transport = httpx.MockTransport(raise_connect)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await probe_embedding_model_loaded(
+            client,
+            "http://test-lmstudio/v1",
+            "text-embedding-nomic-embed-text-v1.5",
+        )
+
+    assert result is False
+
+
+async def test_probe_embedding_strips_openai_prefix():
+    """Caller may pass an openai/-prefixed id; probe strips before comparing
+    against LM Studio's bare id field."""
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": "text-embed-x",
+                        "type": "embeddings",
+                        "state": "loaded",
+                    },
+                ]
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await probe_embedding_model_loaded(
+            client,
+            "http://test-lmstudio/v1",
+            "openai/text-embed-x",
+        )
+
+    assert result is True
+
+
+async def test_probe_embedding_loaded_false_when_only_llm_loaded():
+    """A loaded LLM with the same id but type='llm' must not satisfy the
+    embedding probe — both type AND state must match."""
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": "text-embedding-nomic-embed-text-v1.5",
+                        "type": "llm",
+                        "state": "loaded",
+                    },
+                ]
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await probe_embedding_model_loaded(
+            client,
+            "http://test-lmstudio/v1",
+            "text-embedding-nomic-embed-text-v1.5",
+        )
+
+    assert result is False

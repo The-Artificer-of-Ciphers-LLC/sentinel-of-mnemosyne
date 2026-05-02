@@ -258,3 +258,59 @@ async def discover_active_model(
 
     logger.info("Auto-selected model: %s", chosen)
     return _prefixed(chosen)
+
+
+async def probe_embedding_model_loaded(
+    http_client: httpx.AsyncClient,
+    lmstudio_base_url: str,
+    configured_embedding_model: str,
+) -> bool:
+    """Return True iff the configured embedding model is loaded in LM Studio.
+
+    Queries LM Studio's REST API v0 (``/api/v0/models``) which exposes a
+    ``state`` field (``"loaded"`` / ``"not-loaded"``) and a ``type`` field
+    (``"llm"`` / ``"embeddings"`` / ``"vlm"``) per entry. The OpenAI-compat
+    ``/v1/models`` endpoint omits both, so it can't answer this question.
+
+    Graceful degrade: any HTTP failure, JSON-decode failure, missing key,
+    or schema mismatch returns False rather than raising. Startup probes
+    must never fail the app over a model-state check (mirrors
+    sentinel/persona.md probe pattern from commit 27d5ee9).
+
+    Strips a leading ``openai/`` from ``configured_embedding_model`` so the
+    caller can pass either the bare id or the litellm-prefixed string and
+    still get a meaningful comparison against LM Studio's bare id field.
+
+    260502-1zv D-02.
+    """
+    bare_id = configured_embedding_model
+    if bare_id.startswith("openai/"):
+        bare_id = bare_id[len("openai/"):]
+
+    # /v1 → /api/v0 — same strip pattern as get_context_window_from_lmstudio.
+    api_base = lmstudio_base_url.rstrip("/").removesuffix("/v1")
+    url = f"{api_base}/api/v0/models"
+
+    try:
+        resp = await http_client.get(url, timeout=5.0)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as exc:
+        logger.debug("Embedding probe failed (%s): %s", url, exc)
+        return False
+
+    try:
+        entries = data.get("data", []) if isinstance(data, dict) else []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            if (
+                entry.get("state") == "loaded"
+                and entry.get("type") == "embeddings"
+                and entry.get("id") == bare_id
+            ):
+                return True
+        return False
+    except Exception as exc:
+        logger.debug("Embedding probe schema mismatch: %s", exc)
+        return False
