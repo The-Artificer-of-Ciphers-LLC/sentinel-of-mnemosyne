@@ -30,7 +30,16 @@ def default_app_state(mock_ai_provider):
     mock_obsidian.get_recent_sessions.return_value = []
     mock_obsidian.write_session_summary.return_value = None
     mock_obsidian.search_vault.return_value = []
-    mock_obsidian.read_self_context.return_value = ""
+
+    # Per-path responses for read_self_context: persona.md returns a test
+    # persona so Task 4's vault-sourced persona path is exercised; all other
+    # paths default to "" (empty), matching pre-refactor expectations.
+    def _read_self_context_side_effect(path):
+        if path == "sentinel/persona.md":
+            return "You are the test Sentinel."
+        return ""
+
+    mock_obsidian.read_self_context.side_effect = _read_self_context_side_effect
     app.state.obsidian_client = mock_obsidian
     app.state.ai_provider = mock_ai_provider
     app.state.context_window = 8192
@@ -82,19 +91,27 @@ def lmstudio_available_mock(mock_lmstudio_models_response):
     return httpx.MockTransport(handler)
 
 
-async def test_post_message_uses_message_processor_factory_when_present(mock_ai_provider):
-    """Route uses app.state.message_processor_factory seam when provided."""
-    class _FakeProcessor:
+async def test_post_message_uses_app_state_processor(mock_ai_provider):
+    """Route reads app.state.message_processor directly (singleton seam).
+
+    Overwriting app.state.message_processor with a concrete stub causes
+    POST /message to delegate to that stub's process() method. This protects
+    the new attribute seam that replaced the factory lambda in 260502-0vr."""
+    captured_requests = []
+
+    class _StubProcessor:
         async def process(self, req):
+            captured_requests.append(req)
             from app.services.message_processing import MessageResult
             return MessageResult(
-                content="factory response",
+                content="stub response",
                 model="test-model",
                 summary_path="ops/sessions/2026-01-01/u-00-00-00.md",
-                summary_content="x",
+                summary_content="stub summary",
             )
 
-    app.state.message_processor_factory = lambda: _FakeProcessor()
+    stub = _StubProcessor()
+    app.state.message_processor = stub
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(
@@ -104,7 +121,12 @@ async def test_post_message_uses_message_processor_factory_when_present(mock_ai_
         )
 
     assert resp.status_code == 200
-    assert resp.json()["content"] == "factory response"
+    assert resp.json()["content"] == "stub response"
+    # Strict behavioral assertion: the route invoked the stub (not the
+    # autouse-fixture LazyTestProcessor) and forwarded the envelope content.
+    assert len(captured_requests) == 1
+    assert captured_requests[0].content == "hello"
+    assert captured_requests[0].user_id == "test"
 
 
 async def test_post_message_returns_response_envelope(mock_ai_provider):
