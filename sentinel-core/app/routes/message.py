@@ -1,11 +1,10 @@
 """POST /message route adapter."""
 
-import logging
-
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from app.models import MessageEnvelope, ResponseEnvelope
 from app.services.message_error_mapper import to_http_status
+from app.services.message_persistence import write_session_summary_best_effort
 from app.services.message_processing import (
     MessageProcessingError,
     MessageRequest,
@@ -14,7 +13,6 @@ from app.services.message_processing import (
     SEARCH_SCORE_THRESHOLD,
 )
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -55,16 +53,8 @@ async def post_message(
 
 def _schedule_session_summary(background_tasks: BackgroundTasks, request: Request, result: MessageResult) -> None:
     background_tasks.add_task(
-        _write_session_summary,
+        write_session_summary_best_effort,
         request.app.state.obsidian_client,
         result.summary_path,
         result.summary_content,
     )
-
-
-async def _write_session_summary(obsidian, path: str, content: str) -> None:
-    try:
-        await obsidian.write_session_summary(path, content)
-        logger.debug("Session summary written: %s", path)
-    except Exception as exc:
-        logger.warning("Session summary write failed for %s: %s", path, exc)
