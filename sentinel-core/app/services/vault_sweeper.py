@@ -15,7 +15,6 @@ from __future__ import annotations
 import base64
 import logging
 import re
-import secrets
 from datetime import datetime, timezone
 from typing import AsyncIterator, Awaitable, Callable
 
@@ -265,48 +264,10 @@ async def walk_vault(client, root: str = "") -> AsyncIterator[str]:
                 yield full
 
 
-# --- Trash move ---
-
-
-async def move_to_trash(
-    client, src_path: str, reason: str, sweep_at: str | None = None
-) -> str:
-    """PUT to _trash/{date}/{filename}, then DELETE src. Returns the trash path."""
-    today = _today_str()
-    filename = src_path.rsplit("/", 1)[-1]
-    dst = f"_trash/{today}/{filename}"
-
-    # Collision check
-    existing = await client.read_note(dst)
-    if existing:
-        suffix = secrets.token_hex(4)
-        stem, _, ext = filename.rpartition(".")
-        if ext:
-            dst = f"_trash/{today}/{stem}-{suffix}.{ext}"
-        else:
-            dst = f"_trash/{today}/{filename}-{suffix}"
-
-    body = await client.read_note(src_path)
-    fm, rest = split_frontmatter(body)
-    fm = dict(fm or {})
-    fm["original_path"] = src_path
-    fm["reason"] = reason
-    fm["sweep_at"] = sweep_at or _iso_utc()
-    annotated = join_frontmatter(fm, rest)
-
-    await client.write_note(dst, annotated)
-    try:
-        await client.delete_note(src_path)
-    except Exception as exc:
-        # Per RESEARCH §4: copy succeeded, delete failed. Log + continue;
-        # duplicate is recoverable, lost data is not.
-        logger.warning(
-            "move_to_trash: delete failed for %s after copy to %s: %s",
-            src_path,
-            dst,
-            exc,
-        )
-    return dst
+# --- Trash move (migrated to ObsidianVault.move_to_trash in 260502-cky) ---
+# The sweeper no longer owns trash/relocate/lock primitives. Decision logic
+# below (is_in_topic_dir, propose_topic_move, run_sweep orchestration)
+# stays here; I/O goes through the injected ``vault``.
 
 
 # --- Topic-folder move (misplaced note → correct topic dir) ---
@@ -329,67 +290,6 @@ def is_in_topic_dir(path: str, topic_dir: str) -> bool:
     return path.startswith(family_root)
 
 
-async def move_to_topic_folder(
-    client,
-    src_path: str,
-    topic: str,
-    sweep_at: str | None = None,
-    *,
-    today: str | None = None,
-) -> str:
-    """PUT to ``{topic_dir}/{original_filename}``, then DELETE src.
-
-    Preserves the source filename — the sweeper relocates existing notes
-    rather than renaming them. Mirrors ``move_to_trash`` shape: collision
-    handler appends an 8-char hex suffix; provenance frontmatter records
-    ``original_path`` and ``topic_moved_at``.
-
-    Returns the destination path. Caller must have already classified
-    ``src_path`` as ``topic`` and confirmed the path is misplaced via
-    ``is_in_topic_dir``.
-    """
-    from app.services.note_classifier import topic_dir_for
-
-    topic_dir = topic_dir_for(topic, today=today)
-    if not topic_dir:
-        # noise/unsure shouldn't reach here; defensive guard
-        raise ValueError(f"topic {topic!r} has no canonical directory")
-
-    filename = src_path.rsplit("/", 1)[-1]
-    dst = f"{topic_dir}/{filename}"
-
-    # Collision check
-    existing = await client.read_note(dst)
-    if existing:
-        suffix = secrets.token_hex(4)
-        stem, _, ext = filename.rpartition(".")
-        if ext:
-            dst = f"{topic_dir}/{stem}-{suffix}.{ext}"
-        else:
-            dst = f"{topic_dir}/{filename}-{suffix}"
-
-    body = await client.read_note(src_path)
-    fm, rest = split_frontmatter(body)
-    fm = dict(fm or {})
-    fm["original_path"] = src_path
-    fm["topic_moved_at"] = sweep_at or _iso_utc()
-    annotated = join_frontmatter(fm, rest)
-
-    await client.write_note(dst, annotated)
-    try:
-        await client.delete_note(src_path)
-    except Exception as exc:
-        # Per move_to_trash precedent: copy succeeded, delete failed.
-        # Log + continue; duplicate is recoverable, lost data is not.
-        logger.warning(
-            "move_to_topic_folder: delete failed for %s after copy to %s: %s",
-            src_path,
-            dst,
-            exc,
-        )
-    return dst
-
-
 def propose_topic_move(
     src_path: str, topic: str, *, today: str | None = None
 ) -> str | None:
@@ -410,38 +310,7 @@ def propose_topic_move(
     return f"{topic_dir}/{filename}"
 
 
-# --- Lockfile ---
-
-
-async def acquire_lock(client, now: datetime | None = None) -> bool:
-    """Return True if lock acquired; False if a fresh lock exists.
-
-    Stale lockfiles (mtime older than STALE_LOCK_SECONDS) are taken over with
-    a WARNING log per RESEARCH Pitfall 1.
-    """
-    now = now or datetime.now(timezone.utc)
-    existing = await client.read_note(LOCKFILE_PATH)
-    if existing.strip():
-        fm, _ = split_frontmatter(existing)
-        started = _parse_iso(str(fm.get("started_at", "")))
-        if started is not None:
-            age = (now - started).total_seconds()
-            if age < STALE_LOCK_SECONDS:
-                return False
-            logger.warning(
-                "acquire_lock: stale lockfile (age %.0fs) — taking over", age
-            )
-    fm = {"started_at": _iso_utc(now), "host": "sentinel-core"}
-    body = join_frontmatter(fm, "# Sweep in progress\n")
-    await client.write_note(LOCKFILE_PATH, body)
-    return True
-
-
-async def release_lock(client) -> None:
-    try:
-        await client.delete_note(LOCKFILE_PATH)
-    except Exception as exc:
-        logger.warning("release_lock: delete failed: %s", exc)
+# --- Lockfile (migrated to ObsidianVault.acquire_sweep_lock / release_sweep_lock) ---
 
 
 # --- Sweep orchestrator ---
@@ -476,7 +345,7 @@ async def run_sweep(
     sweep_id = _iso_utc()
     report = SweepReport(sweep_id=sweep_id, status="running")
 
-    if not await acquire_lock(client):
+    if not await client.acquire_sweep_lock():
         raise SweepInProgressError("a sweep is already running")
 
     try:
@@ -511,8 +380,8 @@ async def run_sweep(
                             "reason": "cheap-filter:noise",
                         })
                     else:
-                        await move_to_trash(
-                            client, path, reason="cheap-filter:noise", sweep_at=sweep_id
+                        await client.move_to_trash(
+                            path, reason="cheap-filter:noise", sweep_at=sweep_id
                         )
                     report.noise_moved += 1
                     report.files_processed += 1
@@ -547,8 +416,8 @@ async def run_sweep(
                         continue
                     else:
                         try:
-                            new_path = await move_to_topic_folder(
-                                client, path, topic, sweep_at=sweep_id
+                            new_path = await client.relocate(
+                                path, proposed_dst, sweep_at=sweep_id
                             )
                             report.topic_moves += 1
                             # Continue processing using the new path so
@@ -635,8 +504,7 @@ async def run_sweep(
                         report.duplicates_moved += 1
                         continue
                     try:
-                        dst = await move_to_trash(
-                            client,
+                        dst = await client.move_to_trash(
                             src,
                             reason=f"duplicate of {keeper_path}",
                             sweep_at=sweep_id,
@@ -679,7 +547,7 @@ async def run_sweep(
         report.errors.append(str(exc))
         raise
     finally:
-        await release_lock(client)
+        await client.release_sweep_lock()
 
 
 # --- Module-level status (for /vault/sweep/status route) ---

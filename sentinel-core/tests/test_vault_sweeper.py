@@ -8,17 +8,15 @@ import numpy as np
 import pytest
 
 from app.services.note_classifier import ClassificationResult
+from app.vault import ObsidianVault
 from app.services.vault_sweeper import (
     LOCKFILE_PATH,
     SWEEP_SKIP_PREFIXES,
     _should_skip,
-    acquire_lock,
     cosine_similarity,
     decode_embedding,
     encode_embedding,
     find_dup_clusters,
-    move_to_trash,
-    release_lock,
     run_sweep,
     walk_vault,
 )
@@ -47,6 +45,25 @@ class FakeObsidian:
 
     async def patch_append(self, path: str, body: str) -> None:
         self.store[path] = self.store.get(path, "") + body
+
+    # Sweep capabilities — delegate to the canonical ObsidianVault method
+    # bodies. The Vault implementations only use read_note/write_note/
+    # delete_note internally, so they work unchanged against FakeObsidian's
+    # in-memory store. This is a fixture-wiring delegation under the
+    # Test-Rewrite Ban allowed list — no assertion semantics change.
+    async def move_to_trash(self, path, when=None, *, reason="", sweep_at=None):
+        return await ObsidianVault.move_to_trash(
+            self, path, when, reason=reason, sweep_at=sweep_at
+        )
+
+    async def relocate(self, src, dst, *, sweep_at=None):
+        return await ObsidianVault.relocate(self, src, dst, sweep_at=sweep_at)
+
+    async def acquire_sweep_lock(self, now=None):
+        return await ObsidianVault.acquire_sweep_lock(self, now)
+
+    async def release_sweep_lock(self):
+        return await ObsidianVault.release_sweep_lock(self)
 
 
 # --- Pure helpers ---
@@ -153,7 +170,9 @@ async def test_move_to_trash_basic():
     fake = FakeObsidian()
     fake.store["foo.md"] = "---\ntopic: reference\n---\n\nbody"
 
-    dst = await move_to_trash(fake, "foo.md", reason="duplicate of bar.md", sweep_at="2026-04-27T00:00:00Z")
+    dst = await fake.move_to_trash(
+        "foo.md", reason="duplicate of bar.md", sweep_at="2026-04-27T00:00:00Z"
+    )
     assert dst.startswith("_trash/")
     assert dst.endswith("foo.md")
     assert "foo.md" not in fake.store  # source deleted
@@ -174,7 +193,7 @@ async def test_move_to_trash_collision_suffix():
     today_dst = f"_trash/{_today_str()}/foo.md"
     fake.store[today_dst] = "existing"
 
-    dst = await move_to_trash(fake, "foo.md", reason="dup")
+    dst = await fake.move_to_trash("foo.md", reason="dup")
     assert dst != today_dst
     assert dst in fake.store
 
@@ -186,10 +205,10 @@ async def test_move_to_trash_collision_suffix():
 async def test_acquire_lock_fresh_blocks_new():
     fake = FakeObsidian()
     now = datetime(2026, 4, 27, 12, 0, 0, tzinfo=timezone.utc)
-    assert await acquire_lock(fake, now=now) is True
+    assert await fake.acquire_sweep_lock(now=now) is True
     # second attempt at the same time → blocked
-    assert await acquire_lock(fake, now=now) is False
-    await release_lock(fake)
+    assert await fake.acquire_sweep_lock(now=now) is False
+    await fake.release_sweep_lock()
     assert LOCKFILE_PATH not in fake.store
 
 
@@ -202,7 +221,7 @@ async def test_acquire_lock_stale_takeover():
     started = datetime(2026, 4, 27, 10, 0, 0, tzinfo=timezone.utc)
     fake.store[LOCKFILE_PATH] = f"---\nstarted_at: {started.strftime('%Y-%m-%dT%H:%M:%SZ')}\n---\n"
     now = started + timedelta(hours=2)
-    assert await acquire_lock(fake, now=now) is True
+    assert await fake.acquire_sweep_lock(now=now) is True
 
 
 # --- End-to-end run_sweep with embedding-failure degrade ---

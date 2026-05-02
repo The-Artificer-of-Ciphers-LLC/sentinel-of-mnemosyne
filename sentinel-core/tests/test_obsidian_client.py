@@ -509,3 +509,101 @@ async def test_read_persona_raises_vault_unreachable_on_transport_failure():
         vault = ObsidianVault(client, "http://test", "k")
         with pytest.raises(VaultUnreachableError):
             await vault.read_persona()
+
+
+# ---------------------------------------------------------------------------
+# Plan 260502-cky Task 3 — sweep capabilities on ObsidianVault.
+# Each test asserts on observable post-state mutations (not request shape):
+#   * move_to_trash: source gone + body present at returned destination
+#   * relocate:      source gone + body present at returned destination
+#   * acquire/release: True/False/True sequence across acquire-acquire-release-acquire
+# Mutating primitives (write/delete/read) are backed by an in-memory store
+# served via httpx.MockTransport so the assertions ride the real adapter.
+# ---------------------------------------------------------------------------
+
+
+def _make_store_transport(store: dict[str, str]) -> httpx.MockTransport:
+    """Build a MockTransport that backs the GET/PUT/DELETE primitives against
+    an in-memory dict. PATCH appends. Returns 200/404 to mirror the real
+    Obsidian REST API surface."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        # All vault paths are under /vault/<key>
+        if not path.startswith("/vault/"):
+            return httpx.Response(404)
+        key = path[len("/vault/"):]
+        if request.method == "GET":
+            if key in store:
+                return httpx.Response(200, text=store[key])
+            return httpx.Response(404)
+        if request.method == "PUT":
+            store[key] = request.content.decode("utf-8")
+            return httpx.Response(200)
+        if request.method == "DELETE":
+            store.pop(key, None)
+            return httpx.Response(200)
+        return httpx.Response(405)
+
+    return httpx.MockTransport(handler)
+
+
+async def test_obsidian_vault_move_to_trash_mutates_state():
+    """After move_to_trash, the source path is empty and the destination
+    holds the original body — observable state assertion, not call shape."""
+    store: dict[str, str] = {"foo.md": "original body content"}
+    transport = _make_store_transport(store)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        vault = ObsidianVault(client, "http://test", "k")
+        dst = await vault.move_to_trash("foo.md", reason="dup")
+        # Source gone (read returns "" — graceful 404)
+        assert await vault.read_note("foo.md") == ""
+        # Destination contains the original body (with provenance frontmatter)
+        moved = await vault.read_note(dst)
+        assert "original body content" in moved
+        assert "original_path: foo.md" in moved
+
+
+async def test_obsidian_vault_relocate_mutates_state():
+    """After relocate(src, dst), src is empty and dst contains the body."""
+    store: dict[str, str] = {"random/x.md": "body of x"}
+    transport = _make_store_transport(store)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        vault = ObsidianVault(client, "http://test", "k")
+        actual_dst = await vault.relocate("random/x.md", "topic/x.md")
+        assert actual_dst == "topic/x.md"
+        assert await vault.read_note("random/x.md") == ""
+        moved = await vault.read_note("topic/x.md")
+        assert "body of x" in moved
+        assert "original_path: random/x.md" in moved
+
+
+async def test_obsidian_vault_acquire_release_sweep_lock_sequence():
+    """acquire-acquire-release-acquire returns True/False/True sequence."""
+    store: dict[str, str] = {}
+    transport = _make_store_transport(store)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        vault = ObsidianVault(client, "http://test", "k")
+        now = __import__("datetime").datetime(
+            2026, 5, 2, 12, 0, 0, tzinfo=__import__("datetime").timezone.utc
+        )
+        first = await vault.acquire_sweep_lock(now=now)
+        second = await vault.acquire_sweep_lock(now=now)
+        await vault.release_sweep_lock()
+        third = await vault.acquire_sweep_lock(now=now)
+    assert (first, second, third) == (True, False, True)
+
+
+async def test_obsidian_vault_move_to_trash_raises_on_transport_failure():
+    """A transport failure during the underlying write surfaces as an
+    httpx error from the underlying primitive. (move_to_trash itself does
+    not catch — the sweeper's run_sweep error handler does.)"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("vault down")
+
+    transport = httpx.MockTransport(handler)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        vault = ObsidianVault(client, "http://test", "k")
+        with pytest.raises(httpx.ConnectError):
+            await vault.move_to_trash("foo.md", reason="dup")

@@ -21,12 +21,69 @@ not one HTTP adapter among many.
 from __future__ import annotations
 
 import logging
+import re
+import secrets
 import typing
 from datetime import datetime, timedelta, timezone
 
 import httpx
+import yaml
 
 logger = logging.getLogger(__name__)
+
+
+# --- Sweep lockfile constants (kept here because the lockfile lives in the vault) ---
+
+_LOCKFILE_PATH = "ops/sweeps/_in-progress.md"
+_STALE_LOCK_SECONDS = 3600  # 1 hour
+
+
+_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
+
+
+def _split_frontmatter(body: str) -> tuple[dict, str]:
+    m = _FRONTMATTER_RE.match(body or "")
+    if not m:
+        return ({}, body or "")
+    try:
+        fm = yaml.safe_load(m.group(1)) or {}
+        if not isinstance(fm, dict):
+            fm = {}
+    except Exception:
+        fm = {}
+    return (fm, body[m.end():])
+
+
+def _join_frontmatter(fm: dict, rest: str) -> str:
+    if not fm:
+        return rest
+    block = yaml.safe_dump(
+        fm, sort_keys=False, allow_unicode=True, default_flow_style=False
+    ).strip()
+    return f"---\n{block}\n---\n\n{rest.lstrip()}"
+
+
+def _iso_utc(now: datetime | None = None) -> str:
+    n = now or datetime.now(timezone.utc)
+    return n.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _today_str(now: datetime | None = None) -> str:
+    n = now or datetime.now(timezone.utc)
+    return n.astimezone(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _parse_iso(stamp: str) -> datetime | None:
+    if not stamp:
+        return None
+    try:
+        s = stamp.rstrip("Z")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except Exception:
+        return None
 
 
 class VaultUnreachableError(Exception):
@@ -67,6 +124,20 @@ class Vault(typing.Protocol):
     async def delete_note(self, path: str) -> None: ...
 
     async def patch_append(self, path: str, body: str) -> None: ...
+
+    # --- Sweep capabilities (lockfile + trash + relocate) ---
+
+    async def move_to_trash(
+        self, path: str, when: datetime, *, reason: str = "", sweep_at: str | None = None
+    ) -> str: ...
+
+    async def relocate(
+        self, src: str, dst: str, *, sweep_at: str | None = None
+    ) -> str: ...
+
+    async def acquire_sweep_lock(self, now: datetime | None = None) -> bool: ...
+
+    async def release_sweep_lock(self) -> None: ...
 
 
 class ObsidianVault:
@@ -354,3 +425,136 @@ class ObsidianVault:
             return resp.json()
 
         return await self._safe_request(_inner(), [], "find")
+
+    # --- Sweep capabilities ---
+    #
+    # Method bodies migrated verbatim from app.services.vault_sweeper. The
+    # sweeper module retains only decision logic (is_in_topic_dir,
+    # propose_topic_move, run_sweep orchestration); the I/O primitives
+    # belong on the Vault because they are vault concerns (lockfile lives
+    # in the vault, trash/relocate are vault mutations).
+
+    async def move_to_trash(
+        self,
+        path: str,
+        when: datetime | None = None,
+        *,
+        reason: str = "",
+        sweep_at: str | None = None,
+    ) -> str:
+        """Copy ``path`` into ``_trash/{when:%Y-%m-%d}/{basename}``, then delete src.
+
+        Mirrors the historical ``vault_sweeper.move_to_trash`` semantics
+        verbatim: collision suffix on existing target, frontmatter records
+        ``original_path`` / ``reason`` / ``sweep_at``, delete failure is
+        logged + swallowed (copy succeeded, duplicate is recoverable but
+        lost data is not). Returns the destination path.
+        """
+        when = when or datetime.now(timezone.utc)
+        today = _today_str(when)
+        filename = path.rsplit("/", 1)[-1]
+        dst = f"_trash/{today}/{filename}"
+
+        existing = await self.read_note(dst)
+        if existing:
+            suffix = secrets.token_hex(4)
+            stem, _, ext = filename.rpartition(".")
+            if ext:
+                dst = f"_trash/{today}/{stem}-{suffix}.{ext}"
+            else:
+                dst = f"_trash/{today}/{filename}-{suffix}"
+
+        body = await self.read_note(path)
+        fm, rest = _split_frontmatter(body)
+        fm = dict(fm or {})
+        fm["original_path"] = path
+        fm["reason"] = reason
+        fm["sweep_at"] = sweep_at or _iso_utc(when)
+        annotated = _join_frontmatter(fm, rest)
+
+        await self.write_note(dst, annotated)
+        try:
+            await self.delete_note(path)
+        except Exception as exc:
+            logger.warning(
+                "move_to_trash: delete failed for %s after copy to %s: %s",
+                path,
+                dst,
+                exc,
+            )
+        return dst
+
+    async def relocate(
+        self,
+        src: str,
+        dst: str,
+        *,
+        sweep_at: str | None = None,
+    ) -> str:
+        """Copy ``src`` to ``dst`` (with provenance frontmatter) then delete src.
+
+        Mirrors ``vault_sweeper.move_to_topic_folder`` semantics: collision
+        suffix on the existing target, frontmatter records ``original_path``
+        and ``topic_moved_at``, delete failure is logged + swallowed.
+        Returns the actual destination path (post collision-suffix).
+        """
+        existing = await self.read_note(dst)
+        if existing:
+            filename = dst.rsplit("/", 1)[-1]
+            dst_dir = dst.rsplit("/", 1)[0] if "/" in dst else ""
+            suffix = secrets.token_hex(4)
+            stem, _, ext = filename.rpartition(".")
+            if ext:
+                base = f"{stem}-{suffix}.{ext}"
+            else:
+                base = f"{filename}-{suffix}"
+            dst = f"{dst_dir}/{base}" if dst_dir else base
+
+        body = await self.read_note(src)
+        fm, rest = _split_frontmatter(body)
+        fm = dict(fm or {})
+        fm["original_path"] = src
+        fm["topic_moved_at"] = sweep_at or _iso_utc()
+        annotated = _join_frontmatter(fm, rest)
+
+        await self.write_note(dst, annotated)
+        try:
+            await self.delete_note(src)
+        except Exception as exc:
+            logger.warning(
+                "relocate: delete failed for %s after copy to %s: %s",
+                src,
+                dst,
+                exc,
+            )
+        return dst
+
+    async def acquire_sweep_lock(self, now: datetime | None = None) -> bool:
+        """Return True if lock acquired; False if a fresh lock exists.
+
+        Stale lockfiles (older than 1h) are taken over with a WARNING log
+        per RESEARCH Pitfall 1.
+        """
+        now = now or datetime.now(timezone.utc)
+        existing = await self.read_note(_LOCKFILE_PATH)
+        if existing.strip():
+            fm, _ = _split_frontmatter(existing)
+            started = _parse_iso(str(fm.get("started_at", "")))
+            if started is not None:
+                age = (now - started).total_seconds()
+                if age < _STALE_LOCK_SECONDS:
+                    return False
+                logger.warning(
+                    "acquire_sweep_lock: stale lockfile (age %.0fs) — taking over",
+                    age,
+                )
+        fm = {"started_at": _iso_utc(now), "host": "sentinel-core"}
+        body = _join_frontmatter(fm, "# Sweep in progress\n")
+        await self.write_note(_LOCKFILE_PATH, body)
+        return True
+
+    async def release_sweep_lock(self) -> None:
+        try:
+            await self.delete_note(_LOCKFILE_PATH)
+        except Exception as exc:
+            logger.warning("release_sweep_lock: delete failed: %s", exc)
