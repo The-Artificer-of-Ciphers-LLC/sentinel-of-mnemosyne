@@ -22,13 +22,13 @@ from app.clients.anthropic_registry import fetch_anthropic_models
 from app.clients.litellm_provider import get_context_window_from_lmstudio
 from app.config import Settings
 from sentinel_shared.model_profiles import get_profile
-from app.services.model_selector import discover_active_model, strip_litellm_prefix
+from app.services.model_selector import (
+    _ORIGINAL_PREFIXES,
+    discover_active_model,
+    strip_litellm_prefix,
+)
 
 logger = logging.getLogger(__name__)
-
-# Pre-refactor strip set (preserved verbatim). model_registry.py historically only
-# stripped the original 3 litellm provider tags.
-_ORIGINAL_PREFIXES: tuple[str, ...] = ("openai/", "ollama/", "anthropic/")
 
 # Path to seed file — relative to sentinel-core/ project root
 _SEED_PATH = Path(__file__).parent.parent.parent / "models-seed.json"

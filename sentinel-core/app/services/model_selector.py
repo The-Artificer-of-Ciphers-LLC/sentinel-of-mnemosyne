@@ -58,6 +58,12 @@ _LITELLM_PROVIDER_PREFIXES: tuple[str, ...] = (
     "vertex_ai/",
 )
 
+# Pre-refactor strip set (preserved verbatim). Historically only the original 3
+# litellm provider tags were stripped by main.py and model_registry.py — they
+# pass `prefixes=_ORIGINAL_PREFIXES` to keep behavior identical to pre-refactor
+# code. Canonical home for this tuple is here, alongside _LITELLM_PROVIDER_PREFIXES.
+_ORIGINAL_PREFIXES: tuple[str, ...] = ("openai/", "ollama/", "anthropic/")
+
 
 def strip_litellm_prefix(
     model_str: str,

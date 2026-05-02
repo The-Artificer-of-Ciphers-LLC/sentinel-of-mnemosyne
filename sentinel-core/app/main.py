@@ -22,7 +22,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response
 
-from app.clients.litellm_provider import LiteLLMProvider
+from app.composition import build_provider_router
 from app.config import settings
 from app.vault import ObsidianVault, VaultUnreachableError
 from app.routes.message import router as message_router
@@ -30,26 +30,12 @@ from app.routes.modules import router as modules_router
 from app.routes.note import router as note_router
 from app.routes.status import router as status_router
 from app.services.injection_filter import InjectionFilter
-from sentinel_shared.model_profiles import get_profile
 from app.services.message_processing import MessageProcessor
-from app.services.model_registry import build_model_registry
-from app.services.model_selector import (
-    discover_active_model,
-    probe_embedding_model_loaded,
-    strip_litellm_prefix,
-)
+from app.services.model_selector import probe_embedding_model_loaded
 from app.services.output_scanner import OutputScanner
-from app.services.provider_router import ProviderRouter
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 logger = logging.getLogger(__name__)
-
-
-# Pre-refactor strip set (preserved verbatim). main.py historically only stripped
-# the original 3 litellm provider tags; the canonical strip helper supports the
-# full 14-prefix tuple via its `prefixes=` kwarg, but we pass _ORIGINAL_PREFIXES
-# here to keep behavior identical to pre-refactor code.
-_ORIGINAL_PREFIXES: tuple[str, ...] = ("openai/", "ollama/", "anthropic/")
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
@@ -74,107 +60,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.http_client = http_client
     app.state.settings = settings
 
-    # Build model registry (live fetch + seed fallback) — non-fatal if providers unavailable
-    model_registry = await build_model_registry(settings, http_client)
-    app.state.model_registry = model_registry
-
-    # Discover active model for the configured provider (non-fatal)
-    _lmstudio_model_str = await discover_active_model(settings, http_client)
-    # Strip ONLY the litellm provider tag — keep any HF-style namespace inside
-    # the bare id (e.g. "qwen/qwen2.5-coder-14b" must round-trip verbatim).
-    _lmstudio_model_name = strip_litellm_prefix(_lmstudio_model_str, prefixes=_ORIGINAL_PREFIXES)
-
-    # Determine active model id for context window lookup
-    _active_model = (
-        _lmstudio_model_name
-        if settings.ai_provider == "lmstudio"
-        else settings.claude_model
-        if settings.ai_provider == "claude"
-        else settings.ollama_model
-        if settings.ai_provider == "ollama"
-        else settings.llamacpp_model
-    )
-    _model_info = model_registry.get(_active_model)
-    context_window = _model_info.context_window if _model_info else 4096
-    if not _model_info:
-        logger.warning(
-            f"Active model '{_active_model}' not found in registry — using 4096 token default"
-        )
-    else:
-        logger.info(f"Context window: {context_window} tokens (model: {_active_model})")
-    app.state.context_window = context_window
-
-    # Fetch model profile for stop sequences — non-fatal; defaults to no stop sequences.
-    # Only meaningful for lmstudio provider (local models need explicit stop tokens).
-    # Cloud providers (Claude) manage termination via their own chat templates.
-    _lmstudio_api_base = settings.lmstudio_base_url or "http://host.docker.internal:1234"
-    try:
-        _profile = await get_profile(
-            _lmstudio_model_name,
-            api_base=_lmstudio_api_base,
-        )
-        app.state.lmstudio_stop_sequences = _profile.stop_sequences or []
-        logger.info(
-            "Model stop sequences: %s (arch: %s)",
-            _profile.stop_sequences,
-            _profile.arch if hasattr(_profile, "arch") else _profile.family,
-        )
-    except Exception as exc:
-        logger.warning(
-            "Model profile fetch failed for %r — no stop sequences will be sent: %s",
-            _lmstudio_model_name,
-            exc,
-        )
-        app.state.lmstudio_stop_sequences = []
-
-    # All 4 backends route through LiteLLMProvider (RD-02 — eliminate stub providers)
-    _provider_map = {
-        "lmstudio": LiteLLMProvider(
-            model_string=_lmstudio_model_str,  # discovered, not hardcoded
-            api_base=settings.lmstudio_base_url,
-            api_key="lmstudio",
-        ),
-        "ollama": LiteLLMProvider(
-            model_string=f"ollama/{settings.ollama_model}",
-            api_base=settings.ollama_base_url,
-        ),
-        "llamacpp": LiteLLMProvider(
-            model_string=f"openai/{settings.llamacpp_model}",
-            api_base=settings.llamacpp_base_url,
-        ),
-    }
-    if settings.anthropic_api_key:
-        _provider_map["claude"] = LiteLLMProvider(
-            model_string=settings.claude_model,
-            api_key=settings.anthropic_api_key,
-        )
-
-    lmstudio_provider = _provider_map["lmstudio"]
-    primary = _provider_map.get(settings.ai_provider, lmstudio_provider)
-    if primary is None:
-        logger.error(
-            f"AI_PROVIDER='{settings.ai_provider}' selected but provider could not be instantiated "
-            "(likely missing API key). Falling back to LM Studio."
-        )
-        primary = lmstudio_provider
-
-    # Select fallback provider
-    fallback = None
-    if settings.ai_fallback_provider == "claude":
-        fallback = _provider_map.get("claude")
-        if fallback is None:
-            logger.warning(
-                "AI_FALLBACK_PROVIDER=claude but ANTHROPIC_API_KEY not set — no fallback available"
-            )
-
-    # Wire ProviderRouter into app.state
-    app.state.ai_provider = ProviderRouter(primary, fallback_provider=fallback)
+    # Provider router + associated metadata (model registry, context window,
+    # stop sequences, provider name) — extracted to app.composition.
+    _provider_bundle = await build_provider_router(settings, http_client)
+    app.state.model_registry = _provider_bundle.model_registry
+    app.state.context_window = _provider_bundle.context_window
+    app.state.lmstudio_stop_sequences = _provider_bundle.lmstudio_stop_sequences
+    app.state.ai_provider = _provider_bundle.router
     # Expose provider name for /status endpoint (RD-05)
-    app.state.ai_provider_name = settings.ai_provider
-    logger.info(
-        f"AI provider: {settings.ai_provider} "
-        f"(fallback: {settings.ai_fallback_provider})"
-    )
+    app.state.ai_provider_name = _provider_bundle.ai_provider_name
 
     # Vault adapter — degrades gracefully if Obsidian is not running
     vault = ObsidianVault(
