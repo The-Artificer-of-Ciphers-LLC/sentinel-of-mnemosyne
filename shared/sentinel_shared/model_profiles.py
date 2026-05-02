@@ -104,6 +104,12 @@ FAMILY_PROFILES: dict[str, ModelProfile] = {
 # Aliases — additional arch strings that map to the same profile
 FAMILY_PROFILES["qwen2_5"] = FAMILY_PROFILES["qwen2"]
 FAMILY_PROFILES["qwen2_vl"] = FAMILY_PROFILES["qwen2"]
+# Qwen3 family uses identical ChatML stop tokens (<|im_end|>, <|endoftext|>) to
+# Qwen2/2.5 — verified empirically against qwen3.6-35b-a3b on 2026-05-02.
+FAMILY_PROFILES["qwen3"] = FAMILY_PROFILES["qwen2"]
+FAMILY_PROFILES["qwen3_5"] = FAMILY_PROFILES["qwen2"]
+FAMILY_PROFILES["qwen3_5_moe"] = FAMILY_PROFILES["qwen2"]
+FAMILY_PROFILES["qwen3_moe"] = FAMILY_PROFILES["qwen2"]
 FAMILY_PROFILES["llama3_1"] = FAMILY_PROFILES["llama3"]
 FAMILY_PROFILES["llama3_2"] = FAMILY_PROFILES["llama3"]
 FAMILY_PROFILES["mistral_nemo"] = FAMILY_PROFILES["mistral"]
@@ -131,6 +137,7 @@ _SUBSTRING_PATTERNS: list[tuple[str, str]] = [
     ("mistral", "mistral"),
     ("qwen2.5", "qwen2"),
     ("qwen2", "qwen2"),
+    ("qwen3", "qwen2"),
     ("qwen", "qwen2"),
     ("gemma-3", "gemma3"),
     ("gemma-2", "gemma2"),
