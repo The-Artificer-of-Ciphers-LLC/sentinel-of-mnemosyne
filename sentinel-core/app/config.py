@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     lmstudio_base_url: str = "http://host.docker.internal:1234/v1"
     pi_harness_url: str = "http://pi-harness:3000"
     sentinel_api_key: str  # Required — no default. Startup fails fast if missing.
-    model_name: str = "local-model"
+    model_name: str = "gemma-4-e4b-it-mlx"
     log_level: str = "INFO"
     obsidian_api_url: str = "http://host.docker.internal:27123"  # HTTP mode (port 27123, not 27124)
     obsidian_api_key: str = ""  # blank = no Authorization header sent
