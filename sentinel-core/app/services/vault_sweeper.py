@@ -53,7 +53,21 @@ def _active_skip_prefixes() -> tuple[str, ...]:
 
 LOCKFILE_PATH = "ops/sweeps/_in-progress.md"
 STALE_LOCK_SECONDS = 3600  # 1 hour
-EMBEDDING_MODEL = "text-embedding-nomic-embed-text-v1.5"
+
+
+def _embedding_model_id() -> str:
+    """Return the configured embedding model id for frontmatter recording.
+
+    Lazy settings lookup mirrors ``_active_skip_prefixes`` so isolated unit
+    tests of helpers don't fail on settings import. Falls back to the
+    historical default if settings is unimportable. (260502-1zv D-03 — single
+    source of truth: ``Settings.embedding_model``.)
+    """
+    try:
+        from app.config import settings
+        return settings.embedding_model
+    except Exception:
+        return "text-embedding-nomic-embed-text-v1.5"
 
 
 class SweepReport(BaseModel):
@@ -584,7 +598,7 @@ async def run_sweep(
             for idx, (path, fm, rest, _) in enumerate(survivors):
                 try:
                     if embeddings and idx < len(embeddings):
-                        fm["embedding_model"] = EMBEDDING_MODEL
+                        fm["embedding_model"] = _embedding_model_id()
                         fm["embedding_b64"] = encode_embedding(embeddings[idx])
                     new_body = join_frontmatter(fm, rest)
                     await client.write_note(path, new_body)

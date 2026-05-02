@@ -253,7 +253,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         api_base = settings.lmstudio_base_url or "http://host.docker.internal:1234"
         if not api_base.rstrip("/").endswith("/v1"):
             api_base = f"{api_base.rstrip('/')}/v1"
-        return await _embed_texts(texts, api_base=api_base)
+        # Provider prefix added at the call site, not stored in settings
+        # (260502-1zv D-03).
+        return await _embed_texts(
+            texts,
+            api_base=api_base,
+            model=f"openai/{settings.embedding_model}",
+        )
 
     app.state.note_classifier_fn = _classify_note
     app.state.note_embedder_fn = _embedder_fn

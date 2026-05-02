@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     pi_harness_url: str = "http://pi-harness:3000"
     sentinel_api_key: str  # Required — no default. Startup fails fast if missing.
     model_name: str = "gemma-4-e4b-it-mlx"
+    # LM Studio embedding model id (no provider prefix — `openai/` is added at
+    # the litellm call site). Single source of truth: previously duplicated as
+    # hardcoded constants in app/clients/embeddings.py and
+    # app/services/vault_sweeper.py (260502-1zv D-03).
+    embedding_model: str = "text-embedding-nomic-embed-text-v1.5"
     log_level: str = "INFO"
     obsidian_api_url: str = "http://host.docker.internal:27123"  # HTTP mode (port 27123, not 27124)
     obsidian_api_key: str = ""  # blank = no Authorization header sent
