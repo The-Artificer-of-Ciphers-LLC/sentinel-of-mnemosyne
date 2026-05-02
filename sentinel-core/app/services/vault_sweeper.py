@@ -12,7 +12,6 @@ Lockfile sentinel ``ops/sweeps/_in-progress.md`` prevents overlapping sweeps
 """
 from __future__ import annotations
 
-import base64
 import logging
 import re
 from datetime import datetime, timezone
@@ -21,6 +20,18 @@ from typing import AsyncIterator, Awaitable, Callable
 import numpy as np
 import yaml
 from pydantic import BaseModel, Field
+
+from sentinel_shared.embedding_codec import decode_embedding, encode_embedding
+from sentinel_shared.similarity import cosine_similarity, find_dup_clusters
+
+# Re-exports preserved for backwards compatibility with existing import sites
+# (tests + any downstream callers that import these names from vault_sweeper).
+__all__ = [
+    "decode_embedding",
+    "encode_embedding",
+    "cosine_similarity",
+    "find_dup_clusters",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -142,81 +153,11 @@ def join_frontmatter(fm: dict, rest: str) -> str:
     return f"---\n{block}\n---\n\n{rest.lstrip()}"
 
 
-# --- Embedding (de)serialization — copied verbatim from pathfinder rules.py ---
-
-
-def encode_embedding(vec) -> str:
-    """base64-encode a list[float] or np.ndarray as float32 little-endian bytes."""
-    if isinstance(vec, str):
-        return vec
-    arr = np.asarray(vec, dtype=np.float32)
-    return base64.b64encode(arr.tobytes()).decode("ascii")
-
-
-def decode_embedding(s) -> list[float]:
-    """Decode base64 embedding back to list[float]."""
-    if isinstance(s, list):
-        return [float(x) for x in s]
-    if isinstance(s, np.ndarray):
-        return s.astype(np.float32).tolist()
-    if isinstance(s, str):
-        if not s:
-            return []
-        try:
-            raw = base64.b64decode(s.encode("ascii"))
-            return np.frombuffer(raw, dtype=np.float32).tolist()
-        except Exception as exc:
-            logger.warning("Failed to decode embedding base64: %s", exc)
-            return []
-    return []
-
-
-# --- Cosine + cluster ---
-
-
-def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
-    """Cosine similarity between two 1-D vectors. Zero-norm → 0.0."""
-    av = np.asarray(a, dtype=np.float32)
-    bv = np.asarray(b, dtype=np.float32)
-    na = float(np.linalg.norm(av))
-    nb = float(np.linalg.norm(bv))
-    if na == 0.0 or nb == 0.0:
-        return 0.0
-    return float(np.dot(av, bv) / (na * nb))
-
-
-def find_dup_clusters(matrix: np.ndarray, threshold: float = 0.92) -> list[list[int]]:
-    """Connected-components on cosine ≥ threshold pairs. Returns groups of 2+ indices."""
-    if matrix is None or matrix.size == 0:
-        return []
-    n = matrix.shape[0]
-    if n < 2:
-        return []
-
-    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    safe = np.where(norms == 0.0, 1.0, norms)
-    sim = (matrix @ matrix.T) / (safe * safe.T)
-    np.fill_diagonal(sim, 0.0)
-
-    visited: set[int] = set()
-    clusters: list[list[int]] = []
-    for i in range(n):
-        if i in visited:
-            continue
-        cluster = [i]
-        stack = [i]
-        visited.add(i)
-        while stack:
-            j = stack.pop()
-            for k in np.where(sim[j] >= threshold)[0]:
-                k_int = int(k)
-                if k_int not in visited:
-                    visited.add(k_int)
-                    cluster.append(k_int)
-                    stack.append(k_int)
-        if len(cluster) > 1:
-            clusters.append(sorted(cluster))
-    return clusters
+# --- Embedding codec + similarity migrated to sentinel_shared (260502-g8c Task 2) ---
+# encode_embedding / decode_embedding now live in sentinel_shared.embedding_codec;
+# cosine_similarity / find_dup_clusters now live in sentinel_shared.similarity.
+# Imported at the top of this module and re-exported via __all__ so existing
+# `from app.services.vault_sweeper import cosine_similarity` callers keep working.
 
 
 # --- Skip logic ---

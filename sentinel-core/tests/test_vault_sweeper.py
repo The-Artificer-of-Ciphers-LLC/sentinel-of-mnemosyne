@@ -12,13 +12,11 @@ from app.services.vault_sweeper import (
     LOCKFILE_PATH,
     SWEEP_SKIP_PREFIXES,
     _should_skip,
-    cosine_similarity,
-    decode_embedding,
-    encode_embedding,
-    find_dup_clusters,
     run_sweep,
     walk_vault,
 )
+from sentinel_shared.embedding_codec import decode_embedding, encode_embedding
+from sentinel_shared.similarity import cosine_similarity, find_dup_clusters
 from tests.fakes.vault import FakeVault
 
 # Plan 260502-cky Task 4: this file historically used a test-local
