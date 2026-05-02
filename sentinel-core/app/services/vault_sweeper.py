@@ -13,14 +13,13 @@ Lockfile sentinel ``ops/sweeps/_in-progress.md`` prevents overlapping sweeps
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime, timezone
 from typing import AsyncIterator, Awaitable, Callable
 
 import numpy as np
-import yaml
 from pydantic import BaseModel, Field
 
+from app.markdown_frontmatter import join_frontmatter, split_frontmatter
 from sentinel_shared.embedding_codec import decode_embedding, encode_embedding
 from sentinel_shared.similarity import cosine_similarity, find_dup_clusters
 
@@ -31,6 +30,8 @@ __all__ = [
     "encode_embedding",
     "cosine_similarity",
     "find_dup_clusters",
+    "split_frontmatter",
+    "join_frontmatter",
 ]
 
 logger = logging.getLogger(__name__)
@@ -124,33 +125,11 @@ def _parse_iso(stamp: str) -> datetime | None:
         return None
 
 
-# --- Frontmatter helpers ---
-
-
-_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
-
-
-def split_frontmatter(body: str) -> tuple[dict, str]:
-    """Return (frontmatter, rest_body). Empty FM → ({}, body)."""
-    m = _FRONTMATTER_RE.match(body or "")
-    if not m:
-        return ({}, body or "")
-    try:
-        fm = yaml.safe_load(m.group(1)) or {}
-        if not isinstance(fm, dict):
-            fm = {}
-    except Exception:
-        fm = {}
-    return (fm, body[m.end():])
-
-
-def join_frontmatter(fm: dict, rest: str) -> str:
-    if not fm:
-        return rest
-    block = yaml.safe_dump(
-        fm, sort_keys=False, allow_unicode=True, default_flow_style=False
-    ).strip()
-    return f"---\n{block}\n---\n\n{rest.lstrip()}"
+# --- Frontmatter helpers migrated to app.markdown_frontmatter (260502-g8c Task 3) ---
+# split_frontmatter / join_frontmatter now live in app.markdown_frontmatter,
+# imported at the top of this module and re-exported via __all__ so existing
+# `from app.services.vault_sweeper import split_frontmatter` callers (tests +
+# downstream services) keep working.
 
 
 # --- Embedding codec + similarity migrated to sentinel_shared (260502-g8c Task 2) ---

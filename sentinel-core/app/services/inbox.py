@@ -35,9 +35,9 @@ import re
 from datetime import datetime, timezone
 from typing import Iterable
 
-import yaml
 from pydantic import BaseModel, Field
 
+from app.markdown_frontmatter import join_frontmatter, split_frontmatter
 from app.services.note_classifier import ClassificationResult
 
 
@@ -61,30 +61,9 @@ def _iso_utc(now: datetime | None = None) -> str:
     return n.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
 _ENTRY_HEADER_RE = re.compile(r"^## Entry (\d+)\s*$", re.MULTILINE)
-
-
-def _split_frontmatter(body: str) -> tuple[dict, str]:
-    """Return (frontmatter_dict, body_without_frontmatter)."""
-    m = _FRONTMATTER_RE.match(body or "")
-    if not m:
-        return ({}, body or "")
-    fm_raw = m.group(1)
-    try:
-        fm = yaml.safe_load(fm_raw) or {}
-        if not isinstance(fm, dict):
-            fm = {}
-    except Exception:
-        fm = {}
-    return (fm, body[m.end():])
-
-
-def _join_frontmatter(fm: dict, rest: str) -> str:
-    fm_block = yaml.safe_dump(
-        fm, sort_keys=False, allow_unicode=True, default_flow_style=False
-    ).strip()
-    return f"---\n{fm_block}\n---\n\n{rest.lstrip()}"
+# _FRONTMATTER_RE / _split_frontmatter / _join_frontmatter migrated to
+# app.markdown_frontmatter (260502-g8c Task 3).
 
 
 def build_initial_inbox(now: datetime | None = None) -> str:
@@ -99,7 +78,7 @@ def build_initial_inbox(now: datetime | None = None) -> str:
         "changes on the next `:inbox`. Or use `:inbox classify <n> <topic>`\n"
         "or `:inbox discard <n>` from Discord.\n"
     )
-    return _join_frontmatter(fm, body)
+    return join_frontmatter(fm, body)
 
 
 def _parse_entry_section(section_text: str, entry_n: int) -> PendingEntry:
@@ -144,7 +123,7 @@ def parse_inbox(body: str) -> list[PendingEntry]:
     """Parse inbox body into PendingEntry list, ordered by entry_n."""
     if not body or not body.strip():
         return []
-    _, rest = _split_frontmatter(body)
+    _, rest = split_frontmatter(body)
     headers = list(_ENTRY_HEADER_RE.finditer(rest))
     if not headers:
         return []
@@ -185,7 +164,7 @@ def _rebuild_body(fm: dict, entries: Iterable[PendingEntry]) -> str:
     chunks = [header]
     for e in entries:
         chunks.append(f"## Entry {e.entry_n}\n{_render_entry(e)}\n")
-    return _join_frontmatter(fm, "".join(chunks))
+    return join_frontmatter(fm, "".join(chunks))
 
 
 def append_entry(
@@ -198,7 +177,7 @@ def append_entry(
     """Append a new entry; renumber sequentially; refresh `updated:` frontmatter."""
     if not body or not body.strip():
         body = build_initial_inbox(now)
-    fm, _ = _split_frontmatter(body)
+    fm, _ = split_frontmatter(body)
     if not fm:
         fm = {"type": "pending-classification-inbox"}
     fm["updated"] = _iso_utc(now)
@@ -221,7 +200,7 @@ def append_entry(
 
 def remove_entry(body: str, entry_n: int, now: datetime | None = None) -> str:
     """Remove the named entry, renumber the rest sequentially, refresh updated."""
-    fm, _ = _split_frontmatter(body)
+    fm, _ = split_frontmatter(body)
     if not fm:
         fm = {"type": "pending-classification-inbox"}
     fm["updated"] = _iso_utc(now)

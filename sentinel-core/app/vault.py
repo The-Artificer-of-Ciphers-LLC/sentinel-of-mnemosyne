@@ -21,13 +21,13 @@ not one HTTP adapter among many.
 from __future__ import annotations
 
 import logging
-import re
 import secrets
 import typing
 from datetime import datetime, timedelta, timezone
 
 import httpx
-import yaml
+
+from app.markdown_frontmatter import join_frontmatter, split_frontmatter
 
 logger = logging.getLogger(__name__)
 
@@ -38,29 +38,12 @@ _LOCKFILE_PATH = "ops/sweeps/_in-progress.md"
 _STALE_LOCK_SECONDS = 3600  # 1 hour
 
 
-_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
-
-
-def _split_frontmatter(body: str) -> tuple[dict, str]:
-    m = _FRONTMATTER_RE.match(body or "")
-    if not m:
-        return ({}, body or "")
-    try:
-        fm = yaml.safe_load(m.group(1)) or {}
-        if not isinstance(fm, dict):
-            fm = {}
-    except Exception:
-        fm = {}
-    return (fm, body[m.end():])
-
-
-def _join_frontmatter(fm: dict, rest: str) -> str:
-    if not fm:
-        return rest
-    block = yaml.safe_dump(
-        fm, sort_keys=False, allow_unicode=True, default_flow_style=False
-    ).strip()
-    return f"---\n{block}\n---\n\n{rest.lstrip()}"
+# Frontmatter helpers migrated to app.markdown_frontmatter (260502-g8c Task 3).
+# vault.py's prior _join_frontmatter had an `if not fm: return rest`
+# short-circuit; audit at migration time confirmed every live call site
+# passes a non-empty dict (sets original_path / topic_moved_at /
+# started_at before calling), so canonical always-emit-block behavior
+# is observationally equivalent for all current callers.
 
 
 def _iso_utc(now: datetime | None = None) -> str:
@@ -465,12 +448,12 @@ class ObsidianVault:
                 dst = f"_trash/{today}/{filename}-{suffix}"
 
         body = await self.read_note(path)
-        fm, rest = _split_frontmatter(body)
+        fm, rest = split_frontmatter(body)
         fm = dict(fm or {})
         fm["original_path"] = path
         fm["reason"] = reason
         fm["sweep_at"] = sweep_at or _iso_utc(when)
-        annotated = _join_frontmatter(fm, rest)
+        annotated = join_frontmatter(fm, rest)
 
         await self.write_note(dst, annotated)
         try:
@@ -511,11 +494,11 @@ class ObsidianVault:
             dst = f"{dst_dir}/{base}" if dst_dir else base
 
         body = await self.read_note(src)
-        fm, rest = _split_frontmatter(body)
+        fm, rest = split_frontmatter(body)
         fm = dict(fm or {})
         fm["original_path"] = src
         fm["topic_moved_at"] = sweep_at or _iso_utc()
-        annotated = _join_frontmatter(fm, rest)
+        annotated = join_frontmatter(fm, rest)
 
         await self.write_note(dst, annotated)
         try:
@@ -538,7 +521,7 @@ class ObsidianVault:
         now = now or datetime.now(timezone.utc)
         existing = await self.read_note(_LOCKFILE_PATH)
         if existing.strip():
-            fm, _ = _split_frontmatter(existing)
+            fm, _ = split_frontmatter(existing)
             started = _parse_iso(str(fm.get("started_at", "")))
             if started is not None:
                 age = (now - started).total_seconds()
@@ -549,7 +532,7 @@ class ObsidianVault:
                     age,
                 )
         fm = {"started_at": _iso_utc(now), "host": "sentinel-core"}
-        body = _join_frontmatter(fm, "# Sweep in progress\n")
+        body = join_frontmatter(fm, "# Sweep in progress\n")
         await self.write_note(_LOCKFILE_PATH, body)
         return True
 
