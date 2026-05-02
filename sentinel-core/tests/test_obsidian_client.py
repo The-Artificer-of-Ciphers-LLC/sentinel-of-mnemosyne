@@ -1,7 +1,11 @@
 """Tests for ObsidianClient (MEM-01, MEM-05, MEM-08)."""
-import pytest
+import unittest.mock
+from unittest.mock import AsyncMock
+
 import httpx
+import pytest
 from httpx import AsyncClient
+
 from app.clients.obsidian import ObsidianClient
 
 
@@ -180,7 +184,6 @@ async def test_check_health_returns_false_on_error(obsidian_connect_error_mock):
 # asyncio.gather() over all 5 paths is tested in test_message.py.
 # ---------------------------------------------------------------------------
 
-import unittest.mock
 
 
 @pytest.fixture
@@ -253,9 +256,6 @@ async def test_get_self_context_404_no_log(obsidian_404_mock):
 # ---------------------------------------------------------------------------
 # Phase 25-04 — _safe_request() helper (RD-04 / DUP-02)
 # ---------------------------------------------------------------------------
-
-import pytest
-from unittest.mock import AsyncMock
 
 
 @pytest.fixture
