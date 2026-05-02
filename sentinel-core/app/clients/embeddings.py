@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import litellm
 
+DEFAULT_LMSTUDIO_BASE_URL = "http://host.docker.internal:1234"
+
 
 class EmbeddingModelUnavailable(Exception):
     """Raised when LM Studio reports no embedding model loaded.
@@ -78,3 +80,45 @@ async def embed_texts(
         emb = item["embedding"] if isinstance(item, dict) else item.embedding
         out.append([float(x) for x in emb])
     return out
+
+
+class Embeddings:
+    """Thin adapter over :func:`embed_texts` for compose-root injection.
+
+    Replaces the ``_embedder_fn`` closure that used to live in lifespan(). Pin
+    ``Embeddings(...).embed`` (the bound method) onto ``app.state.note_embedder_fn``
+    to keep call sites byte-identical (`await embedder(texts)` → list[list[float]]).
+
+    The base URL is normalised to ensure ``/v1`` suffix exactly once — matches
+    the closure behavior. The model string is litellm-prefixed with
+    ``openai/`` (provider prefix added at the call site, not stored in
+    settings — 260502-1zv D-03).
+
+    The ``http_client`` parameter is accepted for forward-compat with future
+    clients that route through the shared httpx pool; the current
+    ``embed_texts`` helper instantiates its own underlying transport via
+    litellm and so the parameter is held but not yet consumed.
+    """
+
+    def __init__(
+        self,
+        http_client: object,
+        base_url: str,
+        model: str,
+    ) -> None:
+        self._http_client = http_client
+        # /v1 suffix normalisation — ensure exactly one trailing /v1
+        normalised = base_url.rstrip("/") if base_url else DEFAULT_LMSTUDIO_BASE_URL
+        if not normalised.endswith("/v1"):
+            normalised = f"{normalised}/v1"
+        self._api_base = normalised
+        # Provider prefix added here, not stored in settings (260502-1zv D-03)
+        self._model = f"openai/{model}" if not model.startswith("openai/") else model
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        """Return one float-vector per input text."""
+        return await embed_texts(
+            texts,
+            api_base=self._api_base,
+            model=self._model,
+        )

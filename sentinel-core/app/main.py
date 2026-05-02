@@ -116,23 +116,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.module_registry = {}
 
     # 260427-vl1: note classifier + embedder for the vault sweeper
-    from app.clients.embeddings import embed_texts as _embed_texts
+    from app.clients.embeddings import DEFAULT_LMSTUDIO_BASE_URL, Embeddings
     from app.services.note_classifier import classify_note as _classify_note
 
-    async def _embedder_fn(texts: list[str]) -> list[list[float]]:
-        api_base = settings.lmstudio_base_url or "http://host.docker.internal:1234"
-        if not api_base.rstrip("/").endswith("/v1"):
-            api_base = f"{api_base.rstrip('/')}/v1"
-        # Provider prefix added at the call site, not stored in settings
-        # (260502-1zv D-03).
-        return await _embed_texts(
-            texts,
-            api_base=api_base,
-            model=f"openai/{settings.embedding_model}",
-        )
-
+    embeddings = Embeddings(
+        http_client,
+        settings.lmstudio_base_url or DEFAULT_LMSTUDIO_BASE_URL,
+        settings.embedding_model,
+    )
     app.state.note_classifier_fn = _classify_note
-    app.state.note_embedder_fn = _embedder_fn
+    app.state.note_embedder_fn = embeddings.embed
 
     # 260502-1zv D-02: probe LM Studio for the embedding model state at startup.
     # Graceful degrade — never raises. Surfaces via /health and via WARNING log
