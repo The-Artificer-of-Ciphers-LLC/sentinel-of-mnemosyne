@@ -153,10 +153,21 @@ class MessageProcessor:
             "self/relationships.md",
             "ops/reminders.md",
         ]
-        self_results = await asyncio.gather(
+        gather_results = await asyncio.gather(
             *[self._obsidian.read_self_context(p) for p in self_paths],
+            self._obsidian.read_self_context("sentinel/persona.md"),
             return_exceptions=True,
         )
+        self_results = gather_results[: len(self_paths)]
+        persona_result = gather_results[-1]
+
+        if isinstance(persona_result, str) and persona_result.strip():
+            messages[0] = {"role": "system", "content": persona_result}
+        else:
+            logger.warning(
+                "Sentinel persona vault read returned empty; using fallback"
+            )
+
         self_contents = [r for r in self_results if isinstance(r, str) and r.strip()]
         recent_sessions = await self._obsidian.get_recent_sessions(req.user_id, limit=3)
 
