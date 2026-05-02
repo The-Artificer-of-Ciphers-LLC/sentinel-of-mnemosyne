@@ -474,10 +474,15 @@ async def test_provider_unavailable_returns_503(mock_ai_provider):
 
 
 async def test_bad_request_error_returns_422(mock_ai_provider):
-    """litellm.BadRequestError from ai_provider → HTTP 422 (context overflow, client error)."""
-    import litellm
-    mock_ai_provider.complete.side_effect = litellm.BadRequestError(
-        message="context_length_exceeded", model="test-model", llm_provider="lm-studio"
+    """ContextLengthError from ai_provider → HTTP 422 (context overflow, client error).
+
+    Vendor BadRequestError → ContextLengthError translation now lives in
+    app/clients/litellm_provider.py (AI-agnostic guardrail). The route mock
+    raises ContextLengthError directly to exercise the service-layer mapping.
+    """
+    from app.services.provider_router import ContextLengthError
+    mock_ai_provider.complete.side_effect = ContextLengthError(
+        "Message plus context exceeds model capacity. Try a shorter message."
     )
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

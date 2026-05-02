@@ -8,25 +8,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import tiktoken
-from litellm import BadRequestError as LiteLLMBadRequestError
 
-from app.services.provider_router import ProviderUnavailableError
+from app.services.provider_router import ContextLengthError, ProviderUnavailableError
 from app.services.token_guard import TokenLimitError, check_token_limit
 
 logger = logging.getLogger(__name__)
 
 SEARCH_SCORE_THRESHOLD = 0.5
-
-_CONTEXT_LENGTH_MARKERS: tuple[str, ...] = (
-    "context length",
-    "context_length",
-    "maximum context",
-    "context window",
-    "too many tokens",
-    "tokens. however",
-    "reduce the length",
-    "prompt is too long",
-)
 
 
 @dataclass(frozen=True)
@@ -113,16 +101,8 @@ class MessageProcessor:
             content = await self._ai_provider.complete(messages)
         except ProviderUnavailableError as exc:
             raise MessageProcessingError("provider_unavailable", str(exc)) from exc
-        except LiteLLMBadRequestError as exc:
-            if self._is_context_length_error(exc):
-                raise MessageProcessingError(
-                    "context_overflow",
-                    "Message plus context exceeds model capacity. Try a shorter message.",
-                ) from exc
-            raise MessageProcessingError(
-                "provider_misconfigured",
-                "AI provider configuration error. Check sentinel-core logs.",
-            ) from exc
+        except ContextLengthError as exc:
+            raise MessageProcessingError("context_overflow", str(exc)) from exc
         except Exception as exc:
             raise MessageProcessingError(
                 "provider_misconfigured", f"AI provider error: {type(exc).__name__}"
@@ -214,11 +194,6 @@ class MessageProcessor:
             snippet = matches[0].get("context", "").strip() if matches else ""
             lines.append(f"- **{filename}**: {snippet}" if snippet else f"- **{filename}**")
         return "\n".join(lines)
-
-    @staticmethod
-    def _is_context_length_error(exc: BaseException) -> bool:
-        msg = str(exc).lower()
-        return any(marker in msg for marker in _CONTEXT_LENGTH_MARKERS)
 
     @staticmethod
     def _build_session_summary(

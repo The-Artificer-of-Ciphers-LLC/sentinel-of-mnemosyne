@@ -27,6 +27,12 @@ class ProviderUnavailableError(Exception):
     pass
 
 
+class ContextLengthError(Exception):
+    """Raised when a provider rejects a completion because the prompt+context exceeds model capacity."""
+
+    pass
+
+
 class ProviderRouter:
     """
     Routes complete() calls to primary provider, with optional fallback.

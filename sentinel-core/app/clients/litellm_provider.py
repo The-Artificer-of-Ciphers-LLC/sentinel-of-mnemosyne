@@ -13,12 +13,14 @@ import logging
 
 import httpx
 import litellm
+from litellm import BadRequestError
 from tenacity import (
     retry,
     retry_if_exception_type,
 )
 
 from app.clients.retry_config import RETRY_STOP, RETRY_WAIT
+from app.services.provider_router import ContextLengthError
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,25 @@ _RETRYABLE = (
     httpx.ConnectError,
     httpx.TimeoutException,
 )
+
+# Substrings appearing in vendor BadRequestError messages when the prompt+context
+# exceeds the model's maximum context window. Centralised here because vendor SDK
+# imports must live under app/clients/ (AI-agnostic guardrail).
+_CONTEXT_LENGTH_MARKERS: tuple[str, ...] = (
+    "context length",
+    "context_length",
+    "maximum context",
+    "context window",
+    "too many tokens",
+    "tokens. however",
+    "reduce the length",
+    "prompt is too long",
+)
+
+
+def _is_context_length_error(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return any(marker in msg for marker in _CONTEXT_LENGTH_MARKERS)
 
 
 class LiteLLMProvider:
@@ -92,7 +113,17 @@ class LiteLLMProvider:
             kwargs["temperature"] = temperature
 
         logger.debug(f"LiteLLMProvider.complete: model={self._model_string}")
-        response = await litellm.acompletion(**kwargs)
+        try:
+            response = await litellm.acompletion(**kwargs)
+        except BadRequestError as exc:
+            # Translate vendor-specific context-window rejections into a typed
+            # service-layer exception so app/services/ never imports litellm.
+            if _is_context_length_error(exc):
+                raise ContextLengthError(
+                    "Message plus context exceeds model capacity. "
+                    "Try a shorter message."
+                ) from exc
+            raise
         return response.choices[0].message.content
 
 

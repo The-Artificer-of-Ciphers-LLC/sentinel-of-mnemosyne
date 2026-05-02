@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 
 import pytest
-from litellm import BadRequestError as LiteLLMBadRequestError
 
 from app.services.message_processing import (
     MessageProcessingError,
@@ -19,7 +18,7 @@ from app.services.message_processing import (
     MessageRequest,
     MessageResult,
 )
-from app.services.provider_router import ProviderUnavailableError
+from app.services.provider_router import ContextLengthError, ProviderUnavailableError
 
 
 # ---------------------------------------------------------------------------
@@ -223,16 +222,13 @@ async def test_persona_fallback_when_vault_returns_empty(caplog):
 
 
 async def test_litellm_context_length_string_mapped_to_context_overflow():
-    """A LiteLLM BadRequestError whose message contains a context-length marker
-    must map to context_overflow, NOT provider_misconfigured. This is the
-    string-detection guard for upstream model-capacity errors."""
-    err = LiteLLMBadRequestError(
-        message=(
-            "This model's maximum context length is 4096 tokens. "
-            "However, you requested 5000 tokens."
-        ),
-        model="test-model",
-        llm_provider="lmstudio",
+    """A ContextLengthError raised by the provider layer must map to
+    context_overflow, NOT provider_misconfigured. The vendor-specific
+    BadRequestError → ContextLengthError translation now lives in
+    app/clients/litellm_provider.py; this test enforces the service-layer
+    half of the contract."""
+    err = ContextLengthError(
+        "Message plus context exceeds model capacity. Try a shorter message."
     )
     proc, _, _ = make_processor(ai_raises=err)
     req = make_request()
