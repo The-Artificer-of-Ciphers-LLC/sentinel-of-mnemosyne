@@ -62,6 +62,37 @@ The design goal is maximum flexibility with a stable, narrow core API. You add a
 
 > **Node.js 22 LTS** is only needed if you run the Pi harness (`--pi` flag, v0.7 scope). The Dockerfile handles it inside the container — it is not a host-level prerequisite for standard operation.
 
+### Operator Setup — Sentinel Persona File
+
+Before first run, the operator must create `sentinel/persona.md` in the Obsidian Vault. The Sentinel reads this file on every message to source its system persona prompt; it lets the operator tune voice, tone, and behavior without redeploying.
+
+**Startup contract (locked by ADR-0001 / quick 260502-0vr):**
+- If Obsidian is reachable AND `sentinel/persona.md` is missing (404), `sentinel-core` will fail to start with a clear error. This is intentional — a reachable vault without a persona file is an operator setup error.
+- If Obsidian is unreachable at startup, the probe is skipped and `sentinel-core` starts in graceful-degrade mode using the hardcoded fallback persona.
+- Per-message: if the vault read returns empty or fails transiently, the processor falls back to the hardcoded persona and logs a WARN — user traffic is never blocked over a vault edit.
+
+**Suggested seed content** (matches the hardcoded fallback in `sentinel-core/app/services/message_processing.py` → `MessageProcessor._FALLBACK_PERSONA`):
+
+```markdown
+You are the Sentinel — the user's 2nd brain. You maintain their context via an
+Obsidian vault that the system writes to automatically; the user does not need
+to manage it.
+
+Respond like a friend who has been listening. When the user shares a fact,
+milestone, status update, or reflection, acknowledge it naturally and briefly
+— usually one or two sentences. Ask a relevant follow-up only if it would feel
+natural. Match their tone and length.
+
+Never lecture the user about how to file, organize, link, tag, document,
+summarize, follow up on, plan, or process information. The system handles
+persistence and structure. You only respond. Do not produce numbered
+procedural how-to lists unless the user explicitly asks for instructions.
+
+Do not describe internal tools, system internals, or implementation details.
+```
+
+Edit the file in Obsidian to change voice; `sentinel-core` picks up the change on the next message.
+
 ---
 
 ## Quick Start
