@@ -2,7 +2,7 @@
 Obsidian Local REST API client.
 Follows the exact adapter pattern of lmstudio.py and pi_adapter.py.
 All methods degrade gracefully on error — callers never need to handle exceptions
-from this client (except write_session_summary, which callers wrap in try/except).
+from this client.
 
 HTTP mode: plugin must have non-encrypted server enabled (port 27123).
   Settings → Community Plugins → Local REST API → enable non-encrypted server.
@@ -153,15 +153,21 @@ class ObsidianClient:
         """
         PUT /vault/{path} — write session summary markdown.
         Per D-2 (MEM-06): always called after every completed exchange.
-        Callers wrap in try/except and log warning on failure — do NOT fail the HTTP response.
+        Swallows transport errors and logs a warning, returning None on failure —
+        the HTTP response to the user is never blocked by a vault write failure.
         """
-        resp = await self._client.put(
-            f"{self._base_url}/vault/{path}",
-            headers={**self._headers, "Content-Type": "text/markdown"},
-            content=content.encode("utf-8"),
-            timeout=10.0,
-        )
-        resp.raise_for_status()
+
+        async def _inner():
+            resp = await self._client.put(
+                f"{self._base_url}/vault/{path}",
+                headers={**self._headers, "Content-Type": "text/markdown"},
+                content=content.encode("utf-8"),
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            return None
+
+        await self._safe_request(_inner(), None, "write_session_summary")
 
     async def list_directory(self, path: str = "") -> list[str]:
         """GET /vault/{path}/ — return mixed list of filenames and subdir names.

@@ -4,13 +4,15 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from app.models import MessageEnvelope, ResponseEnvelope
 from app.services.message_error_mapper import to_http_status
-from app.services.message_persistence import write_session_summary_best_effort
 from app.services.message_processor_factory import from_app_state
 from app.services.message_processing import (
     MessageProcessingError,
     MessageResult,
     SEARCH_SCORE_THRESHOLD,
 )
+
+# Re-exported for tests; consumed in app.services.message_processing.
+_ = SEARCH_SCORE_THRESHOLD
 from app.services.message_route_bridge import build_message_request
 
 router = APIRouter()
@@ -36,8 +38,7 @@ async def post_message(
 
 def _schedule_session_summary(background_tasks: BackgroundTasks, request: Request, result: MessageResult) -> None:
     background_tasks.add_task(
-        write_session_summary_best_effort,
-        request.app.state.obsidian_client,
+        request.app.state.obsidian_client.write_session_summary,
         result.summary_path,
         result.summary_content,
     )

@@ -196,11 +196,16 @@ def obsidian_no_context():
 
 @pytest.fixture
 def obsidian_write_fails():
-    """Mock ObsidianClient where write raises an exception."""
+    """Mock ObsidianClient simulating the new swallow contract: write_session_summary
+    swallows transport errors internally (via _safe_request) and returns None.
+    The route schedules the client method directly as a background task; the client
+    layer absorbs the failure so the HTTP response stays 200."""
     mock = AsyncMock()
     mock.get_user_context.return_value = None
     mock.get_recent_sessions.return_value = []
-    mock.write_session_summary.side_effect = Exception("Obsidian write failed")
+    # Real ObsidianClient.write_session_summary now wraps in _safe_request and
+    # returns None on failure. Mirror that contract here.
+    mock.write_session_summary.return_value = None
     mock.search_vault.return_value = []
     return mock
 
@@ -308,7 +313,13 @@ async def test_no_injection_when_obsidian_down():
 
 
 async def test_response_succeeds_when_write_fails(obsidian_write_fails):
-    """Session summary write failure does not affect the HTTP response (D-2 failure handling)."""
+    """Session summary write failure does not affect the HTTP response (D-2 failure handling).
+
+    The swallow lives in ObsidianClient.write_session_summary now — see
+    test_obsidian_client.py::test_write_session_summary_swallows_exception_and_logs
+    for the unit-level swallow assertion. This test asserts the route-level
+    observable: HTTP 200, AI content returned, write_session_summary scheduled
+    as a background task with the expected summary path."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         app.state.obsidian_client = obsidian_write_fails
 
@@ -320,6 +331,11 @@ async def test_response_succeeds_when_write_fails(obsidian_write_fails):
 
     assert resp.status_code == 200
     assert resp.json()["content"] == "Test AI response"
+    # Confirm the route did schedule the write — the client's swallow is what
+    # would protect the response if this raised in production.
+    obsidian_write_fails.write_session_summary.assert_called_once()
+    call_args = obsidian_write_fails.write_session_summary.call_args
+    assert "ops/sessions/" in call_args.args[0]
 
 
 async def test_token_guard_fires_on_inflated_context():

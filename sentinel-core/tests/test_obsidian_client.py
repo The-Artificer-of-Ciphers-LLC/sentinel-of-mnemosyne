@@ -309,11 +309,19 @@ async def test_safe_request_silent_suppresses_log(mock_obsidian_client, caplog):
     assert "check_health" not in caplog.text
 
 
-async def test_write_session_summary_propagates_exception(mock_obsidian_client):
-    """write_session_summary is NOT wrapped in _safe_request — must raise."""
+async def test_write_session_summary_swallows_exception_and_logs(mock_obsidian_client, caplog):
+    """write_session_summary swallows transport errors via _safe_request,
+    returns None, and logs a warning. Vault write failure must not raise to the
+    background task or the route."""
+    import logging
+
     mock_obsidian_client._client.put = AsyncMock(side_effect=httpx.ConnectError("down"))
-    with pytest.raises(Exception):
-        await mock_obsidian_client.write_session_summary("ops/sessions/test.md", "content")
+    with caplog.at_level(logging.WARNING):
+        result = await mock_obsidian_client.write_session_summary(
+            "ops/sessions/test.md", "content"
+        )
+    assert result is None
+    assert "write_session_summary" in caplog.text
 
 
 # --- 260427-vl1 Task 5: list_directory / read_note / write_note / delete_note / patch_append ---
