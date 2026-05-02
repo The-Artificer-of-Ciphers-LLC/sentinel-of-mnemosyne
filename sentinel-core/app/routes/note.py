@@ -291,7 +291,6 @@ async def vault_sweep_start(req: SweepStartRequest, request: Request):
     # response returns immediately with the future path so the caller knows
     # where to look.
     if req.dry_run:
-        date_part = sweep_id.split("T")[0]
         # Sweep_id contains colons; sanitize for use in a filename.
         id_part = sweep_id.replace(":", "-")
         report_path = f"ops/sweeps/dry-run-{id_part}.md"
