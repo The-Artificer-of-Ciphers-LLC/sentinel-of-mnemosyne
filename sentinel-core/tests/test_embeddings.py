@@ -64,3 +64,69 @@ async def test_explicit_model_param_wins_over_settings(monkeypatch):
     )
 
     assert captured["model"] == "openai/explicit-override"
+
+
+@pytest.mark.asyncio
+async def test_no_models_loaded_raises_typed_error(monkeypatch):
+    """D-01: a litellm BadRequestError whose message contains "No models
+    loaded" is translated to EmbeddingModelUnavailable, with the
+    configured model id embedded in the new exception's message."""
+    import litellm
+
+    from app.clients import embeddings as embeddings_module
+    from app.clients.embeddings import EmbeddingModelUnavailable
+
+    async def _raise_no_models_loaded(**kwargs):
+        raise litellm.BadRequestError(
+            message="No models loaded. Please load a model.",
+            model=kwargs.get("model", ""),
+            llm_provider="openai",
+        )
+
+    monkeypatch.setattr(
+        embeddings_module.litellm, "aembedding", _raise_no_models_loaded
+    )
+
+    with pytest.raises(EmbeddingModelUnavailable) as excinfo:
+        await embeddings_module.embed_texts(
+            ["hello"],
+            api_base="http://localhost:1234/v1",
+            model="openai/some-model-id",
+        )
+
+    assert "openai/some-model-id" in str(excinfo.value)
+    assert "lms load" in str(excinfo.value)
+    # __cause__ preserved via `raise ... from exc`
+    assert isinstance(excinfo.value.__cause__, litellm.BadRequestError)
+
+
+@pytest.mark.asyncio
+async def test_other_bad_request_passes_through(monkeypatch):
+    """D-01: a BadRequestError that is NOT the "No models loaded" sentinel
+    propagates untouched — we don't want to swallow genuine bad-request
+    bugs (malformed input, wrong endpoint, etc.) under a generic typed
+    exception."""
+    import litellm
+
+    from app.clients import embeddings as embeddings_module
+    from app.clients.embeddings import EmbeddingModelUnavailable
+
+    async def _raise_malformed(**kwargs):
+        raise litellm.BadRequestError(
+            message="malformed request: invalid input shape",
+            model=kwargs.get("model", ""),
+            llm_provider="openai",
+        )
+
+    monkeypatch.setattr(
+        embeddings_module.litellm, "aembedding", _raise_malformed
+    )
+
+    with pytest.raises(litellm.BadRequestError) as excinfo:
+        await embeddings_module.embed_texts(
+            ["hello"], api_base="http://x", model="openai/m"
+        )
+
+    # Specifically NOT translated to EmbeddingModelUnavailable
+    assert not isinstance(excinfo.value, EmbeddingModelUnavailable)
+    assert "malformed request" in str(excinfo.value)

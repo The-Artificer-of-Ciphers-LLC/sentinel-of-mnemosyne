@@ -10,6 +10,18 @@ from __future__ import annotations
 import litellm
 
 
+class EmbeddingModelUnavailable(Exception):
+    """Raised when LM Studio reports no embedding model loaded.
+
+    Mirrors the ``ContextLengthError`` precedent (commit 9fe7c82) — vendor
+    SDK exception translation lives here in ``app/clients/`` so callers
+    higher in the stack don't pattern-match on litellm's BadRequestError
+    message strings. The configured embedding model id is included in the
+    message so operators can see exactly which model needs to be loaded
+    (260502-1zv D-01).
+    """
+
+
 def _default_model() -> str:
     """Resolve the configured embedding model id at call time.
 
@@ -41,12 +53,25 @@ async def embed_texts(
     call time. Callers that pass an explicit ``model=`` win.
     """
     resolved_model = model or _default_model()
-    resp = await litellm.aembedding(
-        model=resolved_model,
-        input=list(texts),
-        api_base=api_base,
-        timeout=timeout,
-    )
+    try:
+        resp = await litellm.aembedding(
+            model=resolved_model,
+            input=list(texts),
+            api_base=api_base,
+            timeout=timeout,
+        )
+    except litellm.BadRequestError as exc:
+        # LM Studio returns "No models loaded. Please load a model." as a
+        # 400 BadRequest when the embedding model isn't loaded. Translate
+        # to a typed exception so callers can distinguish operator-setup
+        # problems from genuine bad-request bugs.
+        if "no models loaded" in str(exc).lower():
+            raise EmbeddingModelUnavailable(
+                f"No embedding model loaded on LM Studio. Configured: "
+                f"{resolved_model}. Load via `lms load {resolved_model}` "
+                f"or LM Studio UI."
+            ) from exc
+        raise
     data = resp["data"] if isinstance(resp, dict) else resp.data
     out: list[list[float]] = []
     for item in data:
