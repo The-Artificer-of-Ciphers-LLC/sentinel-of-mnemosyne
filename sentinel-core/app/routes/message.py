@@ -8,10 +8,10 @@ from app.services.message_persistence import write_session_summary_best_effort
 from app.services.message_processor_factory import from_app_state
 from app.services.message_processing import (
     MessageProcessingError,
-    MessageRequest,
     MessageResult,
     SEARCH_SCORE_THRESHOLD,
 )
+from app.services.message_route_bridge import build_message_request
 
 router = APIRouter()
 
@@ -23,18 +23,10 @@ async def post_message(
     background_tasks: BackgroundTasks,
 ) -> ResponseEnvelope:
     processor = from_app_state(request.app.state)
-    stop_sequences = getattr(request.app.state, "lmstudio_stop_sequences", None) or None
+    req = build_message_request(envelope=envelope, app_state=request.app.state)
 
     try:
-        result = await processor.process(
-            MessageRequest(
-                content=envelope.content,
-                user_id=envelope.user_id,
-                model_name=request.app.state.settings.model_name,
-                context_window=request.app.state.context_window,
-                stop_sequences=stop_sequences,
-            )
-        )
+        result = await processor.process(req)
     except MessageProcessingError as exc:
         raise HTTPException(status_code=to_http_status(exc.code), detail=str(exc))
 
