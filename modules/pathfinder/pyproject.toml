@@ -25,7 +25,7 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-pythonpath = ["."]
+pythonpath = [".", "../../shared"]
 
 [dependency-groups]
 dev = [

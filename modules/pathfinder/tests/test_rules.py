@@ -202,7 +202,7 @@ def test_cosine_similarity_deterministic():
     """cosine_similarity(matrix, vec) matches np.dot(matrix, vec) / (norms * vec_norm)."""
     import numpy as np
 
-    from app.rules import cosine_similarity
+    from sentinel_shared.similarity import cosine_similarity
 
     matrix = np.array([[1.0, 0.0, 0.0, 0.0],
                        [0.0, 1.0, 0.0, 0.0],
@@ -220,7 +220,7 @@ def test_cosine_similarity_zero_vector_safe():
     """Zero-norm rows must NOT produce NaN (division-by-zero guard)."""
     import numpy as np
 
-    from app.rules import cosine_similarity
+    from sentinel_shared.similarity import cosine_similarity
 
     matrix = np.array([[0.0, 0.0, 0.0],
                        [1.0, 0.0, 0.0]], dtype=np.float32)

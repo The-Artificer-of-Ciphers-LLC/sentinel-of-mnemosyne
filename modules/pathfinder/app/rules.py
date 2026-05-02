@@ -19,7 +19,6 @@ GET-then-PUT is the only safe write pattern, enforced at the route layer (Wave 3
 """
 from __future__ import annotations
 
-import base64
 import datetime
 import hashlib
 import json
@@ -35,6 +34,8 @@ from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
 
 from app.routes.npc import slugify  # reuse — Don't Hand-Roll (Phase 29 precedent)
+from sentinel_shared.embedding_codec import decode_embedding, encode_embedding
+from sentinel_shared.similarity import cosine_similarity
 
 logger = logging.getLogger(__name__)
 
@@ -167,34 +168,9 @@ def check_pf1_scope(query: str) -> str | None:
 
 
 # --- Vector math (D-02 step 3 retrieval) ---
-
-def cosine_similarity(matrix: np.ndarray, vec: np.ndarray) -> np.ndarray:
-    """Return cosine similarity of every row in `matrix` against `vec`.
-
-    Zero-norm rows yield 0.0 (not NaN). Zero-norm `vec` yields an all-zero result.
-    """
-    matrix = np.asarray(matrix, dtype=np.float32)
-    vec = np.asarray(vec, dtype=np.float32)
-    if matrix.ndim != 2:
-        raise ValueError(f"cosine_similarity expected matrix.ndim=2, got {matrix.ndim}")
-    if vec.ndim != 1:
-        raise ValueError(f"cosine_similarity expected vec.ndim=1, got {vec.ndim}")
-
-    row_norms = np.linalg.norm(matrix, axis=1)
-    vec_norm = float(np.linalg.norm(vec))
-
-    # Guard against divide-by-zero: zero-norm rows or zero-norm query produce sim=0.
-    if vec_norm == 0.0:
-        return np.zeros(matrix.shape[0], dtype=np.float32)
-
-    # Replace zero row norms with 1.0 to avoid NaN; the numerator is 0 for those rows
-    # so the resulting similarity is correctly 0.
-    safe_row_norms = np.where(row_norms == 0.0, 1.0, row_norms)
-    dots = matrix @ vec
-    sims = dots / (safe_row_norms * vec_norm)
-    # Explicitly zero-out the rows that had zero norm (in case numerator wasn't exactly 0).
-    sims = np.where(row_norms == 0.0, 0.0, sims)
-    return sims.astype(np.float32)
+# cosine_similarity migrated to sentinel_shared.similarity (260502-g8c Task 4).
+# Q1-a overload: matrix×vec → ndarray contract preserved (pathfinder
+# uses the 2D×1D shape; sentinel-core uses 1D×1D). Imported above.
 
 
 def retrieve(
@@ -560,36 +536,13 @@ def _normalize_ruling_output(
 
 
 # --- Query-embedding (de)serialization helpers ---
-
-def _encode_query_embedding(vec) -> str:
-    """base64-encode a list[float] or np.ndarray as float32 little-endian bytes."""
-    if isinstance(vec, str):
-        # Already-encoded base64 — caller provided cached representation.
-        return vec
-    arr = np.asarray(vec, dtype=np.float32)
-    return base64.b64encode(arr.tobytes()).decode("ascii")
-
-
-def _decode_query_embedding(s) -> list[float]:
-    """Decode the frontmatter query_embedding back to a list[float].
-
-    Accepts either a base64 string (new-style) or a list/ndarray (already decoded).
-    """
-    if isinstance(s, list):
-        return [float(x) for x in s]
-    if isinstance(s, np.ndarray):
-        return s.astype(np.float32).tolist()
-    if isinstance(s, str):
-        if not s:
-            return []
-        try:
-            raw = base64.b64decode(s.encode("ascii"))
-            arr = np.frombuffer(raw, dtype=np.float32)
-            return arr.tolist()
-        except Exception as exc:
-            logger.warning("Failed to decode query_embedding base64: %s", exc)
-            return []
-    return []
+# _encode_query_embedding / _decode_query_embedding migrated to
+# sentinel_shared.embedding_codec.encode_embedding / decode_embedding
+# (260502-g8c Task 4). Q4-b: shared decode returns list[float]; ndarray
+# consumers wrap at the call site with np.asarray(..., dtype=np.float32).
+# Module-local aliases kept for backwards compat with __all__ + test imports.
+_encode_query_embedding = encode_embedding
+_decode_query_embedding = decode_embedding
 
 
 def _iso_utc_now() -> str:
@@ -655,7 +608,7 @@ def build_ruling_markdown(result: dict) -> str:
         hashlib.sha1(embedding_model.encode("utf-8")).hexdigest() if embedding_model else ""
     )
     query_embedding_raw = result.get("query_embedding", [])
-    query_embedding_b64 = _encode_query_embedding(query_embedding_raw)
+    query_embedding_b64 = encode_embedding(query_embedding_raw)
 
     composed_at = result.get("composed_at") or _iso_utc_now()
     last_reused_at = result.get("last_reused_at") or composed_at

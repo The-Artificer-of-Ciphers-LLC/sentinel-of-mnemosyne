@@ -39,10 +39,13 @@ import numpy as np
 
 _MODULE_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_MODULE_ROOT))
+# 260502-g8c Task 4: also add the repo-level shared/ so `sentinel_shared.*`
+# resolves when this script is run directly (no editable install needed).
+sys.path.insert(0, str(_MODULE_ROOT.parent.parent / "shared"))
 
 from app.config import settings  # noqa: E402
 from app.llm import embed_texts  # noqa: E402
-from app.rules import cosine_similarity  # noqa: E402
+from sentinel_shared.similarity import cosine_similarity  # noqa: E402
 
 _DEFAULT_EMBED_MODEL = settings.rules_embedding_model
 

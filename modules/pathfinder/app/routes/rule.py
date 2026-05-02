@@ -21,7 +21,6 @@ in this file — enforced by grep gate. All writes are full-body PUT on the cach
 """
 from __future__ import annotations
 
-import base64
 import datetime
 import hashlib
 import logging
@@ -34,6 +33,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.config import settings
 from app.resolve_model import resolve
+from sentinel_shared.embedding_codec import decode_embedding, encode_embedding
 from app.llm import (
     classify_rule_topic,
     embed_texts,
@@ -185,16 +185,12 @@ def _embedding_hash(model: str) -> str:
     return hashlib.sha1(model.encode("utf-8")).hexdigest()
 
 
-def _encode_query_embedding(vec) -> str:
-    """base64-encode a float32 LE byte array (D-13)."""
-    arr = np.asarray(vec, dtype=np.float32)
-    return base64.b64encode(arr.tobytes()).decode("ascii")
-
-
-def _decode_query_embedding(b64: str) -> np.ndarray:
-    """Decode a base64 float32 LE byte array back into a numpy float32 array."""
-    raw = base64.b64decode(b64)
-    return np.frombuffer(raw, dtype=np.float32).copy()
+# _encode_query_embedding / _decode_query_embedding migrated to
+# sentinel_shared.embedding_codec.encode_embedding / decode_embedding
+# (260502-g8c Task 4). Q4-b wrap-at-call-site: shared decode_embedding
+# returns list[float]; this module's decode call sites wrap with
+# np.asarray(..., dtype=np.float32) to preserve the ndarray contract
+# at the consumer boundary.
 
 
 def _strip_internal_fields(result: dict) -> dict:
@@ -346,7 +342,12 @@ async def rule_query(req: RuleQueryRequest) -> JSONResponse:
             # D-13: skip rulings from a different embedding model — staleness tolerated.
             continue
         try:
-            sib_vec = _decode_query_embedding(sib_parsed["query_embedding"])
+            # Q4-b wrap-at-call-site: shared decode returns list[float];
+            # this consumer needs ndarray for shape comparison + cosine.
+            sib_vec = np.asarray(
+                decode_embedding(sib_parsed["query_embedding"]),
+                dtype=np.float32,
+            )
         except Exception:
             continue
         # Cosine similarity against the single sibling vector.
@@ -420,7 +421,7 @@ async def rule_query(req: RuleQueryRequest) -> JSONResponse:
     result["last_reused_at"] = now_iso
     result["embedding_model"] = settings.rules_embedding_model
     result["embedding_hash"] = _embedding_hash(settings.rules_embedding_model)
-    result["query_embedding"] = _encode_query_embedding(query_vec)
+    result["query_embedding"] = encode_embedding(query_vec)
     result["reused"] = False
     result["reuse_note"] = ""
 
