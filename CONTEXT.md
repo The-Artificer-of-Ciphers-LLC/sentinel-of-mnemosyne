@@ -19,9 +19,12 @@ Sentinel reads from the **Self namespace**.
 _Avoid_: system prompt (use only when describing the LLM mechanism), personality, character.
 
 **Vault**:
-The Obsidian vault that serves as the Sentinel's persistent memory. Accessed exclusively through
-the Obsidian Local REST API. Contains the **Self**, **Sentinel**, and **Ops** namespaces.
-_Avoid_: database, store, knowledge base.
+The Obsidian vault that serves as the Sentinel's persistent memory. Both a domain concept
+and a code module (`app/vault.py`) — the `Vault` Protocol is the single seam through which
+Sentinel Core reads and writes persistent state. The current concrete adapter `ObsidianVault`
+implements the Protocol over the Obsidian Local REST API; tests use `FakeVault`. Contains the
+**Self**, **Sentinel**, **Ops**, and **Trash** namespaces.
+_Avoid_: database, store, knowledge base, ObsidianClient (legacy name — superseded by `Vault`).
 
 **Self namespace** (`self/`):
 Vault path holding the **user's** identity, methodology, goals, and relationships. Read by the
@@ -37,6 +40,13 @@ _Avoid_: prompts/, system/.
 Vault path holding operational state the Sentinel writes to: **Session summaries**
 (`ops/sessions/`), reminders (`ops/reminders.md`), sweeper output (`ops/sweeps/`).
 _Avoid_: logs, history.
+
+**Trash namespace** (`_trash/`):
+Vault path holding files relocated by the **vault sweeper** rather than deleted. Sweep
+operations are non-destructive: every relocation places the source under `_trash/{date}/`
+so an operator can restore. Operator-curated cleanup; never read by the Sentinel during
+message processing.
+_Avoid_: deleted/, archive/.
 
 **Hot tier**:
 Context loaded into every message: **Sentinel persona** (system role), **Self namespace** files
@@ -60,11 +70,13 @@ _Avoid_: plugin, extension, service.
 ## Relationships
 
 - A **Sentinel** owns one **Vault**.
-- A **Vault** contains the **Self namespace**, the **Sentinel namespace**, and the **Ops namespace**.
+- A **Vault** contains the **Self namespace**, the **Sentinel namespace**, the **Ops namespace**,
+  and the **Trash namespace**.
 - A **Session** writes one **Session summary** into `ops/sessions/`.
 - The **Sentinel persona** is read from the **Sentinel namespace** at the start of every **Session**.
 - The **Hot tier** combines the **Sentinel persona**, the **Self namespace**, and recent
   **Session summaries**. The **Warm tier** is sourced from **Vault** search.
+- The **vault sweeper** never deletes — it relocates source files into the **Trash namespace**.
 
 ## Example dialogue
 
