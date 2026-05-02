@@ -70,17 +70,22 @@ async def test_sentinel_key_name_fires(scanner, mock_classifier):
 # --- fail-open tests ---
 
 
-async def test_timeout_fails_open(mock_classifier, monkeypatch):
-    """asyncio.wait_for raises TimeoutError — scanner must fail open, not crash."""
+async def test_timeout_fails_open(monkeypatch):
+    """Real asyncio.wait_for timeout — scanner must fail open, not crash."""
     import asyncio as _asyncio
 
-    async def _timeout(*args, **kwargs):
-        raise _asyncio.TimeoutError()
+    from app.services import output_scanner as scanner_module
 
-    monkeypatch.setattr(_asyncio, "wait_for", _timeout)
-    scanner = OutputScanner(mock_classifier)
+    monkeypatch.setattr(scanner_module, "SECONDARY_TIMEOUT_S", 0.01)
+
+    async def _slow_classifier(excerpt: str, fired_patterns: list[str]) -> str:
+        await _asyncio.sleep(1.0)
+        return "SAFE"
+
+    scanner = OutputScanner(_slow_classifier)
     is_safe, reason = await scanner.scan("sk-ant-abc123def456ghi789jkl012mno345")
     assert is_safe is True
+    assert reason is None
 
 
 async def test_exception_fails_open():
