@@ -1,6 +1,6 @@
 """Tests for /note/classify and /inbox routes (260427-vl1 Tasks 5 + 6).
 
-Uses FastAPI TestClient with a fake in-memory ObsidianClient and the
+Uses FastAPI TestClient with a fake in-memory ObsidianVault and the
 classifier patched via monkeypatch / unittest.mock.
 """
 from __future__ import annotations
@@ -36,7 +36,7 @@ class FakeObsidian:
 
 def _make_app(obsidian: FakeObsidian) -> FastAPI:
     app = FastAPI()
-    app.state.obsidian_client = obsidian
+    app.state.vault = obsidian
     app.include_router(note_router)
     return app
 

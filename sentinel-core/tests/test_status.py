@@ -32,7 +32,7 @@ def mock_http_client():
 
 @pytest.fixture(autouse=True)
 def setup_app_state(mock_obsidian, mock_http_client):
-    app.state.obsidian_client = mock_obsidian
+    app.state.vault = mock_obsidian
     app.state.http_client = mock_http_client
     app.state.ai_provider_name = "lmstudio"
     app.state.settings = MagicMock()

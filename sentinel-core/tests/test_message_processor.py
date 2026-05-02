@@ -27,7 +27,7 @@ from app.services.provider_router import ContextLengthError, ProviderUnavailable
 
 
 class FakeObsidian:
-    """In-memory fake of the subset of ObsidianClient that MessageProcessor calls."""
+    """In-memory fake of the subset of the Vault that MessageProcessor calls."""
 
     def __init__(self, persona: str | None = None, self_files: dict[str, str] | None = None):
         self._persona = persona
@@ -43,7 +43,7 @@ class FakeObsidian:
     async def get_recent_sessions(self, user_id: str, limit: int = 3) -> list[str]:
         return []
 
-    async def search_vault(self, query: str) -> list[dict]:
+    async def find(self, query: str) -> list[dict]:
         return []
 
 
@@ -99,7 +99,7 @@ def make_processor(
     obsidian = FakeObsidian(persona=persona, self_files=self_files)
     ai = FakeAIProvider(response=ai_response, raise_exc=ai_raises)
     proc = MessageProcessor(
-        obsidian=obsidian,
+        vault=obsidian,
         ai_provider=ai,
         injection_filter=FakeInjectionFilter(),
         output_scanner=FakeOutputScanner(safe=output_safe),

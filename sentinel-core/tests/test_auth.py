@@ -49,7 +49,7 @@ async def test_auth_accepts_valid_key():
     from app.services.injection_filter import InjectionFilter
 
     _state_keys = (
-        "obsidian_client",
+        "vault",
         "context_window",
         "settings",
         "injection_filter",
@@ -67,7 +67,7 @@ async def test_auth_accepts_valid_key():
         mock_obsidian.get_user_context.return_value = None
         mock_obsidian.get_recent_sessions.return_value = []
         mock_obsidian.write_session_summary.return_value = None
-        app.state.obsidian_client = mock_obsidian
+        app.state.vault = mock_obsidian
         app.state.context_window = 8192
         app.state.settings = settings
         app.state.injection_filter = InjectionFilter()
@@ -94,7 +94,7 @@ async def test_auth_accepts_valid_key():
         from app.services.message_processing import MessageProcessor
 
         app.state.message_processor = MessageProcessor(
-            obsidian=app.state.obsidian_client,
+            vault=app.state.vault,
             ai_provider=app.state.ai_provider,
             injection_filter=app.state.injection_filter,
             output_scanner=app.state.output_scanner,

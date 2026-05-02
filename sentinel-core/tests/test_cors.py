@@ -18,7 +18,7 @@ AUTH_HEADERS = {"X-Sentinel-Key": "test-key-for-pytest"}
 def setup_app_state():
     app.state.module_registry = {}
     app.state.http_client = MagicMock()
-    app.state.obsidian_client = MagicMock()
+    app.state.vault = MagicMock()
     app.state.ai_provider_name = "lmstudio"
     app.state.settings = MagicMock()
     app.state.settings.pi_harness_url = "http://pi-harness:3000"

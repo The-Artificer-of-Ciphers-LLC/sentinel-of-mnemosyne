@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.get("/status")
 async def system_status(request: Request) -> JSONResponse:
-    obsidian = request.app.state.obsidian_client
+    obsidian = request.app.state.vault
     http_client = request.app.state.http_client
     pi_url = request.app.state.settings.pi_harness_url
 
@@ -37,7 +37,7 @@ async def debug_context(
     request: Request,
     user_id: str = Path(..., pattern=r"^[a-zA-Z0-9_-]+$"),
 ) -> JSONResponse:
-    obsidian = request.app.state.obsidian_client
+    obsidian = request.app.state.vault
     self_paths = [
         "self/identity.md",
         "self/methodology.md",

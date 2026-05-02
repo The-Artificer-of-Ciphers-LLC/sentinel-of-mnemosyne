@@ -69,8 +69,8 @@ class MessageProcessor:
     _SESSIONS_RATIO: float = 0.15
     _SEARCH_RATIO: float = 0.10
 
-    def __init__(self, obsidian, ai_provider, injection_filter, output_scanner) -> None:
-        self._obsidian = obsidian
+    def __init__(self, vault, ai_provider, injection_filter, output_scanner) -> None:
+        self._vault = vault
         self._ai_provider = ai_provider
         self._injection_filter = injection_filter
         self._output_scanner = output_scanner
@@ -134,8 +134,8 @@ class MessageProcessor:
             "ops/reminders.md",
         ]
         gather_results = await asyncio.gather(
-            *[self._obsidian.read_self_context(p) for p in self_paths],
-            self._obsidian.read_self_context("sentinel/persona.md"),
+            *[self._vault.read_self_context(p) for p in self_paths],
+            self._vault.read_self_context("sentinel/persona.md"),
             return_exceptions=True,
         )
         self_results = gather_results[: len(self_paths)]
@@ -149,7 +149,7 @@ class MessageProcessor:
             )
 
         self_contents = [r for r in self_results if isinstance(r, str) and r.strip()]
-        recent_sessions = await self._obsidian.get_recent_sessions(req.user_id, limit=3)
+        recent_sessions = await self._vault.get_recent_sessions(req.user_id, limit=3)
 
         context_parts: list[str] = []
         if self_contents:
@@ -166,7 +166,7 @@ class MessageProcessor:
         messages.append({"role": "assistant", "content": "Understood."})
 
     async def _append_warm_tier(self, messages: list[dict], req: MessageRequest, budget: int) -> None:
-        search_results = await self._obsidian.search_vault(req.content)
+        search_results = await self._vault.find(req.content)
         relevant_results = [r for r in search_results if r.get("score", 0.0) >= SEARCH_SCORE_THRESHOLD]
         if not relevant_results:
             return

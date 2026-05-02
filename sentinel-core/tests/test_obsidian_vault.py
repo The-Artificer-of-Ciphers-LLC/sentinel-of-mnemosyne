@@ -1,4 +1,4 @@
-"""Tests for ObsidianClient (MEM-01, MEM-05, MEM-08)."""
+"""Tests for ObsidianVault (MEM-01, MEM-05, MEM-08)."""
 import unittest.mock
 from unittest.mock import AsyncMock
 
@@ -6,7 +6,6 @@ import httpx
 import pytest
 from httpx import AsyncClient
 
-from app.clients.obsidian import ObsidianClient
 from app.vault import ObsidianVault, VaultUnreachableError
 
 
@@ -96,7 +95,7 @@ def obsidian_health_ok_mock():
 async def test_get_user_context_returns_content(obsidian_user_context_mock):
     """get_user_context() returns markdown body when Obsidian returns 200."""
     async with AsyncClient(transport=obsidian_user_context_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
         result = await obsidian.get_user_context("trekkie")
     assert result == "# User: trekkie\n\nI am a developer."
 
@@ -104,7 +103,7 @@ async def test_get_user_context_returns_content(obsidian_user_context_mock):
 async def test_get_user_context_returns_none_on_404(obsidian_404_mock):
     """get_user_context() returns None when Obsidian returns 404."""
     async with AsyncClient(transport=obsidian_404_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
         result = await obsidian.get_user_context("trekkie")
     assert result is None
 
@@ -112,7 +111,7 @@ async def test_get_user_context_returns_none_on_404(obsidian_404_mock):
 async def test_get_user_context_returns_none_on_connect_error(obsidian_connect_error_mock):
     """get_user_context() returns None (graceful degrade) when Obsidian is unreachable."""
     async with AsyncClient(transport=obsidian_connect_error_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
         result = await obsidian.get_user_context("trekkie")
     assert result is None
 
@@ -120,7 +119,7 @@ async def test_get_user_context_returns_none_on_connect_error(obsidian_connect_e
 async def test_get_recent_sessions_returns_list(obsidian_directory_listing_mock):
     """get_recent_sessions() returns a list of strings from directory listing."""
     async with AsyncClient(transport=obsidian_directory_listing_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
         result = await obsidian.get_recent_sessions("trekkie", limit=3)
     assert isinstance(result, list)
     # May have 0 to 3 items — graceful return, not assertion on count
@@ -129,7 +128,7 @@ async def test_get_recent_sessions_returns_list(obsidian_directory_listing_mock)
 async def test_get_recent_sessions_returns_empty_on_error(obsidian_connect_error_mock):
     """get_recent_sessions() returns [] when Obsidian is unreachable."""
     async with AsyncClient(transport=obsidian_connect_error_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
         result = await obsidian.get_recent_sessions("trekkie")
     assert result == []
 
@@ -137,7 +136,7 @@ async def test_get_recent_sessions_returns_empty_on_error(obsidian_connect_error
 async def test_write_session_summary_calls_put(obsidian_put_capture_mock):
     """write_session_summary() sends a PUT request to /vault/{path}."""
     async with AsyncClient(transport=obsidian_put_capture_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
         await obsidian.write_session_summary(
             "ops/sessions/2026-04-10/trekkie-12-00-00.md",
             "# Session\n\nContent here."
@@ -146,27 +145,27 @@ async def test_write_session_summary_calls_put(obsidian_put_capture_mock):
     assert "ops/sessions/2026-04-10/trekkie-12-00-00.md" in obsidian_put_capture_mock.captured[0]["path"]
 
 
-async def test_search_vault_returns_list(obsidian_search_mock):
-    """search_vault() returns a list of search results."""
+async def test_find_returns_list(obsidian_search_mock):
+    """find() returns a list of search results."""
     async with AsyncClient(transport=obsidian_search_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
-        result = await obsidian.search_vault("trekkie")
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
+        result = await obsidian.find("trekkie")
     assert isinstance(result, list)
     assert len(result) > 0
 
 
-async def test_search_vault_returns_empty_on_error(obsidian_connect_error_mock):
-    """search_vault() returns [] when Obsidian is unreachable."""
+async def test_find_returns_empty_on_error(obsidian_connect_error_mock):
+    """find() returns [] when Obsidian is unreachable."""
     async with AsyncClient(transport=obsidian_connect_error_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
-        result = await obsidian.search_vault("trekkie")
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
+        result = await obsidian.find("trekkie")
     assert result == []
 
 
 async def test_check_health_returns_true(obsidian_health_ok_mock):
     """check_health() returns True when Obsidian vault listing returns 200."""
     async with AsyncClient(transport=obsidian_health_ok_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
         result = await obsidian.check_health()
     assert result is True
 
@@ -174,7 +173,7 @@ async def test_check_health_returns_true(obsidian_health_ok_mock):
 async def test_check_health_returns_false_on_error(obsidian_connect_error_mock):
     """check_health() returns False when Obsidian is unreachable."""
     async with AsyncClient(transport=obsidian_connect_error_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
         result = await obsidian.check_health()
     assert result is False
 
@@ -214,7 +213,7 @@ async def test_get_self_context_parallel_all_present(obsidian_self_context_200_m
     async with AsyncClient(
         transport=obsidian_self_context_200_mock, base_url="http://test"
     ) as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
         result = await obsidian.read_self_context("self/identity.md")
     assert isinstance(result, str), "read_self_context() must return a str"
     assert result.strip(), "File is present — result must be non-empty"
@@ -225,7 +224,7 @@ async def test_get_self_context_parallel_one_404(obsidian_404_mock):
     async with AsyncClient(
         transport=obsidian_404_mock, base_url="http://test"
     ) as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
         result = await obsidian.read_self_context("self/methodology.md")
     assert result == "", "404 must return empty string"
 
@@ -235,7 +234,7 @@ async def test_get_self_context_parallel_error_returns_empty(obsidian_self_conte
     async with AsyncClient(
         transport=obsidian_self_context_error_mock, base_url="http://test"
     ) as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
         result = await obsidian.read_self_context("self/goals.md")
     assert result == "", "Error must return empty string"
 
@@ -245,8 +244,8 @@ async def test_get_self_context_404_no_log(obsidian_404_mock):
     async with AsyncClient(
         transport=obsidian_404_mock, base_url="http://test"
     ) as client:
-        obsidian = ObsidianClient(client, "http://test", "test-api-key")
-        import app.clients.obsidian as obsidian_module
+        obsidian = ObsidianVault(client, "http://test", "test-api-key")
+        import app.vault as obsidian_module
 
         with unittest.mock.patch.object(obsidian_module.logger, "warning") as mock_warn:
             result = await obsidian.read_self_context("self/relationships.md")
@@ -261,9 +260,9 @@ async def test_get_self_context_404_no_log(obsidian_404_mock):
 
 @pytest.fixture
 def mock_obsidian_client():
-    """ObsidianClient backed by a mock httpx.AsyncClient."""
+    """ObsidianVault backed by a mock httpx.AsyncClient."""
     mock_http = AsyncMock()
-    return ObsidianClient(mock_http, "http://test", "test-api-key")
+    return ObsidianVault(mock_http, "http://test", "test-api-key")
 
 
 async def test_safe_request_returns_result_on_success(mock_obsidian_client):
@@ -325,7 +324,7 @@ async def test_write_session_summary_swallows_exception_and_logs(mock_obsidian_c
     assert "write_session_summary" in caplog.text
 
 
-# --- 260427-vl1 Task 5: list_directory / read_note / write_note / delete_note / patch_append ---
+# --- 260427-vl1 Task 5: list_under / read_note / write_note / delete_note / patch_append ---
 
 
 @pytest.fixture
@@ -339,25 +338,25 @@ def obsidian_list_dir_mock():
     return httpx.MockTransport(handler)
 
 
-async def test_list_directory_returns_entries(obsidian_list_dir_mock):
+async def test_list_under_returns_entries(obsidian_list_dir_mock):
     async with AsyncClient(transport=obsidian_list_dir_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "k")
-        entries = await obsidian.list_directory("foo")
+        obsidian = ObsidianVault(client, "http://test", "k")
+        entries = await obsidian.list_under("foo")
     assert entries == ["a.md", "b.md", "subdir/"]
 
 
-async def test_list_directory_404_returns_empty(obsidian_list_dir_mock):
+async def test_list_under_404_returns_empty(obsidian_list_dir_mock):
     async with AsyncClient(transport=obsidian_list_dir_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "k")
-        entries = await obsidian.list_directory("missing")
+        obsidian = ObsidianVault(client, "http://test", "k")
+        entries = await obsidian.list_under("missing")
     assert entries == []
 
 
-async def test_list_directory_5xx_returns_empty(obsidian_list_dir_mock):
+async def test_list_under_5xx_returns_empty(obsidian_list_dir_mock):
     """Non-404 errors degrade to [] via _safe_request."""
     async with AsyncClient(transport=obsidian_list_dir_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "k")
-        entries = await obsidian.list_directory("anywhere")
+        obsidian = ObsidianVault(client, "http://test", "k")
+        entries = await obsidian.list_under("anywhere")
     assert entries == []
 
 
@@ -374,14 +373,14 @@ def obsidian_read_note_mock():
 
 async def test_read_note_returns_body(obsidian_read_note_mock):
     async with AsyncClient(transport=obsidian_read_note_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "k")
+        obsidian = ObsidianVault(client, "http://test", "k")
         body = await obsidian.read_note("foo.md")
     assert body == "# foo\nbody here"
 
 
 async def test_read_note_404_returns_empty(obsidian_read_note_mock):
     async with AsyncClient(transport=obsidian_read_note_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "k")
+        obsidian = ObsidianVault(client, "http://test", "k")
         body = await obsidian.read_note("missing.md")
     assert body == ""
 
@@ -408,7 +407,7 @@ def obsidian_write_capture_mock():
 
 async def test_write_note_puts_with_markdown_content_type(obsidian_write_capture_mock):
     async with AsyncClient(transport=obsidian_write_capture_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "k")
+        obsidian = ObsidianVault(client, "http://test", "k")
         await obsidian.write_note("references/x.md", "# x\nbody")
     cap = obsidian_write_capture_mock.captured[0]  # type: ignore[attr-defined]
     assert cap["method"] == "PUT"
@@ -424,14 +423,14 @@ async def test_write_note_raises_on_5xx():
 
     transport = httpx.MockTransport(handler)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "k")
+        obsidian = ObsidianVault(client, "http://test", "k")
         with pytest.raises(Exception):
             await obsidian.write_note("x.md", "body")
 
 
 async def test_delete_note_issues_delete(obsidian_write_capture_mock):
     async with AsyncClient(transport=obsidian_write_capture_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "k")
+        obsidian = ObsidianVault(client, "http://test", "k")
         await obsidian.delete_note("x.md")
     cap = obsidian_write_capture_mock.captured[0]  # type: ignore[attr-defined]
     assert cap["method"] == "DELETE"
@@ -440,7 +439,7 @@ async def test_delete_note_issues_delete(obsidian_write_capture_mock):
 
 async def test_patch_append_sets_end_position_header(obsidian_write_capture_mock):
     async with AsyncClient(transport=obsidian_write_capture_mock, base_url="http://test") as client:
-        obsidian = ObsidianClient(client, "http://test", "k")
+        obsidian = ObsidianVault(client, "http://test", "k")
         await obsidian.patch_append("ops/log.md", "new line\n")
     cap = obsidian_write_capture_mock.captured[0]  # type: ignore[attr-defined]
     assert cap["method"] == "PATCH"

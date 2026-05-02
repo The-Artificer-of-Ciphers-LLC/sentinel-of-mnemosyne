@@ -21,7 +21,7 @@ AUTH_HEADER = {"X-Sentinel-Key": "test-key-for-pytest"}
 def default_app_state(mock_ai_provider):
     """
     Provide default app state for all tests.
-    Sets obsidian_client (no-op mock), ai_provider (mock returning canned response),
+    Sets vault (no-op mock), ai_provider (mock returning canned response),
     context_window, settings, and security services (injection_filter, output_scanner).
     Tests that need specific behavior override app.state directly.
     """
@@ -29,7 +29,7 @@ def default_app_state(mock_ai_provider):
     mock_obsidian.get_user_context.return_value = None
     mock_obsidian.get_recent_sessions.return_value = []
     mock_obsidian.write_session_summary.return_value = None
-    mock_obsidian.search_vault.return_value = []
+    mock_obsidian.find.return_value = []
 
     # Per-path responses for read_self_context: persona.md returns a test
     # persona so Task 4's vault-sourced persona path is exercised; all other
@@ -40,7 +40,7 @@ def default_app_state(mock_ai_provider):
         return ""
 
     mock_obsidian.read_self_context.side_effect = _read_self_context_side_effect
-    app.state.obsidian_client = mock_obsidian
+    app.state.vault = mock_obsidian
     app.state.ai_provider = mock_ai_provider
     app.state.context_window = 8192
     app.state.settings = settings
@@ -56,7 +56,7 @@ def default_app_state(mock_ai_provider):
     default_output_scanner = AsyncMock()
     default_output_scanner.scan = AsyncMock(return_value=(True, None))
     app.state.output_scanner = default_output_scanner
-    # Test-only lazy proxy: many tests mutate app.state.obsidian_client /
+    # Test-only lazy proxy: many tests mutate app.state.vault /
     # ai_provider AFTER fixture setup, then expect the route to pick up the
     # new wiring. The route now reads app.state.message_processor directly,
     # so without a lazy rebuild every such test would have to manually
@@ -69,7 +69,7 @@ def default_app_state(mock_ai_provider):
     class _LazyTestProcessor:
         async def process(self, req):
             current = MessageProcessor(
-                obsidian=app.state.obsidian_client,
+                vault=app.state.vault,
                 ai_provider=app.state.ai_provider,
                 injection_filter=app.state.injection_filter,
                 output_scanner=app.state.output_scanner,
@@ -204,40 +204,40 @@ def test_user_id_accepts_valid_chars():
 
 @pytest.fixture
 def obsidian_with_context():
-    """Mock ObsidianClient that returns self/ context and no sessions."""
+    """Mock ObsidianVault that returns self/ context and no sessions."""
     mock = AsyncMock()
     mock.get_user_context.return_value = "# User: trekkie\n\nI am a developer."
     mock.read_self_context.return_value = "# User: trekkie\n\nI am a developer."
     mock.get_recent_sessions.return_value = []
     mock.write_session_summary.return_value = None
-    mock.search_vault.return_value = []
+    mock.find.return_value = []
     return mock
 
 
 @pytest.fixture
 def obsidian_no_context():
-    """Mock ObsidianClient where user file does not exist."""
+    """Mock ObsidianVault where user file does not exist."""
     mock = AsyncMock()
     mock.get_user_context.return_value = None
     mock.get_recent_sessions.return_value = []
     mock.write_session_summary.return_value = None
-    mock.search_vault.return_value = []
+    mock.find.return_value = []
     return mock
 
 
 @pytest.fixture
 def obsidian_write_fails():
-    """Mock ObsidianClient simulating the new swallow contract: write_session_summary
+    """Mock ObsidianVault simulating the new swallow contract: write_session_summary
     swallows transport errors internally (via _safe_request) and returns None.
     The route schedules the client method directly as a background task; the client
     layer absorbs the failure so the HTTP response stays 200."""
     mock = AsyncMock()
     mock.get_user_context.return_value = None
     mock.get_recent_sessions.return_value = []
-    # Real ObsidianClient.write_session_summary now wraps in _safe_request and
+    # Real ObsidianVault.write_session_summary now wraps in _safe_request and
     # returns None on failure. Mirror that contract here.
     mock.write_session_summary.return_value = None
-    mock.search_vault.return_value = []
+    mock.find.return_value = []
     return mock
 
 
@@ -252,7 +252,7 @@ async def test_context_injected_when_file_exists(obsidian_with_context, mock_ai_
     mock_ai_provider.complete.side_effect = capturing_complete
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = obsidian_with_context
+        app.state.vault = obsidian_with_context
         app.state.ai_provider = mock_ai_provider
 
         resp = await client.post(
@@ -276,7 +276,7 @@ async def test_context_injected_messages_shape(obsidian_with_context, mock_ai_pr
     mock_ai_provider.complete.side_effect = capturing_complete
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = obsidian_with_context
+        app.state.vault = obsidian_with_context
         app.state.ai_provider = mock_ai_provider
 
         resp = await client.post(
@@ -307,7 +307,7 @@ async def test_no_injection_when_user_file_missing(obsidian_no_context, mock_ai_
     mock_ai_provider.complete.side_effect = capturing_complete
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = obsidian_no_context
+        app.state.vault = obsidian_no_context
         app.state.ai_provider = mock_ai_provider
 
         resp = await client.post(
@@ -328,11 +328,11 @@ async def test_no_injection_when_obsidian_down():
     obsidian_down.get_user_context.return_value = None  # graceful — returns None not raises
     obsidian_down.get_recent_sessions.return_value = []
     obsidian_down.write_session_summary.return_value = None
-    obsidian_down.search_vault.return_value = []
+    obsidian_down.find.return_value = []
     obsidian_down.read_self_context.return_value = ""
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = obsidian_down
+        app.state.vault = obsidian_down
 
         resp = await client.post(
             "/message",
@@ -346,13 +346,13 @@ async def test_no_injection_when_obsidian_down():
 async def test_response_succeeds_when_write_fails(obsidian_write_fails):
     """Session summary write failure does not affect the HTTP response (D-2 failure handling).
 
-    The swallow lives in ObsidianClient.write_session_summary now — see
-    test_obsidian_client.py::test_write_session_summary_swallows_exception_and_logs
+    The swallow lives in ObsidianVault.write_session_summary now — see
+    test_obsidian_vault.py::test_write_session_summary_swallows_exception_and_logs
     for the unit-level swallow assertion. This test asserts the route-level
     observable: HTTP 200, AI content returned, write_session_summary scheduled
     as a background task with the expected summary path."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = obsidian_write_fails
+        app.state.vault = obsidian_write_fails
 
         resp = await client.post(
             "/message",
@@ -377,7 +377,7 @@ async def test_token_guard_fires_on_inflated_context():
     huge_context.write_session_summary.return_value = None
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = huge_context
+        app.state.vault = huge_context
         app.state.context_window = 10  # tiny window — truncation overhead alone exceeds this
 
         resp = await client.post(
@@ -399,7 +399,7 @@ async def test_context_truncated_to_budget():
     long_context.write_session_summary.return_value = None
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = long_context
+        app.state.vault = long_context
         app.state.context_window = 400  # 25% budget = 100 tokens
 
         resp = await client.post(
@@ -667,12 +667,12 @@ async def test_output_scanner_clean_response_passes(mock_ai_provider, mock_injec
 
 @pytest.fixture
 def obsidian_with_search_results():
-    """Mock ObsidianClient that returns vault search results and no hot-tier context."""
+    """Mock ObsidianVault that returns vault search results and no hot-tier context."""
     mock = AsyncMock()
     mock.get_user_context.return_value = None
     mock.get_recent_sessions.return_value = []
     mock.write_session_summary.return_value = None
-    mock.search_vault.return_value = [
+    mock.find.return_value = [
         {
             "filename": "core/users/trekkie.md",
             "score": 1.0,
@@ -684,13 +684,13 @@ def obsidian_with_search_results():
 
 @pytest.fixture
 def obsidian_with_context_and_search():
-    """Mock ObsidianClient that returns both hot-tier self/ context and vault search results."""
+    """Mock ObsidianVault that returns both hot-tier self/ context and vault search results."""
     mock = AsyncMock()
     mock.get_user_context.return_value = "# User: trekkie\n\nI am a developer."
     mock.read_self_context.return_value = "# User: trekkie\n\nI am a developer."
     mock.get_recent_sessions.return_value = []
     mock.write_session_summary.return_value = None
-    mock.search_vault.return_value = [
+    mock.find.return_value = [
         {
             "filename": "core/users/trekkie.md",
             "score": 1.0,
@@ -701,23 +701,23 @@ def obsidian_with_context_and_search():
 
 
 async def test_warm_tier_called_on_every_message(mock_ai_provider):
-    """search_vault() is called on every POST /message exchange (D-03)."""
+    """vault.find() is called on every POST /message exchange (D-03)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         app.state.ai_provider = mock_ai_provider
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
     assert resp.status_code == 200
-    app.state.obsidian_client.search_vault.assert_called_once_with("hello")
+    app.state.vault.find.assert_called_once_with("hello")
 
 
 async def test_warm_tier_injected_when_results_present(obsidian_with_search_results, mock_ai_provider):
-    """When search_vault returns results, a 2nd user/assistant pair is injected (D-04)."""
+    """When find() returns results, a 2nd user/assistant pair is injected (D-04)."""
     captured_messages = []
     async def capturing_complete(messages):
         captured_messages.extend(messages)
         return "Hello from AI"
     mock_ai_provider.complete.side_effect = capturing_complete
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = obsidian_with_search_results
+        app.state.vault = obsidian_with_search_results
         app.state.ai_provider = mock_ai_provider
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
     assert resp.status_code == 200
@@ -734,8 +734,8 @@ async def test_warm_tier_injected_when_results_present(obsidian_with_search_resu
 
 
 async def test_warm_tier_skipped_when_empty(mock_ai_provider):
-    """When search_vault returns [], no vault pair is injected (D-05)."""
-    # default_app_state already sets search_vault.return_value = []
+    """When find() returns [], no vault pair is injected (D-05)."""
+    # default_app_state already sets find.return_value = []
     captured_messages = []
     async def capturing_complete(messages):
         captured_messages.extend(messages)
@@ -758,12 +758,12 @@ async def test_warm_tier_truncated_independently(mock_ai_provider):
     long_vault_obsidian.get_recent_sessions.return_value = []
     long_vault_obsidian.write_session_summary.return_value = None
     # Return a result where context snippet is very long
-    long_vault_obsidian.search_vault.return_value = [
+    long_vault_obsidian.find.return_value = [
         {"filename": "notes/long.md", "score": 1.0,
          "matches": [{"match": {"start": 0, "end": 100}, "context": "word " * 500}]}
     ]
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = long_vault_obsidian
+        app.state.vault = long_vault_obsidian
         app.state.ai_provider = mock_ai_provider
         app.state.context_window = 400  # SEARCH_BUDGET_RATIO=0.10 → 40 tokens budget
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
@@ -779,7 +779,7 @@ async def test_warm_tier_both_tiers_five_messages(obsidian_with_context_and_sear
         return "Hello from AI"
     mock_ai_provider.complete.side_effect = capturing_complete
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = obsidian_with_context_and_search
+        app.state.vault = obsidian_with_context_and_search
         app.state.ai_provider = mock_ai_provider
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
     assert resp.status_code == 200
@@ -813,7 +813,7 @@ async def test_warm_tier_skipped_when_all_results_below_threshold(mock_ai_provid
     low_score_obsidian.get_recent_sessions.return_value = []
     low_score_obsidian.write_session_summary.return_value = None
     # Score just below threshold — should be filtered out entirely
-    low_score_obsidian.search_vault.return_value = [
+    low_score_obsidian.find.return_value = [
         {
             "filename": "pf2e/harvest/wolf-lord.md",
             "score": SEARCH_SCORE_THRESHOLD - 0.01,
@@ -834,7 +834,7 @@ async def test_warm_tier_skipped_when_all_results_below_threshold(mock_ai_provid
     mock_ai_provider.complete.side_effect = capturing_complete
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = low_score_obsidian
+        app.state.vault = low_score_obsidian
         app.state.ai_provider = mock_ai_provider
         resp = await client.post(
             "/message",
@@ -861,7 +861,7 @@ async def test_warm_tier_injected_when_score_meets_threshold(mock_ai_provider):
     mixed_score_obsidian.get_user_context.return_value = None
     mixed_score_obsidian.get_recent_sessions.return_value = []
     mixed_score_obsidian.write_session_summary.return_value = None
-    mixed_score_obsidian.search_vault.return_value = [
+    mixed_score_obsidian.find.return_value = [
         {
             "filename": "memory/courses/sing-better.md",
             "score": SEARCH_SCORE_THRESHOLD + 0.1,
@@ -882,7 +882,7 @@ async def test_warm_tier_injected_when_score_meets_threshold(mock_ai_provider):
     mock_ai_provider.complete.side_effect = capturing_complete
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = mixed_score_obsidian
+        app.state.vault = mixed_score_obsidian
         app.state.ai_provider = mock_ai_provider
         resp = await client.post(
             "/message",
@@ -908,7 +908,7 @@ async def test_warm_tier_result_missing_score_defaults_to_zero(mock_ai_provider)
     no_score_obsidian.get_recent_sessions.return_value = []
     no_score_obsidian.write_session_summary.return_value = None
     # Result with no score field — should be treated as 0.0 and filtered out
-    no_score_obsidian.search_vault.return_value = [
+    no_score_obsidian.find.return_value = [
         {
             "filename": "some/note.md",
             "matches": [{"match": {"start": 0, "end": 10}, "context": "some content"}],
@@ -924,7 +924,7 @@ async def test_warm_tier_result_missing_score_defaults_to_zero(mock_ai_provider)
     mock_ai_provider.complete.side_effect = capturing_complete
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = no_score_obsidian
+        app.state.vault = no_score_obsidian
         app.state.ai_provider = mock_ai_provider
         resp = await client.post(
             "/message",
@@ -953,11 +953,11 @@ async def test_session_write_uses_ops_sessions_path():
     mock_obsidian.get_user_context.return_value = None
     mock_obsidian.get_recent_sessions.return_value = []
     mock_obsidian.write_session_summary.return_value = None
-    mock_obsidian.search_vault.return_value = []
+    mock_obsidian.find.return_value = []
     mock_obsidian.read_self_context.return_value = ""
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        app.state.obsidian_client = mock_obsidian
+        app.state.vault = mock_obsidian
 
         resp = await client.post(
             "/message",

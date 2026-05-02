@@ -23,9 +23,8 @@ from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response
 
 from app.clients.litellm_provider import LiteLLMProvider
-from app.clients.obsidian import ObsidianClient
 from app.config import settings
-from app.vault import VaultUnreachableError
+from app.vault import ObsidianVault, VaultUnreachableError
 from app.routes.message import router as message_router
 from app.routes.modules import router as modules_router
 from app.routes.note import router as note_router
@@ -177,20 +176,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         f"(fallback: {settings.ai_fallback_provider})"
     )
 
-    # Obsidian client — degrades gracefully if Obsidian is not running
-    obsidian_client = ObsidianClient(
+    # Vault adapter — degrades gracefully if Obsidian is not running
+    vault = ObsidianVault(
         http_client,
         settings.obsidian_api_url,
         settings.obsidian_api_key,
     )
-    app.state.obsidian_client = obsidian_client
+    app.state.vault = vault
 
     # ADR-0001 startup contract — preserved end-to-end via the Vault seam:
     #   * vault reachable + persona 200 → log success
     #   * vault reachable + persona 404 → hard fail (operator setup error)
     #   * vault unreachable (transport failure) → warn + continue with fallback
     try:
-        persona = await obsidian_client.read_persona()
+        persona = await vault.read_persona()
     except VaultUnreachableError as exc:
         logger.warning(
             "Obsidian REST API unavailable at startup — memory features degraded. "
@@ -228,7 +227,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.injection_filter = InjectionFilter()
     app.state.output_scanner = OutputScanner(_secondary_classifier)
     app.state.message_processor = MessageProcessor(
-        obsidian=app.state.obsidian_client,
+        vault=app.state.vault,
         ai_provider=app.state.ai_provider,
         injection_filter=app.state.injection_filter,
         output_scanner=app.state.output_scanner,
@@ -318,7 +317,7 @@ async def health(request: Request) -> JSONResponse:
     as non-blocking fields. (260502-1zv D-02 — embedding_model field added.)"""
     obsidian_ok = False
     try:
-        obsidian_ok = await request.app.state.obsidian_client.check_health()
+        obsidian_ok = await request.app.state.vault.check_health()
     except Exception:
         pass
 

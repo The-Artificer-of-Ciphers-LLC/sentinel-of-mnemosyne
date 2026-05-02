@@ -20,9 +20,9 @@ import sys
 
 import httpx
 
-from app.clients.obsidian import ObsidianClient
 from app.config import settings
-from app.services.vault_sweeper import _today_str, move_to_trash
+from app.services.vault_sweeper import _today_str
+from app.vault import ObsidianVault
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger("trash_vault_root_junk")
@@ -50,11 +50,11 @@ async def _run(dry_run: bool) -> int:
     failed = 0
 
     async with httpx.AsyncClient() as http_client:
-        client = ObsidianClient(http_client, base_url, api_key)
+        vault = ObsidianVault(http_client, base_url, api_key)
 
         for filename in JUNK_FILES:
             try:
-                body = await client.read_note(filename)
+                body = await vault.read_note(filename)
             except Exception as exc:
                 logger.warning("error: read failed for %s: %s", filename, exc)
                 failed += 1
@@ -72,7 +72,7 @@ async def _run(dry_run: bool) -> int:
                 continue
 
             try:
-                actual_dst = await move_to_trash(client, filename, reason=TRASH_REASON)
+                actual_dst = await vault.move_to_trash(filename, reason=TRASH_REASON)
                 logger.info("trashed: %s -> %s", filename, actual_dst)
                 trashed += 1
             except Exception as exc:

@@ -57,7 +57,7 @@ def _schedule_session_summary(
     background_tasks: BackgroundTasks, request: Request, result: MessageResult
 ) -> None:
     background_tasks.add_task(
-        request.app.state.obsidian_client.write_session_summary,
+        request.app.state.vault.write_session_summary,
         result.summary_path,
         result.summary_content,
     )

@@ -250,7 +250,7 @@ async def walk_vault(client, root: str = "") -> AsyncIterator[str]:
         dir_path = queue.pop(0)
         if any(dir_path.startswith(p.rstrip("/")) and dir_path != "" for p in skip_prefixes):
             continue
-        listing = await client.list_directory(dir_path)
+        listing = await client.list_under(dir_path)
         for entry in listing:
             if not entry:
                 continue
@@ -328,8 +328,9 @@ async def run_sweep(
     """Walk vault, classify, embed, de-dup, relocate-misplaced, move-to-trash.
 
     Args:
-        client: ObsidianClient (or fake) with list_directory/read_note/
-            write_note/delete_note/patch_append.
+        client: Vault adapter (ObsidianVault or FakeVault) with list_under/
+            read_note/write_note/delete_note/patch_append plus the sweep
+            primitives move_to_trash/relocate/acquire_sweep_lock/release_sweep_lock.
         classifier: async fn(text) → ClassificationResult (or compatible).
             Bound caller passes ``classify_note`` from note_classifier.
         embedder: async fn(list[str]) → list[list[float]]. Caller binds the

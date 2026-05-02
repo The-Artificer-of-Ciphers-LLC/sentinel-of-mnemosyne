@@ -4,7 +4,7 @@ Implements the full ``app.vault.Vault`` Protocol against a ``dict[str, str]``
 backing store (path → body). Every method preserves the contract of the
 production ``ObsidianVault`` adapter at the observable level — same return
 shapes, same graceful-degrade vs raise semantics — so tests that swap
-``MagicMock(spec=ObsidianClient)`` for ``FakeVault()`` are pure
+``MagicMock(spec=ObsidianVault)`` for ``FakeVault()`` are pure
 fixture-wiring refactors (Test-Rewrite Ban allowed list): assertions and
 call paths stay identical.
 """

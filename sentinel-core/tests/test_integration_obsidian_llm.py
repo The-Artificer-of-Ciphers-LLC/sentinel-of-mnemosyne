@@ -29,14 +29,14 @@ KNOWN_SESSION = "## User\nWhat is my current goal?\n## Sentinel\nBuild the Senti
 @pytest.fixture(autouse=True)
 def setup_app_state():
     """Inject mock state for all integration tests — no live infrastructure required."""
-    # Mock ObsidianClient with known return values
+    # Mock ObsidianVault with known return values
     mock_obsidian = AsyncMock()
     mock_obsidian.read_self_context = AsyncMock(return_value="")
     mock_obsidian.read_self_context.side_effect = lambda path: (
         KNOWN_IDENTITY if path == "self/identity.md" else ""
     )
     mock_obsidian.get_recent_sessions = AsyncMock(return_value=[KNOWN_SESSION])
-    mock_obsidian.search_vault = AsyncMock(return_value=[])
+    mock_obsidian.find = AsyncMock(return_value=[])
     mock_obsidian.write_session_summary = AsyncMock(return_value=None)
 
     # Mock AI provider — returns a known response
@@ -58,7 +58,7 @@ def setup_app_state():
     mock_settings.model_name = "test-model"
     mock_settings.pi_harness_url = "http://pi-harness:3000"
 
-    app.state.obsidian_client = mock_obsidian
+    app.state.vault = mock_obsidian
     app.state.ai_provider = mock_ai_provider
     app.state.injection_filter = mock_filter
     app.state.output_scanner = mock_scanner
@@ -72,7 +72,7 @@ def setup_app_state():
     from app.services.message_processing import MessageProcessor
 
     app.state.message_processor = MessageProcessor(
-        obsidian=mock_obsidian,
+        vault=mock_obsidian,
         ai_provider=mock_ai_provider,
         injection_filter=mock_filter,
         output_scanner=mock_scanner,
@@ -99,7 +99,7 @@ async def test_obsidian_context_injected_into_llm_prompt():
     assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
 
     # Verify Obsidian context was called
-    app.state.obsidian_client.read_self_context.assert_any_call("self/identity.md")
+    app.state.vault.read_self_context.assert_any_call("self/identity.md")
 
     # Verify known identity content reached the messages array
     all_content = " ".join(
@@ -131,7 +131,7 @@ async def test_recent_sessions_injected_into_llm_prompt():
 
     assert resp.status_code == 200
 
-    app.state.obsidian_client.get_recent_sessions.assert_called_once_with("test-user-123", limit=3)
+    app.state.vault.get_recent_sessions.assert_called_once_with("test-user-123", limit=3)
 
     all_content = " ".join(
         msg["content"] for msg in captured_messages if isinstance(msg.get("content"), str)
@@ -160,9 +160,9 @@ async def test_pipeline_returns_200_with_response():
 
 async def test_pipeline_degrades_gracefully_when_obsidian_unavailable():
     """D-GD-03: If Obsidian returns empty for all reads, POST /message still returns 200."""
-    app.state.obsidian_client.read_self_context = AsyncMock(return_value="")
-    app.state.obsidian_client.get_recent_sessions = AsyncMock(return_value=[])
-    app.state.obsidian_client.search_vault = AsyncMock(return_value=[])
+    app.state.vault.read_self_context = AsyncMock(return_value="")
+    app.state.vault.get_recent_sessions = AsyncMock(return_value=[])
+    app.state.vault.find = AsyncMock(return_value=[])
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(

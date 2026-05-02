@@ -8,7 +8,7 @@ Endpoints:
   POST /vault/sweep/start       — admin-gated; spawns a sweep task and returns sweep_id
   GET  /vault/sweep/status      — current sweep progress (idle/running/complete)
 
-All Obsidian I/O goes through `request.app.state.obsidian_client`. The
+All Obsidian I/O goes through `request.app.state.vault`. The
 classifier is a pure function (no app.state singleton needed).
 """
 from __future__ import annotations
@@ -109,11 +109,11 @@ def _build_filed_note_markdown(
 
 
 async def _resolve_target_with_collision_suffix(
-    obsidian, topic: str, slug: str
+    vault, topic: str, slug: str
 ) -> str:
     """Return a target path that does not currently exist in the vault."""
     target = _topic_target_path(topic, slug)
-    existing = await obsidian.read_note(target)
+    existing = await vault.read_note(target)
     if existing:
         suffix = secrets.token_hex(4)
         target = _topic_target_path(topic, f"{slug}-{suffix}")
@@ -129,7 +129,7 @@ def _content_hash(body: str) -> str:
 
 @router.post("/note/classify", response_model=ClassifyResponse)
 async def classify_and_file(req: ClassifyRequest, request: Request) -> ClassifyResponse:
-    obsidian = request.app.state.obsidian_client
+    vault = request.app.state.vault
     result = await classify_note(req.content, user_topic=req.topic)
 
     if result.topic == "noise":
@@ -141,7 +141,7 @@ async def classify_and_file(req: ClassifyRequest, request: Request) -> ClassifyR
         )
 
     if result.topic == "unsure" or result.confidence < 0.5:
-        body = await obsidian.read_note(INBOX_PATH)
+        body = await vault.read_note(INBOX_PATH)
         if not body or not body.strip():
             body = build_initial_inbox()
         new_body = append_entry(
@@ -150,7 +150,7 @@ async def classify_and_file(req: ClassifyRequest, request: Request) -> ClassifyR
             result,
             suggested=[result.topic] if result.topic != "unsure" else [],
         )
-        await obsidian.write_note(INBOX_PATH, new_body)
+        await vault.write_note(INBOX_PATH, new_body)
         return ClassifyResponse(
             action="inboxed",
             topic=result.topic,
@@ -160,10 +160,10 @@ async def classify_and_file(req: ClassifyRequest, request: Request) -> ClassifyR
 
     # File directly
     target = await _resolve_target_with_collision_suffix(
-        obsidian, result.topic, result.title_slug or "untitled"
+        vault, result.topic, result.title_slug or "untitled"
     )
     body = _build_filed_note_markdown(req.content, result)
-    await obsidian.write_note(target, body)
+    await vault.write_note(target, body)
     return ClassifyResponse(
         action="filed",
         path=target,
@@ -174,8 +174,8 @@ async def classify_and_file(req: ClassifyRequest, request: Request) -> ClassifyR
 
 @router.get("/inbox")
 async def get_inbox(request: Request):
-    obsidian = request.app.state.obsidian_client
-    body = await obsidian.read_note(INBOX_PATH)
+    vault = request.app.state.vault
+    body = await vault.read_note(INBOX_PATH)
     entries = parse_inbox(body)
     rendered = render_for_discord(entries)
     return {
@@ -186,8 +186,8 @@ async def get_inbox(request: Request):
 
 @router.post("/inbox/classify")
 async def inbox_classify(req: InboxClassifyRequest, request: Request):
-    obsidian = request.app.state.obsidian_client
-    body = await obsidian.read_note(INBOX_PATH)
+    vault = request.app.state.vault
+    body = await vault.read_note(INBOX_PATH)
     entries = parse_inbox(body)
 
     target_entry = next((e for e in entries if e.entry_n == req.entry_n), None)
@@ -200,13 +200,13 @@ async def inbox_classify(req: InboxClassifyRequest, request: Request):
     result = await classify_note(target_entry.candidate_text, user_topic=req.topic)
 
     target = await _resolve_target_with_collision_suffix(
-        obsidian, req.topic, result.title_slug or "untitled"
+        vault, req.topic, result.title_slug or "untitled"
     )
     note_body = _build_filed_note_markdown(target_entry.candidate_text, result)
-    await obsidian.write_note(target, note_body)
+    await vault.write_note(target, note_body)
 
     # Concurrency check: re-read inbox; abort if changed since pre-hash
-    fresh_body = await obsidian.read_note(INBOX_PATH)
+    fresh_body = await vault.read_note(INBOX_PATH)
     if _content_hash(fresh_body) != pre_hash:
         raise HTTPException(
             status_code=409,
@@ -214,7 +214,7 @@ async def inbox_classify(req: InboxClassifyRequest, request: Request):
         )
 
     new_inbox = remove_entry(body, req.entry_n)
-    await obsidian.write_note(INBOX_PATH, new_inbox)
+    await vault.write_note(INBOX_PATH, new_inbox)
 
     return {
         "action": "filed",
@@ -226,8 +226,8 @@ async def inbox_classify(req: InboxClassifyRequest, request: Request):
 
 @router.post("/inbox/discard")
 async def inbox_discard(req: InboxDiscardRequest, request: Request):
-    obsidian = request.app.state.obsidian_client
-    body = await obsidian.read_note(INBOX_PATH)
+    vault = request.app.state.vault
+    body = await vault.read_note(INBOX_PATH)
     entries = parse_inbox(body)
     target_entry = next((e for e in entries if e.entry_n == req.entry_n), None)
     if target_entry is None:
@@ -235,7 +235,7 @@ async def inbox_discard(req: InboxDiscardRequest, request: Request):
 
     pre_hash = _content_hash(body)
 
-    fresh_body = await obsidian.read_note(INBOX_PATH)
+    fresh_body = await vault.read_note(INBOX_PATH)
     if _content_hash(fresh_body) != pre_hash:
         raise HTTPException(
             status_code=409,
@@ -243,7 +243,7 @@ async def inbox_discard(req: InboxDiscardRequest, request: Request):
         )
 
     new_inbox = remove_entry(body, req.entry_n)
-    await obsidian.write_note(INBOX_PATH, new_inbox)
+    await vault.write_note(INBOX_PATH, new_inbox)
     return {"action": "discarded", "entry_n": req.entry_n}
 
 
@@ -279,7 +279,7 @@ async def vault_sweep_start(req: SweepStartRequest, request: Request):
     if not _is_admin_route(req.user_id):
         raise HTTPException(status_code=403, detail="admin only")
 
-    obsidian = request.app.state.obsidian_client
+    vault = request.app.state.vault
     classifier = request.app.state.note_classifier_fn  # injected at startup
     embedder = request.app.state.note_embedder_fn
 
@@ -316,7 +316,7 @@ async def vault_sweep_start(req: SweepStartRequest, request: Request):
         async def _dry_runner():
             try:
                 report = await run_sweep(
-                    obsidian,
+                    vault,
                     classifier,
                     embedder,
                     force_reclassify=req.force_reclassify,
@@ -363,7 +363,7 @@ async def vault_sweep_start(req: SweepStartRequest, request: Request):
                         lines.append(f"- {e}")
                     lines.append("")
                 body = "\n".join(lines)
-                await obsidian.write_note(report_path, body)
+                await vault.write_note(report_path, body)
                 # Stash report path on status so callers can find it.
                 cur = get_status()
                 cur["status"] = "dry-run-complete"
@@ -409,7 +409,7 @@ async def vault_sweep_start(req: SweepStartRequest, request: Request):
     async def _runner():
         try:
             report = await run_sweep(
-                obsidian,
+                vault,
                 classifier,
                 embedder,
                 force_reclassify=req.force_reclassify,
