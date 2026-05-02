@@ -7,8 +7,10 @@ Architecture:
   GET  /status  → authenticated system status (obsidian, pi_harness, ai_provider)
   GET  /context/{user_id} → authenticated debug context dump
 
-Lifespan creates shared resources (httpx client, model registry, ProviderRouter) at startup.
-Uses lifespan context manager (not deprecated @app.on_event — see Pitfall 5).
+Lifespan delegates wiring to ``app.composition.build_application`` and pins
+each ``AppGraph`` field onto ``app.state`` for back-compat with existing
+routes/tests (Q4(a)). The persona probe stays here because ADR-0001 is a
+startup-failure decision, not graph construction.
 """
 import logging
 from contextlib import asynccontextmanager
@@ -22,17 +24,14 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response
 
-from app.composition import build_provider_router
+from app.composition import build_application
 from app.config import settings
-from app.vault import ObsidianVault, VaultUnreachableError
 from app.routes.message import router as message_router
 from app.routes.modules import router as modules_router
 from app.routes.note import router as note_router
 from app.routes.status import router as status_router
-from app.services.injection_filter import InjectionFilter
-from app.services.message_processing import MessageProcessor
 from app.services.model_selector import probe_embedding_model_loaded
-from app.services.output_scanner import OutputScanner
+from app.vault import VaultUnreachableError
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 logger = logging.getLogger(__name__)
@@ -55,35 +54,34 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Create shared resources at startup; clean up at shutdown."""
     logger.info("Sentinel Core starting...")
 
-    # Single shared httpx client for all outbound calls
     http_client = httpx.AsyncClient(timeout=30.0)
     app.state.http_client = http_client
     app.state.settings = settings
 
-    # Provider router + associated metadata (model registry, context window,
-    # stop sequences, provider name) — extracted to app.composition.
-    _provider_bundle = await build_provider_router(settings, http_client)
-    app.state.model_registry = _provider_bundle.model_registry
-    app.state.context_window = _provider_bundle.context_window
-    app.state.lmstudio_stop_sequences = _provider_bundle.lmstudio_stop_sequences
-    app.state.ai_provider = _provider_bundle.router
-    # Expose provider name for /status endpoint (RD-05)
-    app.state.ai_provider_name = _provider_bundle.ai_provider_name
+    graph = await build_application(settings, http_client)
 
-    # Vault adapter — degrades gracefully if Obsidian is not running
-    vault = ObsidianVault(
-        http_client,
-        settings.obsidian_api_url,
-        settings.obsidian_api_key,
-    )
-    app.state.vault = vault
+    # Pin every graph field onto app.state for back-compat (Q4(a)).
+    app.state.settings = graph.settings
+    app.state.model_registry = graph.model_registry
+    app.state.context_window = graph.context_window
+    app.state.lmstudio_stop_sequences = graph.lmstudio_stop_sequences
+    app.state.ai_provider = graph.ai_provider
+    app.state.ai_provider_name = graph.ai_provider_name
+    app.state.vault = graph.vault
+    app.state.injection_filter = graph.injection_filter
+    app.state.output_scanner = graph.output_scanner
+    app.state.message_processor = graph.message_processor
+    app.state.module_registry = graph.module_registry
+    app.state.note_classifier_fn = graph.note_classifier_fn
+    app.state.note_embedder_fn = graph.embeddings.embed
+    app.state.embedding_model_loaded = graph.embedding_model_loaded
 
     # ADR-0001 startup contract — preserved end-to-end via the Vault seam:
     #   * vault reachable + persona 200 → log success
     #   * vault reachable + persona 404 → hard fail (operator setup error)
     #   * vault unreachable (transport failure) → warn + continue with fallback
     try:
-        persona = await vault.read_persona()
+        persona = await graph.vault.read_persona()
     except VaultUnreachableError as exc:
         logger.warning(
             "Obsidian REST API unavailable at startup — memory features degraded. "
@@ -97,55 +95,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 "sentinel/persona.md missing from Vault — operator setup required (see README)"
             )
         logger.info("Persona loaded from vault (%d chars)", len(persona))
-
-    # Security services — instantiated once, shared across all requests (SEC-01, SEC-02).
-    # OutputScanner routes through the Sentinel's configured AI provider (AI-agnostic
-    # design). Construction details live in the scanner itself; lifespan only injects
-    # the provider router.
-    app.state.injection_filter = InjectionFilter()
-    app.state.output_scanner = OutputScanner(ai_provider=app.state.ai_provider)
-    app.state.message_processor = MessageProcessor(
-        vault=app.state.vault,
-        ai_provider=app.state.ai_provider,
-        injection_filter=app.state.injection_filter,
-        output_scanner=app.state.output_scanner,
-    )
-    logger.info("Security services initialized: InjectionFilter, OutputScanner")
-
-    # Module registry — in-memory; populated by POST /modules/register at runtime (Phase 27)
-    app.state.module_registry = {}
-
-    # 260427-vl1: note classifier + embedder for the vault sweeper
-    from app.clients.embeddings import DEFAULT_LMSTUDIO_BASE_URL, Embeddings
-    from app.services.note_classifier import classify_note as _classify_note
-
-    embeddings = Embeddings(
-        http_client,
-        settings.lmstudio_base_url or DEFAULT_LMSTUDIO_BASE_URL,
-        settings.embedding_model,
-    )
-    app.state.note_classifier_fn = _classify_note
-    app.state.note_embedder_fn = embeddings.embed
-
-    # 260502-1zv D-02: probe LM Studio for the embedding model state at startup.
-    # Graceful degrade — never raises. Surfaces via /health and via WARNING log
-    # so operators see the problem at boot rather than via opaque
-    # BadRequestError when the vault sweeper / note classifier first runs.
-    embedding_loaded = await probe_embedding_model_loaded(
-        http_client,
-        settings.lmstudio_base_url,
-        settings.embedding_model,
-    )
-    app.state.embedding_model_loaded = embedding_loaded
-    if embedding_loaded:
-        logger.info("Embedding model `%s` loaded ✓", settings.embedding_model)
-    else:
-        logger.warning(
-            "Embedding model `%s` NOT loaded on LM Studio — vault sweeper / "
-            "note classifier will fail until you `lms load %s`.",
-            settings.embedding_model,
-            settings.embedding_model,
-        )
 
     logger.info("Sentinel Core ready.")
     yield

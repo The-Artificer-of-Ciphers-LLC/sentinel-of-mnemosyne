@@ -6,8 +6,8 @@ delegates wiring here so the construction logic is independently testable.
 This module is introduced incrementally:
 
 - Task 1: defines ``AppGraph``.
-- Task 2 (this commit): adds ``build_provider_router``.
-- Task 5: adds ``build_application``.
+- Task 2: adds ``build_provider_router``.
+- Task 5 (this commit): adds ``build_application``.
 """
 from __future__ import annotations
 
@@ -15,14 +15,21 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
+from app.clients.embeddings import DEFAULT_LMSTUDIO_BASE_URL, Embeddings
 from app.clients.litellm_provider import LiteLLMProvider
+from app.services.injection_filter import InjectionFilter
+from app.services.message_processing import MessageProcessor
 from app.services.model_registry import build_model_registry
 from app.services.model_selector import (
     _ORIGINAL_PREFIXES,
     discover_active_model,
+    probe_embedding_model_loaded,
     strip_litellm_prefix,
 )
+from app.services.note_classifier import classify_note
+from app.services.output_scanner import OutputScanner
 from app.services.provider_router import ProviderRouter
+from app.vault import ObsidianVault
 from sentinel_shared.model_profiles import get_profile
 
 if TYPE_CHECKING:
@@ -207,4 +214,134 @@ async def build_provider_router(
         context_window=context_window,
         lmstudio_stop_sequences=lmstudio_stop_sequences,
         ai_provider_name=settings.ai_provider,
+    )
+
+
+async def build_application(
+    settings: "Settings",
+    http_client: "httpx.AsyncClient",
+    *,
+    vault: "Vault | None" = None,
+    ai_provider: "ProviderRouter | None" = None,
+    provider_bundle: "ProviderRouterBundle | None" = None,
+    injection_filter: "InjectionFilter | None" = None,
+    output_scanner: "OutputScanner | None" = None,
+    embeddings: "Embeddings | None" = None,
+    message_processor: "MessageProcessor | None" = None,
+    module_registry: "dict[str, Any] | None" = None,
+    note_classifier_fn: "Callable[[str], Awaitable[Any]] | None" = None,
+    embedding_model_loaded: bool | None = None,
+) -> AppGraph:
+    """Build the full application graph.
+
+    For each keyword-only dependency: if ``None`` (default), construct the
+    production implementation; otherwise use the supplied fake. This is the
+    test seam — call sites pass explicit kwargs (e.g.
+    ``build_application(settings, http_client, vault=FakeVault())``).
+
+    The signature intentionally avoids a ``**fakes`` bag so that typos like
+    ``build_application(..., vualt=...)`` are caught at type-check / runtime
+    rather than silently swallowed (W1).
+
+    Note: the persona probe is NOT performed here. ADR-0001 startup contract
+    (vault-up + 404 → RuntimeError; vault-unreachable → graceful degrade) is
+    a startup-failure decision and stays in lifespan(); ``build_application``
+    only constructs the graph.
+    """
+    # Provider router — supplied bundle wins; explicit ai_provider override is
+    # honored (no metadata in that path); otherwise build from scratch.
+    if provider_bundle is None and ai_provider is None:
+        provider_bundle = await build_provider_router(settings, http_client)
+    if ai_provider is None:
+        assert provider_bundle is not None  # narrowed for type-checkers
+        ai_provider = provider_bundle.router
+        model_registry = provider_bundle.model_registry
+        context_window = provider_bundle.context_window
+        lmstudio_stop_sequences = provider_bundle.lmstudio_stop_sequences
+        ai_provider_name = provider_bundle.ai_provider_name
+    else:
+        # Caller supplied an ai_provider directly (test fake) — derive
+        # registry/context/stop_sequences from the supplied bundle if any,
+        # otherwise fall back to empty/default values that match the
+        # pre-refactor non-fatal posture.
+        if provider_bundle is not None:
+            model_registry = provider_bundle.model_registry
+            context_window = provider_bundle.context_window
+            lmstudio_stop_sequences = provider_bundle.lmstudio_stop_sequences
+            ai_provider_name = provider_bundle.ai_provider_name
+        else:
+            model_registry = {}
+            context_window = 4096
+            lmstudio_stop_sequences = []
+            ai_provider_name = settings.ai_provider
+
+    if vault is None:
+        vault = ObsidianVault(
+            http_client,
+            settings.obsidian_api_url,
+            settings.obsidian_api_key,
+        )
+
+    if injection_filter is None:
+        injection_filter = InjectionFilter()
+
+    if output_scanner is None:
+        output_scanner = OutputScanner(ai_provider=ai_provider)
+
+    if message_processor is None:
+        message_processor = MessageProcessor(
+            vault=vault,
+            ai_provider=ai_provider,
+            injection_filter=injection_filter,
+            output_scanner=output_scanner,
+        )
+
+    if embeddings is None:
+        embeddings = Embeddings(
+            http_client,
+            settings.lmstudio_base_url or DEFAULT_LMSTUDIO_BASE_URL,
+            settings.embedding_model,
+        )
+
+    if module_registry is None:
+        module_registry = {}
+
+    if note_classifier_fn is None:
+        note_classifier_fn = classify_note
+
+    if embedding_model_loaded is None:
+        # Graceful degrade — never raises. Surfaces via /health and via WARNING
+        # log so operators see the problem at boot rather than via opaque
+        # BadRequestError when the vault sweeper / note classifier first runs.
+        embedding_model_loaded = await probe_embedding_model_loaded(
+            http_client,
+            settings.lmstudio_base_url,
+            settings.embedding_model,
+        )
+        if embedding_model_loaded:
+            logger.info("Embedding model `%s` loaded ✓", settings.embedding_model)
+        else:
+            logger.warning(
+                "Embedding model `%s` NOT loaded on LM Studio — vault sweeper / "
+                "note classifier will fail until you `lms load %s`.",
+                settings.embedding_model,
+                settings.embedding_model,
+            )
+
+    return AppGraph(
+        settings=settings,
+        http_client=http_client,
+        model_registry=model_registry,
+        context_window=context_window,
+        lmstudio_stop_sequences=lmstudio_stop_sequences,
+        ai_provider=ai_provider,
+        ai_provider_name=ai_provider_name,
+        vault=vault,
+        embedding_model_loaded=embedding_model_loaded,
+        injection_filter=injection_filter,
+        output_scanner=output_scanner,
+        message_processor=message_processor,
+        module_registry=module_registry,
+        embeddings=embeddings,
+        note_classifier_fn=note_classifier_fn,
     )
