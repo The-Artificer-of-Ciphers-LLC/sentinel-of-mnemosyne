@@ -98,28 +98,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             )
         logger.info("Persona loaded from vault (%d chars)", len(persona))
 
-    # Security services — instantiated once, shared across all requests (SEC-01, SEC-02)
-    #
-    # Build the secondary classifier as a thin closure over ai_provider.complete so that
-    # OutputScanner routes through the Sentinel's configured AI engine (AI-agnostic design).
-    # The closure builds a minimal two-message conversation (system + user) and returns the
-    # first content token from the provider response.
-    _scanner_ai_provider = app.state.ai_provider
-
-    async def _secondary_classifier(excerpt: str, fired_patterns: list[str]) -> str:
-        from app.services.output_scanner import _CLASSIFIER_SYSTEM
-
-        messages = [
-            {"role": "system", "content": _CLASSIFIER_SYSTEM},
-            {
-                "role": "user",
-                "content": f"Triggered patterns: {fired_patterns}\n\nText excerpt:\n{excerpt}",
-            },
-        ]
-        return await _scanner_ai_provider.complete(messages)
-
+    # Security services — instantiated once, shared across all requests (SEC-01, SEC-02).
+    # OutputScanner routes through the Sentinel's configured AI provider (AI-agnostic
+    # design). Construction details live in the scanner itself; lifespan only injects
+    # the provider router.
     app.state.injection_filter = InjectionFilter()
-    app.state.output_scanner = OutputScanner(_secondary_classifier)
+    app.state.output_scanner = OutputScanner(ai_provider=app.state.ai_provider)
     app.state.message_processor = MessageProcessor(
         vault=app.state.vault,
         ai_provider=app.state.ai_provider,

@@ -9,10 +9,15 @@ Pattern corpus: mazen160/secrets-patterns-db (github.com/mazen160/secrets-patter
 
 Private IP patterns excluded from initial blocklist (see Research Pitfall 5).
 """
+from __future__ import annotations
+
 import asyncio
 import logging
 import re
-from collections.abc import Callable, Awaitable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.services.provider_router import ProviderRouter
 
 logger = logging.getLogger(__name__)
 
@@ -38,23 +43,26 @@ No other output."""
 
 SECONDARY_TIMEOUT_S = 2.0
 
-# Type alias for the secondary classifier callable.
-# Accepts (excerpt: str, fired_patterns: list[str]) and returns a verdict string ("LEAK" or "SAFE").
-SecondaryClassifier = Callable[[str, list[str]], Awaitable[str]]
-
 
 class OutputScanner:
     """
     Scan AI response output for secret leakage before the response leaves POST /message.
     Uses two-stage detection: fast regex → independent secondary classifier.
 
-    The secondary classifier is a generic async callable injected at construction time.
-    It must accept (excerpt: str, fired_patterns: list[str]) and return "LEAK" or "SAFE".
-    Passing None disables the secondary stage (fail-open).
+    The secondary classifier routes through the supplied ``ai_provider`` (a
+    ``ProviderRouter``). The scanner builds a minimal two-message conversation
+    (system + user) using ``classifier_system`` and calls
+    ``ai_provider.complete(messages)``. Passing ``ai_provider=None`` disables
+    the secondary stage (fail-open).
     """
 
-    def __init__(self, classifier: SecondaryClassifier | None) -> None:
-        self._classifier = classifier
+    def __init__(
+        self,
+        ai_provider: "ProviderRouter | None" = None,
+        classifier_system: str = _CLASSIFIER_SYSTEM,
+    ) -> None:
+        self._ai_provider = ai_provider
+        self._classifier_system = classifier_system
 
     def _regex_scan(self, response: str) -> list[str]:
         """Return list of pattern names that fired."""
@@ -75,7 +83,7 @@ class OutputScanner:
 
         logger.warning(f"Output regex matched patterns: {fired} — routing to secondary classifier")
 
-        if self._classifier is None:
+        if self._ai_provider is None:
             logger.warning("OutputScanner: no secondary classifier configured — failing open")
             return True, None
 
@@ -121,10 +129,20 @@ class OutputScanner:
 
     async def _classify(self, response: str, fired_patterns: list[str]) -> str:
         """
-        Call the injected secondary classifier to determine whether the regex match
-        is a genuine secret leak.  Returns 'LEAK' or 'SAFE'.
+        Call the configured AI provider with the classifier system prompt and
+        the matched excerpt. Returns 'LEAK' or 'SAFE'.
+
+        Caller (``scan``) only invokes ``_classify`` when ``self._ai_provider``
+        is not None, so this method does not re-check.
         """
         excerpt = self._extract_excerpt(response, fired_patterns)
-        verdict = await self._classifier(excerpt, fired_patterns)
+        messages = [
+            {"role": "system", "content": self._classifier_system},
+            {
+                "role": "user",
+                "content": f"Triggered patterns: {fired_patterns}\n\nText excerpt:\n{excerpt}",
+            },
+        ]
+        verdict = await self._ai_provider.complete(messages)
         normalised = verdict.strip().upper() if isinstance(verdict, str) else "SAFE"
         return normalised if normalised in ("LEAK", "SAFE") else "SAFE"
