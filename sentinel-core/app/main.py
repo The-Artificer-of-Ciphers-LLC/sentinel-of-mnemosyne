@@ -186,6 +186,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "Obsidian REST API unavailable at startup — memory features degraded. "
             "Ensure Obsidian is running with Local REST API plugin enabled (HTTP mode port 27123)."
         )
+    else:
+        # Strict probe: when Obsidian is reachable, sentinel/persona.md MUST exist.
+        # 404 here is an operator setup error (see README); raise to fail fast.
+        # Any other error (timeout, 5xx) is non-fatal — preserves graceful-degrade.
+        _persona_url = f"{settings.obsidian_api_url.rstrip('/')}/vault/sentinel/persona.md"
+        _persona_headers = (
+            {"Authorization": f"Bearer {settings.obsidian_api_key}"}
+            if settings.obsidian_api_key
+            else {}
+        )
+        try:
+            _persona_resp = await http_client.get(
+                _persona_url, headers=_persona_headers, timeout=5.0
+            )
+            if _persona_resp.status_code == 404:
+                raise RuntimeError(
+                    "sentinel/persona.md missing from Vault — operator setup required (see README)"
+                )
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Persona file probe failed (non-fatal — continuing with fallback persona): %s",
+                exc,
+            )
 
     # Security services — instantiated once, shared across all requests (SEC-01, SEC-02)
     #
@@ -209,7 +234,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     app.state.injection_filter = InjectionFilter()
     app.state.output_scanner = OutputScanner(_secondary_classifier)
-    app.state.message_processor_factory = lambda: MessageProcessor(
+    app.state.message_processor = MessageProcessor(
         obsidian=app.state.obsidian_client,
         ai_provider=app.state.ai_provider,
         injection_filter=app.state.injection_filter,

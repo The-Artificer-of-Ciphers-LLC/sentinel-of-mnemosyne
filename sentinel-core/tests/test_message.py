@@ -47,18 +47,27 @@ def default_app_state(mock_ai_provider):
     default_output_scanner = AsyncMock()
     default_output_scanner.scan = AsyncMock(return_value=(True, None))
     app.state.output_scanner = default_output_scanner
-    app.state.message_processor = MessageProcessor(
-        obsidian=mock_obsidian,
-        ai_provider=mock_ai_provider,
-        injection_filter=default_injection_filter,
-        output_scanner=default_output_scanner,
-    )
-    app.state.message_processor_factory = lambda: MessageProcessor(
-        obsidian=app.state.obsidian_client,
-        ai_provider=app.state.ai_provider,
-        injection_filter=app.state.injection_filter,
-        output_scanner=app.state.output_scanner,
-    )
+    # Test-only lazy proxy: many tests mutate app.state.obsidian_client /
+    # ai_provider AFTER fixture setup, then expect the route to pick up the
+    # new wiring. The route now reads app.state.message_processor directly,
+    # so without a lazy rebuild every such test would have to manually
+    # rebuild the processor after each mutation. This proxy instantiates a
+    # fresh MessageProcessor against current app.state on every process()
+    # call — observable behavior matches the singleton in production where
+    # state is set once during lifespan. Tests that need to assert against
+    # the singleton itself can overwrite app.state.message_processor with a
+    # concrete instance/stub (this proxy will be replaced).
+    class _LazyTestProcessor:
+        async def process(self, req):
+            current = MessageProcessor(
+                obsidian=app.state.obsidian_client,
+                ai_provider=app.state.ai_provider,
+                injection_filter=app.state.injection_filter,
+                output_scanner=app.state.output_scanner,
+            )
+            return await current.process(req)
+
+    app.state.message_processor = _LazyTestProcessor()
 
     return mock_obsidian
 

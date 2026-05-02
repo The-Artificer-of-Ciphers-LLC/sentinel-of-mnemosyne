@@ -67,6 +67,17 @@ def setup_app_state():
     app.state.module_registry = {}
     app.state.http_client = AsyncMock()
 
+    # Build the singleton MessageProcessor against the just-installed mocks —
+    # the route reads app.state.message_processor directly (no factory).
+    from app.services.message_processing import MessageProcessor
+
+    app.state.message_processor = MessageProcessor(
+        obsidian=mock_obsidian,
+        ai_provider=mock_ai_provider,
+        injection_filter=mock_filter,
+        output_scanner=mock_scanner,
+    )
+
 
 async def test_obsidian_context_injected_into_llm_prompt():
     """D-GD-01/D-GD-02: Obsidian self-context appears in the messages sent to ai_provider.complete()."""

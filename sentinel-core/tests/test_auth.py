@@ -56,6 +56,7 @@ async def test_auth_accepts_valid_key():
         "output_scanner",
         "pi_adapter",
         "ai_provider",
+        "message_processor",
     )
     # Save originals so we can restore them after the test.
     _orig = {k: getattr(app.state, k, _MISSING) for k in _state_keys}
@@ -87,6 +88,17 @@ async def test_auth_accepts_valid_key():
         mock_ai = AsyncMock()
         mock_ai.complete = AsyncMock(return_value="Auth test response")
         app.state.ai_provider = mock_ai
+
+        # Build the processor against the just-installed test mocks. The route
+        # now reads app.state.message_processor directly (no factory).
+        from app.services.message_processing import MessageProcessor
+
+        app.state.message_processor = MessageProcessor(
+            obsidian=app.state.obsidian_client,
+            ai_provider=app.state.ai_provider,
+            injection_filter=app.state.injection_filter,
+            output_scanner=app.state.output_scanner,
+        )
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(

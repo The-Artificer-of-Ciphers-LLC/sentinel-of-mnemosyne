@@ -3,7 +3,6 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from app.models import MessageEnvelope, ResponseEnvelope
-from app.services.message_processor_factory import from_app_state
 from app.services.message_processing import (
     MessageProcessingError,
     MessageRequest,
@@ -23,8 +22,8 @@ async def post_message(
     request: Request,
     background_tasks: BackgroundTasks,
 ) -> ResponseEnvelope:
-    processor = from_app_state(request.app.state)
     app_state = request.app.state
+    processor = app_state.message_processor
     stop_sequences = getattr(app_state, "lmstudio_stop_sequences", None) or None
     req = MessageRequest(
         content=envelope.content,
