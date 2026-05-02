@@ -5,13 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
+
 import tiktoken
 from litellm import BadRequestError as LiteLLMBadRequestError
 
-from app.services.context_budget_policy import ContextBudgetPolicy
-from app.services.message_prompt import SYSTEM_PROMPT
 from app.services.provider_router import ProviderUnavailableError
-from app.services.session_summary import build_session_summary
 from app.services.token_guard import TokenLimitError, check_token_limit
 
 logger = logging.getLogger(__name__)
@@ -28,6 +27,12 @@ _CONTEXT_LENGTH_MARKERS: tuple[str, ...] = (
     "reduce the length",
     "prompt is too long",
 )
+
+
+@dataclass(frozen=True)
+class _ContextBudget:
+    sessions_budget: int
+    search_budget: int
 
 
 class MessageProcessingError(Exception):
@@ -56,16 +61,42 @@ class MessageResult:
 
 
 class MessageProcessor:
-    def __init__(self, obsidian, ai_provider, injection_filter, output_scanner, budget_policy: ContextBudgetPolicy | None = None) -> None:
+    _FALLBACK_PERSONA: str = (
+        "You are the Sentinel — the user's 2nd brain. "
+        "You maintain their context via an Obsidian vault that the system "
+        "writes to automatically; the user does not need to manage it. "
+        "\n\n"
+        "Respond like a friend who has been listening. When the user shares "
+        "a fact, milestone, status update, or reflection, acknowledge it "
+        "naturally and briefly — usually one or two sentences. Ask a relevant "
+        "follow-up only if it would feel natural. Match their tone and length.\n\n"
+        "Never lecture the user about how to file, organize, link, tag, "
+        "document, summarize, follow up on, plan, or process information. "
+        "The system handles persistence and structure. You only respond. "
+        "Do not produce numbered procedural how-to lists unless the user "
+        "explicitly asks for instructions.\n\n"
+        "Do not describe internal tools, system internals, or implementation details."
+    )
+
+    _SESSIONS_RATIO: float = 0.15
+    _SEARCH_RATIO: float = 0.10
+
+    def __init__(self, obsidian, ai_provider, injection_filter, output_scanner) -> None:
         self._obsidian = obsidian
         self._ai_provider = ai_provider
         self._injection_filter = injection_filter
         self._output_scanner = output_scanner
-        self._budget_policy = budget_policy or ContextBudgetPolicy()
+
+    @classmethod
+    def _allocate_budgets(cls, context_window: int) -> _ContextBudget:
+        return _ContextBudget(
+            sessions_budget=int(context_window * cls._SESSIONS_RATIO),
+            search_budget=int(context_window * cls._SEARCH_RATIO),
+        )
 
     async def process(self, req: MessageRequest) -> MessageResult:
-        budgets = self._budget_policy.allocate(req.context_window)
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        budgets = self._allocate_budgets(req.context_window)
+        messages = [{"role": "system", "content": self._FALLBACK_PERSONA}]
 
         await self._append_hot_tier(messages, req, budgets.sessions_budget)
         await self._append_warm_tier(messages, req, budgets.search_budget)
@@ -101,7 +132,7 @@ class MessageProcessor:
         if not is_safe:
             raise MessageProcessingError("security_blocked", "Response blocked by security scanner")
 
-        summary_path, summary_content = build_session_summary(
+        summary_path, summary_content = self._build_session_summary(
             req.user_id,
             req.content,
             content,
@@ -178,3 +209,26 @@ class MessageProcessor:
         msg = str(exc).lower()
         return any(marker in msg for marker in _CONTEXT_LENGTH_MARKERS)
 
+    @staticmethod
+    def _build_session_summary(
+        user_id: str, user_msg: str, ai_msg: str, model: str
+    ) -> tuple[str, str]:
+        now = datetime.now(timezone.utc)
+        date_str = now.strftime("%Y-%m-%d")
+        time_str = now.strftime("%H-%M-%S")
+        path = f"ops/sessions/{date_str}/{user_id}-{time_str}.md"
+        content = f"""---
+timestamp: {now.isoformat()}
+user_id: {user_id}
+model: {model}
+---
+
+## User
+
+{user_msg}
+
+## Sentinel
+
+{ai_msg}
+"""
+        return path, content
