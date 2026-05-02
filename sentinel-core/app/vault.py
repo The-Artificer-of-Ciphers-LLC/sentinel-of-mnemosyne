@@ -46,6 +46,8 @@ class Vault(typing.Protocol):
 
     async def check_health(self) -> bool: ...
 
+    async def read_persona(self) -> str | None: ...
+
     async def get_user_context(self, user_id: str) -> str | None: ...
 
     async def read_self_context(self, path: str) -> str: ...
@@ -110,6 +112,40 @@ class ObsidianVault:
             return resp.status_code < 500
 
         return await self._safe_request(_inner(), False, "check_health", silent=True)
+
+    async def read_persona(self) -> str | None:
+        """GET /vault/sentinel/persona.md — distinguishes 404 from transport failure.
+
+        Returns:
+          * the response body (str) on 200
+          * ``None`` when the vault is reachable but the file does not exist (404)
+
+        Raises:
+          ``VaultUnreachableError`` on transport failure (timeout, connection
+          error, 5xx). Lifespan branches on this to preserve ADR-0001:
+          vault-up + persona 404 → hard fail; vault-down → graceful degrade.
+        """
+        try:
+            resp = await self._client.get(
+                f"{self._base_url}/vault/sentinel/persona.md",
+                headers=self._headers,
+                timeout=5.0,
+            )
+        except (httpx.TransportError, httpx.TimeoutException) as exc:
+            raise VaultUnreachableError(
+                f"persona probe transport failure: {exc}"
+            ) from exc
+
+        if resp.status_code == 200:
+            return resp.text
+        if resp.status_code == 404:
+            return None
+        if 500 <= resp.status_code < 600:
+            raise VaultUnreachableError(
+                f"persona probe got {resp.status_code} from vault"
+            )
+        # 4xx other than 404 — treat as reachable but file unavailable
+        return None
 
     async def get_user_context(self, user_id: str) -> str | None:
         """

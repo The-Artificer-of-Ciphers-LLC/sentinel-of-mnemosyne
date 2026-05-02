@@ -25,6 +25,7 @@ from starlette.responses import Response
 from app.clients.litellm_provider import LiteLLMProvider
 from app.clients.obsidian import ObsidianClient
 from app.config import settings
+from app.vault import VaultUnreachableError
 from app.routes.message import router as message_router
 from app.routes.modules import router as modules_router
 from app.routes.note import router as note_router
@@ -184,37 +185,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     app.state.obsidian_client = obsidian_client
 
-    obsidian_ok = await obsidian_client.check_health()
-    if not obsidian_ok:
+    # ADR-0001 startup contract — preserved end-to-end via the Vault seam:
+    #   * vault reachable + persona 200 → log success
+    #   * vault reachable + persona 404 → hard fail (operator setup error)
+    #   * vault unreachable (transport failure) → warn + continue with fallback
+    try:
+        persona = await obsidian_client.read_persona()
+    except VaultUnreachableError as exc:
         logger.warning(
             "Obsidian REST API unavailable at startup — memory features degraded. "
-            "Ensure Obsidian is running with Local REST API plugin enabled (HTTP mode port 27123)."
+            "Ensure Obsidian is running with Local REST API plugin enabled "
+            "(HTTP mode port 27123). %s",
+            exc,
         )
     else:
-        # Strict probe: when Obsidian is reachable, sentinel/persona.md MUST exist.
-        # 404 here is an operator setup error (see README); raise to fail fast.
-        # Any other error (timeout, 5xx) is non-fatal — preserves graceful-degrade.
-        _persona_url = f"{settings.obsidian_api_url.rstrip('/')}/vault/sentinel/persona.md"
-        _persona_headers = (
-            {"Authorization": f"Bearer {settings.obsidian_api_key}"}
-            if settings.obsidian_api_key
-            else {}
-        )
-        try:
-            _persona_resp = await http_client.get(
-                _persona_url, headers=_persona_headers, timeout=5.0
+        if persona is None:
+            raise RuntimeError(
+                "sentinel/persona.md missing from Vault — operator setup required (see README)"
             )
-            if _persona_resp.status_code == 404:
-                raise RuntimeError(
-                    "sentinel/persona.md missing from Vault — operator setup required (see README)"
-                )
-        except RuntimeError:
-            raise
-        except Exception as exc:
-            logger.warning(
-                "Persona file probe failed (non-fatal — continuing with fallback persona): %s",
-                exc,
-            )
+        logger.info("Persona loaded from vault (%d chars)", len(persona))
 
     # Security services — instantiated once, shared across all requests (SEC-01, SEC-02)
     #

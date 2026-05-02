@@ -7,6 +7,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.clients.obsidian import ObsidianClient
+from app.vault import ObsidianVault, VaultUnreachableError
 
 
 @pytest.fixture
@@ -446,3 +447,65 @@ async def test_patch_append_sets_end_position_header(obsidian_write_capture_mock
     assert cap["path"] == "/vault/ops/log.md"
     assert cap["patch_pos"] == "end"
     assert cap["content"] == "new line\n"
+
+
+# ---------------------------------------------------------------------------
+# Plan 260502-cky Task 2 — read_persona() typed-exception branching.
+# Three behavioral tests covering ADR-0001's three startup paths:
+#   1. vault-up + persona 200 → returns the body string
+#   2. vault-up + persona 404 → returns None (lifespan turns this into RuntimeError)
+#   3. transport failure         → raises VaultUnreachableError (lifespan logs+continues)
+# Each test calls await vault.read_persona() and asserts on the observable
+# result/exception — no source-grep, no mock-call-shape-only assertions.
+# ---------------------------------------------------------------------------
+
+
+async def test_read_persona_returns_body_on_200():
+    """vault-up + persona 200 — read_persona returns the body string."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/vault/sentinel/persona.md":
+            return httpx.Response(200, text="# Persona\n\nYou are the Sentinel.")
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        vault = ObsidianVault(client, "http://test", "k")
+        result = await vault.read_persona()
+    assert result == "# Persona\n\nYou are the Sentinel."
+
+
+async def test_read_persona_returns_none_on_404():
+    """vault-up + persona 404 — read_persona returns None.
+
+    Lifespan turns this into a RuntimeError (ADR-0001 hard-fail) so the
+    operator notices the missing setup file at startup rather than at
+    request-time.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        vault = ObsidianVault(client, "http://test", "k")
+        result = await vault.read_persona()
+    assert result is None
+
+
+async def test_read_persona_raises_vault_unreachable_on_transport_failure():
+    """transport failure — read_persona raises VaultUnreachableError.
+
+    Lifespan catches this and continues with the fallback persona
+    (ADR-0001 graceful-degrade branch). The exception type is the seam
+    that distinguishes "vault down" from "vault up but file missing".
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("Connection refused")
+
+    transport = httpx.MockTransport(handler)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        vault = ObsidianVault(client, "http://test", "k")
+        with pytest.raises(VaultUnreachableError):
+            await vault.read_persona()
