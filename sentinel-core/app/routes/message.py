@@ -5,11 +5,11 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from app.models import MessageEnvelope, ResponseEnvelope
 from app.services.message_error_mapper import to_http_status
 from app.services.message_persistence import write_session_summary_best_effort
+from app.services.message_processor_factory import from_app_state
 from app.services.message_processing import (
     MessageProcessingError,
     MessageRequest,
     MessageResult,
-    MessageProcessor,
     SEARCH_SCORE_THRESHOLD,
 )
 
@@ -22,16 +22,7 @@ async def post_message(
     request: Request,
     background_tasks: BackgroundTasks,
 ) -> ResponseEnvelope:
-    factory = getattr(request.app.state, "message_processor_factory", None)
-    if callable(factory):
-        processor = factory()
-    else:
-        processor = MessageProcessor(
-            obsidian=request.app.state.obsidian_client,
-            ai_provider=request.app.state.ai_provider,
-            injection_filter=request.app.state.injection_filter,
-            output_scanner=request.app.state.output_scanner,
-        )
+    processor = from_app_state(request.app.state)
     stop_sequences = getattr(request.app.state, "lmstudio_stop_sequences", None) or None
 
     try:
