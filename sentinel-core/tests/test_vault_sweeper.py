@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 
 from app.services.note_classifier import ClassificationResult
-from app.vault import ObsidianVault
 from app.services.vault_sweeper import (
     LOCKFILE_PATH,
     SWEEP_SKIP_PREFIXES,
@@ -20,50 +19,15 @@ from app.services.vault_sweeper import (
     run_sweep,
     walk_vault,
 )
+from tests.fakes.vault import FakeVault
 
-
-# --- In-memory Obsidian fake ---
-
-
-class FakeObsidian:
-    def __init__(self) -> None:
-        self.store: dict[str, str] = {}
-        # Directory listing map: dir_path → list of entries (subdirs end with '/')
-        self.dirs: dict[str, list[str]] = {}
-
-    async def list_directory(self, path: str = "") -> list[str]:
-        return list(self.dirs.get(path, []))
-
-    async def read_note(self, path: str) -> str:
-        return self.store.get(path, "")
-
-    async def write_note(self, path: str, body: str) -> None:
-        self.store[path] = body
-
-    async def delete_note(self, path: str) -> None:
-        self.store.pop(path, None)
-
-    async def patch_append(self, path: str, body: str) -> None:
-        self.store[path] = self.store.get(path, "") + body
-
-    # Sweep capabilities — delegate to the canonical ObsidianVault method
-    # bodies. The Vault implementations only use read_note/write_note/
-    # delete_note internally, so they work unchanged against FakeObsidian's
-    # in-memory store. This is a fixture-wiring delegation under the
-    # Test-Rewrite Ban allowed list — no assertion semantics change.
-    async def move_to_trash(self, path, when=None, *, reason="", sweep_at=None):
-        return await ObsidianVault.move_to_trash(
-            self, path, when, reason=reason, sweep_at=sweep_at
-        )
-
-    async def relocate(self, src, dst, *, sweep_at=None):
-        return await ObsidianVault.relocate(self, src, dst, sweep_at=sweep_at)
-
-    async def acquire_sweep_lock(self, now=None):
-        return await ObsidianVault.acquire_sweep_lock(self, now)
-
-    async def release_sweep_lock(self):
-        return await ObsidianVault.release_sweep_lock(self)
+# Plan 260502-cky Task 4: this file historically used a test-local
+# FakeObsidian class. Migrated to the canonical tests.fakes.vault.FakeVault
+# fixture-wiring refactor under the Test-Rewrite Ban allowed list —
+# assertions and call paths preserved (FakeVault exposes ``.store`` as an
+# alias for ``.notes`` so ``fake.store[path]`` style assertions read
+# unchanged). Only the test double's implementation changed.
+FakeObsidian = FakeVault
 
 
 # --- Pure helpers ---
