@@ -7,10 +7,8 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-import tiktoken
-
 from app.services.provider_router import ContextLengthError, ProviderUnavailableError
-from app.services.token_guard import TokenLimitError, check_token_limit
+from app.services.token_budget import TokenBudget, TokenLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +72,7 @@ class MessageProcessor:
         self._ai_provider = ai_provider
         self._injection_filter = injection_filter
         self._output_scanner = output_scanner
+        self._budget = TokenBudget()
 
     @classmethod
     def _allocate_budgets(cls, context_window: int) -> _ContextBudget:
@@ -93,7 +92,7 @@ class MessageProcessor:
         messages.append({"role": "user", "content": safe_input})
 
         try:
-            check_token_limit(messages, req.context_window)
+            self._budget.check(messages, req.context_window)
         except TokenLimitError as exc:
             raise MessageProcessingError("context_overflow", str(exc)) from exc
 
@@ -160,7 +159,7 @@ class MessageProcessor:
             return
 
         raw_context = "\n\n".join(context_parts)
-        safe_context = self._truncate_to_tokens(raw_context, budget)
+        safe_context = self._budget.truncate(raw_context, budget)
         filtered_context = self._injection_filter.wrap_context(safe_context)
         messages.append({"role": "user", "content": filtered_context})
         messages.append({"role": "assistant", "content": "Understood."})
@@ -172,19 +171,12 @@ class MessageProcessor:
             return
 
         vault_block = self._format_search_results(relevant_results[:3])
-        safe_vault = self._truncate_to_tokens(vault_block, budget)
+        safe_vault = self._budget.truncate(vault_block, budget)
         filtered_vault = self._injection_filter.wrap_context(safe_vault)
         messages.append({"role": "user", "content": filtered_vault})
         messages.append({"role": "assistant", "content": "Understood."})
 
     @staticmethod
-    def _truncate_to_tokens(text: str, max_tokens: int) -> str:
-        enc = tiktoken.get_encoding("cl100k_base")
-        tokens = enc.encode(text)
-        if len(tokens) <= max_tokens:
-            return text
-        return enc.decode(tokens[:max_tokens]) + "\n\n[...context truncated to fit token budget]"
-
     @staticmethod
     def _format_search_results(results: list[dict]) -> str:
         lines = ["Relevant vault notes:"]

@@ -58,7 +58,7 @@ HISTORY_MAX_TOKENS: int = 2000
 
 # Module-scope tiktoken encoder (IN-01): get_encoding is internally cached by
 # tiktoken but hoisting matches the idiomatic pattern used in
-# sentinel-core/app/services/token_guard.py and avoids a lookup on every call.
+# sentinel-core/app/services/token_budget.py and avoids a lookup on every call.
 _ENC = tiktoken.get_encoding("cl100k_base")
 
 
@@ -196,7 +196,7 @@ def cap_history_turns(turns: list[dict]) -> list[dict]:
     """Drop oldest turns first until under HISTORY_MAX_TURNS AND HISTORY_MAX_TOKENS (D-14).
 
     Token count uses tiktoken cl100k_base — same encoding as
-    sentinel-core/app/services/token_guard.py for consistency.
+    sentinel-core/app/services/token_budget.py for consistency.
     """
     if not turns:
         return []
