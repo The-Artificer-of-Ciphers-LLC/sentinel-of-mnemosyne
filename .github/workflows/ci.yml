@@ -10,8 +10,68 @@ on:
   workflow_dispatch:
 
 jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run_tests: ${{ steps.filter.outputs.run_tests }}
+      run_docker: ${{ steps.filter.outputs.run_docker }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Determine changed files
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+            echo "run_docker=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+          fi
+
+          CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)
+          echo "$CHANGED_FILES"
+
+          RUN_TESTS=false
+          RUN_DOCKER=false
+
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+
+            if [[ "$file" =~ ^sentinel-core/ ]] || \
+               [[ "$file" =~ ^shared/ ]] || \
+               [[ "$file" == ".github/workflows/ci.yml" ]]; then
+              RUN_TESTS=true
+            fi
+
+            if [[ "$file" =~ ^sentinel-core/ ]] || \
+               [[ "$file" =~ ^shared/ ]] || \
+               [[ "$file" == "sentinel-core/Dockerfile" ]] || \
+               [[ "$file" == "docker-compose.yml" ]] || \
+               [[ "$file" == ".github/workflows/ci.yml" ]]; then
+              RUN_DOCKER=true
+            fi
+          done <<< "$CHANGED_FILES"
+
+          echo "run_tests=$RUN_TESTS" >> "$GITHUB_OUTPUT"
+          echo "run_docker=$RUN_DOCKER" >> "$GITHUB_OUTPUT"
+
   test:
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.run_tests == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -40,12 +100,15 @@ jobs:
             "pytest-asyncio>=0.23" \
             "pytest-mock>=3.14.1" \
             "pytest-cov>=7.0.0"
+
       - name: Run tests
         working-directory: sentinel-core
         run: python -m pytest tests/ --tb=short
 
   docker-build:
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.run_docker == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v5
