@@ -3,3 +3,6 @@ contact_links:
   - name: Question / Discussion
     url: https://github.com/The-Artificer-of-Ciphers-LLC/sentinel-of-mnemosyne/discussions
     about: Ask questions and discuss ideas here
+  - name: Security vulnerability disclosure
+    url: https://github.com/The-Artificer-of-Ciphers-LLC/sentinel-of-mnemosyne/security/policy
+    about: Please report security issues privately via SECURITY.md policy
