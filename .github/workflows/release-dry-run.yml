@@ -29,22 +29,8 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
-          PYPROJECT_VERSION=$(python - <<'PY'
-from pathlib import Path
-import re
-text=Path('sentinel-core/pyproject.toml').read_text()
-m=re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
-print(m.group(1))
-PY
-)
-          APP_VERSION=$(python - <<'PY'
-from pathlib import Path
-import re
-text=Path('sentinel-core/app/main.py').read_text()
-m=re.search(r'version="([^"]+)"', text)
-print(m.group(1))
-PY
-)
+          PYPROJECT_VERSION=$(awk -F'"' '/^version = / {print $2; exit}' sentinel-core/pyproject.toml)
+          APP_VERSION=$(sed -n 's/.*version="\([^"]*\)".*/\1/p' sentinel-core/app/main.py | head -n1)
           echo "input=$INPUT_VERSION pyproject=$PYPROJECT_VERSION app=$APP_VERSION"
           test "$INPUT_VERSION" = "$PYPROJECT_VERSION"
           test "$INPUT_VERSION" = "$APP_VERSION"
