@@ -5,14 +5,16 @@
 - Obsidian running with Local REST API plugin enabled
 - LM Studio running with a model loaded
 
-## 2) Clone and configure
+## 2) Download sample deploy files and configure
 ```bash
-git clone https://github.com/The-Artificer-of-Ciphers-LLC/sentinel-of-mnemosyne.git
-cd sentinel-of-mnemosyne
-cp .env.example .env
+mkdir -p sentinel-deploy/secrets
+cd sentinel-deploy
+
+curl -fsSLO https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/sentinel-of-mnemosyne/main/docs/deploy/docker-compose.ghcr.yml
+curl -fsSLo .env https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/sentinel-of-mnemosyne/main/docs/deploy/.env.sample
 ```
 
-Edit `.env` for your environment (`LMSTUDIO_BASE_URL`, model settings, CORS, etc.).
+Edit `.env` for your environment (`LMSTUDIO_BASE_URL`, `OBSIDIAN_API_URL`, `OBSIDIAN_VAULT_PATH`, model settings, CORS, etc.).
 
 ## 3) Create required secrets
 ```bash
@@ -35,15 +37,10 @@ Startup policy:
 - Vault reachable + missing persona => startup fails (intentional)
 - Vault unreachable => startup degrades with warning
 
-## 5) Start services
-Core only:
+## 5) Pull and start services
 ```bash
-./sentinel.sh up -d
-```
-
-Core + Discord + Pathfinder (v0.50):
-```bash
-./sentinel.sh --discord --pathfinder up -d
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
 ```
 
 ## 6) Validate
@@ -58,8 +55,8 @@ curl -s -H "X-Sentinel-Key: $SENTINEL_KEY" \
   http://localhost:8000/message
 ```
 
-## 7) Rebuild after code changes
+## 7) Updating images
 ```bash
-docker compose build sentinel-core
-docker compose up -d --force-recreate sentinel-core
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
 ```

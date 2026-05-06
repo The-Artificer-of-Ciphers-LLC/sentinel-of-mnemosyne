@@ -1,0 +1,78 @@
+services:
+  sentinel-core:
+    image: ghcr.io/the-artificer-of-ciphers-llc/sentinel-core:latest
+    container_name: sentinel-core
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    secrets:
+      - obsidian_api_key
+      - sentinel_api_key
+      - lmstudio_api_key
+      - anthropic_api_key
+      - alpaca_paper_api_key
+      - alpaca_paper_secret_key
+      - alpaca_live_api_key
+      - alpaca_live_secret_key
+
+  discord-bot:
+    image: ghcr.io/the-artificer-of-ciphers-llc/sentinel-discord:latest
+    container_name: sentinel-discord
+    restart: unless-stopped
+    env_file:
+      - .env
+    secrets:
+      - discord_bot_token
+      - sentinel_api_key
+      - obsidian_api_key
+    depends_on:
+      sentinel-core:
+        condition: service_healthy
+
+  pf2e-module:
+    image: ghcr.io/the-artificer-of-ciphers-llc/sentinel-pathfinder:latest
+    container_name: sentinel-pf2e
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - SENTINEL_CORE_URL=http://sentinel-core:8000
+      - OPENAI_API_KEY=lmstudio
+      - SESSION_AUTO_RECAP=false
+      - SESSION_TZ=America/New_York
+      - DISCORD_BOT_INTERNAL_URL=http://discord-bot:8001
+    volumes:
+      - ${OBSIDIAN_VAULT_PATH:-/Users/trekkie/projects/2ndbrain}:/vault:ro
+    secrets:
+      - sentinel_api_key
+    depends_on:
+      sentinel-core:
+        condition: service_healthy
+
+secrets:
+  obsidian_api_key:
+    file: ./secrets/obsidian_api_key
+  sentinel_api_key:
+    file: ./secrets/sentinel_api_key
+  discord_bot_token:
+    file: ./secrets/discord_bot_token
+  lmstudio_api_key:
+    file: ./secrets/lmstudio_api_key
+  anthropic_api_key:
+    file: ./secrets/anthropic_api_key
+  alpaca_paper_api_key:
+    file: ./secrets/alpaca_paper_api_key
+  alpaca_paper_secret_key:
+    file: ./secrets/alpaca_paper_secret_key
+  alpaca_live_api_key:
+    file: ./secrets/alpaca_live_api_key
+  alpaca_live_secret_key:
+    file: ./secrets/alpaca_live_secret_key

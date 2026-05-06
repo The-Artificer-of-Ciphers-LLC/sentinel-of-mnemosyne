@@ -98,10 +98,13 @@ Edit the file in Obsidian to change voice; `sentinel-core` picks up the change o
 
 > This gets you a fully containerized running stack with Docker Compose (no manual `curl` required).
 
-**1. Clone the repo**
+**1. Create a deploy folder + download sample files**
 ```bash
-git clone https://github.com/The-Artificer-of-Ciphers-LLC/sentinel-of-mnemosyne.git
-cd sentinel-of-mnemosyne
+mkdir -p sentinel-deploy/secrets
+cd sentinel-deploy
+
+curl -fsSLO https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/sentinel-of-mnemosyne/main/docs/deploy/docker-compose.ghcr.yml
+curl -fsSLo .env https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/sentinel-of-mnemosyne/main/docs/deploy/.env.sample
 ```
 
 **2. Create your secret files**
@@ -122,9 +125,7 @@ echo -n "your-anthropic-key" > secrets/anthropic_api_key
 
 **3. Configure non-secret settings**
 ```bash
-cp .env.example .env
-# Edit .env — set LMSTUDIO_BASE_URL to your Mac Mini IP, adjust MODEL_NAME if needed
-# .env contains only non-secret config (URLs, log levels, modes)
+# Edit .env — set LMSTUDIO_BASE_URL, OBSIDIAN_API_URL, OBSIDIAN_VAULT_PATH, and model values
 ```
 
 **4. Start LM Studio on your Mac Mini**
@@ -132,23 +133,20 @@ cp .env.example .env
 - Note the IP address and port (default: `1234`)
 - Make sure a model is loaded
 
-**5. Deploy with Docker Compose**
+**5. Deploy with Docker Compose (GHCR images)**
 ```bash
-# Build images
-./sentinel.sh --discord --pathfinder build
-
-# Start full stack
-./sentinel.sh --discord --pathfinder up -d
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
 ```
 
-For complete deployment details (profiles, env, validation, troubleshooting), see:
+For complete deployment details (env, validation, troubleshooting), see:
 - [Installation Guide (v0.50)](docs/INSTALLATION-v0.50.md)
 - [Core Architecture](docs/ARCHITECTURE-Core.md)
 
 **6. Verify containers are healthy**
 ```bash
-./sentinel.sh ps
-./sentinel.sh logs -f sentinel-core
+docker compose -f docker-compose.ghcr.yml ps
+docker compose -f docker-compose.ghcr.yml logs -f sentinel-core
 ```
 
 **7. Use it from Discord (recommended)**
