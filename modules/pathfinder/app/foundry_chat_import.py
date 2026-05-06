@@ -3,6 +3,8 @@ from __future__ import annotations
 import datetime as dt
 import json
 import re
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Protocol
 
@@ -94,12 +96,9 @@ def _find_nedb_chatlog_file(inbox: Path) -> Path | None:
     return best[0] if best is not None else None
 
 
-def _load_nedb_records_from_leveldb_dir(inbox: Path, limit: int | None) -> list[dict]:
-    if plyvel is None:
-        raise RuntimeError("plyvel is required for Foundry LevelDB chat import")
-
+def _read_leveldb_records(db_path: Path, limit: int | None) -> list[dict]:
     records: list[dict] = []
-    db = plyvel.DB(str(inbox), create_if_missing=False, read_only=True)
+    db = plyvel.DB(str(db_path), create_if_missing=False)
     try:
         for key, value in db:
             if not key.startswith(b"!messages!"):
@@ -115,6 +114,25 @@ def _load_nedb_records_from_leveldb_dir(inbox: Path, limit: int | None) -> list[
     finally:
         db.close()
     return records
+
+
+def _load_nedb_records_from_leveldb_dir(inbox: Path, limit: int | None) -> list[dict]:
+    if plyvel is None:
+        raise RuntimeError("plyvel is required for Foundry LevelDB chat import")
+
+    try:
+        return _read_leveldb_records(inbox, limit)
+    except Exception as exc:
+        msg = str(exc)
+        if "LOCK" not in msg and "Read-only file system" not in msg:
+            raise
+
+    with tempfile.TemporaryDirectory(prefix="foundry-leveldb-") as tmpdir:
+        tmp = Path(tmpdir)
+        for p in inbox.iterdir():
+            if p.is_file() and not _is_imported_name(p.name):
+                shutil.copy2(p, tmp / p.name)
+        return _read_leveldb_records(tmp, limit)
 
 
 def _looks_like_leveldb_dir(inbox: Path) -> bool:
