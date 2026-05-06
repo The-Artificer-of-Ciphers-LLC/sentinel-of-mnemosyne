@@ -40,8 +40,14 @@ Icon
 .Spotlight-V8
 .Trashes
 
-# Claude Code — project-specific instructions and planning artifacts, not committed
+# Claude Code / GSD / local agent artifacts, not committed
 CLAUDE.md
+.claude/
+.gsd.id
+.gsd-id
+*GSD*
+*V040*
+.agents/
 .planning/
 
 # Editor
