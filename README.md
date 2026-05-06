@@ -65,7 +65,7 @@ The design goal is maximum flexibility with a stable, narrow core API. You add a
 
 Before first run, the operator must create `sentinel/persona.md` in the Obsidian Vault. The Sentinel reads this file on every message to source its system persona prompt; it lets the operator tune voice, tone, and behavior without redeploying.
 
-**Startup contract (locked by ADR-0001 / quick 260502-0vr):**
+**Startup contract:**
 - If Obsidian is reachable AND `sentinel/persona.md` is missing (404), `sentinel-core` will fail to start with a clear error. This is intentional — a reachable vault without a persona file is an operator setup error.
 - If Obsidian is unreachable at startup, the probe is skipped and `sentinel-core` starts in graceful-degrade mode using the hardcoded fallback persona.
 - Per-message: if the vault read returns empty or fails transiently, the processor falls back to the hardcoded persona and logs a WARN — user traffic is never blocked over a vault edit.
@@ -164,7 +164,7 @@ You should get an AI response back.
 
 Flags:
   --discord      Start Discord bot interface
-  --pi           Start Pi harness (optional coding tool — v0.7 scope)
+  --pi           Start Pi harness (optional coding tool)
   --pathfinder   Start Pathfinder 2e DM module (v0.50, shipped)
   --music        Start Music Lesson Tracker module (v0.6, planned)
   --finance      Start Personal Finance module (v0.8, planned)
@@ -255,7 +255,7 @@ sentinel-of-mnemosyne/
 │   │   ├── routes/             # /message, /modules, /status, /health
 │   │   └── services/           # ProviderRouter, InjectionFilter, OutputScanner
 │   └── compose.yml
-├── pi-harness/                 # Node.js pi coding-agent (optional — --pi flag, v0.7 scope)
+├── pi-harness/                 # Pi coding-agent container (optional — --pi flag)
 ├── interfaces/
 │   ├── discord/                # Discord bot (/sen command)
 │   └── messages/               # Apple Messages bridge (Mac-native component)
@@ -309,7 +309,7 @@ Non-secret configuration lives in `.env`. See `.env.example` for the full list w
 This project is at **v0.50**.
 
 Shipped and validated:
-- Sentinel Core route/context/startup hardening (`route_ctx` seam, startup orchestration seam)
+- Sentinel Core route/context/startup reliability improvements
 - LiteLLM-direct provider path with fallback support
 - Discord interface
 - Pathfinder module registration + proxy execution
@@ -320,7 +320,7 @@ Current baseline:
 - Automated tests: 279 passed, 12 skipped
 - Live smoke checks: `/health`, `/status`, `/modules`, `/note/classify`, `/message`
 
-Canonical architecture remains Path B: LiteLLM-direct chat, Pi harness optional (`--pi`) for future coder workflows.
+Core architecture: LiteLLM-direct chat, with optional Pi harness (`--pi`) for future coder workflows.
 
 ---
 
