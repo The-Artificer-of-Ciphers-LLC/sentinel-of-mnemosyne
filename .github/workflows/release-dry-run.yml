@@ -2,6 +2,7 @@ name: Release Dry Run
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "false"
 
 on:
   workflow_dispatch:
