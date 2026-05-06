@@ -96,7 +96,7 @@ Edit the file in Obsidian to change voice; `sentinel-core` picks up the change o
 
 ## Quick Start
 
-> This gets you a working AI response via `curl`. Full interface setup comes later.
+> This gets you a fully containerized running stack (no manual `curl` required).
 
 **1. Clone the repo**
 ```bash
@@ -132,28 +132,25 @@ cp .env.example .env
 - Note the IP address and port (default: `1234`)
 - Make sure a model is loaded
 
-**5. Start containers**
+**5. Build and start containers**
 ```bash
-# Core only
-./sentinel.sh up -d
+# Build images
+./sentinel.sh --discord --pathfinder build
 
-# Core + Discord
-./sentinel.sh --discord up -d
-
-# Core + Discord + Pathfinder module (v0.50)
+# Start full stack
 ./sentinel.sh --discord --pathfinder up -d
 ```
 
-**6. Test it**
+**6. Verify containers are healthy**
 ```bash
-SENTINEL_KEY=$(cat secrets/sentinel_api_key)
-curl -X POST http://localhost:8000/message \
-  -H "Content-Type: application/json" \
-  -H "X-Sentinel-Key: $SENTINEL_KEY" \
-  -d '{"id":"test-001","source":"curl","user_id":"you","channel_id":"test","timestamp":"2026-04-06T12:00:00Z","content":"Hello, are you there?","attachments":[],"metadata":{}}'
+./sentinel.sh ps
+./sentinel.sh logs -f sentinel-core
 ```
 
-You should get an AI response back.
+**7. Use it from Discord (recommended)**
+- Invite/configure your Discord bot
+- Send `/sen hello` in an allowed channel
+- You should receive a Sentinel response in Discord
 
 ---
 
