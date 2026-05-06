@@ -132,6 +132,7 @@ async def dispatch(
 # Each adapter module registers its commands via register() / register_star().
 from pathfinder_harvest_adapter import HarvestCommand  # noqa: E402, F401
 from pathfinder_ingest_adapter import CartosiaCommand, IngestCommand  # noqa: E402, F401
+from pathfinder_foundry_adapter import FoundryImportMessagesCommand  # noqa: E402, F401
 from pathfinder_npc_basic_adapter import (  # noqa: E402, F401
     NpcCreateCommand,
     NpcRelateCommand,
@@ -192,3 +193,6 @@ COMMANDS["npc"]["say"] = NpcSayCommand()
 # Ingest: two nouns, each with its own command.
 COMMANDS.setdefault("ingest", {})["*"] = IngestCommand()
 COMMANDS["cartosia"] = {"*": CartosiaCommand()}
+
+# Foundry import commands.
+COMMANDS.setdefault("foundry", {})["import-messages"] = FoundryImportMessagesCommand()

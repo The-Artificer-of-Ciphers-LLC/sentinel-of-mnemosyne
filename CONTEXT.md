@@ -137,6 +137,7 @@ Adapters should do only translation/auth/delegation.
 - Sweep engine: `app/services/vault_sweeper.py`
 - Sweep status store: `app/services/sweep_status_store.py`
 - Background scheduling seam: `app/services/task_runner.py`
+- PF2e Foundry NeDB chat import: `modules/pathfinder/app/foundry_chat_import.py`
 
 ### Authoritative flows
 - Message flow:
@@ -156,6 +157,14 @@ Adapters should do only translation/auth/delegation.
 - Health/status flow:
   - `runtime_probe.probe_runtime` drives runtime snapshot
   - `/health` additionally probes embedding model and formats through `health_response`
+
+- PF2e Foundry NeDB chat import flow:
+  1) Foundry/ops copies `messages.db` into inbox folder (`/vault/inbox/messages.db` default)
+  2) PF2e route `POST /foundry/messages/import` validates `X-Sentinel-Key`
+  3) `import_nedb_chatlogs_from_inbox(...)` parses line-delimited NeDB JSON
+  4) each message classified to `ic|roll|ooc|system` from `type` + normalized content
+  5) result persisted as markdown report note under `mnemosyne/pf2e/sessions/foundry-chat/YYYY-MM-DD/`
+  6) response returns summary counts (`imported_count`, `invalid_count`, `class_counts`, `note_path`)
 
 ### Policy invariants
 - Startup persona policy:

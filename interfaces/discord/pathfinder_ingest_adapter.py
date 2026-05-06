@@ -18,13 +18,12 @@ class IngestCommand(PathfinderCommand):
     """Handle ``:pf ingest <subfolder> [--live] [--dry-run] [--limit N] [--force] [--confirm-large]`` (admin-only)."""
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
-        if not request.is_admin is not None and request.is_admin(request.user_id):
+        if request.is_admin is None or not request.is_admin(request.user_id):
             return PathfinderResponse(
                 kind="text", content="Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command."
             )
 
-        tail = " ".join(request.rest.split(" ")[1:]).strip()
-        tokens = [t for t in tail.split() if t]
+        tokens = [t for t in request.rest.split() if t]
         archive_path: str | None = None
         live = False
         force_flag = False
@@ -108,13 +107,12 @@ class CartosiaCommand(PathfinderCommand):
     """Handle ``:pf cartosia <archive_path>`` (deprecated, forwards to ingest)."""
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
-        if not request.is_admin is not None and request.is_admin(request.user_id):
+        if request.is_admin is None or not request.is_admin(request.user_id):
             return PathfinderResponse(
                 kind="text", content="Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command."
             )
 
-        tail = " ".join(request.rest.split(" ")[1:]).strip()
-        tokens = [t for t in tail.split() if t]
+        tokens = [t for t in request.rest.split() if t]
         archive_path: str | None = None
         live = False
         force_flag = False

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-PF_NOUNS = frozenset({"npc", "harvest", "rule", "session", "ingest", "cartosia"})
+PF_NOUNS = frozenset({"npc", "harvest", "rule", "session", "ingest", "cartosia", "foundry"})
 
 
 def parse_pf_args(args: str) -> tuple[tuple[str, str, str, list[str]] | None, str | None]:
@@ -23,7 +23,8 @@ def usage_message() -> str:
         "Usage: `:pf npc <create|update|show|relate|import|say> ...` "
         "or `:pf harvest <Name>[,<Name>...]` "
         "or `:pf rule <question>|show <topic>|history [N]|list` "
-        "or `:pf cartosia <archive_path> [--live] [--limit N]` (admin-only)"
+        "or `:pf cartosia <archive_path> [--live] [--limit N]` (admin-only) "
+        "or `:pf foundry import-messages <inbox_dir> [--dry-run|--live] [--limit N]` (admin-only)"
     )
 
 
