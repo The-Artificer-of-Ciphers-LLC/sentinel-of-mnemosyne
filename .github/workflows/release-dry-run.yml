@@ -75,7 +75,7 @@ jobs:
           EOF
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: release-dry-run-${{ inputs.version }}
           path: dist/release-dry-run.txt
