@@ -36,6 +36,13 @@ async def test_import_nedb_chatlogs_from_inbox_live_writes_classified_markdown(t
             "timestamp": 1710000002000,
         },
         {
+            "_id": "m4",
+            "type": "base",
+            "speaker": {"alias": "Merisiel"},
+            "content": "<p>Scout ahead.</p>",
+            "timestamp": 1710000002500,
+        },
+        {
             "_id": "junk",
             "type": 99,
             "speaker": {"alias": "System"},
@@ -55,10 +62,10 @@ async def test_import_nedb_chatlogs_from_inbox_live_writes_classified_markdown(t
     )
 
     assert result["source"].endswith("chatlog-2026-05-06.db")
-    assert result["imported_count"] == 3
+    assert result["imported_count"] == 4
     assert result["deduped_count"] == 0
     assert result["invalid_count"] == 2
-    assert result["class_counts"] == {"ic": 1, "roll": 1, "ooc": 1, "system": 0}
+    assert result["class_counts"] == {"ic": 2, "roll": 1, "ooc": 1, "system": 0}
     assert result["note_path"].startswith("mnemosyne/pf2e/sessions/foundry-chat/")
     obsidian.put_note.assert_awaited_once()
 
@@ -67,6 +74,7 @@ async def test_import_nedb_chatlogs_from_inbox_live_writes_classified_markdown(t
     assert "| ic | Valeros | We move at dawn. |" in written_content
     assert "| roll | System | Attack Roll: 22 |" in written_content
     assert "| ooc | GM | ((rules clarification)) |" in written_content
+    assert "| ic | Merisiel | Scout ahead. |" in written_content
     assert (inbox_dir / "chatlog-2026-05-06.db_imported").exists()
 
 

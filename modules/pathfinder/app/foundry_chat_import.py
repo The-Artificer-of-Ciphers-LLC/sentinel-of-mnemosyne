@@ -32,11 +32,12 @@ def _strip_html(text: str) -> str:
 def _classify(record: dict) -> str:
     msg_type = record.get("type")
     content = _strip_html(str(record.get("content", "")))
-    if msg_type == 5 or "roll" in content.lower():
+    msg_type_s = str(msg_type).lower()
+    if msg_type == 5 or msg_type_s == "roll" or "roll" in content.lower():
         return "roll"
-    if msg_type == 0 or content.startswith("(("):
+    if msg_type == 0 or msg_type_s == "ooc" or content.startswith("(("):
         return "ooc"
-    if msg_type in (1, 2, 3, 4):
+    if msg_type in (1, 2, 3, 4) or msg_type_s in {"base", "ic", "emote", "incharacter"}:
         return "ic"
     return "system"
 
@@ -55,9 +56,12 @@ def _is_nedb_chat_record(record: dict) -> bool:
         return False
     if not isinstance(record.get("content"), str):
         return False
-    if not isinstance(record.get("type"), int):
+    msg_type = record.get("type")
+    if not isinstance(msg_type, (int, str)):
         return False
-    if record.get("type") not in {0, 1, 2, 3, 4, 5}:
+    if isinstance(msg_type, int) and msg_type not in {0, 1, 2, 3, 4, 5}:
+        return False
+    if isinstance(msg_type, str) and msg_type.lower() not in {"base", "ic", "ooc", "roll", "emote", "incharacter", "system"}:
         return False
     if not isinstance(record.get("timestamp"), int):
         return False
