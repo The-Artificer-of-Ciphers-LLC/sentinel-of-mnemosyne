@@ -168,12 +168,19 @@ async def foundry_messages_import(
     if obsidian is None:
         raise HTTPException(status_code=503, detail={"error": "obsidian client not initialised"})
 
-    result = await import_nedb_chatlogs_from_inbox(
-        inbox_dir=req.inbox_dir,
-        dry_run=req.dry_run,
-        limit=req.limit,
-        obsidian_client=obsidian,
-    )
+    try:
+        result = await import_nedb_chatlogs_from_inbox(
+            inbox_dir=req.inbox_dir,
+            dry_run=req.dry_run,
+            limit=req.limit,
+            obsidian_client=obsidian,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        logger.exception("foundry messages import failed")
+        raise HTTPException(status_code=500, detail=f"foundry messages import failed: {exc}")
+
     return JSONResponse(result)
 
 
