@@ -45,6 +45,7 @@ CLAUDE.md
 .claude/
 .gsd
 .gsd.id
+*.pi*
 .gsd-id
 *GSD*
 *V040*
