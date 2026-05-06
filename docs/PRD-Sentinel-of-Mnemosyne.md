@@ -59,7 +59,7 @@ The core philosophy is flexibility over prescription. Whether you want a Dungeon
            ▼                 ▼
 ┌──────────────────┐  ┌──────────────────────┐
 │  AI PROVIDER     │  │  MODULE CONTAINERS   │
-│  LiteLLMProvider │  │  (v0.5+: Pathfinder, │
+│  LiteLLMProvider │  │  (v0.50+: Pathfinder, │
 │  → LM Studio     │  │  Music, Finance, etc)│
 │  → Claude API    │  │  Each: FastAPI        │
 └──────────────────┘  │  POST /register →    │
@@ -91,7 +91,7 @@ LiteLLM runs inside the Sentinel Core container — not a separate service. It a
 Not a container — a folder on the host filesystem accessible via the Obsidian Local REST API plugin. Obsidian on your Mac reads the same folder. Markdown files, organized by module conventions. No database, no migrations.
 
 **Module Containers**
-Optional FastAPI containers (v0.5+) that add capability. Each module calls `POST /modules/register` on sentinel-core at startup, declaring its `name`, `base_url`, and available `routes`. sentinel-core then proxies `POST /modules/{name}/{path}` requests to the appropriate module. Modules may have their own Obsidian folder conventions (e.g., `/pathfinder/npcs/`, `/music/lessons/`).
+Optional FastAPI containers (v0.50+) that add capability. Each module calls `POST /modules/register` on sentinel-core at startup, declaring its `name`, `base_url`, and available `routes`. sentinel-core then proxies `POST /modules/{name}/{path}` requests to the appropriate module. Modules may have their own Obsidian folder conventions (e.g., `/pathfinder/npcs/`, `/music/lessons/`).
 
 **Pi Harness Container (optional — v0.7 scope)**
 The pi-mono coding-agent running in Docker, activated via `./sentinel.sh --pi`. An advanced coding tool for interactive code-generation tasks. Not in the standard chat message path.
@@ -465,7 +465,7 @@ Slack, WhatsApp (via Business API or unofficial bridge), Telegram, SMS (via Twil
 
 **Success criteria:** Switch AI providers without touching anything except an env file.
 
-### v0.5 — The Dungeon (Pathfinder 2e Module)
+### v0.50 — The Dungeon (Pathfinder 2e Module)
 **Goal:** First real module demonstrating the pluggable architecture.
 
 - NPC management — create, update, query NPCs via the interface
@@ -548,7 +548,7 @@ Slack, WhatsApp (via Business API or unofficial bridge), Telegram, SMS (via Twil
 | AppleScript bridge architecture | Messages interface requires Mac-side component. Define the bridge protocol before v0.3. |
 | Pi harness version pinning | The pi-mono project is under active development. Need a strategy for pinning and upgrading the Pi version. |
 | Obsidian vault sync | Local vault only for now. If multi-device access is needed later, iCloud sync of the vault folder is the simplest option before considering Obsidian Sync. |
-| Module discovery and registration | How does the Core know which modules are running? Environment variable list? A registration endpoint? Design for v0.5. |
+| Module discovery and registration | How does the Core know which modules are running? Environment variable list? A registration endpoint? Design for v0.50. |
 | Authentication | Who is allowed to talk to the Sentinel? For personal use, a shared secret token in the envelope header is probably sufficient for v0.x. |
 
 ---

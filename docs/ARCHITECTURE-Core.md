@@ -282,7 +282,7 @@ SENTINEL_API_KEY=<shared secret>
 
 ---
 
-### 3.4 Module Containers (v0.5+)
+### 3.4 Module Containers (v0.50+)
 
 Each module (Pathfinder, Music, Finance, etc.) is a self-contained FastAPI container.
 
@@ -491,7 +491,7 @@ mnemosyne/
 │           └── {user_id}-{HH-MM-SS}.md
 ├── inbox/
 │   └── imports/
-└── (module folders added in v0.5+: /pathfinder/, /music/, etc.)
+└── (module folders added in v0.50+: /pathfinder/, /music/, etc.)
 ```
 
 ### 7.3 User Context File Format
@@ -726,7 +726,7 @@ sentinel-of-mnemosyne/
 │       ├── requirements.txt
 │       └── bot.py
 │
-├── modules/                        ← (populated in v0.5+)
+├── modules/                        ← (populated in v0.50+)
 │   └── .gitkeep
 │
 └── docs/
@@ -737,13 +737,13 @@ sentinel-of-mnemosyne/
 
 ---
 
-## 10. Build Sequence (v0.1 → v0.5)
+## 10. Build Sequence (v0.1 → v0.50)
 
 ### Phase 1–4: Core Loop, Memory, Voice, AI Layer (Complete)
 
 The foundation is built: sentinel-core FastAPI container, LiteLLM-direct chat, Obsidian integration, Discord interface, token guard, model registry. See phase summaries in `.planning/phases/`.
 
-### Phase 11: First Path B Module (v0.5 — Pathfinder 2e)
+### Phase 11: First Path B Module (v0.50 — Pathfinder 2e)
 
 Goal: Deliver a module under the Path B contract.
 
@@ -770,9 +770,9 @@ Goal: Deliver a module under the Path B contract.
 
 | # | Question | Notes | Target |
 |---|---|---|---|
-| 1 | Module registry persistence | In-memory registry clears on sentinel-core restart; modules re-register on their restart. Is restart ordering reliable enough, or do we need a persistent registry? | v0.5 |
-| 2 | Module health checking | Should sentinel-core probe registered modules periodically? Or return 503 on-demand only? | v0.5 |
-| 3 | Module API versioning | Should module routes include a version prefix (`/v1/npcs`)? Start without, add if needed. | v0.5 |
+| 1 | Module registry persistence | In-memory registry clears on sentinel-core restart; modules re-register on their restart. Is restart ordering reliable enough, or do we need a persistent registry? | v0.50 |
+| 2 | Module health checking | Should sentinel-core probe registered modules periodically? Or return 503 on-demand only? | v0.50 |
+| 3 | Module API versioning | Should module routes include a version prefix (`/v1/npcs`)? Start without, add if needed. | v0.50 |
 | 4 | Pi harness integration depth | v0.7 scope: Pi as a parallel coding environment. Does it share the Obsidian vault context with sentinel-core, or maintain its own? | v0.7 |
 
 ---

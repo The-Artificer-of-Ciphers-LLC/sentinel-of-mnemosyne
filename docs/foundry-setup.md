@@ -1,5 +1,7 @@
 # Sentinel Connector — Complete Setup Guide
 
+> **Version audit:** Reviewed for Sentinel v0.50 (2026-05-06).
+
 > **Who this is for:** A Game Master who wants AI-powered roll narrations from their tabletop sessions appearing in Discord, automatically. No programming background required.
 
 ---

@@ -1,5 +1,7 @@
 # Obsidian Lifebook Design
 
+> **Version audit:** Reviewed for Sentinel v0.50 (2026-05-06).
+
 The Sentinel treats the user's Obsidian vault as a living knowledge system — a lifebook — not a
 simple session note store. This document describes what the Sentinel reads, what it writes, where
 it writes it, and how the Discord interface exposes vault operations as slash-command subcommands.
