@@ -1,6 +1,6 @@
 # Sentinel of Mnemosyne — Core Architecture
-**Version:** 0.40
-**Date:** 2026-04-21
+**Version:** 0.50
+**Date:** 2026-05-06
 **Scope:** Core system (Path B) — Interface layer, Sentinel Core container, AI provider layer, Module API gateway, Obsidian vault. Pi harness is optional (v0.7 scope, `--pi` flag only).
 
 ---
@@ -29,7 +29,7 @@ The Sentinel of Mnemosyne is a self-hosted, containerized AI assistant platform.
            ▼                 ▼
 ┌──────────────────┐  ┌──────────────────────┐
 │  AI PROVIDER     │  │  MODULE CONTAINERS   │
-│  LiteLLMProvider │  │  (v0.5+: Pathfinder, │
+│  LiteLLMProvider │  │  (v0.50: Pathfinder, │
 │  → LM Studio     │  │  Music, Finance, etc)│
 │  → Claude API    │  │  Each: FastAPI        │
 └──────────────────┘  │  POST /register →    │
@@ -42,6 +42,13 @@ The Sentinel of Mnemosyne is a self-hosted, containerized AI assistant platform.
               └──────────────────────────┘
 
 [ Pi Harness ] — optional, only with sentinel.sh --pi flag, v0.7 scope
+
+**v0.50 release snapshot:**
+- Core route seam uses `RouteContext` (`app.state.route_ctx`) with strict access.
+- Startup wiring/policy centralized in `initialize_startup()`.
+- Runtime probe, health formatting, message request mapping, module gateway/registry,
+  and sweep orchestration are extracted as deep modules behind thin route adapters.
+- Pathfinder module integration is operational via module registry + proxy.
 ```
 
 **Chat path:** `POST /message → APIKeyMiddleware → InjectionFilter → LiteLLMProvider → OutputScanner → response`

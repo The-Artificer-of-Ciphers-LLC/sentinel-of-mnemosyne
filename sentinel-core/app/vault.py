@@ -27,7 +27,9 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
+from app.errors import VaultUnreachableError
 from app.markdown_frontmatter import join_frontmatter, split_frontmatter
+from app.time_utils import _iso_utc, _parse_iso, _today_str
 
 logger = logging.getLogger(__name__)
 
@@ -46,37 +48,10 @@ _STALE_LOCK_SECONDS = 3600  # 1 hour
 # is observationally equivalent for all current callers.
 
 
-def _iso_utc(now: datetime | None = None) -> str:
-    n = now or datetime.now(timezone.utc)
-    return n.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _today_str(now: datetime | None = None) -> str:
-    n = now or datetime.now(timezone.utc)
-    return n.astimezone(timezone.utc).strftime("%Y-%m-%d")
 
 
-def _parse_iso(stamp: str) -> datetime | None:
-    if not stamp:
-        return None
-    try:
-        s = stamp.rstrip("Z")
-        dt = datetime.fromisoformat(s)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except Exception:
-        return None
-
-
-class VaultUnreachableError(Exception):
-    """Raised when the vault is unreachable (transport failure / 5xx).
-
-    Distinguishes from "reachable but file missing" (which surfaces as
-    ``None`` / empty / ``False`` per the relevant capability's contract).
-    Pairs with ``ContextLengthError`` / ``EmbeddingModelUnavailable`` /
-    ``ProviderUnavailableError`` as a typed transport-failure exception.
-    """
 
 
 @typing.runtime_checkable

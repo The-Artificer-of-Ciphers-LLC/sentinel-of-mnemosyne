@@ -1,63 +1,44 @@
-"""Direct tests for pathfinder_npc_rich_adapter seam."""
+"""Direct tests for NPC rich commands (deepened seam).
+
+Tests the new adapter classes directly — these replace the old module-level
+handle_npc_rich tests that were removed during deepening.
+"""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pathfinder_npc_rich_adapter
+from pathfinder_types import PathfinderRequest
 
 
-async def test_handle_npc_rich_import_requires_attachment():
-    handled, out = await pathfinder_npc_rich_adapter.handle_npc_rich(
-        verb="import",
-        rest="",
-        user_id="u1",
-        attachments=None,
-        channel=None,
-        bot_user=None,
-        sentinel_client=AsyncMock(),
-        http_client=AsyncMock(),
-        build_stat_embed=lambda _r: object(),
-        render_say_response=lambda _r: "x",
-        extract_thread_history=AsyncMock(return_value=[]),
+async def test_handle_npc_import_requires_attachment():
+    cmd = pathfinder_npc_rich_adapter.NpcImportCommand()
+    request = PathfinderRequest(
+        noun="npc", verb="import", rest="", user_id="u1",
+        attachments=None, channel=None, bot_user=None,
     )
-    assert handled is True
-    assert "attach" in out.lower()
+    response = await cmd.handle(request)
+    assert "attach" in response.content.lower()
 
 
-async def test_handle_npc_rich_pdf_returns_file_shape():
+async def test_handle_npc_pdf_returns_file_shape():
+    cmd = pathfinder_npc_rich_adapter.NpcPdfCommand()
     client = AsyncMock()
     client.post_to_module = AsyncMock(return_value={"data_b64": "UERG", "filename": "n.pdf"})
-    handled, out = await pathfinder_npc_rich_adapter.handle_npc_rich(
-        verb="pdf",
-        rest="Varek",
-        user_id="u1",
-        attachments=None,
-        channel=None,
-        bot_user=None,
+    request = PathfinderRequest(
+        noun="npc", verb="pdf", rest="Varek", user_id="u1",
         sentinel_client=client,
-        http_client=AsyncMock(),
-        build_stat_embed=lambda _r: object(),
-        render_say_response=lambda _r: "x",
-        extract_thread_history=AsyncMock(return_value=[]),
     )
-    assert handled is True
-    assert out["type"] == "file"
-    assert out["filename"] == "n.pdf"
+    response = await cmd.handle(request)
+    assert response.kind == "file"
+    assert response.filename == "n.pdf"
 
 
-async def test_handle_npc_rich_say_usage_when_missing_pipe():
-    handled, out = await pathfinder_npc_rich_adapter.handle_npc_rich(
-        verb="say",
-        rest="Varek hello",
-        user_id="u1",
-        attachments=None,
-        channel=None,
+async def test_handle_npc_say_usage_when_missing_pipe():
+    cmd = pathfinder_npc_rich_adapter.NpcSayCommand()
+    request = PathfinderRequest(
+        noun="npc", verb="say", rest="Varek hello", user_id="u1",
         bot_user=SimpleNamespace(id=1),
-        sentinel_client=AsyncMock(),
-        http_client=AsyncMock(),
-        build_stat_embed=lambda _r: object(),
-        render_say_response=lambda _r: "x",
-        extract_thread_history=AsyncMock(return_value=[]),
     )
-    assert handled is True
-    assert "Usage" in out
+    response = await cmd.handle(request)
+    assert "Usage" in response.content

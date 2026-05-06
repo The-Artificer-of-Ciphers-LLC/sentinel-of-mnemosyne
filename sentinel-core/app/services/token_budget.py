@@ -13,8 +13,10 @@ Absorbs:  message_processing._truncate_to_tokens (duplicate encoding logic)
 
 import tiktoken
 
+from app.errors import InternalError
 
-class TokenLimitError(Exception):
+
+class TokenLimitError(InternalError):
     """Raised when token count exceeds the context window."""
 
     def __init__(self, count: int, limit: int) -> None:

@@ -57,6 +57,7 @@ async def test_auth_accepts_valid_key():
         "pi_adapter",
         "ai_provider",
         "message_processor",
+        "route_ctx",
     )
     # Save originals so we can restore them after the test.
     _orig = {k: getattr(app.state, k, _MISSING) for k in _state_keys}
@@ -99,6 +100,29 @@ async def test_auth_accepts_valid_key():
             injection_filter=app.state.injection_filter,
             output_scanner=app.state.output_scanner,
         )
+
+        class _LazyRouteCtx:
+            @property
+            def vault(self):
+                return app.state.vault
+
+            @property
+            def processor(self):
+                return app.state.message_processor
+
+            @property
+            def settings(self):
+                return app.state.settings
+
+            @property
+            def context_window(self):
+                return app.state.context_window
+
+            @property
+            def lmstudio_stop_sequences(self):
+                return getattr(app.state, "lmstudio_stop_sequences", [])
+
+        app.state.route_ctx = _LazyRouteCtx()
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(

@@ -1,9 +1,9 @@
 # Product Requirements Document
 ## Sentinel of Mnemosyne
-**Version:** 0.2-draft
+**Version:** 0.50
 **Author:** Tom Boucher
-**Date:** 2026-04-06
-**Status:** Working Draft — Personal Reference
+**Date:** 2026-05-06
+**Status:** Active Reference — v0.50 hardening baseline
 
 ---
 

@@ -78,6 +78,29 @@ def setup_app_state():
         output_scanner=mock_scanner,
     )
 
+    class _LazyRouteCtx:
+        @property
+        def vault(self):
+            return app.state.vault
+
+        @property
+        def processor(self):
+            return app.state.message_processor
+
+        @property
+        def settings(self):
+            return app.state.settings
+
+        @property
+        def context_window(self):
+            return app.state.context_window
+
+        @property
+        def lmstudio_stop_sequences(self):
+            return getattr(app.state, "lmstudio_stop_sequences", [])
+
+    app.state.route_ctx = _LazyRouteCtx()
+
 
 async def test_obsidian_context_injected_into_llm_prompt():
     """D-GD-01/D-GD-02: Obsidian self-context appears in the messages sent to ai_provider.complete()."""

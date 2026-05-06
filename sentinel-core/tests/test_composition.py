@@ -9,6 +9,8 @@ silently swallowed.
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -17,7 +19,9 @@ from app.composition import (
     AppGraph,
     build_application,
     build_provider_router,
+    initialize_startup,
 )
+from app.vault import VaultUnreachableError
 from app.config import Settings
 from app.services.provider_router import ProviderRouter
 
@@ -151,6 +155,97 @@ async def test_build_application_typo_kwarg_raises_typeerror(http_client):
         await build_application(  # type: ignore[call-arg]
             settings, http_client, vualt=_FakeVault()
         )
+
+
+async def test_initialize_startup_pins_route_context_and_minimal_state(
+    monkeypatch,
+):
+    """initialize_startup pins route_ctx + minimal non-route state onto app.state."""
+    fake_vault = AsyncMock()
+    fake_vault.read_persona = AsyncMock(return_value="persona")
+    fake_graph = SimpleNamespace(
+        vault=fake_vault,
+        message_processor=object(),
+        settings=SimpleNamespace(model_name="test-model"),
+        http_client=object(),
+        context_window=8192,
+        lmstudio_stop_sequences=["</s>"],
+        note_classifier_fn=AsyncMock(),
+        embeddings=SimpleNamespace(embed=AsyncMock(return_value=[])),
+        module_registry={},
+        ai_provider_name="lmstudio",
+    )
+
+    async def _fake_build_application(_settings, _http_client):
+        return fake_graph
+
+    monkeypatch.setattr("app.composition.build_application", _fake_build_application)
+
+    app = SimpleNamespace(state=SimpleNamespace())
+    result = await initialize_startup(app, SimpleNamespace(), object())
+
+    assert result.warnings == []
+    assert app.state.route_ctx.vault is fake_vault
+    assert app.state.settings is fake_graph.settings
+    assert app.state.vault is fake_vault
+
+
+async def test_initialize_startup_returns_warning_when_vault_unreachable(
+    monkeypatch,
+):
+    """Vault transport failures are non-fatal and surfaced as warnings."""
+    fake_vault = AsyncMock()
+    fake_vault.read_persona = AsyncMock(side_effect=VaultUnreachableError("down"))
+    fake_graph = SimpleNamespace(
+        vault=fake_vault,
+        message_processor=object(),
+        settings=SimpleNamespace(model_name="test-model"),
+        http_client=object(),
+        context_window=8192,
+        lmstudio_stop_sequences=[],
+        note_classifier_fn=AsyncMock(),
+        embeddings=SimpleNamespace(embed=AsyncMock(return_value=[])),
+        module_registry={},
+        ai_provider_name="lmstudio",
+    )
+
+    async def _fake_build_application(_settings, _http_client):
+        return fake_graph
+
+    monkeypatch.setattr("app.composition.build_application", _fake_build_application)
+
+    app = SimpleNamespace(state=SimpleNamespace())
+    result = await initialize_startup(app, SimpleNamespace(), object())
+
+    assert len(result.warnings) == 1
+    assert "memory features degraded" in result.warnings[0]
+
+
+async def test_initialize_startup_raises_when_persona_missing(monkeypatch):
+    """Missing persona is a hard startup failure (ADR-0001)."""
+    fake_vault = AsyncMock()
+    fake_vault.read_persona = AsyncMock(return_value=None)
+    fake_graph = SimpleNamespace(
+        vault=fake_vault,
+        message_processor=object(),
+        settings=SimpleNamespace(model_name="test-model"),
+        http_client=object(),
+        context_window=8192,
+        lmstudio_stop_sequences=[],
+        note_classifier_fn=AsyncMock(),
+        embeddings=SimpleNamespace(embed=AsyncMock(return_value=[])),
+        module_registry={},
+        ai_provider_name="lmstudio",
+    )
+
+    async def _fake_build_application(_settings, _http_client):
+        return fake_graph
+
+    monkeypatch.setattr("app.composition.build_application", _fake_build_application)
+
+    app = SimpleNamespace(state=SimpleNamespace())
+    with pytest.raises(RuntimeError, match="sentinel/persona.md missing"):
+        await initialize_startup(app, SimpleNamespace(), object())
 
 
 # Suppress unused-import warning when running with json available

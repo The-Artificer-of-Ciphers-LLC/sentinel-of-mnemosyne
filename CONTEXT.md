@@ -95,3 +95,76 @@ _Avoid_: plugin, extension, service.
   the context isn't obvious, qualify: "Sentinel module" vs "architectural module".
 - **"Self"** in `self/identity.md` refers to the **user's** self, not the Sentinel's self. The
   Sentinel's self lives under `sentinel/`. Resolved via the **Sentinel namespace**.
+
+## Architecture memory for future agents (sentinel-core, machine-oriented)
+
+### Canonical seams
+- `app/state.py`
+  - `RouteContext` is REQUIRED route dependency carrier.
+  - `get_route_context(request)` strict: missing `route_ctx` => runtime error.
+- `app/composition.py`
+  - `initialize_startup(app, settings, http_client)` is startup orchestrator.
+  - Performs state pinning + persona startup policy.
+- `app/vault.py`
+  - `Vault` protocol is sole persistence interface.
+
+### Runtime state contract
+- Lifespan pins:
+  - `app.state.route_ctx` (primary)
+  - `app.state.settings` (minimal non-route use)
+  - `app.state.vault` (minimal non-route use)
+- Do not reintroduce scattered `app.state.*` dependencies in routes.
+
+### Adapter map
+- `app/main.py` => `/health`
+- `app/routes/message.py` => `/message`
+- `app/routes/status.py` => `/status`, `/context/{user_id}`
+- `app/routes/modules.py` => register/list/proxy
+- `app/routes/note.py` => note/inbox/sweep endpoints
+
+Adapters should do only translation/auth/delegation.
+
+### Deep module map
+- Startup: `app/composition.py`
+- Runtime config view: `app/runtime_config.py`
+- Runtime probe: `app/services/runtime_probe.py`
+- Health payload: `app/services/health_response.py`
+- Message request build: `app/services/message_request_factory.py`
+- Message exception mapping: `app/services/message_http_mapping.py`
+- Module forwarding: `app/services/module_gateway.py`
+- Module registry ops: `app/services/module_registry.py`
+- Sweep orchestration: `app/services/note_sweep_runner.py`
+- Sweep engine: `app/services/vault_sweeper.py`
+- Sweep status store: `app/services/sweep_status_store.py`
+- Background scheduling seam: `app/services/task_runner.py`
+
+### Authoritative flows
+- Message flow:
+  1) route -> `get_route_context`
+  2) `message_request_factory.build_message_request`
+  3) `MessageProcessor.process`
+  4) map exception via `message_http_mapping`
+  5) schedule session summary write via `ctx.vault`
+
+- Sweep flow:
+  1) route admin check
+  2) `note_sweep_runner.start_sweep`
+  3) schedule background task via `task_runner`
+  4) core execution in `vault_sweeper.run_sweep`
+  5) status via `sweep_status_store` wrappers
+
+- Health/status flow:
+  - `runtime_probe.probe_runtime` drives runtime snapshot
+  - `/health` additionally probes embedding model and formats through `health_response`
+
+### Policy invariants
+- Startup persona policy:
+  - persona missing + reachable vault => hard fail
+  - vault unreachable => warning + degraded startup
+- Sweeper is non-destructive (`_trash/*` moves only).
+- Pi harness probe is non-fatal.
+- `/health` always returns 200 with degraded fields when needed.
+
+### Validation baseline
+- Unit/integration tests: 279 passed, 12 skipped.
+- Live smoke validated: `/health`, `/status` (auth+unauth), `/modules`, `/note/classify`, `/message`.

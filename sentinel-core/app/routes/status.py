@@ -5,29 +5,31 @@ import asyncio
 from fastapi import APIRouter, Path, Request
 from starlette.responses import JSONResponse
 
+from app.runtime_config import runtime_config_from_settings
+from app.services.runtime_probe import probe_runtime
+from app.state import get_route_context
+
 router = APIRouter()
 
 
 @router.get("/status")
 async def system_status(request: Request) -> JSONResponse:
-    obsidian = request.app.state.vault
-    http_client = request.app.state.http_client
-    pi_url = request.app.state.settings.pi_harness_url
+    ctx = get_route_context(request)
+    snapshot = await probe_runtime(
+        vault=ctx.vault,
+        http_client=ctx.http_client,
+        runtime_config=runtime_config_from_settings(ctx.settings),
+        include_embedding_probe=False,
+    )
 
-    obsidian_ok = await obsidian.check_health()
-    pi_ok = False
-    try:
-        resp = await http_client.get(f"{pi_url}/health", timeout=5.0)
-        pi_ok = resp.status_code == 200
-    except Exception:
-        pass
+    ai_provider = ctx.ai_provider_name or getattr(ctx.settings, "ai_provider_name", None)
 
     return JSONResponse(
         {
-            "status": "ok" if obsidian_ok else "degraded",
-            "obsidian": "ok" if obsidian_ok else "unreachable",
-            "pi_harness": "ok" if pi_ok else "unreachable",
-            "ai_provider": request.app.state.ai_provider_name,
+            "status": "ok" if snapshot.obsidian_ok else "degraded",
+            "obsidian": "ok" if snapshot.obsidian_ok else "unreachable",
+            "pi_harness": "ok" if snapshot.pi_ok else "unreachable",
+            "ai_provider": ai_provider,
         }
     )
 
@@ -37,7 +39,8 @@ async def debug_context(
     request: Request,
     user_id: str = Path(..., pattern=r"^[a-zA-Z0-9_-]+$"),
 ) -> JSONResponse:
-    obsidian = request.app.state.vault
+    ctx = get_route_context(request)
+    obsidian = ctx.vault
     self_paths = [
         "self/identity.md",
         "self/methodology.md",

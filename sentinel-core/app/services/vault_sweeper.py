@@ -19,9 +19,17 @@ from typing import AsyncIterator, Awaitable, Callable
 import numpy as np
 from pydantic import BaseModel, Field
 
+from app.errors import SweepInProgressError
 from app.markdown_frontmatter import join_frontmatter, split_frontmatter
+from app.time_utils import _iso_utc, _parse_iso, _today_str
 from sentinel_shared.embedding_codec import decode_embedding, encode_embedding
 from sentinel_shared.similarity import cosine_similarity, find_dup_clusters
+
+from app.services.sweep_status_store import (
+    get_sweep_status,
+    reset_sweep_status,
+    set_sweep_status_from_report,
+)
 
 # Re-exports preserved for backwards compatibility with existing import sites
 # (tests + any downstream callers that import these names from vault_sweeper).
@@ -95,34 +103,13 @@ class SweepReport(BaseModel):
     proposed_moves: list[dict] = Field(default_factory=list)
 
 
-class SweepInProgressError(RuntimeError):
-    """Raised when an existing fresh lockfile blocks a new sweep."""
+
 
 
 # --- Time / utility ---
 
 
-def _iso_utc(now: datetime | None = None) -> str:
-    n = now or datetime.now(timezone.utc)
-    return n.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-
-def _today_str(now: datetime | None = None) -> str:
-    n = now or datetime.now(timezone.utc)
-    return n.astimezone(timezone.utc).strftime("%Y-%m-%d")
-
-
-def _parse_iso(stamp: str) -> datetime | None:
-    if not stamp:
-        return None
-    try:
-        s = stamp.rstrip("Z")
-        dt = datetime.fromisoformat(s)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except Exception:
-        return None
 
 
 # --- Frontmatter helpers migrated to app.markdown_frontmatter (260502-g8c Task 3) ---
@@ -471,39 +458,16 @@ async def run_sweep(
         await client.release_sweep_lock()
 
 
-# --- Module-level status (for /vault/sweep/status route) ---
-
-_SWEEP_STATUS: dict[str, object] = {
-    "sweep_id": None,
-    "status": "idle",
-    "files_processed": 0,
-    "files_total": 0,
-    "duplicates_moved": 0,
-    "noise_moved": 0,
-}
+# --- Operational status wrappers (for /vault/sweep/status route) ---
 
 
 def get_status() -> dict:
-    return dict(_SWEEP_STATUS)
+    return get_sweep_status()
 
 
 def _set_status(report: SweepReport) -> None:
-    _SWEEP_STATUS.update(
-        sweep_id=report.sweep_id,
-        status=report.status,
-        files_processed=report.files_processed,
-        files_total=report.files_total,
-        duplicates_moved=report.duplicates_moved,
-        noise_moved=report.noise_moved,
-    )
+    set_sweep_status_from_report(report)
 
 
 def reset_status_for_tests() -> None:
-    _SWEEP_STATUS.update(
-        sweep_id=None,
-        status="idle",
-        files_processed=0,
-        files_total=0,
-        duplicates_moved=0,
-        noise_moved=0,
-    )
+    reset_sweep_status()

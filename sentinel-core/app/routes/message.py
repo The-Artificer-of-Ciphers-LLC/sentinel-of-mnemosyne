@@ -2,13 +2,12 @@
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
+from app.errors import MessageProcessingError
 from app.models import MessageEnvelope, ResponseEnvelope
-from app.services.message_processing import (
-    MessageProcessingError,
-    MessageRequest,
-    MessageResult,
-    SEARCH_SCORE_THRESHOLD,
-)
+from app.services.message_processing import MessageResult, SEARCH_SCORE_THRESHOLD
+from app.services.message_http_mapping import map_message_exception
+from app.services.message_request_factory import build_message_request
+from app.state import RouteContext, get_route_context
 
 # Re-exported for tests; consumed in app.services.message_processing.
 _ = SEARCH_SCORE_THRESHOLD
@@ -22,42 +21,26 @@ async def post_message(
     request: Request,
     background_tasks: BackgroundTasks,
 ) -> ResponseEnvelope:
-    app_state = request.app.state
-    processor = app_state.message_processor
-    stop_sequences = getattr(app_state, "lmstudio_stop_sequences", None) or None
-    req = MessageRequest(
-        content=envelope.content,
-        user_id=envelope.user_id,
-        model_name=app_state.settings.model_name,
-        context_window=app_state.context_window,
-        stop_sequences=stop_sequences,
-    )
+    ctx = get_route_context(request)
+    processor = ctx.processor
+    if processor is None or ctx.settings is None:
+        raise HTTPException(status_code=500, detail="message processor not configured")
+    req = build_message_request(ctx, envelope)
 
     try:
         result = await processor.process(req)
-    except MessageProcessingError as exc:
-        match exc.code:
-            case "context_overflow":
-                status_code = 422
-            case "provider_unavailable":
-                status_code = 503
-            case "provider_misconfigured":
-                status_code = 502
-            case "security_blocked":
-                status_code = 500
-            case _:
-                status_code = 502
-        raise HTTPException(status_code=status_code, detail=str(exc))
+    except Exception as exc:
+        raise map_message_exception(exc)
 
-    _schedule_session_summary(background_tasks, request, result)
+    _schedule_session_summary(background_tasks, ctx, result)
     return ResponseEnvelope(content=result.content, model=result.model)
 
 
 def _schedule_session_summary(
-    background_tasks: BackgroundTasks, request: Request, result: MessageResult
+    background_tasks: BackgroundTasks, ctx: RouteContext, result: MessageResult
 ) -> None:
     background_tasks.add_task(
-        request.app.state.vault.write_session_summary,
+        ctx.vault.write_session_summary,
         result.summary_path,
         result.summary_content,
     )

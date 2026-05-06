@@ -7,10 +7,11 @@ Architecture:
   GET  /status  → authenticated system status (obsidian, pi_harness, ai_provider)
   GET  /context/{user_id} → authenticated debug context dump
 
-Lifespan delegates wiring to ``app.composition.build_application`` and pins
-each ``AppGraph`` field onto ``app.state`` for back-compat with existing
-routes/tests (Q4(a)). The persona probe stays here because ADR-0001 is a
-startup-failure decision, not graph construction.
+Lifespan delegates startup wiring and policy enforcement to
+``app.composition.initialize_startup``.
+
+Route handlers consume ``app.state.route_ctx``; we avoid scattering the full
+``AppGraph`` onto ``app.state``.
 """
 import logging
 from contextlib import asynccontextmanager
@@ -24,14 +25,16 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response
 
-from app.composition import build_application
+from app.composition import initialize_startup
 from app.config import settings
 from app.routes.message import router as message_router
+from app.runtime_config import runtime_config_from_settings
 from app.routes.modules import router as modules_router
 from app.routes.note import router as note_router
 from app.routes.status import router as status_router
+from app.services.health_response import build_health_payload
 from app.services.model_selector import probe_embedding_model_loaded
-from app.vault import VaultUnreachableError
+from app.services.runtime_probe import probe_runtime
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 logger = logging.getLogger(__name__)
@@ -58,43 +61,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.http_client = http_client
     app.state.settings = settings
 
-    graph = await build_application(settings, http_client)
-
-    # Pin every graph field onto app.state for back-compat (Q4(a)).
-    app.state.settings = graph.settings
-    app.state.model_registry = graph.model_registry
-    app.state.context_window = graph.context_window
-    app.state.lmstudio_stop_sequences = graph.lmstudio_stop_sequences
-    app.state.ai_provider = graph.ai_provider
-    app.state.ai_provider_name = graph.ai_provider_name
-    app.state.vault = graph.vault
-    app.state.injection_filter = graph.injection_filter
-    app.state.output_scanner = graph.output_scanner
-    app.state.message_processor = graph.message_processor
-    app.state.module_registry = graph.module_registry
-    app.state.note_classifier_fn = graph.note_classifier_fn
-    app.state.note_embedder_fn = graph.embeddings.embed
-    app.state.embedding_model_loaded = graph.embedding_model_loaded
-
-    # ADR-0001 startup contract — preserved end-to-end via the Vault seam:
-    #   * vault reachable + persona 200 → log success
-    #   * vault reachable + persona 404 → hard fail (operator setup error)
-    #   * vault unreachable (transport failure) → warn + continue with fallback
-    try:
-        persona = await graph.vault.read_persona()
-    except VaultUnreachableError as exc:
-        logger.warning(
-            "Obsidian REST API unavailable at startup — memory features degraded. "
-            "Ensure Obsidian is running with Local REST API plugin enabled "
-            "(HTTP mode port 27123). %s",
-            exc,
-        )
-    else:
-        if persona is None:
-            raise RuntimeError(
-                "sentinel/persona.md missing from Vault — operator setup required (see README)"
-            )
-        logger.info("Persona loaded from vault (%d chars)", len(persona))
+    startup = await initialize_startup(app, settings, http_client)
+    for warning in startup.warnings:
+        logger.warning(warning)
 
     logger.info("Sentinel Core ready.")
     yield
@@ -106,7 +75,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="Sentinel Core",
-    version="0.1.0",
+    version="0.50.0",
     description="Sentinel of Mnemosyne — Core message processing API",
     lifespan=lifespan,
 )
@@ -135,30 +104,23 @@ app.include_router(note_router)
 async def health(request: Request) -> JSONResponse:
     """Health check — always 200. Reports obsidian + embedding-model state
     as non-blocking fields. (260502-1zv D-02 — embedding_model field added.)"""
-    obsidian_ok = False
-    try:
-        obsidian_ok = await request.app.state.vault.check_health()
-    except Exception:
-        pass
+    http_client = getattr(request.app.state, "http_client", None)
 
-    # Re-run the probe on each /health call rather than serving a cached
-    # boot-time result — operators may load the model after startup, and a
-    # stale "not_loaded" would mislead them. The probe itself is graceful
-    # and bounded by a 5s timeout in probe_embedding_model_loaded.
+    snapshot = await probe_runtime(
+        vault=getattr(request.app.state, "vault", None),
+        http_client=http_client,
+        runtime_config=runtime_config_from_settings(settings),
+        include_embedding_probe=False,
+    )
+
     embedding_loaded = False
     try:
         embedding_loaded = await probe_embedding_model_loaded(
-            request.app.state.http_client,
+            http_client,
             settings.lmstudio_base_url,
             settings.embedding_model,
         )
     except Exception:
         pass
 
-    return JSONResponse(
-        {
-            "status": "ok",
-            "obsidian": "ok" if obsidian_ok else "degraded",
-            "embedding_model": "loaded" if embedding_loaded else "not_loaded",
-        }
-    )
+    return JSONResponse(build_health_payload(snapshot, embedding_loaded))

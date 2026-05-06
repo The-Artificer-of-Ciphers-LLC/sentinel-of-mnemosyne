@@ -12,6 +12,19 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from starlette.responses import JSONResponse
 
+from app.services.module_gateway import (
+    forward_get,
+    forward_post,
+    target_url_for,
+    to_json_response,
+)
+from app.services.module_registry import (
+    list_modules_payload,
+    register_module as register_module_entry,
+    resolve_module,
+)
+from app.state import get_route_context
+
 router = APIRouter()
 
 
@@ -33,7 +46,8 @@ async def register_module(registration: ModuleRegistration, request: Request) ->
     The module container calls this at startup. sentinel-core stores the registration
     in-memory and begins proxying /modules/{name}/{path} requests to the module's base_url.
     """
-    request.app.state.module_registry[registration.name] = registration
+    ctx = get_route_context(request)
+    register_module_entry(ctx.module_registry, registration)
     return JSONResponse({"status": "registered"})
 
 
@@ -43,77 +57,53 @@ async def list_modules(request: Request) -> JSONResponse:
 
     Returns the module registry as a JSON list. Used by GET /modules to satisfy SC-2.
     """
-    registry = request.app.state.module_registry
-    result = [
-        {
-            "name": reg.name,
-            "base_url": reg.base_url,
-            "routes": [{"path": r.path, "description": r.description} for r in reg.routes],
-        }
-        for reg in registry.values()
-    ]
+    ctx = get_route_context(request)
+    registry = ctx.module_registry
+    result = list_modules_payload(registry)
     return JSONResponse(result)
 
 
 @router.get("/modules/{name}/{path:path}")
 async def get_proxy_module(name: str, path: str, request: Request) -> JSONResponse:
-    """Proxy a GET request to a registered module endpoint (D-08).
-
-    Mirror of proxy_module() using http_client.get(). No request body forwarded.
-    Returns 404 if module not registered, 503 if module unreachable.
-    """
-    registry = request.app.state.module_registry
-    if name not in registry:
+    """Proxy a GET request to a registered module endpoint (D-08)."""
+    ctx = get_route_context(request)
+    registry = ctx.module_registry
+    try:
+        module = resolve_module(registry, name)
+    except KeyError:
         raise HTTPException(status_code=404, detail=f"Module '{name}' not registered")
-    module = registry[name]
-    target_url = f"{module.base_url.rstrip('/')}/{path}"
+
+    target_url = target_url_for(module, path)
     sentinel_key = request.headers.get("X-Sentinel-Key", "")
     try:
-        resp = await request.app.state.http_client.get(
-            target_url,
-            headers={"X-Sentinel-Key": sentinel_key},
-        )
-        try:
-            content = resp.json()
-        except ValueError:
-            content = {"body": resp.text}
-        return JSONResponse(content=content, status_code=resp.status_code)
+        result = await forward_get(ctx.http_client, target_url, sentinel_key)
+        return to_json_response(result)
     except httpx.TransportError:
         raise HTTPException(status_code=503, detail={"error": "module unavailable"})
 
 
 @router.post("/modules/{name}/{path:path}")
 async def proxy_module(name: str, path: str, request: Request) -> JSONResponse:
-    """Proxy a request to a registered module endpoint.
-
-    Forwards the request body to module.base_url/{path} via the shared httpx client.
-    Returns 404 if the module is not registered, 503 if the module is unreachable.
-    """
-    registry = request.app.state.module_registry
-    if name not in registry:
+    """Proxy a request to a registered module endpoint."""
+    ctx = get_route_context(request)
+    registry = ctx.module_registry
+    try:
+        module = resolve_module(registry, name)
+    except KeyError:
         raise HTTPException(status_code=404, detail=f"Module '{name}' not registered")
-    module = registry[name]
-    target_url = f"{module.base_url.rstrip('/')}/{path}"
+
+    target_url = target_url_for(module, path)
     body = await request.body()
-    # Forward X-Sentinel-Key to the module so it can verify the request comes from sentinel-core.
-    # Per ARCHITECTURE-Core.md §3.4: all modules receive SENTINEL_API_KEY for auth.
-    # Without forwarding, modules that enforce auth will reject the proxy call with 401 (seen as 503).
     sentinel_key = request.headers.get("X-Sentinel-Key", "")
     try:
-        resp = await request.app.state.http_client.post(
+        result = await forward_post(
+            ctx.http_client,
             target_url,
-            content=body,
-            headers={
-                "Content-Type": "application/json",
-                "X-Sentinel-Key": sentinel_key,
-            },
+            body,
+            sentinel_key,
             timeout=120.0,
         )
-        try:
-            content = resp.json()
-        except ValueError:
-            content = {"body": resp.text}
-        return JSONResponse(content=content, status_code=resp.status_code)
+        return to_json_response(result)
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail={"error": "module timed out"})
     except httpx.TransportError:

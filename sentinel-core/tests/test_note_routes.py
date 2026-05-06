@@ -10,8 +10,10 @@ from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import app.routes.note as note_routes
 from app.routes.note import router as note_router
 from app.services.note_classifier import ClassificationResult
+from app.state import RouteContext
 
 
 class FakeObsidian:
@@ -37,6 +39,13 @@ class FakeObsidian:
 def _make_app(obsidian: FakeObsidian) -> FastAPI:
     app = FastAPI()
     app.state.vault = obsidian
+    app.state.note_classifier_fn = note_routes.classify_note
+    app.state.note_embedder_fn = AsyncMock(return_value=[])
+    app.state.route_ctx = RouteContext(
+        vault=app.state.vault,
+        classify=app.state.note_classifier_fn,
+        embedder=app.state.note_embedder_fn,
+    )
     app.include_router(note_router)
     return app
 
@@ -266,6 +275,11 @@ def test_sweep_start_admin_only(monkeypatch):
     app = _make_app(obsidian)
     app.state.note_classifier_fn = AsyncMock()
     app.state.note_embedder_fn = AsyncMock(return_value=[])
+    app.state.route_ctx = RouteContext(
+        vault=app.state.vault,
+        classify=app.state.note_classifier_fn,
+        embedder=app.state.note_embedder_fn,
+    )
     client = TestClient(app)
     resp = client.post("/vault/sweep/start", json={"user_id": "789", "force_reclassify": False})
     assert resp.status_code == 403
@@ -287,6 +301,11 @@ def test_sweep_start_admin_returns_running(monkeypatch):
 
     app.state.note_classifier_fn = _classifier
     app.state.note_embedder_fn = _embedder
+    app.state.route_ctx = RouteContext(
+        vault=app.state.vault,
+        classify=app.state.note_classifier_fn,
+        embedder=app.state.note_embedder_fn,
+    )
     client = TestClient(app)
     resp = client.post(
         "/vault/sweep/start", json={"user_id": "123", "force_reclassify": False}

@@ -1,55 +1,80 @@
-"""Pathfinder NPC basic verb adapter for Discord :pf commands."""
+"""Pathfinder NPC basic verb adapter for Discord :pf commands.
 
+Deepened into PathfinderCommand classes: one handle() method per sub-verb,
+one request object, one response type.  HTTP plumbing stays in the bridge.
+
+Sub-verbs: create, update, show, relate.
+Returns PathfinderResponse(kind="unhandled") when verb doesn't match —
+signals dispatch to try npc_rich next.
+"""
 from __future__ import annotations
 
+from pathfinder_types import (
+    PathfinderCommand,
+    PathfinderRequest,
+    PathfinderResponse,
+)
 
-async def handle_npc_basic(
-    *,
-    verb: str,
-    rest: str,
-    user_id: str,
-    sentinel_client,
-    http_client,
-    valid_relations: frozenset[str],
-) -> tuple[bool, str]:
-    if verb == "create":
-        name, _, description = rest.partition("|")
+
+class NpcCreateCommand(PathfinderCommand):
+    """Handle ``:pf npc create <name> | <description>``."""
+
+    async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
+        name, _, description = request.rest.partition("|")
         if not name.strip():
-            return True, "Usage: `:pf npc create <name> | <description>`"
+            return PathfinderResponse(
+                kind="text", content="Usage: `:pf npc create <name> | <description>`"
+            )
         payload = {
             "name": name.strip(),
             "description": description.strip(),
-            "user_id": user_id,
+            "user_id": request.user_id,
         }
-        result = await sentinel_client.post_to_module(
-            "modules/pathfinder/npc/create", payload, http_client
+        result = await request.sentinel_client.post_to_module(
+            "modules/pathfinder/npc/create", payload, request.http_client
         )
-        return True, (
-            f"NPC **{result.get('name', name.strip())}** created.\n"
-            f"Path: `{result.get('path', '?')}`\n"
-            f"Ancestry: {result.get('ancestry', '?')} | Class: {result.get('class', '?')} | Level: {result.get('level', '?')}"
+        return PathfinderResponse(
+            kind="text",
+            content=(
+                f"NPC **{result.get('name', name.strip())}** created.\n"
+                f"Path: `{result.get('path', '?')}`\n"
+                f"Ancestry: {result.get('ancestry', '?')} | Class: {result.get('class', '?')} | Level: {result.get('level', '?')}"
+            ),
         )
 
-    if verb == "update":
-        name, _, correction = rest.partition("|")
+
+class NpcUpdateCommand(PathfinderCommand):
+    """Handle ``:pf npc update <name> | <correction>``."""
+
+    async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
+        name, _, correction = request.rest.partition("|")
         if not name.strip() or not correction.strip():
-            return True, "Usage: `:pf npc update <name> | <correction>`"
+            return PathfinderResponse(
+                kind="text", content="Usage: `:pf npc update <name> | <correction>`"
+            )
         payload = {
             "name": name.strip(),
             "correction": correction.strip(),
-            "user_id": user_id,
+            "user_id": request.user_id,
         }
-        result = await sentinel_client.post_to_module(
-            "modules/pathfinder/npc/update", payload, http_client
+        result = await request.sentinel_client.post_to_module(
+            "modules/pathfinder/npc/update", payload, request.http_client
         )
-        return True, f"NPC **{name.strip()}** updated. Fields changed: {', '.join(result.get('changed_fields', []))}"
+        return PathfinderResponse(
+            kind="text",
+            content=f"NPC **{name.strip()}** updated. Fields changed: {', '.join(result.get('changed_fields', []))}",
+        )
 
-    if verb == "show":
-        npc_name = rest.strip()
+
+class NpcShowCommand(PathfinderCommand):
+    """Handle ``:pf npc show <name>``."""
+
+    async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
+        npc_name = request.rest.strip()
         if not npc_name:
-            return True, "Usage: `:pf npc show <name>`"
-        result = await sentinel_client.post_to_module(
-            "modules/pathfinder/npc/show", {"name": npc_name, "user_id": user_id}, http_client
+            return PathfinderResponse(kind="text", content="Usage: `:pf npc show <name>`")
+        result = await request.sentinel_client.post_to_module(
+            "modules/pathfinder/npc/show", {"name": npc_name, "user_id": request.user_id}, request.http_client
         )
         lines = [
             f"**{result.get('name', npc_name)}** "
@@ -68,26 +93,35 @@ async def handle_npc_basic(
             rel_text = ", ".join(f"{r.get('target')} ({r.get('relation')})" for r in rels)
             lines.append(f"Relationships: {rel_text}")
         lines.append(f"*Mood: {result.get('mood', 'neutral')} | {result.get('path', '')}*")
-        return True, "\n".join(lines)
+        return PathfinderResponse(kind="text", content="\n".join(lines))
 
-    if verb == "relate":
-        relate_parts = [p.strip() for p in rest.split("|")]
+
+class NpcRelateCommand(PathfinderCommand):
+    """Handle ``:pf npc relate <npc-name> | <relation> | <target-npc-name>``."""
+
+    async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
+        relate_parts = [p.strip() for p in request.rest.split("|")]
         if len(relate_parts) < 3 or not all(relate_parts[:3]):
-            return True, (
-                "Usage: `:pf npc relate <npc-name> | <relation> | <target-npc-name>`\n"
-                f"Valid relations: {', '.join(sorted(valid_relations))}"
+            return PathfinderResponse(
+                kind="text",
+                content=(
+                    "Usage: `:pf npc relate <npc-name> | <relation> | <target-npc-name>`"
+                ),
             )
         npc_name, relation, target = relate_parts[0], relate_parts[1], relate_parts[2]
-        if relation not in valid_relations:
-            return True, (
-                f"`{relation}` is not a valid relation type.\n"
-                f"Valid options: {', '.join(sorted(valid_relations))}"
+        # valid_relations passed via request metadata (set by bridge)
+        valid = request.valid_relations or frozenset()
+        if relation not in valid:
+            return PathfinderResponse(
+                kind="text",
+                content=f"`{relation}` is not a valid relation type.\nValid options: {', '.join(sorted(valid))}",
             )
-        await sentinel_client.post_to_module(
+        await request.sentinel_client.post_to_module(
             "modules/pathfinder/npc/relate",
             {"name": npc_name, "relation": relation, "target": target},
-            http_client,
+            request.http_client,
         )
-        return True, f"Relationship added: **{npc_name}** {relation} **{target}**."
-
-    return False, ""
+        return PathfinderResponse(
+            kind="text",
+            content=f"Relationship added: **{npc_name}** {relation} **{target}**.",
+        )

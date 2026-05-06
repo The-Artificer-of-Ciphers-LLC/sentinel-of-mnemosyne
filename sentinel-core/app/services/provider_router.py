@@ -15,22 +15,15 @@ import logging
 
 import httpx
 
-logger = logging.getLogger(__name__)
+from app.errors import ContextLengthError, ProviderUnavailableError
 
 # Errors that trigger fallback (connectivity failures only)
 _FALLBACK_TRIGGERS = (httpx.ConnectError, httpx.TimeoutException)
 
-
-class ProviderUnavailableError(Exception):
-    """Raised when primary (and fallback, if configured) providers both fail with connectivity errors."""
-
-    pass
+logger = logging.getLogger(__name__)
 
 
-class ContextLengthError(Exception):
-    """Raised when a provider rejects a completion because the prompt+context exceeds model capacity."""
 
-    pass
 
 
 class ProviderRouter:

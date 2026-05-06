@@ -353,14 +353,14 @@ async def test_pf_say_scene_advance_dispatch():
     assert payload["party_line"] == ""
 
 
-async def test_pf_unknown_verb_help_includes_say():
-    """Unknown-verb help text lists `say` in the Available: verb catalog (DLG-01, D-04)."""
+async def test_pf_unknown_verb_returns_error():
+    """Unknown verb returns a simple error (no catalog — shallow interface)."""
     with patch.object(bot._sentinel_client, "post_to_module", new=AsyncMock()) as mock_ptm:
         result = await bot._pf_dispatch("npc bogus", "user123")
 
     mock_ptm.assert_not_called()
-    assert "say" in result
-    assert "Available:" in result
+    assert isinstance(result, str)
+    assert "bogus" in result
 
 
 async def test_pf_say_render_two_quote_blocks():

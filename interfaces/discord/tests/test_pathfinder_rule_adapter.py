@@ -1,37 +1,33 @@
-"""Direct tests for pathfinder_rule_adapter seam."""
+"""Direct tests for Rule commands (deepened seam).
+
+Tests the new adapter classes directly — these replace the old module-level
+handle_rule tests that were removed during deepening.
+"""
 
 from unittest.mock import AsyncMock
 
 import pathfinder_rule_adapter
+from pathfinder_types import PathfinderRequest
 
 
 async def test_handle_rule_query_usage_when_empty():
-    out = await pathfinder_rule_adapter.handle_rule(
-        verb="query",
-        rest="",
-        parts=["rule"],
-        user_id="u1",
-        channel=None,
-        sentinel_client=AsyncMock(),
-        http_client=object(),
-        build_ruling_embed=lambda _r: object(),
+    cmd = pathfinder_rule_adapter.RuleQueryCommand()
+    request = PathfinderRequest(
+        noun="rule", verb="query", rest="", user_id="u1"
     )
-    assert "Usage" in out
+    response = await cmd.handle(request)
+    assert "Usage" in response.content
 
 
 async def test_handle_rule_history_caps_n():
+    cmd = pathfinder_rule_adapter.RuleHistoryCommand()
     client = AsyncMock()
     client.post_to_module = AsyncMock(return_value={"rulings": []})
-    out = await pathfinder_rule_adapter.handle_rule(
-        verb="history",
-        rest="500",
-        parts=["rule", "history", "500"],
-        user_id="u1",
-        channel=None,
+    request = PathfinderRequest(
+        noun="rule", verb="history", rest="500", user_id="u1",
         sentinel_client=client,
-        http_client=object(),
-        build_ruling_embed=lambda _r: object(),
     )
-    assert out == "_No rulings yet._"
+    response = await cmd.handle(request)
+    assert response.content == "_No rulings yet._"
     payload = client.post_to_module.call_args[0][1]
     assert payload["n"] == 50

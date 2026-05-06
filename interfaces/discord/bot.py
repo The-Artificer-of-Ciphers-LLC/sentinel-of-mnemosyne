@@ -58,15 +58,7 @@ import discord_router_bridge
 import embed_builders
 import pathfinder_bridge
 import pathfinder_cli
-import pathfinder_dispatch
 import pathfinder_error_mapper
-import pathfinder_harvest_adapter
-import pathfinder_ingest_adapter
-import pathfinder_npc_basic_adapter
-import pathfinder_npc_rich_adapter
-import pathfinder_registry
-import pathfinder_rule_adapter
-import pathfinder_session_adapter
 import response_renderer
 
 logging.basicConfig(level=logging.INFO)
@@ -465,37 +457,30 @@ async def _pf_dispatch(
     (D-11..D-14). Callers that do not pass a channel (tests, slash path without a
     thread) get empty history — the branch degrades gracefully.
     """
-    return await pathfinder_bridge.dispatch_pf(
-        args=args,
-        user_id=user_id,
-        attachments=attachments,
-        channel=channel,
-        bot_user=getattr(bot, "user", None),
-        parse_pf_args=pathfinder_cli.parse_pf_args,
-        dispatch=pathfinder_dispatch.dispatch,
-        sent_client=_sentinel_client,
-        is_admin=_is_admin,
-        valid_relations=_VALID_RELATIONS,
-        adapters=pathfinder_registry.adapter_registry(
-            harvest=pathfinder_harvest_adapter,
-            ingest=pathfinder_ingest_adapter,
-            rule=pathfinder_rule_adapter,
-            session=pathfinder_session_adapter,
-            npc_basic=pathfinder_npc_basic_adapter,
-            npc_rich=pathfinder_npc_rich_adapter,
-        ),
-        builders=pathfinder_registry.builder_registry(
-            build_harvest_embed=build_harvest_embed,
-            build_ruling_embed=build_ruling_embed,
-            recap_view_cls=RecapView,
-            build_session_embed=build_session_embed,
-            build_stat_embed=build_stat_embed,
-            render_say_response=_render_say_response,
+    async with httpx.AsyncClient() as http_client:
+        return await pathfinder_bridge.dispatch_pf(
+            args=args,
+            user_id=user_id,
+            attachments=attachments,
+            channel=channel,
+            bot_user=getattr(bot, "user", None),
+            parse_pf_args=pathfinder_cli.parse_pf_args,
+            sent_client=_sentinel_client,
+            http_client=http_client,
+            is_admin=_is_admin,
+            valid_relations=_VALID_RELATIONS,
+            builders={
+                "build_harvest_embed": build_harvest_embed,
+                "build_ruling_embed": build_ruling_embed,
+                "recap_view_cls": RecapView,
+                "build_session_embed": build_session_embed,
+                "build_stat_embed": build_stat_embed,
+                "render_say_response": _render_say_response,
+            },
             extract_thread_history=_extract_thread_history,
-        ),
-        map_http_status=pathfinder_error_mapper.map_http_status,
-        log_error=logger.error,
-    )
+            map_http_status=pathfinder_error_mapper.map_http_status,
+            log_error=logger.error,
+        )
 
 
 async def _route_message(

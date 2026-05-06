@@ -18,8 +18,8 @@ A self-hosted, containerized AI assistant platform built for personal use. The S
     | LiteLLM       | httpx proxy       | REST API
     v               v                   v
 [ AI Providers ]  [ Module Containers ] [ Obsidian Local REST API ]
-  LM Studio         (v0.5+: Pathfinder,   Mnemosyne vault
-  Claude API         Music, Finance...)
+  LM Studio         (v0.50: Pathfinder,   Mnemosyne vault
+  Claude API         Music/Finance next)
   Ollama (future)
 
 [ Pi Harness ] — optional, ./sentinel.sh --pi, scoped to v0.7 (Coder module)
@@ -43,8 +43,8 @@ The design goal is maximum flexibility with a stable, narrow core API. You add a
 
 | Module | Purpose | Status |
 |---|---|---|
-| Core | Routing, context, Obsidian writes | Working (v0.40) |
-| Pathfinder 2e DM | NPC management, dialogue, session notes | Planned v0.5 |
+| Core | Routing, context, Obsidian writes | Working (v0.50) |
+| Pathfinder 2e DM | NPC management, dialogue, session notes, harvest, rules RAG, ingest | Working (v0.50) |
 | Music Lesson Tracker | Practice logs, chord ideas, progress | Planned v0.6 |
 | Coder Interface | AI-assisted module development (uses Pi harness) | Planned v0.7 |
 | Personal Finance | OFX import, spending analysis, budgets | Planned v0.8 |
@@ -133,13 +133,16 @@ cp .env.example .env
 - Note the IP address and port (default: `1234`)
 - Make sure a model is loaded
 
-**5. Start the core containers**
+**5. Start containers**
 ```bash
 # Core only
 ./sentinel.sh up -d
 
 # Core + Discord
 ./sentinel.sh --discord up -d
+
+# Core + Discord + Pathfinder module (v0.50)
+./sentinel.sh --discord --pathfinder up -d
 ```
 
 **6. Test it**
@@ -163,7 +166,7 @@ You should get an AI response back.
 Flags:
   --discord      Start Discord bot interface
   --pi           Start Pi harness (optional coding tool — v0.7 scope)
-  --pathfinder   Start Pathfinder 2e DM module (v0.5, planned)
+  --pathfinder   Start Pathfinder 2e DM module (v0.50, shipped)
   --music        Start Music Lesson Tracker module (v0.6, planned)
   --finance      Start Personal Finance module (v0.8, planned)
   --trader       Start Stock Trader module (v0.9, planned)
@@ -257,7 +260,7 @@ sentinel-of-mnemosyne/
 ├── interfaces/
 │   ├── discord/                # Discord bot (/sen command)
 │   └── messages/               # Apple Messages bridge (Mac-native component)
-├── modules/                    # Module containers (v0.5+ when phases ship)
+├── modules/                    # Module containers (Pathfinder shipped in v0.50)
 ├── skills/                     # Skill files for module dispatch
 ├── secrets/                    # Secret files (gitignored — one file per secret)
 ├── security/                   # Security tooling
@@ -294,6 +297,7 @@ Non-secret configuration lives in `.env`. See `.env.example` for the full list w
 
 ## Documentation
 
+- [Installation Guide (v0.50)](docs/INSTALLATION-v0.50.md) — operator setup and validation
 - [Product Requirements Document](docs/PRD-Sentinel-of-Mnemosyne.md) — vision, modules, milestones
 - [Core Architecture](docs/ARCHITECTURE-Core.md) — technical decisions, API specs, Docker layout
 - [Contributing Guide](CONTRIBUTING.md) — how to build modules and interfaces
@@ -303,7 +307,21 @@ Non-secret configuration lives in `.env`. See `.env.example` for the full list w
 
 ## Status
 
-This project is at v0.40 (pre-beta). The core loop, Discord interface, and LiteLLM-direct AI path are working. The architecture described here is the canonical v0.40 Path B design — LiteLLM-direct chat, Pi harness as an optional future coding tool. Module milestones (v0.5+) are planned.
+This project is at **v0.50**.
+
+Shipped and validated:
+- Sentinel Core route/context/startup hardening (`route_ctx` seam, startup orchestration seam)
+- LiteLLM-direct provider path with fallback support
+- Discord interface
+- Pathfinder module registration + proxy execution
+- Runtime health/status probing
+- Note classify/inbox/sweep flows
+
+Current baseline:
+- Automated tests: 279 passed, 12 skipped
+- Live smoke checks: `/health`, `/status`, `/modules`, `/note/classify`, `/message`
+
+Canonical architecture remains Path B: LiteLLM-direct chat, Pi harness optional (`--pi`) for future coder workflows.
 
 ---
 

@@ -8,6 +8,7 @@ from httpx import ASGITransport, AsyncClient
 from unittest.mock import AsyncMock, MagicMock
 
 from app.main import app
+from app.state import RouteContext
 
 AUTH_HEADERS = {"X-Sentinel-Key": "test-key-for-pytest"}
 
@@ -37,6 +38,12 @@ def setup_app_state(mock_obsidian, mock_http_client):
     app.state.ai_provider_name = "lmstudio"
     app.state.settings = MagicMock()
     app.state.settings.pi_harness_url = "http://pi-harness:3000"
+    app.state.route_ctx = RouteContext(
+        vault=app.state.vault,
+        settings=app.state.settings,
+        http_client=app.state.http_client,
+        ai_provider_name=app.state.ai_provider_name,
+    )
 
 
 async def test_status_all_up(mock_obsidian, mock_http_client):

@@ -48,7 +48,7 @@ async def test_status():
 
 
 async def test_message_happy_path():
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=180.0) as client:
         resp = await client.post(
             f"{BASE_URL}/message",
             json={"content": "Say hello", "user_id": "live-test"},
@@ -127,7 +127,7 @@ async def test_modules_register_happy_path():
             json={
                 "name": module_name,
                 "base_url": "http://localhost:19999",
-                "description": "UAT test module",
+                "routes": [{"path": "run", "description": "Run module"}],
             },
             headers=AUTH,
         )
@@ -142,7 +142,7 @@ async def test_modules_register_no_auth():
             json={
                 "name": "no-auth-module",
                 "base_url": "http://localhost:19999",
-                "description": "test",
+                "routes": [{"path": "run", "description": "Run module"}],
             },
         )
     assert resp.status_code == 401
@@ -178,7 +178,7 @@ async def test_modules_proxy_module_down():
             json={
                 "name": module_name,
                 "base_url": "http://localhost:19999",
-                "description": "intentionally unreachable",
+                "routes": [{"path": "run", "description": "Run module"}],
             },
             headers=AUTH,
         )

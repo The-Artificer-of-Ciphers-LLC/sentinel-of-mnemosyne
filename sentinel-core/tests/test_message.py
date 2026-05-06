@@ -78,6 +78,29 @@ def default_app_state(mock_ai_provider):
 
     app.state.message_processor = _LazyTestProcessor()
 
+    class _LazyRouteCtx:
+        @property
+        def vault(self):
+            return app.state.vault
+
+        @property
+        def processor(self):
+            return app.state.message_processor
+
+        @property
+        def settings(self):
+            return app.state.settings
+
+        @property
+        def context_window(self):
+            return app.state.context_window
+
+        @property
+        def lmstudio_stop_sequences(self):
+            return getattr(app.state, "lmstudio_stop_sequences", [])
+
+    app.state.route_ctx = _LazyRouteCtx()
+
     return mock_obsidian
 
 

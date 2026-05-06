@@ -1,0 +1,73 @@
+name: Release Dry Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.50.0)'
+        required: true
+        default: '0.50.0'
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e sentinel-core[dev]
+
+      - name: Verify version alignment
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          PYPROJECT_VERSION=$(python - <<'PY'
+from pathlib import Path
+import re
+text=Path('sentinel-core/pyproject.toml').read_text()
+m=re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
+print(m.group(1))
+PY
+)
+          APP_VERSION=$(python - <<'PY'
+from pathlib import Path
+import re
+text=Path('sentinel-core/app/main.py').read_text()
+m=re.search(r'version="([^"]+)"', text)
+print(m.group(1))
+PY
+)
+          echo "input=$INPUT_VERSION pyproject=$PYPROJECT_VERSION app=$APP_VERSION"
+          test "$INPUT_VERSION" = "$PYPROJECT_VERSION"
+          test "$INPUT_VERSION" = "$APP_VERSION"
+
+      - name: Run tests
+        working-directory: sentinel-core
+        run: python -m pytest tests/ --tb=short
+
+      - name: Build docker image
+        run: docker compose build sentinel-core
+
+      - name: Create release manifest artifact
+        run: |
+          mkdir -p dist
+          cat > dist/release-dry-run.txt <<EOF
+          Release Dry Run Successful
+          Version: ${{ inputs.version }}
+          Commit: ${{ github.sha }}
+          Ref: ${{ github.ref }}
+          EOF
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dry-run-${{ inputs.version }}
+          path: dist/release-dry-run.txt

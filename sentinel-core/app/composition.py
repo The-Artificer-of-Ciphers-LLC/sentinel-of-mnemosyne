@@ -15,6 +15,9 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
+from app.state import RouteContext
+from app.vault import VaultUnreachableError
+
 from app.clients.embeddings import DEFAULT_LMSTUDIO_BASE_URL, Embeddings
 from app.clients.litellm_provider import LiteLLMProvider
 from app.services.injection_filter import InjectionFilter
@@ -35,6 +38,8 @@ from sentinel_shared.model_profiles import get_profile
 if TYPE_CHECKING:
     import httpx
 
+    from fastapi import FastAPI
+
     from app.clients.embeddings import Embeddings
     from app.config import Settings
     from app.services.injection_filter import InjectionFilter
@@ -45,6 +50,17 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class StartupResult:
+    """Result of startup initialization.
+
+    warnings contains non-fatal startup degradations to surface in logs.
+    """
+
+    graph: "AppGraph"
+    warnings: list[str]
 
 
 @dataclass(frozen=True)
@@ -345,3 +361,43 @@ async def build_application(
         embeddings=embeddings,
         note_classifier_fn=note_classifier_fn,
     )
+
+
+async def initialize_startup(
+    app: "FastAPI", settings: "Settings", http_client: "httpx.AsyncClient"
+) -> StartupResult:
+    """Build graph, pin runtime state, and enforce startup policy."""
+    graph = await build_application(settings, http_client)
+
+    app.state.route_ctx = RouteContext(
+        vault=graph.vault,
+        processor=graph.message_processor,
+        settings=graph.settings,
+        http_client=graph.http_client,
+        context_window=graph.context_window,
+        lmstudio_stop_sequences=graph.lmstudio_stop_sequences,
+        classify=graph.note_classifier_fn,
+        embedder=graph.embeddings.embed,
+        module_registry=graph.module_registry,
+        ai_provider_name=graph.ai_provider_name,
+    )
+    app.state.settings = graph.settings
+    app.state.vault = graph.vault
+
+    warnings: list[str] = []
+    try:
+        persona = await graph.vault.read_persona()
+    except VaultUnreachableError as exc:
+        warnings.append(
+            "Obsidian REST API unavailable at startup — memory features degraded. "
+            "Ensure Obsidian is running with Local REST API plugin enabled "
+            f"(HTTP mode port 27123). {exc}"
+        )
+    else:
+        if persona is None:
+            raise RuntimeError(
+                "sentinel/persona.md missing from Vault — operator setup required (see README)"
+            )
+        logger.info("Persona loaded from vault (%d chars)", len(persona))
+
+    return StartupResult(graph=graph, warnings=warnings)

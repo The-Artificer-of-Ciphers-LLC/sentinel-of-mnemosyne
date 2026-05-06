@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 from unittest.mock import MagicMock
 
 from app.main import app
+from app.state import RouteContext
 
 AUTH_HEADERS = {"X-Sentinel-Key": "test-key-for-pytest"}
 
@@ -24,6 +25,13 @@ def setup_app_state():
     app.state.settings.pi_harness_url = "http://pi-harness:3000"
     app.state.injection_filter = MagicMock()
     app.state.output_scanner = MagicMock()
+    app.state.route_ctx = RouteContext(
+        vault=app.state.vault,
+        settings=app.state.settings,
+        http_client=app.state.http_client,
+        module_registry=app.state.module_registry,
+        ai_provider_name=app.state.ai_provider_name,
+    )
 
 
 async def test_cors_preflight_returns_200():

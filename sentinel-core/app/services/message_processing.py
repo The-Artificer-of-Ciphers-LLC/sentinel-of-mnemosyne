@@ -7,8 +7,16 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from app.services.provider_router import ContextLengthError, ProviderUnavailableError
+from app.errors import (
+    ContextError,
+    ContextLengthError,
+    InternalError,
+    MessageProcessingError,
+    ProviderUnavailableError,
+    SecurityError,
+)
 from app.services.token_budget import TokenBudget, TokenLimitError
+
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +29,7 @@ class _ContextBudget:
     search_budget: int
 
 
-class MessageProcessingError(Exception):
-    code: str
 
-    def __init__(self, code: str, message: str) -> None:
-        self.code = code
-        super().__init__(message)
 
 
 @dataclass(frozen=True)
@@ -109,7 +112,9 @@ class MessageProcessor:
 
         is_safe, _reason = await self._output_scanner.scan(content)
         if not is_safe:
-            raise MessageProcessingError("security_blocked", "Response blocked by security scanner")
+            raise MessageProcessingError(
+                "security_blocked", "Response blocked by security scanner"
+            )
 
         summary_path, summary_content = self._build_session_summary(
             req.user_id,

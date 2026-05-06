@@ -23,6 +23,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Literal, Mapping, Sequence
 
+from app.errors import ModelSelectorError
+
 import httpx
 import litellm
 
@@ -91,9 +93,6 @@ def ensure_litellm_prefix(model_str: str, default_provider: str = "openai/") -> 
         return model_str
     return f"{default_provider}{model_str}"
 
-
-class ModelSelectorError(RuntimeError):
-    """Raised when no model can be resolved: empty discovery AND no default."""
 
 
 async def get_loaded_models(api_base: str, *, force_refresh: bool = False) -> list[str]:

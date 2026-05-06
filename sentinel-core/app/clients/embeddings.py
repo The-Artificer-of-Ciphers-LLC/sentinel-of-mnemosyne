@@ -9,19 +9,10 @@ from __future__ import annotations
 
 import litellm
 
+from app.errors import EmbeddingModelUnavailable
+
 DEFAULT_LMSTUDIO_BASE_URL = "http://host.docker.internal:1234"
 
-
-class EmbeddingModelUnavailable(Exception):
-    """Raised when LM Studio reports no embedding model loaded.
-
-    Mirrors the ``ContextLengthError`` precedent (commit 9fe7c82) — vendor
-    SDK exception translation lives here in ``app/clients/`` so callers
-    higher in the stack don't pattern-match on litellm's BadRequestError
-    message strings. The configured embedding model id is included in the
-    message so operators can see exactly which model needs to be loaded
-    (260502-1zv D-01).
-    """
 
 
 def _default_model() -> str:
