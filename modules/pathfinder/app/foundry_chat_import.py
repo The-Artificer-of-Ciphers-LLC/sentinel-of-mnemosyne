@@ -36,7 +36,7 @@ def _classify(record: dict) -> str:
         return "roll"
     if msg_type == 0 or content.startswith("(("):
         return "ooc"
-    if msg_type in (1, 2, 3):
+    if msg_type in (1, 2, 3, 4):
         return "ic"
     return "system"
 
@@ -53,10 +53,18 @@ def _speaker(record: dict) -> str:
 def _is_nedb_chat_record(record: dict) -> bool:
     if not isinstance(record, dict):
         return False
-    has_content = "content" in record and isinstance(record.get("content"), str)
-    has_speaker = isinstance(record.get("speaker"), dict)
-    has_type = isinstance(record.get("type"), int)
-    return has_content and (has_speaker or has_type)
+    if not isinstance(record.get("content"), str):
+        return False
+    if not isinstance(record.get("type"), int):
+        return False
+    if record.get("type") not in {0, 1, 2, 3, 4, 5}:
+        return False
+    if not isinstance(record.get("timestamp"), int):
+        return False
+    content = _strip_html(record.get("content", ""))
+    if not content:
+        return False
+    return True
 
 
 def _probe_nedb_file(path: Path, max_lines: int = 50) -> tuple[int, int]:

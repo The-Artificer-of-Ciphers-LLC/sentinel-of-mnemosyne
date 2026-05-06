@@ -35,6 +35,13 @@ async def test_import_nedb_chatlogs_from_inbox_live_writes_classified_markdown(t
             "content": "((rules clarification))",
             "timestamp": 1710000002000,
         },
+        {
+            "_id": "junk",
+            "type": 99,
+            "speaker": {"alias": "System"},
+            "content": "<p>ignore me</p>",
+            "timestamp": 1710000003000,
+        },
     ]
     db_path.write_text("\n".join(json.dumps(r) for r in records) + "\nnot-json\n", encoding="utf-8")
 
@@ -50,7 +57,7 @@ async def test_import_nedb_chatlogs_from_inbox_live_writes_classified_markdown(t
     assert result["source"].endswith("chatlog-2026-05-06.db")
     assert result["imported_count"] == 3
     assert result["deduped_count"] == 0
-    assert result["invalid_count"] == 1
+    assert result["invalid_count"] == 2
     assert result["class_counts"] == {"ic": 1, "roll": 1, "ooc": 1, "system": 0}
     assert result["note_path"].startswith("mnemosyne/pf2e/sessions/foundry-chat/")
     obsidian.put_note.assert_awaited_once()
