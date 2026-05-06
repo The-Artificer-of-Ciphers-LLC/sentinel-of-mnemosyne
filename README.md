@@ -60,7 +60,6 @@ The design goal is maximum flexibility with a stable, narrow core API. You add a
 - **Obsidian** with the [Local REST API community plugin](https://github.com/coddingtonbear/obsidian-local-rest-api) installed and enabled
 - A Discord bot token if using the Discord interface
 
-> **Node.js 22 LTS** is only needed if you run the Pi harness (`--pi` flag, v0.7 scope). The Dockerfile handles it inside the container — it is not a host-level prerequisite for standard operation.
 
 ### Operator Setup — Sentinel Persona File
 
