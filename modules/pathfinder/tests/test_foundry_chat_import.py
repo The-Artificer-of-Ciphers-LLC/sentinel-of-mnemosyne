@@ -12,7 +12,7 @@ async def test_import_nedb_chatlogs_from_inbox_live_writes_classified_markdown(t
 
     inbox_dir = tmp_path / "inbox"
     inbox_dir.mkdir()
-    db_path = inbox_dir / "messages.db"
+    db_path = inbox_dir / "chatlog-2026-05-06.db"
     records = [
         {
             "_id": "m1",
@@ -47,6 +47,7 @@ async def test_import_nedb_chatlogs_from_inbox_live_writes_classified_markdown(t
         obsidian_client=obsidian,
     )
 
+    assert result["source"].endswith("chatlog-2026-05-06.db")
     assert result["imported_count"] == 3
     assert result["invalid_count"] == 1
     assert result["class_counts"] == {"ic": 1, "roll": 1, "ooc": 1, "system": 0}

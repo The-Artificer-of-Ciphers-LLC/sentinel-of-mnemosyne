@@ -41,6 +41,52 @@ def _speaker(record: dict) -> str:
     return "Unknown"
 
 
+def _is_nedb_chat_record(record: dict) -> bool:
+    if not isinstance(record, dict):
+        return False
+    has_content = "content" in record and isinstance(record.get("content"), str)
+    has_speaker = isinstance(record.get("speaker"), dict)
+    has_type = isinstance(record.get("type"), int)
+    return has_content and (has_speaker or has_type)
+
+
+def _probe_nedb_file(path: Path, max_lines: int = 50) -> tuple[int, int]:
+    valid = 0
+    seen = 0
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return (0, 0)
+    for line in lines[:max_lines]:
+        line = line.strip()
+        if not line:
+            continue
+        seen += 1
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if _is_nedb_chat_record(record):
+            valid += 1
+    return (valid, seen)
+
+
+def _find_nedb_chatlog_file(inbox: Path) -> Path:
+    candidates = [p for p in sorted(inbox.iterdir()) if p.is_file()]
+    best: tuple[Path, int, int] | None = None
+    for p in candidates:
+        valid, seen = _probe_nedb_file(p)
+        if valid == 0:
+            continue
+        if best is None or valid > best[1]:
+            best = (p, valid, seen)
+    if best is None:
+        raise FileNotFoundError(
+            f"no NeDB-style Foundry chat file found in inbox dir: {inbox}"
+        )
+    return best[0]
+
+
 async def import_nedb_chatlogs_from_inbox(
     *,
     inbox_dir: str,
@@ -48,14 +94,17 @@ async def import_nedb_chatlogs_from_inbox(
     limit: int | None,
     obsidian_client: _ObsidianLike,
 ) -> dict:
-    """Import Foundry NeDB messages copied into an Obsidian inbox folder.
+    """Import Foundry NeDB chat logs copied into an Obsidian inbox folder.
 
-    Reads ``<inbox_dir>/messages.db`` (line-delimited NeDB JSON docs), classifies
-    chat rows, and writes one markdown import note into PF2e session storage.
+    Probes files in ``inbox_dir`` for line-delimited NeDB-like chat records,
+    picks the best match, classifies chat rows, and writes one markdown import
+    note into PF2e session storage.
     """
-    messages_db = Path(inbox_dir) / "messages.db"
-    if not messages_db.exists():
-        raise FileNotFoundError(f"messages.db not found in inbox dir: {inbox_dir}")
+    inbox = Path(inbox_dir)
+    if not inbox.exists() or not inbox.is_dir():
+        raise FileNotFoundError(f"inbox dir does not exist: {inbox_dir}")
+
+    messages_db = _find_nedb_chatlog_file(inbox)
 
     class_counts = {"ic": 0, "roll": 0, "ooc": 0, "system": 0}
     imported_count = 0
