@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 import app.foundry as _foundry
 from app.config import settings
+from app.foundry_chat_import import import_nedb_chatlogs_from_inbox
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ router = APIRouter(prefix="/foundry", tags=["foundry"])
 # Module-level singleton — set by main.py lifespan.
 # Holds the Discord bot internal URL so tests can patch it without touching settings.
 discord_bot_url: str = ""
+obsidian = None  # set by app.main lifespan
 
 # X-Sentinel-Key — read from env (mirrors other route modules).
 _SENTINEL_API_KEY: str = os.environ.get("SENTINEL_API_KEY", "")
@@ -62,6 +64,12 @@ FoundryEventUnion = Annotated[
     Union[FoundryRollEvent, FoundryChatEvent],
     Field(discriminator="event_type"),
 ]
+
+
+class FoundryImportRequest(BaseModel):
+    inbox_dir: str = "/vault/inbox"
+    dry_run: bool = True
+    limit: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +154,27 @@ async def _handle_roll(event: FoundryRollEvent) -> JSONResponse:
         event.dc,
     )
     return JSONResponse({"status": "ok", "event_type": "roll"})
+
+
+@router.post("/messages/import")
+async def foundry_messages_import(
+    req: FoundryImportRequest,
+    x_sentinel_key: str = Header(default=""),
+) -> JSONResponse:
+    api_key = os.environ.get("SENTINEL_API_KEY", _SENTINEL_API_KEY)
+    if x_sentinel_key != api_key:
+        raise HTTPException(status_code=401, detail={"error": "unauthorized"})
+
+    if obsidian is None:
+        raise HTTPException(status_code=503, detail={"error": "obsidian client not initialised"})
+
+    result = await import_nedb_chatlogs_from_inbox(
+        inbox_dir=req.inbox_dir,
+        dry_run=req.dry_run,
+        limit=req.limit,
+        obsidian_client=obsidian,
+    )
+    return JSONResponse(result)
 
 
 def _handle_chat(event: FoundryChatEvent) -> JSONResponse:

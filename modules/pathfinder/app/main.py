@@ -91,6 +91,7 @@ REGISTRATION_PAYLOAD = {
         {"path": "rule", "description": "PF2e Remaster rules RAG engine with Paizo citations (RUL-01..04)"},
         {"path": "session", "description": "Session notes — start/log/end/show/undo with Obsidian persistence (SES-01..03)"},
         {"path": "foundry/event", "description": "Receive Foundry VTT game events (FVT-01..03)"},
+        {"path": "foundry/messages/import", "description": "Import Foundry NeDB chat logs from Obsidian inbox"},
         {"path": "npcs/", "description": "List all Sentinel NPCs (FVT-04)"},
         {"path": "npcs/{slug}/foundry-actor", "description": "Return PF2e actor JSON for NPC (FVT-04)"},
         {"path": "ingest", "description": "Bulk import PF2e archive subfolder (260427-cui)"},
@@ -221,8 +222,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 exc,
             )
             _session_module.npc_roster_cache = {}
-        # Phase 35: wire foundry route's module-level discord_bot_url singleton (D-14).
+        # Phase 35: wire foundry route singletons.
         _foundry_module.discord_bot_url = settings.discord_bot_internal_url
+        _foundry_module.obsidian = obsidian_client
         # Phase 36: wire npcs route's module-level obsidian singleton.
         _npcs_module.obsidian = obsidian_client
         # 260427-cui: wire ingest route's module-level obsidian singleton.
@@ -247,6 +249,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _session_module.obsidian = None
     _session_module.npc_roster_cache = None
     _foundry_module.discord_bot_url = ""
+    _foundry_module.obsidian = None
     _npcs_module.obsidian = None
     import app.routes.ingest as _ingest_module_shutdown
     _ingest_module_shutdown.obsidian = None
