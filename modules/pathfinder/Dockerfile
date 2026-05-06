@@ -2,8 +2,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# curl required for the compose.yml healthcheck CMD
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+# curl required for healthcheck; leveldb toolchain required for plyvel
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    gcc \
+    g++ \
+    libleveldb-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml ./
 RUN pip install --no-cache-dir \
@@ -17,7 +22,8 @@ RUN pip install --no-cache-dir \
     "reportlab>=4.4.0" \
     "beautifulsoup4>=4.12.0" \
     "numpy>=1.26.0" \
-    "pillow>=11.0.0"
+    "pillow>=11.0.0" \
+    "plyvel>=1.5.1"
 
 COPY . .
 
