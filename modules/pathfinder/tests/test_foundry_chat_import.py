@@ -59,3 +59,42 @@ async def test_import_nedb_chatlogs_from_inbox_live_writes_classified_markdown(t
     assert "| ic | Valeros | We move at dawn. |" in written_content
     assert "| roll | System | Attack Roll: 22 |" in written_content
     assert "| ooc | GM | ((rules clarification)) |" in written_content
+
+
+@pytest.mark.asyncio
+async def test_import_nedb_chatlogs_from_leveldb_shards(tmp_path):
+    from app.foundry_chat_import import import_nedb_chatlogs_from_inbox
+
+    inbox_dir = tmp_path / "inbox"
+    inbox_dir.mkdir()
+    (inbox_dir / "CURRENT").write_text("MANIFEST-000001\n", encoding="utf-8")
+
+    record = {
+        "_id": "m-leveldb",
+        "type": 1,
+        "speaker": {"alias": "Merisiel"},
+        "content": "<p>Quiet now.</p>",
+        "timestamp": 1710000010000,
+    }
+    blob = (
+        "junk-bytes"
+        + "<!messages!abc>"
+        + json.dumps(record)
+        + "\x00\x01more-junk"
+    )
+    (inbox_dir / "001000.ldb").write_bytes(blob.encode("utf-8", errors="ignore"))
+
+    obsidian = AsyncMock()
+    result = await import_nedb_chatlogs_from_inbox(
+        inbox_dir=str(inbox_dir),
+        dry_run=False,
+        limit=None,
+        obsidian_client=obsidian,
+    )
+
+    assert result["source"].startswith("leveldb://")
+    assert result["imported_count"] == 1
+    assert result["class_counts"]["ic"] == 1
+    written_path, written_content = obsidian.put_note.await_args.args
+    assert written_path == result["note_path"]
+    assert "| ic | Merisiel | Quiet now. |" in written_content
