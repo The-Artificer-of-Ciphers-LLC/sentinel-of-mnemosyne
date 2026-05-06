@@ -96,7 +96,7 @@ Edit the file in Obsidian to change voice; `sentinel-core` picks up the change o
 
 ## Quick Start
 
-> This gets you a fully containerized running stack (no manual `curl` required).
+> This gets you a fully containerized running stack with Docker Compose (no manual `curl` required).
 
 **1. Clone the repo**
 ```bash
@@ -132,7 +132,7 @@ cp .env.example .env
 - Note the IP address and port (default: `1234`)
 - Make sure a model is loaded
 
-**5. Build and start containers**
+**5. Deploy with Docker Compose**
 ```bash
 # Build images
 ./sentinel.sh --discord --pathfinder build
@@ -140,6 +140,10 @@ cp .env.example .env
 # Start full stack
 ./sentinel.sh --discord --pathfinder up -d
 ```
+
+For complete deployment details (profiles, env, validation, troubleshooting), see:
+- [Installation Guide (v0.50)](docs/INSTALLATION-v0.50.md)
+- [Core Architecture](docs/ARCHITECTURE-Core.md)
 
 **6. Verify containers are healthy**
 ```bash
