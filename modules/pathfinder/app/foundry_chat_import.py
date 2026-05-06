@@ -99,7 +99,7 @@ def _load_nedb_records_from_leveldb_dir(inbox: Path, limit: int | None) -> list[
         raise RuntimeError("plyvel is required for Foundry LevelDB chat import")
 
     records: list[dict] = []
-    db = plyvel.DB(str(inbox), create_if_missing=False)
+    db = plyvel.DB(str(inbox), create_if_missing=False, read_only=True)
     try:
         for key, value in db:
             if not key.startswith(b"!messages!"):
