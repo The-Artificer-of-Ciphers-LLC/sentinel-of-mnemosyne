@@ -19,7 +19,7 @@ Use GitHub's built-in **Private Vulnerability Reporting**:
 2. Click **"Report a vulnerability"**
 3. Fill in the details — describe the issue, affected component, and steps to reproduce
 
-Private reports are visible only to maintainers. We will acknowledge receipt within 7 days and aim to resolve or mitigate within 30 days.
+Private reports are visible only to maintainers. We will acknowledge receipt within **72 hours** and aim to provide an initial triage decision within **7 days**.
 
 ## What to Include
 
@@ -29,10 +29,29 @@ A useful report includes:
 - Potential impact
 - Any suggested fix (optional but appreciated)
 
+## Severity and Response Targets
+
+- **Critical** (RCE, auth bypass, secret exposure): target mitigation within 7 days
+- **High** (privilege escalation, significant data exposure): target mitigation within 14 days
+- **Medium/Low**: handled in normal release cadence
+
 ## Scope
 
-This project is designed for **personal, self-hosted, local-network use**. The threat model reflects that — shared-secret auth (`X-Sentinel-Key`) is intentional and sufficient for the target deployment. Vulnerabilities that only affect intentionally insecure configurations are out of scope.
+This project is designed for **personal, self-hosted, local-network use**. The threat model reflects that — shared-secret auth (`X-Sentinel-Key`) is intentional and sufficient for target deployment.
 
-## Disclosure Timeline
+In scope:
+- Vulnerabilities in default/recommended deployment docs
+- Auth bypasses, command injection, SSRF, path traversal, secret leakage
+- Supply-chain risks introduced by project-managed dependencies/workflows
 
-We follow coordinated disclosure: please give us a reasonable window (30 days) to address the issue before publishing details publicly.
+Out of scope:
+- Findings that require local machine compromise first
+- Vulnerabilities in third-party services outside this repo (report upstream)
+- Intentionally insecure local test/dev configurations
+
+## Coordinated Disclosure
+
+Please allow time for a fix before public disclosure.
+
+- Default disclosure window: **30 days**
+- If actively exploited or critical, we may request a shorter or staged disclosure plan

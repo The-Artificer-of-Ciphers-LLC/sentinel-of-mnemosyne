@@ -5,6 +5,7 @@ Thanks for contributing.
 ## Ground rules
 
 - Be respectful and constructive.
+- Follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 - Keep PRs focused and small.
 - Update docs/tests with code changes.
 - Never commit secrets.
