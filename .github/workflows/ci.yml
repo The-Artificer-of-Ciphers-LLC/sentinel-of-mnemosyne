@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e sentinel-core[dev]
+          pip install ./sentinel-core[dev]
 
       - name: Run tests
         working-directory: sentinel-core
