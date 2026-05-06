@@ -48,4 +48,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build sentinel-core image
-        run: docker compose build sentinel-core
+        run: |
+          docker build \
+            -f sentinel-core/Dockerfile \
+            --build-context shared=./shared \
+            -t sentinel-core:ci \
+            sentinel-core

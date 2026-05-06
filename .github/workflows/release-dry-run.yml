@@ -54,7 +54,12 @@ jobs:
         run: python -m pytest tests/ --tb=short
 
       - name: Build docker image
-        run: docker compose build sentinel-core
+        run: |
+          docker build \
+            -f sentinel-core/Dockerfile \
+            --build-context shared=./shared \
+            -t sentinel-core:release-dry-run \
+            sentinel-core
 
       - name: Create release manifest artifact
         run: |
