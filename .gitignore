@@ -43,6 +43,9 @@ Icon
 # Claude Code / GSD / local agent artifacts, not committed
 CLAUDE.md
 .claude/
+.pi/
+*.pi*
+.gsd
 .gsd.id
 .gsd-id
 *GSD*
