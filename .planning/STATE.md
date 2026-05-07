@@ -4,14 +4,14 @@ milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
 stopped_at: context exhaustion at 75% (2026-04-27)
-last_updated: "2026-05-07T05:12:03.235Z"
+last_updated: "2026-05-07T05:30:00.000Z"
 last_activity: 2026-05-07
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 54
-  completed_plans: 48
-  percent: 89
+  completed_plans: 49
+  percent: 91
 ---
 
 # Project State
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 37 (pf2e-per-player-memory) — EXECUTING
-Plan: 9 of 14 (plan 04 ✅ complete — Wave 0 RED tests for Discord pathfinder_player_adapter; 14 RED tests)
-Next: Plan 37-05 — next Wave 0 / Wave 1 plan per phase sequence
+Plan: 10 of 14 (plan 09 ✅ complete — deterministic player_recall_engine + POST /player/recall; PVL-03 + PVL-07 covered)
+Next: Plan 37-10 — canonize verb + POST /player/canonize (only remaining RED on the per-player surface)
 Prior Phase: 35 (Foundry VTT Event Ingest) — ✅ COMPLETE (FVT-01..03, 6 plans, 2026-04-25)
 Milestone: v0.5 The Dungeon — ✅ COMPLETE (9/9 phases complete: 28, 29, 30, 31, 32, 33, 34, 35, 36)
 Status: Ready to execute
@@ -93,6 +93,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 37 P06 | 4 | 3 tasks | 5 files |
 | Phase 37 P07 | 25m | 2 tasks | 5 files |
 | Phase 37-pf2e-per-player-memory P08 | 10m | 2 tasks | 3 files |
+| Phase 37-pf2e-per-player-memory P09 | 12m | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,8 @@ Recent decisions affecting current work:
 - [Phase ?]: Wave 1 shared seam (37-06): identity resolver + vault store + projection store + npc matcher landed; 20 RED tests turned GREEN.
 - [Phase ?]: 37-07: Pre-import app.main in pathfinder conftest so mock.patch resolves during __enter__
 - [Phase ?]: 37-07: /player/note 503/409 gate surface ships in Wave 2; plan 37-08 widens to inbox.md write
+- [Phase 37-09]: Recall engine v1 is keyword-count + recency-weight ONLY (no LLM, no embeddings — CONTEXT lock). Sessions/{YYYY-MM-DD}.md weighted max(0,1-days/365); non-session files fixed 0.1. Snippet ~80 chars around first matched token. Deterministic via _today_iso() module seam patched in tests.
+- [Phase 37-09]: PVL-07 isolation enforced at three layers — list_directory called only with the slug-bound prefix, defensive engine-side prefix guard drops any path that escapes, and player_vault_store._SLUG_RE-shaped slug rejection happens before any I/O.
 
 ### Pending Todos
 
@@ -168,8 +171,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-07T05:11:58.306Z
-Stopped at: context exhaustion at 75% (2026-04-27)
+Last session: 2026-05-07T05:30:00.000Z
+Stopped at: Completed 37-09 (player_recall_engine + /player/recall route)
 Resume file: None
 
 **Completed Phase:** 35 (Foundry VTT Event Ingest) — 6 plans — 2026-04-25 — FVT-01..03 shipped; webhook-first fallback + PNACORSMiddleware gap closure
