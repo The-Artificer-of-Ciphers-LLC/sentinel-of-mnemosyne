@@ -70,6 +70,10 @@ class FoundryImportRequest(BaseModel):
     inbox_dir: str = "/vault/inbox"
     dry_run: bool = True
     limit: int | None = None
+    # Plan 37-12: per-target projection toggles. Default True so existing
+    # callers automatically get player-map + npc-history projection.
+    project_player_maps: bool = True
+    project_npc_history: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -168,12 +172,49 @@ async def foundry_messages_import(
     if obsidian is None:
         raise HTTPException(status_code=503, detail={"error": "obsidian client not initialised"})
 
+    # Plan 37-12: build projection seams (identity_resolver + npc_matcher).
+    # Function-scope imports keep the route module's import graph cheap — these
+    # pull in vault-probe + NPC routing helpers that are unnecessary for the
+    # /foundry/event hot path.
+    from app.npc_matcher import match_npc_speaker
+    from app.player_identity_resolver import (
+        load_alias_map,
+        load_foundry_alias_map,
+        resolve_foundry_speaker,
+    )
+    from app.routes import session as _session_mod
+
+    alias_map = await load_alias_map(obsidian)
+    foundry_alias_map = await load_foundry_alias_map(obsidian)
+    npc_roster = _session_mod.npc_roster_cache or {}
+
+    def _identity_resolver(record: dict):
+        speaker = record.get("speaker")
+        actor = ""
+        if isinstance(speaker, dict):
+            actor = str(speaker.get("alias") or "")
+        return resolve_foundry_speaker(
+            actor=actor,
+            alias_map=foundry_alias_map,
+            npc_roster=npc_roster,
+            pc_character_names=alias_map,
+        )
+
+    async def _npc_matcher(alias: str):
+        return await match_npc_speaker(
+            alias, obsidian_client=obsidian, npc_roster=npc_roster
+        )
+
     try:
         result = await import_nedb_chatlogs_from_inbox(
             inbox_dir=req.inbox_dir,
             dry_run=req.dry_run,
             limit=req.limit,
             obsidian_client=obsidian,
+            project_player_maps=req.project_player_maps,
+            project_npc_history=req.project_npc_history,
+            identity_resolver=_identity_resolver,
+            npc_matcher=_npc_matcher,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

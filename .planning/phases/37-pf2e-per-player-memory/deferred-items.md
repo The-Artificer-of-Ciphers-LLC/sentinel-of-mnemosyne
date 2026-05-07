@@ -1,0 +1,1 @@
+- 2026-05-07 (plan 37-12): test_foundry.py::test_roll_event_accepted/test_notify_dispatched/test_llm_fallback fail with `NameError: name 'get_profile' is not defined` at modules/pathfinder/app/routes/foundry.py:106. Pre-existing on main (verified via git stash). Out of scope for plan 37-12; surface to operator for separate fix.
