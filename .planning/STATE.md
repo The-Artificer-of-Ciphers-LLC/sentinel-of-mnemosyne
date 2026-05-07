@@ -4,14 +4,14 @@ milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
 stopped_at: Completed 37-09 (player_recall_engine + /player/recall route)
-last_updated: "2026-05-07T05:34:16.649Z"
+last_updated: "2026-05-07T05:38:08.792Z"
 last_activity: 2026-05-07
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 54
-  completed_plans: 52
-  percent: 96
+  completed_plans: 53
+  percent: 98
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 37 (pf2e-per-player-memory) — EXECUTING
-Plan: 13 of 14 (plan 09 ✅ complete — deterministic player_recall_engine + POST /player/recall; PVL-03 + PVL-07 covered)
+Plan: 14 of 14 (plan 09 ✅ complete — deterministic player_recall_engine + POST /player/recall; PVL-03 + PVL-07 covered)
 Next: Plan 37-10 — canonize verb + POST /player/canonize (only remaining RED on the per-player surface)
 Prior Phase: 35 (Foundry VTT Event Ingest) — ✅ COMPLETE (FVT-01..03, 6 plans, 2026-04-25)
 Milestone: v0.5 The Dungeon — ✅ COMPLETE (9/9 phases complete: 28, 29, 30, 31, 32, 33, 34, 35, 36)
@@ -97,6 +97,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 37-pf2e-per-player-memory P10 | 12m | 1 tasks | 4 files |
 | Phase 37 P11 | 4 | 1 tasks | 1 files |
 | Phase 37 P12 | 6 | 2 tasks | 3 files |
+| Phase 37 P13 | 10min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,7 @@ Recent decisions affecting current work:
 - [Phase 37-09]: PVL-07 isolation enforced at three layers — list_directory called only with the slug-bound prefix, defensive engine-side prefix guard drops any path that escapes, and player_vault_store._SLUG_RE-shaped slug rejection happens before any I/O.
 - [Phase ?]: Canonize provenance uses 'question:{id}' substring (not wikilink) since /player/ask stores questions as raw text without per-question files
 - [Phase ?]: Plan 37-12: Projection wired into POST /foundry/messages/import via read-then-merge state file shared between importer and projector
+- [Phase ?]: 37-13: PlayerStyleCommand defaults to action=list on empty rest
 
 ### Pending Todos
 
@@ -176,7 +178,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-07T05:34:07.919Z
+Last session: 2026-05-07T05:38:01.424Z
 Stopped at: Completed 37-09 (player_recall_engine + /player/recall route)
 Resume file: None
 

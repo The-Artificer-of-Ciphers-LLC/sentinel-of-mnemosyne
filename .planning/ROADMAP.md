@@ -560,7 +560,7 @@ Plans:
   8. Dry-run produces identical metric shape without mutating vault files
   9. All new behavior covered by Wave 0 RED tests written before implementation (TDD)
 **Status:** Planned (not yet started)
-**Plans:** 12/14 plans executed
+**Plans:** 13/14 plans executed
 
 Plans:
 - [x] 37-01-PLAN.md — Wave 0 RED tests for player_identity_resolver, player_vault_store, memory_projection_store
@@ -575,5 +575,5 @@ Plans:
 - [x] 37-10-PLAN.md — Wave 5 canonization route + provenance back to question_id
 - [x] 37-11-PLAN.md — Wave 6 foundry_memory_projection module (FCM-01..05 core)
 - [x] 37-12-PLAN.md — Wave 7 Foundry import route integration + projection flags + state-file in-place extension
-- [ ] 37-13-PLAN.md — Wave 7 Discord adapter (pathfinder_player_adapter + dispatch + PF_NOUNS)
+- [x] 37-13-PLAN.md — Wave 7 Discord adapter (pathfinder_player_adapter + dispatch + PF_NOUNS)
 - [ ] 37-14-PLAN.md — Wave 8 integration tests (isolation regression + idempotency end-to-end) + USER-GUIDE + architecture map
