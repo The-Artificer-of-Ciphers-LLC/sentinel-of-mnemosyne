@@ -199,10 +199,82 @@ def _load_dedupe_keys(inbox: Path) -> set[str]:
     return {str(k) for k in keys}
 
 
-def _save_dedupe_keys(inbox: Path, keys: set[str]) -> None:
-    path = _dedupe_state_path(inbox)
-    payload = {"imported_keys": sorted(keys)}
+def _load_projection_state(path: Path) -> dict[str, set[str]]:
+    """Load the in-place state file shared with foundry_memory_projection.
+
+    Re-export shim so plan-37-12 callers (and the plan-37-03 backcompat test)
+    can import this loader from `app.foundry_chat_import` without depending
+    on the projection module symbol.
+
+    Returns a dict with three set[str] buckets:
+      - imported_keys: legacy importer dedupe set
+      - player_projection_keys: per-player-target projection dedupe set
+      - npc_projection_keys: per-NPC-target projection dedupe set
+
+    Pre-Phase-37 state files (only `imported_keys`) load cleanly with empty
+    projection sets — no exceptions, no KeyError.
+    """
+    out: dict[str, set[str]] = {
+        "imported_keys": set(),
+        "player_projection_keys": set(),
+        "npc_projection_keys": set(),
+    }
+    if not path.exists():
+        return out
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return out
+    if not isinstance(data, dict):
+        return out
+    for key in (
+        "imported_keys",
+        "player_projection_keys",
+        "npc_projection_keys",
+    ):
+        val = data.get(key)
+        if isinstance(val, list):
+            out[key] = {str(k) for k in val}
+    return out
+
+
+def _save_state(
+    path: Path,
+    *,
+    imported_keys: set[str],
+    player_keys: set[str] | None = None,
+    npc_keys: set[str] | None = None,
+) -> None:
+    """Write state file. If projection keys are None, preserve legacy single-array shape.
+
+    When player_keys/npc_keys are provided, all three arrays are emitted. This
+    matches the foundry_memory_projection write shape exactly.
+    """
+    if player_keys is None and npc_keys is None:
+        payload: dict[str, Any] = {"imported_keys": sorted(imported_keys)}
+    else:
+        payload = {
+            "imported_keys": sorted(imported_keys),
+            "player_projection_keys": sorted(player_keys or set()),
+            "npc_projection_keys": sorted(npc_keys or set()),
+        }
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _save_dedupe_keys(inbox: Path, keys: set[str]) -> None:
+    """Legacy single-array writer — preserved as a thin wrapper over _save_state.
+
+    When projection state is also tracked on disk, the importer must NOT trample
+    the projection arrays. Read-then-merge keeps all three buckets intact.
+    """
+    path = _dedupe_state_path(inbox)
+    existing = _load_projection_state(path)
+    player = existing["player_projection_keys"]
+    npc = existing["npc_projection_keys"]
+    if player or npc:
+        _save_state(path, imported_keys=keys, player_keys=player, npc_keys=npc)
+    else:
+        _save_state(path, imported_keys=keys)
 
 
 def _message_key(record: dict) -> str:
@@ -244,6 +316,10 @@ async def import_nedb_chatlogs_from_inbox(
     dry_run: bool,
     limit: int | None,
     obsidian_client: _ObsidianLike,
+    project_player_maps: bool = True,
+    project_npc_history: bool = True,
+    identity_resolver: Callable[[dict], Any] | None = None,
+    npc_matcher: Callable[[str], Any] | None = None,
 ) -> dict:
     """Import Foundry NeDB chat logs copied into an Obsidian inbox folder.
 
@@ -348,7 +424,28 @@ async def import_nedb_chatlogs_from_inbox(
         elif messages_db is not None and not _is_imported_name(messages_db.name):
             renamed_sources = [str(_mark_imported(messages_db))]
 
-    return {
+    projection_result: dict | None = None
+    projection_enabled = project_player_maps or project_npc_history
+    if (
+        projection_enabled
+        and identity_resolver is not None
+        and npc_matcher is not None
+    ):
+        # Local import to keep the legacy import path of this module cheap and
+        # avoid a top-level circular import (foundry_memory_projection imports
+        # _message_key/_speaker from this module).
+        from app.foundry_memory_projection import project_foundry_chat_memory
+
+        projection_result = await project_foundry_chat_memory(
+            records=records,
+            dry_run=dry_run,
+            obsidian_client=obsidian_client,
+            dedupe_store_path=_dedupe_state_path(inbox),
+            identity_resolver=identity_resolver,
+            npc_matcher=npc_matcher,
+        )
+
+    result = {
         "source": source_label,
         "note_path": note_path,
         "imported_count": imported_count,
@@ -358,4 +455,6 @@ async def import_nedb_chatlogs_from_inbox(
         "deduped_count": len(records) - imported_count,
         "imported_sources": imported_sources,
         "renamed_sources": renamed_sources,
+        "projection": projection_result,
     }
+    return result
