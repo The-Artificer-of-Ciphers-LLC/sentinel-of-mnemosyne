@@ -122,7 +122,8 @@ async def test_foundry_import_idempotent_at_route_layer(tmp_path):
     """
     inbox = _make_inbox(tmp_path)
     obs = _make_obsidian()
-    npc_roster = {"goblin boss": "goblin-boss"}
+    # Roster uses the exact alias casing the resolver does strict dict lookups on.
+    npc_roster = {"Goblin Boss": "goblin-boss"}
 
     patches = _patches(obs, npc_roster)
     for p in patches:
@@ -276,7 +277,7 @@ async def test_foundry_import_dry_run_then_live_writes_once(tmp_path):
     """
     inbox = _make_inbox(tmp_path)
     obs = _make_obsidian()
-    npc_roster = {"goblin boss": "goblin-boss"}
+    npc_roster = {"Goblin Boss": "goblin-boss"}
     patches = _patches(obs, npc_roster)
     for p in patches:
         p.start()
@@ -397,7 +398,7 @@ async def test_state_file_extended_in_place(tmp_path):
     """
     inbox = _make_inbox(tmp_path)
     obs = _make_obsidian()
-    npc_roster = {"goblin boss": "goblin-boss"}
+    npc_roster = {"Goblin Boss": "goblin-boss"}
     patches = _patches(obs, npc_roster)
     for p in patches:
         p.start()

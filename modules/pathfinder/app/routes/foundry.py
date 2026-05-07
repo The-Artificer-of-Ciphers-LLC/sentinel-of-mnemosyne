@@ -188,11 +188,18 @@ async def foundry_messages_import(
     foundry_alias_map = await load_foundry_alias_map(obsidian)
     npc_roster = _session_mod.npc_roster_cache or {}
 
-    def _identity_resolver(record: dict):
-        speaker = record.get("speaker")
-        actor = ""
-        if isinstance(speaker, dict):
-            actor = str(speaker.get("alias") or "")
+    def _identity_resolver(speaker_token: str):
+        # Plan 37-14 fix: foundry_memory_projection calls this with a string
+        # speaker token (already extracted by _speaker(record)), not the raw
+        # record dict. Accept the string directly; legacy dict-call remains
+        # tolerated as a defensive fallback so older callers don't blow up.
+        if isinstance(speaker_token, dict):  # legacy shape — extract and warn
+            speaker = speaker_token.get("speaker")
+            actor = ""
+            if isinstance(speaker, dict):
+                actor = str(speaker.get("alias") or "")
+        else:
+            actor = str(speaker_token or "")
         return resolve_foundry_speaker(
             actor=actor,
             alias_map=foundry_alias_map,
