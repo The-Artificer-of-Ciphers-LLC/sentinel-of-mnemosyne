@@ -59,7 +59,7 @@
 ## Player Vault (Phase 37)
 
 - [x] **PVL-01**: First player interaction triggers onboarding capturing character name, preferred form of address, and PF2E Sentinel style preset; persisted to `mnemosyne/pf2e/players/{player_slug}/profile.md`
-- [ ] **PVL-02**: Players can capture quick notes, questions, todos, and per-NPC knowledge via `:pf player note|ask|npc|todo` commands; writes go to per-player paths only
+- [x] **PVL-02**: Players can capture quick notes, questions, todos, and per-NPC knowledge via `:pf player note|ask|npc|todo` commands; writes go to per-player paths only
 - [ ] **PVL-03**: Player recall (`:pf player recall [query]`) returns deterministic results scoped to the requesting player's vault only — no cross-player data leakage
 - [ ] **PVL-04**: Yellow rule/homebrew outcomes can be canonized to green or red and recorded in `canonization.md` with provenance back to the originating question
 - [x] **PVL-05**: Style presets (`Tactician`, `Lorekeeper`, `Cheerleader`, `Rules-Lawyer Lite` at minimum) influence response formatting; players can list and switch presets via `:pf player style`
