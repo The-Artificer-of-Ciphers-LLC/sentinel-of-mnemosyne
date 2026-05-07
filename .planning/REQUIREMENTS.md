@@ -71,8 +71,8 @@
 - [x] **FCM-01**: Imported Foundry chat records are classified into `player | npc | unknown` buckets via deterministic identity normalization
 - [x] **FCM-02**: Player-attributed lines project into `mnemosyne/pf2e/players/{player_slug}.md` with sections `## Voice Patterns`, `## Notable Moments`, `## Party Dynamics`, `## Chat Timeline`
 - [x] **FCM-03**: NPC-attributed lines append to a `## Foundry Chat History` section on the matching NPC note (created if missing) with timestamp, source marker, and content hash key
-- [ ] **FCM-04**: Re-running projection on the same source produces zero duplicate entries (dedupe key prefers Foundry `_id`, falls back to hash of `timestamp|speaker|content_normalized|target_note`); state persisted alongside existing `.foundry_chat_import_state.json`
-- [ ] **FCM-05**: Dry-run mode emits identical projection metrics shape without mutating vault files; live mode returns metrics in API/Discord response (player updates, NPC updates, deduped counts, unmatched speakers)
+- [x] **FCM-04**: Re-running projection on the same source produces zero duplicate entries (dedupe key prefers Foundry `_id`, falls back to hash of `timestamp|speaker|content_normalized|target_note`); state persisted alongside existing `.foundry_chat_import_state.json`
+- [x] **FCM-05**: Dry-run mode emits identical projection metrics shape without mutating vault files; live mode returns metrics in API/Discord response (player updates, NPC updates, deduped counts, unmatched speakers)
 
 ## Module / Platform
 

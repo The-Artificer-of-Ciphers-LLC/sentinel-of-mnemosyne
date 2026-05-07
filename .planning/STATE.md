@@ -4,14 +4,14 @@ milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
 stopped_at: Completed 37-09 (player_recall_engine + /player/recall route)
-last_updated: "2026-05-07T05:26:00.684Z"
+last_updated: "2026-05-07T05:29:32.873Z"
 last_activity: 2026-05-07
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 54
-  completed_plans: 50
-  percent: 93
+  completed_plans: 51
+  percent: 94
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 37 (pf2e-per-player-memory) — EXECUTING
-Plan: 11 of 14 (plan 09 ✅ complete — deterministic player_recall_engine + POST /player/recall; PVL-03 + PVL-07 covered)
+Plan: 12 of 14 (plan 09 ✅ complete — deterministic player_recall_engine + POST /player/recall; PVL-03 + PVL-07 covered)
 Next: Plan 37-10 — canonize verb + POST /player/canonize (only remaining RED on the per-player surface)
 Prior Phase: 35 (Foundry VTT Event Ingest) — ✅ COMPLETE (FVT-01..03, 6 plans, 2026-04-25)
 Milestone: v0.5 The Dungeon — ✅ COMPLETE (9/9 phases complete: 28, 29, 30, 31, 32, 33, 34, 35, 36)
@@ -95,6 +95,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 37-pf2e-per-player-memory P08 | 10m | 2 tasks | 3 files |
 | Phase 37-pf2e-per-player-memory P09 | 12m | 3 tasks | 4 files |
 | Phase 37-pf2e-per-player-memory P10 | 12m | 1 tasks | 4 files |
+| Phase 37 P11 | 4 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -173,7 +174,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-07T05:25:57.297Z
+Last session: 2026-05-07T05:29:32.867Z
 Stopped at: Completed 37-09 (player_recall_engine + /player/recall route)
 Resume file: None
 
