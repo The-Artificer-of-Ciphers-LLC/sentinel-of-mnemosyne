@@ -64,13 +64,13 @@
 - [ ] **PVL-04**: Yellow rule/homebrew outcomes can be canonized to green or red and recorded in `canonization.md` with provenance back to the originating question
 - [ ] **PVL-05**: Style presets (`Tactician`, `Lorekeeper`, `Cheerleader`, `Rules-Lawyer Lite` at minimum) influence response formatting; players can list and switch presets via `:pf player style`
 - [x] **PVL-06**: Discord identity-to-`player_slug` mapping is deterministic and stable across restarts
-- [ ] **PVL-07**: Per-player isolation is enforced: a player cannot read another player's notes, questions, or NPC knowledge files
+- [x] **PVL-07**: Per-player isolation is enforced: a player cannot read another player's notes, questions, or NPC knowledge files
 
 ## Foundry Chat Memory Projection (Phase 37)
 
-- [ ] **FCM-01**: Imported Foundry chat records are classified into `player | npc | unknown` buckets via deterministic identity normalization
-- [ ] **FCM-02**: Player-attributed lines project into `mnemosyne/pf2e/players/{player_slug}.md` with sections `## Voice Patterns`, `## Notable Moments`, `## Party Dynamics`, `## Chat Timeline`
-- [ ] **FCM-03**: NPC-attributed lines append to a `## Foundry Chat History` section on the matching NPC note (created if missing) with timestamp, source marker, and content hash key
+- [x] **FCM-01**: Imported Foundry chat records are classified into `player | npc | unknown` buckets via deterministic identity normalization
+- [x] **FCM-02**: Player-attributed lines project into `mnemosyne/pf2e/players/{player_slug}.md` with sections `## Voice Patterns`, `## Notable Moments`, `## Party Dynamics`, `## Chat Timeline`
+- [x] **FCM-03**: NPC-attributed lines append to a `## Foundry Chat History` section on the matching NPC note (created if missing) with timestamp, source marker, and content hash key
 - [ ] **FCM-04**: Re-running projection on the same source produces zero duplicate entries (dedupe key prefers Foundry `_id`, falls back to hash of `timestamp|speaker|content_normalized|target_note`); state persisted alongside existing `.foundry_chat_import_state.json`
 - [ ] **FCM-05**: Dry-run mode emits identical projection metrics shape without mutating vault files; live mode returns metrics in API/Discord response (player updates, NPC updates, deduped counts, unmatched speakers)
 

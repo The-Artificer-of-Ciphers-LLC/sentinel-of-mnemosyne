@@ -4,14 +4,14 @@ milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
 stopped_at: context exhaustion at 75% (2026-04-27)
-last_updated: "2026-05-07T04:49:04.869Z"
+last_updated: "2026-05-07T04:55:34.695Z"
 last_activity: 2026-05-07
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 54
-  completed_plans: 45
-  percent: 83
+  completed_plans: 46
+  percent: 85
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 37 (pf2e-per-player-memory) — EXECUTING
-Plan: 6 of 14 (plan 04 ✅ complete — Wave 0 RED tests for Discord pathfinder_player_adapter; 14 RED tests)
+Plan: 7 of 14 (plan 04 ✅ complete — Wave 0 RED tests for Discord pathfinder_player_adapter; 14 RED tests)
 Next: Plan 37-05 — next Wave 0 / Wave 1 plan per phase sequence
 Prior Phase: 35 (Foundry VTT Event Ingest) — ✅ COMPLETE (FVT-01..03, 6 plans, 2026-04-25)
 Milestone: v0.5 The Dungeon — ✅ COMPLETE (9/9 phases complete: 28, 29, 30, 31, 32, 33, 34, 35, 36)
@@ -90,6 +90,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 02-memory-layer P02 | -244 | 2 tasks | 3 files |
 | Phase 23-pi-harness-reset-route P01 | 3 | 2 tasks | 7 files |
 | Phase 37-pf2e-per-player-memory P05 | 3min | 1 tasks | 1 files |
+| Phase 37 P06 | 4 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -130,6 +131,7 @@ Recent decisions affecting current work:
 - [Phase 34-UAT Bug A]: recap_text was gated behind session_auto_recap — button never appeared even when prior ended session existed. Fix: always populate recap_text when recap_available=True; session_auto_recap only controls inline display.
 - [Phase 34-UAT Bug B]: same-day --force start overwrote the ended note before the recap scan ran — recap lost. Fix: capture prior recap from existing_note frontmatter BEFORE the PUT overwrite into forced_prior_recap; use it ahead of the vault scan.
 - [Phase ?]: Plan 37-05 locked alias map path to mnemosyne/pf2e/players/_aliases.json after MockTransport probe of ObsidianClient
+- [Phase ?]: Wave 1 shared seam (37-06): identity resolver + vault store + projection store + npc matcher landed; 20 RED tests turned GREEN.
 
 ### Pending Todos
 
@@ -162,7 +164,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-07T04:48:56.285Z
+Last session: 2026-05-07T04:55:22.341Z
 Stopped at: context exhaustion at 75% (2026-04-27)
 Resume file: None
 
