@@ -560,14 +560,14 @@ Plans:
   8. Dry-run produces identical metric shape without mutating vault files
   9. All new behavior covered by Wave 0 RED tests written before implementation (TDD)
 **Status:** Planned (not yet started)
-**Plans:** 14 plans
+**Plans:** 5/14 plans executed
 
 Plans:
 - [x] 37-01-PLAN.md — Wave 0 RED tests for player_identity_resolver, player_vault_store, memory_projection_store
 - [x] 37-02-PLAN.md — Wave 0 RED tests for /player/* routes and player_interaction_orchestrator
 - [x] 37-03-PLAN.md — Wave 0 RED tests for foundry_memory_projection + idempotency + state-file backcompat
 - [x] 37-04-PLAN.md — Wave 0 RED tests for Discord pathfinder_player_adapter command classes
-- [ ] 37-05-PLAN.md — Wave 0 probe test: Obsidian client accepts underscore-prefixed _aliases.json path
+- [x] 37-05-PLAN.md — Wave 0 probe test: Obsidian client accepts underscore-prefixed _aliases.json path
 - [ ] 37-06-PLAN.md — Wave 1 shared seam: identity resolver + vault_markdown util + player_vault_store + memory_projection_store + npc_matcher
 - [ ] 37-07-PLAN.md — Wave 2 orchestrator + onboard/style/state routes + main.py wiring
 - [ ] 37-08-PLAN.md — Wave 3 capture routes (note, ask store-only, npc per-player, todo)

@@ -4,14 +4,14 @@ milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
 stopped_at: context exhaustion at 75% (2026-04-27)
-last_updated: "2026-05-07T04:45:30Z"
-last_activity: 2026-05-07 -- Phase 37 plan 04 complete (Wave 0 RED tests for Discord pathfinder_player_adapter; 14 RED tests)
+last_updated: "2026-05-07T04:49:04.869Z"
+last_activity: 2026-05-07
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 54
-  completed_plans: 44
-  percent: 81
+  completed_plans: 45
+  percent: 83
 ---
 
 # Project State
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 37 (pf2e-per-player-memory) — EXECUTING
-Plan: 5 of 14 (plan 04 ✅ complete — Wave 0 RED tests for Discord pathfinder_player_adapter; 14 RED tests)
+Plan: 6 of 14 (plan 04 ✅ complete — Wave 0 RED tests for Discord pathfinder_player_adapter; 14 RED tests)
 Next: Plan 37-05 — next Wave 0 / Wave 1 plan per phase sequence
 Prior Phase: 35 (Foundry VTT Event Ingest) — ✅ COMPLETE (FVT-01..03, 6 plans, 2026-04-25)
 Milestone: v0.5 The Dungeon — ✅ COMPLETE (9/9 phases complete: 28, 29, 30, 31, 32, 33, 34, 35, 36)
-Status: Executing Phase 37
-Last activity: 2026-05-07 -- Phase 37 plan 04 complete (14 RED tests)
+Status: Ready to execute
+Last activity: 2026-05-07
 
 ## Milestone Progress
 
@@ -89,6 +89,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 *Updated after each plan completion*
 | Phase 02-memory-layer P02 | -244 | 2 tasks | 3 files |
 | Phase 23-pi-harness-reset-route P01 | 3 | 2 tasks | 7 files |
+| Phase 37-pf2e-per-player-memory P05 | 3min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -128,6 +129,7 @@ Recent decisions affecting current work:
 - [Phase 34-05]: RecapView(discord.ui.View) timeout=180.0 (never None — persistent views require bot-restart re-registration). `view.message = msg` must be set AFTER `await channel.send(..., view=view)` returns so on_timeout can edit the message.
 - [Phase 34-UAT Bug A]: recap_text was gated behind session_auto_recap — button never appeared even when prior ended session existed. Fix: always populate recap_text when recap_available=True; session_auto_recap only controls inline display.
 - [Phase 34-UAT Bug B]: same-day --force start overwrote the ended note before the recap scan ran — recap lost. Fix: capture prior recap from existing_note frontmatter BEFORE the PUT overwrite into forced_prior_recap; use it ahead of the vault scan.
+- [Phase ?]: Plan 37-05 locked alias map path to mnemosyne/pf2e/players/_aliases.json after MockTransport probe of ObsidianClient
 
 ### Pending Todos
 
@@ -160,7 +162,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-04-27T13:55:18.783Z
+Last session: 2026-05-07T04:48:56.285Z
 Stopped at: context exhaustion at 75% (2026-04-27)
 Resume file: None
 
