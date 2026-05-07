@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
-stopped_at: context exhaustion at 75% (2026-04-27)
-last_updated: "2026-05-07T05:30:00.000Z"
+stopped_at: Completed 37-09 (player_recall_engine + /player/recall route)
+last_updated: "2026-05-07T05:26:00.684Z"
 last_activity: 2026-05-07
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 54
-  completed_plans: 49
-  percent: 91
+  completed_plans: 50
+  percent: 93
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 37 (pf2e-per-player-memory) — EXECUTING
-Plan: 10 of 14 (plan 09 ✅ complete — deterministic player_recall_engine + POST /player/recall; PVL-03 + PVL-07 covered)
+Plan: 11 of 14 (plan 09 ✅ complete — deterministic player_recall_engine + POST /player/recall; PVL-03 + PVL-07 covered)
 Next: Plan 37-10 — canonize verb + POST /player/canonize (only remaining RED on the per-player surface)
 Prior Phase: 35 (Foundry VTT Event Ingest) — ✅ COMPLETE (FVT-01..03, 6 plans, 2026-04-25)
 Milestone: v0.5 The Dungeon — ✅ COMPLETE (9/9 phases complete: 28, 29, 30, 31, 32, 33, 34, 35, 36)
@@ -94,6 +94,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 37 P07 | 25m | 2 tasks | 5 files |
 | Phase 37-pf2e-per-player-memory P08 | 10m | 2 tasks | 3 files |
 | Phase 37-pf2e-per-player-memory P09 | 12m | 3 tasks | 4 files |
+| Phase 37-pf2e-per-player-memory P10 | 12m | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -139,6 +140,7 @@ Recent decisions affecting current work:
 - [Phase ?]: 37-07: /player/note 503/409 gate surface ships in Wave 2; plan 37-08 widens to inbox.md write
 - [Phase 37-09]: Recall engine v1 is keyword-count + recency-weight ONLY (no LLM, no embeddings — CONTEXT lock). Sessions/{YYYY-MM-DD}.md weighted max(0,1-days/365); non-session files fixed 0.1. Snippet ~80 chars around first matched token. Deterministic via _today_iso() module seam patched in tests.
 - [Phase 37-09]: PVL-07 isolation enforced at three layers — list_directory called only with the slug-bound prefix, defensive engine-side prefix guard drops any path that escapes, and player_vault_store._SLUG_RE-shaped slug rejection happens before any I/O.
+- [Phase ?]: Canonize provenance uses 'question:{id}' substring (not wikilink) since /player/ask stores questions as raw text without per-question files
 
 ### Pending Todos
 
@@ -171,7 +173,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-07T05:30:00.000Z
+Last session: 2026-05-07T05:25:57.297Z
 Stopped at: Completed 37-09 (player_recall_engine + /player/recall route)
 Resume file: None
 
