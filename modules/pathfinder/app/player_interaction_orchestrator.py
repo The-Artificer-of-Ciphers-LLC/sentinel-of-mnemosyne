@@ -40,6 +40,8 @@ VALID_STYLE_PRESETS = frozenset(
     {"Tactician", "Lorekeeper", "Cheerleader", "Rules-Lawyer Lite"}
 )
 
+VALID_OUTCOMES = frozenset({"yellow", "green", "red"})
+
 
 class PlayerInteractionRequest(BaseModel):
     """Verb-tagged orchestrator request.
@@ -227,6 +229,13 @@ async def handle_player_interaction(
             )
 
         case "canonize":
+            if request.outcome not in VALID_OUTCOMES:
+                raise ValueError(
+                    f"invalid canonize outcome {request.outcome!r}; "
+                    f"valid: {sorted(VALID_OUTCOMES)}"
+                )
+            if not (request.question_id or "").strip():
+                raise ValueError("canonize requires a non-empty question_id")
             await store_adapter.write_canonization(
                 slug,
                 question_id=request.question_id,

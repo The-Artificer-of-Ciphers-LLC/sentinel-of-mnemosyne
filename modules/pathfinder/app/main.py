@@ -103,6 +103,7 @@ REGISTRATION_PAYLOAD = {
         {"path": "player/npc", "description": "Write per-player NPC knowledge (PVL-02, PVL-07 isolation)"},
         {"path": "player/todo", "description": "Append todo to per-player todo.md (PVL-02)"},
         {"path": "player/recall", "description": "Deterministic per-player recall (PVL-03, PVL-07 isolation)"},
+        {"path": "player/canonize", "description": "Record yellow→green/red rule outcome with question_id provenance (PVL-04)"},
         {"path": "player/style", "description": "List or set player style preset (PVL-05)"},
         {"path": "player/state", "description": "Read per-player onboarding/style state (PVL-01)"},
     ],

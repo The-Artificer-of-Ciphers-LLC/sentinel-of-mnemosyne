@@ -53,6 +53,10 @@ VALID_STYLE_PRESETS = frozenset(
     {"Tactician", "Lorekeeper", "Cheerleader", "Rules-Lawyer Lite"}
 )
 
+VALID_CANONIZE_OUTCOMES = frozenset({"yellow", "green", "red"})
+_MAX_QUESTION_ID_LEN = 100
+_MAX_RULE_TEXT_LEN = 2000
+
 
 # ---------------------------------------------------------------------------
 # Pydantic request models
@@ -122,6 +126,44 @@ class PlayerRecallRequest(BaseModel):
 
     user_id: str
     query: str | None = ""
+
+
+class PlayerCanonizeRequest(BaseModel):
+    """Request shape for POST /player/canonize (PVL-04).
+
+    Records a yellow→green or yellow→red rule outcome in the requesting
+    player's canonization.md with provenance back to the originating
+    question_id. v1: NO timeout-based auto-resolution (see Open Question 4
+    in CONTEXT.md).
+    """
+
+    user_id: str
+    outcome: str
+    question_id: str
+    rule_text: str
+
+    @field_validator("outcome")
+    @classmethod
+    def check_outcome(cls, v: str) -> str:
+        if v not in VALID_CANONIZE_OUTCOMES:
+            raise ValueError(
+                f"invalid outcome {v!r}; valid: {sorted(VALID_CANONIZE_OUTCOMES)}"
+            )
+        return v
+
+    @field_validator("question_id")
+    @classmethod
+    def check_question_id(cls, v: str) -> str:
+        cleaned = (v or "").strip()
+        if not cleaned:
+            raise ValueError("question_id must be non-empty")
+        if len(cleaned) > _MAX_QUESTION_ID_LEN:
+            raise ValueError(
+                f"question_id exceeds {_MAX_QUESTION_ID_LEN}-char limit"
+            )
+        if _CONTROL_CHAR_RE.search(cleaned):
+            raise ValueError("question_id contains control characters")
+        return cleaned
 
 
 class PlayerStyleRequest(BaseModel):
@@ -422,6 +464,58 @@ async def recall(req: PlayerRecallRequest) -> JSONResponse:
         ) from exc
     logger.info("Player recall: slug=%s query=%r results=%d", slug, req.query, len(results))
     return JSONResponse({"ok": True, "slug": slug, "results": results})
+
+
+# ---------------------------------------------------------------------------
+# POST /player/canonize — record yellow→green/red rule outcome (PVL-04)
+#
+# Yellow rule outcomes get canonized to green or red and appended to
+# canonization.md with provenance back to the originating question_id.
+# v1: NO timeout-based auto-resolution — every canonization is operator-driven.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/canonize")
+async def canonize(req: PlayerCanonizeRequest) -> JSONResponse:
+    """Append a canonization entry to players/{slug}/canonization.md (PVL-04).
+
+    Onboarding-gated. The persisted bullet embeds {outcome, timestamp,
+    question_id, rule_text} so a downstream reader can trace any green/red
+    decision back to the original yellow question.
+    """
+    _require_obsidian()
+    rule_text = _validate_free_text(req.rule_text, max_len=_MAX_RULE_TEXT_LEN)
+    slug = await _resolve_slug(req.user_id)
+    fm = await _read_profile(slug)
+    _onboarding_gate_or_409(fm)
+    entry = {
+        "outcome": req.outcome,
+        "question_id": req.question_id,
+        "rule_text": rule_text,
+    }
+    try:
+        path = await player_vault_store.append_canonization(
+            slug, entry, obsidian=obsidian
+        )
+    except Exception as exc:
+        logger.error("Obsidian write failed for /player/canonize %s: %s", slug, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "Obsidian write failed", "detail": str(exc)},
+        )
+    logger.info(
+        "Player canonization recorded: slug=%s outcome=%s question_id=%s path=%s",
+        slug, req.outcome, req.question_id, path,
+    )
+    return JSONResponse(
+        {
+            "ok": True,
+            "slug": slug,
+            "path": path,
+            "outcome": req.outcome,
+            "question_id": req.question_id,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

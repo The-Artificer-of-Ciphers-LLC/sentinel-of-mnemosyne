@@ -150,6 +150,46 @@ async def write_npc_knowledge(
 
 
 # ---------------------------------------------------------------------------
+# Canonization (PVL-04) — yellow→green/red rule outcomes with provenance
+# ---------------------------------------------------------------------------
+
+
+async def append_canonization(slug: str, entry: dict, *, obsidian: Any) -> str:
+    """Append a canonization line to players/{slug}/canonization.md (GET-then-PUT).
+
+    `entry` shape: {outcome, question_id, rule_text, timestamp_iso}. The
+    rendered bullet embeds all three load-bearing fields so the test's
+    substring asserts on outcome + question_id hit the body verbatim.
+
+    Returns the resolved vault path so the route layer can include it in the
+    JSON response without reconstructing the prefix.
+    """
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    path = _resolve_player_path(slug, "canonization.md")
+    timestamp_iso = entry.get("timestamp_iso") or datetime.now(timezone.utc).isoformat(
+        timespec="seconds"
+    )
+    outcome = entry["outcome"]
+    question_id = entry["question_id"]
+    rule_text = entry["rule_text"]
+    line = (
+        f"- [{outcome}] {timestamp_iso} — question:{question_id} — {rule_text}"
+    )
+
+    existing = await obsidian.get_note(path)
+    if existing is None:
+        existing = "# Canonization\n"
+    if not existing.endswith("\n"):
+        existing += "\n"
+    merged = existing + line
+    if not merged.endswith("\n"):
+        merged += "\n"
+    await obsidian.put_note(path, merged)
+    return path
+
+
+# ---------------------------------------------------------------------------
 # Listing
 # ---------------------------------------------------------------------------
 
