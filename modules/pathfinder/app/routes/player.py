@@ -17,6 +17,7 @@ routes/npc.py.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
@@ -25,6 +26,21 @@ from pydantic import BaseModel, field_validator
 
 from app import player_identity_resolver, player_vault_store
 from app.vault_markdown import _parse_frontmatter, build_frontmatter_markdown
+
+# Free-text caps + control-char filter mirror routes/npc.py validators.
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
+_MAX_TEXT_LEN = 2000
+_MAX_NPC_NAME_LEN = 100
+
+
+def _sanitize_text(value: str, *, max_len: int = _MAX_TEXT_LEN) -> str:
+    """Strip control chars + enforce length cap; raise ValueError on empty/over-cap."""
+    cleaned = _CONTROL_CHAR_RE.sub("", value or "").strip()
+    if not cleaned:
+        raise ValueError("text must be non-empty after sanitisation")
+    if len(cleaned) > max_len:
+        raise ValueError(f"text exceeds {max_len}-char limit")
+    return cleaned
 
 logger = logging.getLogger(__name__)
 
@@ -60,13 +76,37 @@ class PlayerOnboardRequest(BaseModel):
 
 
 class PlayerNoteRequest(BaseModel):
-    """Request shape for POST /player/note (plan 08 widens behaviour).
+    """Request shape for POST /player/note — appends to per-player inbox.md."""
 
-    This slice ships the 503 + onboarding-gate surface only. Actual inbox.md
-    writes land in plan 08 which extends this handler — keeping the route
-    registered now lets the operational 503 test and the 409 gate test go
-    GREEN at Wave 2, while the 'writes to inbox' test stays RED until plan 08.
+    user_id: str
+    text: str
+
+
+class PlayerAskRequest(BaseModel):
+    """Request shape for POST /player/ask.
+
+    v1 contract: store-only. The question is appended to questions.md and NO
+    LLM/external HTTP call is issued. LLM-answered ask is deferred to v2.
     """
+
+    user_id: str
+    text: str
+
+
+class PlayerNpcRequest(BaseModel):
+    """Request shape for POST /player/npc — writes per-player NPC knowledge.
+
+    Per PVL-07: writes land at players/{slug}/npcs/{npc_slug}.md, NEVER at the
+    global mnemosyne/pf2e/npcs/{npc_slug}.md path.
+    """
+
+    user_id: str
+    npc_name: str
+    note: str
+
+
+class PlayerTodoRequest(BaseModel):
+    """Request shape for POST /player/todo — appends to per-player todo.md."""
 
     user_id: str
     text: str
@@ -156,22 +196,11 @@ async def onboard(req: PlayerOnboardRequest) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
-# POST /player/note — onboarding-gate + 503 surface only (plan 08 wires inbox)
+# Capture-verb shared helpers (plan 37-08)
 # ---------------------------------------------------------------------------
 
 
-@router.post("/note")
-async def note(req: PlayerNoteRequest) -> JSONResponse:
-    """Onboarding-gated note capture.
-
-    Wave 2 ships only the 503 (obsidian missing) and 409 (not onboarded)
-    surface; plan 08 adds the actual inbox.md GET-then-PUT write. Keeping the
-    route registered now means the route table in REGISTRATION_PAYLOAD is
-    stable across waves and the 503 test for /player/note can go GREEN.
-    """
-    _require_obsidian()
-    slug = await _resolve_slug(req.user_id)
-    fm = await _read_profile(slug)
+def _onboarding_gate_or_409(fm: dict) -> None:
     if not fm.get("onboarded"):
         raise HTTPException(
             status_code=409,
@@ -180,13 +209,166 @@ async def note(req: PlayerNoteRequest) -> JSONResponse:
                 "hint": "Run :pf player start to onboard first.",
             },
         )
-    # Plan 08 will replace this with append_to_inbox(slug, req.text). Until
-    # that lands, the route accepts the request shape but performs no write —
-    # the 'writes to inbox' RED test in plan-02 stays RED, by design.
-    raise HTTPException(
-        status_code=501,
-        detail={"error": "note capture lands in plan 37-08"},
+
+
+def _validate_free_text(value: str, *, max_len: int = _MAX_TEXT_LEN) -> str:
+    """422 on empty/over-cap free-text fields (mirrors npc.py validators)."""
+    try:
+        return _sanitize_text(value, max_len=max_len)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"error": str(exc)}) from exc
+
+
+def _wrap_obsidian_write(action: str, slug: str):
+    """Context-manager-like helper for uniform 503-on-write-failure handling."""
+    # Returns a closure that wraps a coroutine; kept as a small helper so the
+    # four capture handlers stay readable.
+    pass  # pragma: no cover — intentionally a marker; handlers use try/except inline
+
+
+# ---------------------------------------------------------------------------
+# POST /player/note — append to per-player inbox.md (PVL-02)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/note")
+async def note(req: PlayerNoteRequest) -> JSONResponse:
+    """Append `text` to mnemosyne/pf2e/players/{slug}/inbox.md (PVL-02).
+
+    Onboarding-gated. 503 if obsidian client is unset; 409 if profile.md does
+    not yet have onboarded:true. Per-player isolation enforced by
+    player_vault_store._resolve_player_path.
+    """
+    _require_obsidian()
+    text = _validate_free_text(req.text)
+    slug = await _resolve_slug(req.user_id)
+    fm = await _read_profile(slug)
+    _onboarding_gate_or_409(fm)
+    try:
+        await player_vault_store.append_to_inbox(slug, text, obsidian=obsidian)
+    except Exception as exc:
+        logger.error("Obsidian write failed for /player/note %s: %s", slug, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "Obsidian write failed", "detail": str(exc)},
+        )
+    path = f"mnemosyne/pf2e/players/{slug}/inbox.md"
+    logger.info("Player note captured: slug=%s path=%s", slug, path)
+    return JSONResponse({"ok": True, "slug": slug, "path": path})
+
+
+# ---------------------------------------------------------------------------
+# POST /player/ask — append to per-player questions.md (PVL-02)
+#
+# v1 contract: STORE-ONLY. No LLM call. The question persists for later
+# canonization (plan 37-10). Behavioural-Test-Only Rule: any LLM POST during
+# this handler is a regression — covered by test_post_ask_stores_question_no_llm.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/ask")
+async def ask(req: PlayerAskRequest) -> JSONResponse:
+    """Append a question to mnemosyne/pf2e/players/{slug}/questions.md.
+
+    v1 contract: store-only. NO LLM call is issued — the question is queued
+    for later canonization. LLM-answered ask is deferred to v2.
+    """
+    _require_obsidian()
+    text = _validate_free_text(req.text)
+    slug = await _resolve_slug(req.user_id)
+    fm = await _read_profile(slug)
+    _onboarding_gate_or_409(fm)
+    try:
+        await player_vault_store.append_to_questions(slug, text, obsidian=obsidian)
+    except Exception as exc:
+        logger.error("Obsidian write failed for /player/ask %s: %s", slug, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "Obsidian write failed", "detail": str(exc)},
+        )
+    path = f"mnemosyne/pf2e/players/{slug}/questions.md"
+    logger.info("Player question stored (no LLM): slug=%s path=%s", slug, path)
+    return JSONResponse({"ok": True, "slug": slug, "path": path})
+
+
+# ---------------------------------------------------------------------------
+# POST /player/npc — write per-player NPC knowledge (PVL-07 isolation)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/npc")
+async def npc(req: PlayerNpcRequest) -> JSONResponse:
+    """Write per-player NPC knowledge at players/{slug}/npcs/{npc_slug}.md.
+
+    PVL-07: this MUST NOT touch the global mnemosyne/pf2e/npcs/{npc_slug}.md
+    path. Per-player isolation is enforced by player_vault_store, which
+    constrains every resolved path under players/{slug}/.
+    """
+    _require_obsidian()
+    # Lazy import keeps app.routes.npc out of player.py module-load — avoids
+    # the circular-import risk Phase 32 documented for cross-route imports.
+    from app.routes.npc import slugify  # noqa: PLC0415
+
+    name = _validate_free_text(req.npc_name, max_len=_MAX_NPC_NAME_LEN)
+    note_text = _validate_free_text(req.note)
+    npc_slug = slugify(name)
+    if not npc_slug:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "npc_name produced an empty slug after sanitisation"},
+        )
+    slug = await _resolve_slug(req.user_id)
+    fm = await _read_profile(slug)
+    _onboarding_gate_or_409(fm)
+    # Build a minimal markdown body so the per-player NPC note is human-readable
+    # in Obsidian. Frontmatter records the npc identity; body holds the note.
+    content = (
+        f"---\n"
+        f"npc_slug: {npc_slug}\n"
+        f"npc_name: {name}\n"
+        f"player_slug: {slug}\n"
+        f"---\n\n"
+        f"{note_text}\n"
     )
+    try:
+        await player_vault_store.write_npc_knowledge(
+            slug, npc_slug, content, obsidian=obsidian
+        )
+    except Exception as exc:
+        logger.error("Obsidian write failed for /player/npc %s: %s", slug, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "Obsidian write failed", "detail": str(exc)},
+        )
+    path = f"mnemosyne/pf2e/players/{slug}/npcs/{npc_slug}.md"
+    logger.info("Player NPC knowledge written: slug=%s npc=%s path=%s", slug, npc_slug, path)
+    return JSONResponse({"ok": True, "slug": slug, "path": path})
+
+
+# ---------------------------------------------------------------------------
+# POST /player/todo — append to per-player todo.md (PVL-02)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/todo")
+async def todo(req: PlayerTodoRequest) -> JSONResponse:
+    """Append `text` to mnemosyne/pf2e/players/{slug}/todo.md."""
+    _require_obsidian()
+    text = _validate_free_text(req.text)
+    slug = await _resolve_slug(req.user_id)
+    fm = await _read_profile(slug)
+    _onboarding_gate_or_409(fm)
+    try:
+        await player_vault_store.append_to_todo(slug, text, obsidian=obsidian)
+    except Exception as exc:
+        logger.error("Obsidian write failed for /player/todo %s: %s", slug, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "Obsidian write failed", "detail": str(exc)},
+        )
+    path = f"mnemosyne/pf2e/players/{slug}/todo.md"
+    logger.info("Player todo captured: slug=%s path=%s", slug, path)
+    return JSONResponse({"ok": True, "slug": slug, "path": path})
 
 
 # ---------------------------------------------------------------------------
