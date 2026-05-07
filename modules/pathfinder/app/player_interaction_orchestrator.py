@@ -197,8 +197,20 @@ async def handle_player_interaction(
             return PlayerInteractionResult(slug=slug, verb="ask")
 
         case "npc":
+            # Plan 37-08: derive npc_slug via the same slugify rule used by the
+            # global Phase-29 NPC routes. Empty npc_name short-circuits with a
+            # usage hint and no vault write — keeps the per-player NPC namespace
+            # free of stray empty-slug files.
+            from app.routes.npc import slugify  # noqa: PLC0415
+            if not (request.npc_name or "").strip():
+                return PlayerInteractionResult(
+                    slug=slug,
+                    verb="npc",
+                    message="Usage: :pf player npc <npc_name> <note>",
+                )
+            npc_slug = slugify(request.npc_name or "")
             await store_adapter.write_npc_knowledge(
-                slug, request.npc_name or "", request.note or ""
+                slug, npc_slug, request.note or ""
             )
             return PlayerInteractionResult(slug=slug, verb="npc")
 
