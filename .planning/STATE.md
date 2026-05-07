@@ -4,14 +4,14 @@ milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
 stopped_at: context exhaustion at 75% (2026-04-27)
-last_updated: "2026-05-07T06:00:00Z"
-last_activity: 2026-05-07 -- Phase 37 plan 03 complete (Wave 0 RED tests for foundry_memory_projection + idempotency + state-file backcompat; 15 RED tests)
+last_updated: "2026-05-07T04:45:30Z"
+last_activity: 2026-05-07 -- Phase 37 plan 04 complete (Wave 0 RED tests for Discord pathfinder_player_adapter; 14 RED tests)
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 54
-  completed_plans: 43
-  percent: 80
+  completed_plans: 44
+  percent: 81
 ---
 
 # Project State
@@ -26,12 +26,12 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 37 (pf2e-per-player-memory) — EXECUTING
-Plan: 4 of 14 (plan 03 ✅ complete — Wave 0 RED tests for foundry_memory_projection + idempotency + state-file backcompat; 15 RED tests across 2 new files + 1 additive)
-Next: Plan 37-04 — Wave 0 RED tests for Discord pathfinder_player_adapter command classes
+Plan: 5 of 14 (plan 04 ✅ complete — Wave 0 RED tests for Discord pathfinder_player_adapter; 14 RED tests)
+Next: Plan 37-05 — next Wave 0 / Wave 1 plan per phase sequence
 Prior Phase: 35 (Foundry VTT Event Ingest) — ✅ COMPLETE (FVT-01..03, 6 plans, 2026-04-25)
 Milestone: v0.5 The Dungeon — ✅ COMPLETE (9/9 phases complete: 28, 29, 30, 31, 32, 33, 34, 35, 36)
 Status: Executing Phase 37
-Last activity: 2026-05-07 -- Phase 37 execution started
+Last activity: 2026-05-07 -- Phase 37 plan 04 complete (14 RED tests)
 
 ## Milestone Progress
 
