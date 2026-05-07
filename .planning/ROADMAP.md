@@ -564,7 +564,7 @@ Plans:
 
 Plans:
 - [x] 37-01-PLAN.md — Wave 0 RED tests for player_identity_resolver, player_vault_store, memory_projection_store
-- [ ] 37-02-PLAN.md — Wave 0 RED tests for /player/* routes and player_interaction_orchestrator
+- [x] 37-02-PLAN.md — Wave 0 RED tests for /player/* routes and player_interaction_orchestrator
 - [ ] 37-03-PLAN.md — Wave 0 RED tests for foundry_memory_projection + idempotency + state-file backcompat
 - [ ] 37-04-PLAN.md — Wave 0 RED tests for Discord pathfinder_player_adapter command classes
 - [ ] 37-05-PLAN.md — Wave 0 probe test: Obsidian client accepts underscore-prefixed _aliases.json path
