@@ -159,6 +159,16 @@ from pathfinder_session_adapter import (  # noqa: E402, F401
     SessionStartCommand,
     SessionShowCommand,
 )
+from pathfinder_player_adapter import (  # noqa: E402, F401
+    PlayerAskCommand,
+    PlayerCanonizeCommand,
+    PlayerNoteCommand,
+    PlayerNpcCommand,
+    PlayerRecallCommand,
+    PlayerStartCommand,
+    PlayerStyleCommand,
+    PlayerTodoCommand,
+)
 
 # Populate the registry from imported command classes.
 # Harvest: wildcard handler (no sub-verbs).
@@ -196,3 +206,13 @@ COMMANDS["cartosia"] = {"*": CartosiaCommand()}
 
 # Foundry import commands.
 COMMANDS.setdefault("foundry", {})["import-messages"] = FoundryImportMessagesCommand()
+
+# Player: per-player memory verbs (Phase 37 — pf2e-per-player-memory).
+COMMANDS.setdefault("player", {})["start"] = PlayerStartCommand()
+COMMANDS["player"]["note"] = PlayerNoteCommand()
+COMMANDS["player"]["ask"] = PlayerAskCommand()
+COMMANDS["player"]["npc"] = PlayerNpcCommand()
+COMMANDS["player"]["recall"] = PlayerRecallCommand()
+COMMANDS["player"]["todo"] = PlayerTodoCommand()
+COMMANDS["player"]["style"] = PlayerStyleCommand()
+COMMANDS["player"]["canonize"] = PlayerCanonizeCommand()

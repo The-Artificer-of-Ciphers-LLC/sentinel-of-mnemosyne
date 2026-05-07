@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-PF_NOUNS = frozenset({"npc", "harvest", "rule", "session", "ingest", "cartosia", "foundry"})
+PF_NOUNS = frozenset({"npc", "harvest", "rule", "session", "ingest", "cartosia", "foundry", "player"})
 
 
 def parse_pf_args(args: str) -> tuple[tuple[str, str, str, list[str]] | None, str | None]:
