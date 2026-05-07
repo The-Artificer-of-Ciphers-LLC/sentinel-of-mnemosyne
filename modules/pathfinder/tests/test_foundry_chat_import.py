@@ -166,3 +166,39 @@ async def test_import_nedb_chatlogs_from_leveldb_shards(tmp_path, monkeypatch):
     written_path, written_content = obsidian.put_note.await_args.args
     assert written_path == result["note_path"]
     assert "| ic | Merisiel | Quiet now. |" in written_content
+
+
+def test_state_file_backcompat_missing_projection_keys(tmp_path):
+    """Wave 0 RED: ADDITIVE backcompat test for the projection state-file shape.
+
+    A pre-Phase-37 state JSON contains only ``imported_keys`` (no projection
+    arrays). The Wave 6 loader ``_load_projection_state`` must handle this
+    legacy shape by returning empty sets for the projection key buckets — no
+    exception, no key-error.
+
+    This test fails RED on ImportError until Wave 6 lands the loader symbol.
+    """
+    from app.foundry_chat_import import _load_projection_state  # noqa: function-scope
+
+    state_path = tmp_path / ".foundry_chat_import_state.json"
+    state_path.write_text(
+        json.dumps({"imported_keys": ["abc"]}),
+        encoding="utf-8",
+    )
+
+    state = _load_projection_state(state_path)
+
+    # Tolerate either dict-of-sets or a small dataclass — assert on the
+    # observable contract: three buckets, two of them empty, one preserved.
+    if hasattr(state, "imported_keys"):
+        imported = state.imported_keys
+        player = state.player_projection_keys
+        npc = state.npc_projection_keys
+    else:
+        imported = state["imported_keys"]
+        player = state["player_projection_keys"]
+        npc = state["npc_projection_keys"]
+
+    assert set(imported) == {"abc"}
+    assert set(player) == set()
+    assert set(npc) == set()
