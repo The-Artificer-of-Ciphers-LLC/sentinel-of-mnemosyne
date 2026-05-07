@@ -112,6 +112,18 @@ class PlayerTodoRequest(BaseModel):
     text: str
 
 
+class PlayerRecallRequest(BaseModel):
+    """Request shape for POST /player/recall — deterministic per-player recall.
+
+    v1 contract (CONTEXT lock): keyword-match + recency only. No LLM, no
+    embeddings. The query is optional; an empty/missing query returns the
+    most-recent notes under the requesting player's namespace.
+    """
+
+    user_id: str
+    query: str | None = ""
+
+
 class PlayerStyleRequest(BaseModel):
     user_id: str
     action: Literal["list", "set"]
@@ -369,6 +381,47 @@ async def todo(req: PlayerTodoRequest) -> JSONResponse:
     path = f"mnemosyne/pf2e/players/{slug}/todo.md"
     logger.info("Player todo captured: slug=%s path=%s", slug, path)
     return JSONResponse({"ok": True, "slug": slug, "path": path})
+
+
+# ---------------------------------------------------------------------------
+# POST /player/recall — deterministic per-player recall (PVL-03 / PVL-07)
+#
+# v1 contract: keyword-match + recency only via app.player_recall_engine.recall.
+# Onboarding-gated. Reads ONLY under mnemosyne/pf2e/players/{slug}/ — the
+# engine's defensive prefix guard plus list_directory's slug-bound prefix arg
+# make cross-player leakage impossible.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/recall")
+async def recall(req: PlayerRecallRequest) -> JSONResponse:
+    """Return ranked recall results scoped to the requesting player's namespace."""
+    _require_obsidian()
+    # Lazy import keeps the engine out of module load — symmetric with the
+    # routes/npc.slugify lazy import pattern in /player/npc.
+    from app.player_recall_engine import recall as recall_engine  # noqa: PLC0415
+
+    slug = await _resolve_slug(req.user_id)
+    fm = await _read_profile(slug)
+    _onboarding_gate_or_409(fm)
+    try:
+        results = await recall_engine(
+            slug, req.query or "", obsidian=obsidian
+        )
+    except ValueError as exc:
+        # Slug-shape validation error — surface as 422 since the offending
+        # value is derived from the user_id we just resolved.
+        raise HTTPException(
+            status_code=422, detail={"error": str(exc)}
+        ) from exc
+    except Exception as exc:
+        logger.error("Obsidian read failed for /player/recall %s: %s", slug, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "Obsidian read failed", "detail": str(exc)},
+        ) from exc
+    logger.info("Player recall: slug=%s query=%r results=%d", slug, req.query, len(results))
+    return JSONResponse({"ok": True, "slug": slug, "results": results})
 
 
 # ---------------------------------------------------------------------------

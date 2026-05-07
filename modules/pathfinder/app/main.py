@@ -102,6 +102,7 @@ REGISTRATION_PAYLOAD = {
         {"path": "player/ask", "description": "Store question to per-player questions.md, no LLM (PVL-02)"},
         {"path": "player/npc", "description": "Write per-player NPC knowledge (PVL-02, PVL-07 isolation)"},
         {"path": "player/todo", "description": "Append todo to per-player todo.md (PVL-02)"},
+        {"path": "player/recall", "description": "Deterministic per-player recall (PVL-03, PVL-07 isolation)"},
         {"path": "player/style", "description": "List or set player style preset (PVL-05)"},
         {"path": "player/state", "description": "Read per-player onboarding/style state (PVL-01)"},
     ],
