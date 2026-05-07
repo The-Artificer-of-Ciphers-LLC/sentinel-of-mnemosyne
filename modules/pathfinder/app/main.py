@@ -55,12 +55,14 @@ import app.routes.foundry as _foundry_module
 import app.routes.harvest as _harvest_module
 import app.routes.npc as _npc_module
 import app.routes.npcs as _npcs_module
+import app.routes.player as _player_module
 import app.routes.rule as _rule_module
 import app.routes.session as _session_module
 from app.routes.foundry import router as foundry_router
 from app.routes.harvest import router as harvest_router
 from app.routes.npc import router as npc_router
 from app.routes.npcs import router as npcs_router
+from app.routes.player import router as player_router
 from app.routes.rule import router as rule_router
 from app.routes.session import router as session_router
 
@@ -95,6 +97,9 @@ REGISTRATION_PAYLOAD = {
         {"path": "npcs/", "description": "List all Sentinel NPCs (FVT-04)"},
         {"path": "npcs/{slug}/foundry-actor", "description": "Return PF2e actor JSON for NPC (FVT-04)"},
         {"path": "ingest", "description": "Bulk import PF2e archive subfolder (260427-cui)"},
+        {"path": "player/onboard", "description": "Create per-player profile.md (PVL-01)"},
+        {"path": "player/style", "description": "List or set player style preset (PVL-05)"},
+        {"path": "player/state", "description": "Read per-player onboarding/style state (PVL-01)"},
     ],
 }
 
@@ -227,6 +232,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         _foundry_module.obsidian = obsidian_client
         # Phase 36: wire npcs route's module-level obsidian singleton.
         _npcs_module.obsidian = obsidian_client
+        # Phase 37: wire player route's module-level obsidian singleton (PVL-01..05).
+        _player_module.obsidian = obsidian_client
         # 260427-cui: wire ingest route's module-level obsidian singleton.
         import app.routes.ingest as _ingest_module
         _ingest_module.obsidian = obsidian_client
@@ -251,6 +258,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _foundry_module.discord_bot_url = ""
     _foundry_module.obsidian = None
     _npcs_module.obsidian = None
+    _player_module.obsidian = None
     import app.routes.ingest as _ingest_module_shutdown
     _ingest_module_shutdown.obsidian = None
 
@@ -314,6 +322,8 @@ app.include_router(session_router)
 app.include_router(session_router, prefix="/modules/pathfinder")
 # Phase 36: NPC listing and Foundry actor export routes (FVT-04).
 app.include_router(npcs_router)
+# Phase 37: Per-player memory routes (PVL-01..05).
+app.include_router(player_router)
 # Quick task 260427-cui: PF2e archive ingester (generalised from cartosia importer).
 from app.routes.ingest import router as ingest_router  # noqa: E402
 app.include_router(ingest_router)

@@ -32,6 +32,21 @@ _SHARED = os.path.join(_REPO_ROOT, "shared")
 if _SHARED not in sys.path:
     sys.path.insert(0, _SHARED)
 
+# Pre-import app.main so mock.patch("app.main.<symbol>") can resolve the attribute
+# at __enter__ time without each test having to do `from app.main import app`
+# above the patch context. Test envs that exercise routes via FastAPI all use
+# this pattern (test_session_integration, test_player_routes); without this
+# pre-import, the patch fails with `module 'app' has no attribute 'main'`.
+# Required env vars are set above this block via os.environ.setdefault calls in
+# the per-test files; main.py reads them via pydantic-settings at import time.
+os.environ.setdefault("SENTINEL_API_KEY", "test-key-for-pytest")
+os.environ.setdefault("SENTINEL_CORE_URL", "http://sentinel-core:8000")
+os.environ.setdefault("OBSIDIAN_BASE_URL", "http://localhost:27123")
+os.environ.setdefault("OBSIDIAN_API_KEY", "")
+os.environ.setdefault("LITELLM_MODEL", "openai/local-model")
+os.environ.setdefault("LITELLM_API_BASE", "http://localhost:1234/v1")
+import app.main  # noqa: E402,F401  — register app.main as attribute of app package
+
 # Fixed date used throughout test_session_integration.py
 _TEST_SESSION_DATE = datetime.date(2026, 4, 25)
 
