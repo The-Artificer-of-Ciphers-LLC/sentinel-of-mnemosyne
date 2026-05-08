@@ -67,6 +67,11 @@ A pluggable container that attaches to Sentinel Core to add capabilities (Discor
 finance tracker, trading module). Distinct from the architectural sense — see Flagged ambiguities.
 _Avoid_: plugin, extension, service.
 
+**Module version**:
+A version number owned by an individual Sentinel module and released independently from Sentinel Core.
+Example: Sentinel Core `v0.50` and Pathfinder module `v1.0` can ship on different cadences.
+_Avoid_: assuming one global version implies all module versions.
+
 ## Relationships
 
 - A **Sentinel** owns one **Vault**.
@@ -77,6 +82,7 @@ _Avoid_: plugin, extension, service.
 - The **Hot tier** combines the **Sentinel persona**, the **Self namespace**, and recent
   **Session summaries**. The **Warm tier** is sourced from **Vault** search.
 - The **vault sweeper** never deletes — it relocates source files into the **Trash namespace**.
+- A **Sentinel module** has its own **Module version** lifecycle independent of Sentinel Core.
 
 ## Example dialogue
 
@@ -177,3 +183,83 @@ Adapters should do only translation/auth/delegation.
 ### Validation baseline
 - Unit/integration tests: 279 passed, 12 skipped.
 - Live smoke validated: `/health`, `/status` (auth+unauth), `/modules`, `/note/classify`, `/message`.
+
+---
+
+## session_issues
+<!-- AI-readable. Compact YAML. Append-only. Each entry: stable ref → fact → mitigation → status. -->
+
+```yaml
+repo_state:
+  - ref: GIT-001
+    fact: ".planning/, .claude/, .agents/, CLAUDE.md, .gitignore are intentionally untracked"
+    evidence: "commits 2eec6d2 (remove .gitignore from repo) and dc2a2f1 (untrack local agent/planning artifacts); .gitignore in .git/info/exclude"
+    implication: "worktree-isolated agents cannot read .planning/* — fail at <files_to_read>"
+    mitigation: "git.branching_strategy=none, workflow.use_worktrees=false; sequential execution on main tree"
+    status: applied_for_phase_37
+  - ref: GIT-002
+    fact: ".gitignore extended locally for secrets/, mnemosyne/, node_modules/, __pycache__/, .env, .DS_Store, .pi/, .claude/settings.local.json, GSD-WORKTREE-DELETION-BUG-REPORT.md, V040-REFACTORING-DIRECTIVE.md"
+    persistence: local-only (file is in .git/info/exclude, never tracked)
+    note: "extensions survive across sessions on this machine; do not assume gitignore semantics from upstream main"
+
+phase_37_contract_drift:
+  - ref: PHASE37-A
+    fact: "PlayerStartCommand shipped with payload {user_id} only; /player/onboard requires character_name, preferred_name, style_preset → 422"
+    why_missed_by_verifier: "adapter unit tests mocked post_to_module without validating payload against route Pydantic model"
+    mitigation_commit: "fix(discord): :pf player start parses pipe-separated onboard args (mitigation for Phase 38)"
+    new_contract: "rest=`<character_name> | <preferred_name> | <style_preset>`; empty rest → usage hint, no POST"
+    status: deployed
+  - ref: PHASE37-B
+    fact: "verb name asymmetry — ROADMAP success criterion #1 says 'onboard', dispatcher registers 'start'"
+    canonical: "37-CONTEXT.md line 129 — verb is 'start' (start/style allowed pre-onboarding)"
+    status: design_lock_honored_no_change_needed
+  - ref: PHASE37-C
+    fact: "PlayerStateCommand does not exist; GET /player/state is HTTP-only (no Discord verb)"
+    intent: by_design
+    consumers: orchestrator_gate_logic, foundry_projection_lookups
+    status: not_a_bug
+  - ref: PHASE37-D
+    fact: "routes/foundry._identity_resolver typed for record dict but called with speaker-token string; every Foundry import silently classified speakers as 'unknown'"
+    caught_by: "plan 37-14 closeout E2E test (test_phase37_integration.py)"
+    fix_commit: 8aee784
+    lesson: "wave-7 unit tests passed because they injected their own resolver callable; only route-stack E2E exercised the real wrapper"
+    status: fixed_in_phase
+
+verifier_blind_spots:
+  - "adapter→route contract drift invisible when adapter tests mock the HTTP boundary"
+  - "verifier PASS requires goal-backward trace from success criterion to behavioral test that exercises the production seam, not the mocked seam"
+  - "trust-but-verify must pull at least one E2E curl through the real container before accepting verifier PASS for shipped HTTP features"
+
+deferred_pre_existing:
+  - ref: DEFER-001
+    file: modules/pathfinder/app/routes/foundry.py:110
+    fact: "get_profile NameError"
+    introduced_by: "Phase 35 commit ea7da29 (2026-04-26)"
+    failing_tests: "test_foundry.py::{test_roll_event_accepted, test_notify_dispatched, test_llm_fallback}"
+    status: tracked_in_deferred-items.md
+  - ref: DEFER-002
+    file: modules/pathfinder/tests/test_registration.py
+    fact: "test_registration_payload_has_16_routes stale — payload now has 29 routes"
+    rule: "Test-Rewrite Ban — operator decides whether to retire or update"
+    status: tracked_in_deferred-items.md
+
+infra_quirks:
+  - ref: INFRA-001
+    fact: "sentinel-core /modules/{name}/{path} proxy returns 405 for GET-with-query-string"
+    repro: "curl -G --data-urlencode 'user_id=X' http://localhost:8000/modules/pathfinder/player/state → 405; same hit direct on pf2e-module:8000 → 200"
+    impact_on_discord: "none — Discord adapter uses POST routes; only HTTP debug/curl affected"
+    status: out_of_scope_unfiled
+
+phase_38_queued:
+  ref: PHASE38
+  goal: "multi-step Discord onboarding dialog replacing one-shot pipe args"
+  driver: "37-CONTEXT.md line 129 unimplemented in Phase 37"
+  preserves: "v0.5 pipe-separated one-shot syntax (regression coverage required)"
+  next_action: "/gsd-spec-phase 38"
+  status: queued_in_ROADMAP
+
+dockerfile_dep_check_phase_37:
+  fact: "no new Python deps introduced in Phase 37"
+  imports: stdlib + fastapi + pydantic + yaml (all pre-existing)
+  dual_ship_required: false
+```
