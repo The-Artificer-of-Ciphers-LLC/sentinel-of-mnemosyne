@@ -224,6 +224,17 @@ phase_37_contract_drift:
     fix_commit: 8aee784
     lesson: "wave-7 unit tests passed because they injected their own resolver callable; only route-stack E2E exercised the real wrapper"
     status: fixed_in_phase
+  - ref: PHASE37-E
+    fact: "PlayerAskCommand posted {user_id, question} but PlayerAskRequest schema requires {user_id, text}; every live :pf player ask 422'd"
+    caught_by: "scripts/uat_phase37.py UAT-18 (adapter contract drift regression guard)"
+    why_missed_by_verifier: "same blind spot as PHASE37-A — adapter unit test mocked post_to_module without validating against the route's Pydantic model"
+    secondary_fix: "PlayerAskCommand response no longer fabricates question_id — route returns {ok, slug, path}, no id is generated; questions.md is a free-form append and the operator picks a question_id when canonizing"
+    status: fixed
+  - ref: PHASE37-F
+    fact: "shipped Phase 37 USER-GUIDE.md described 6 wrong example responses + wrong canonize signature ('<question_id> <green|red> [reason]' instead of '<outcome> <question_id> <rule_text>' with yellow/green/red)"
+    caught_by: "manual reconciliation against scripts/uat_phase37.py output"
+    lesson: "doc examples must be copy-pasted from real adapter output, not transcribed from intent; verifier should diff doc claims against UAT output"
+    status: fixed
 
 verifier_blind_spots:
   - "adapter→route contract drift invisible when adapter tests mock the HTTP boundary"
