@@ -243,15 +243,15 @@ doc_audit_findings:
     caught_by: "audit triggered by /technical-writer 'confirm all verbs and commands'"
     status: fixed
   - ref: DOC-002
-    fact: "README.md /sen subcommand table is correct but incomplete — 12 listed, ~25 shipped (missing :seed, :connect, :review, :graph, :learn, :remember, :note, :tasks, :stats, :vault-sweep, :inbox, plus all 10 :plugin:* commands)"
-    impact: "completeness, not correctness — every listed entry verified accurate"
+    fact: "README.md /sen subcommand table was correct but incomplete — 24 listed, ~35 shipped (missing :note, :inbox, :vault-sweep, plus 7 :plugin:* commands)"
     canonical: "interfaces/discord/command_router.py + bot.py _SUBCOMMAND_PROMPTS / _PLUGIN_PROMPTS"
-    status: noted_not_fixed (out of audit scope; expansion is a separate writing task)
+    fix: "USER-GUIDE.md now holds the canonical /sen subcommand reference (25 standard + 10 plugin verbs); README.md replaced with a 6-row Quick Reference + pointer to USER-GUIDE; single source of truth"
+    status: fixed
   - ref: DOC-003
-    fact: "USER-GUIDE.md only documents :pf player verbs; :pf rule/session/npc/foundry/cartosia/ingest noun namespaces ship without user-facing docs"
-    impact: "user-facing reference incomplete for non-player :pf verbs"
-    canonical_source: "interfaces/discord/pathfinder_dispatch.py COMMANDS dict"
-    status: noted_not_fixed (expansion task)
+    fact: "USER-GUIDE.md only documented :pf player verbs; :pf rule/session/npc/foundry/cartosia/ingest/harvest noun namespaces shipped without user-facing docs"
+    canonical_source: "interfaces/discord/pathfinder_dispatch.py COMMANDS dict + each pathfinder_*_adapter.py PathfinderResponse content strings"
+    fix: "USER-GUIDE.md now covers every shipped :pf <noun> <verb> with copy-pasted-from-source response examples (PHASE37-F discipline)"
+    status: fixed
 
 verifier_blind_spots:
   - "adapter→route contract drift invisible when adapter tests mock the HTTP boundary"
