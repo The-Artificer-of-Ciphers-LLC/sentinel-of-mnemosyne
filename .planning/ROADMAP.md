@@ -577,3 +577,19 @@ Plans:
 - [x] 37-12-PLAN.md — Wave 7 Foundry import route integration + projection flags + state-file in-place extension
 - [x] 37-13-PLAN.md — Wave 7 Discord adapter (pathfinder_player_adapter + dispatch + PF_NOUNS)
 - [x] 37-14-PLAN.md — Wave 8 integration tests (isolation regression + idempotency end-to-end) + USER-GUIDE + architecture map (also fixed routes/foundry resolver-shape bug from plan 37-12)
+
+### Phase 38: PF2E Multi-Step Onboarding Dialog
+**Goal:** `:pf player start` becomes a stateful conversational onboarding flow — the bot asks the player for their character name, preferred name, and style preset across multiple Discord messages, persisting transient progress until the profile is complete.
+**Depends on:** Phase 37
+**Requirements:** PVL-01 (extension — multi-step UX layer over existing `/player/onboard` route)
+**Background:** Phase 37 shipped `/player/onboard` as an atomic 4-field POST and `PlayerStartCommand` posting `{user_id}` only. Live `:pf player start` therefore 422'd until commit `2026-05-07` mitigation parsed pipe-separated args (`character_name | preferred_name | style_preset`). 37-CONTEXT.md line 129 originally specified: "until `profile.md` shows `onboarded: true` (frontmatter), `:pf player <verb>` other than `start`/`style` should redirect into onboarding completion." Phase 38 delivers that missing redirect.
+**Success Criteria** (what must be TRUE):
+  1. `:pf player start` with no args asks the player a question (e.g., "What is your character's name?") and persists transient state keyed by `(channel_id, user_id)`
+  2. The player's next message in the same channel is interpreted as the answer (not a new `:pf` command) until the dialog completes
+  3. After all three questions are answered, `/player/onboard` is called with the assembled payload and `profile.md` is created with `onboarded: true`
+  4. Mid-dialog `:pf player cancel` clears transient state without writing the profile
+  5. Mid-dialog reconnect (bot restart) recovers the in-flight dialog from the vault — transient state survives bot restart for at least 24h
+  6. Existing pipe-separated one-shot syntax from the v0.5 mitigation continues to work unchanged (regression coverage)
+  7. All new behavior covered by Wave 0 RED tests (TDD)
+**Status:** Planned (not yet started)
+**Plans:** TBD via /gsd-spec-phase 38
