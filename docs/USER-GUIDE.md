@@ -30,15 +30,37 @@ options before onboarding.
 
 ### `:pf player start`
 
-Begin onboarding. Prompts for character name, preferred name, and style
-preset; writes `players/{slug}/profile.md` with `onboarded: true` so the
-other verbs unlock.
+Onboard yourself. Provide your character name, preferred name, and style
+preset as **pipe-separated arguments**. Writes `players/{slug}/profile.md`
+with `onboarded: true` so the other verbs unlock.
+
+**Syntax:**
 
 ```
-:pf player start
-→ Walks through character_name / preferred_name / style_preset prompts.
-→ Writes profile.md and replies "onboarded: <preferred_name>".
+:pf player start <character_name> | <preferred_name> | <style_preset>
 ```
+
+**Example:**
+
+```
+:pf player start Kael Stormblade | Kael | Tactician
+→ Player onboarded as `Kael` (Tactician). Profile: `mnemosyne/pf2e/players/p-<hash>/profile.md`
+```
+
+**With no arguments**, the bot returns a usage hint listing valid style
+presets — it does **not** call the route or partially onboard you.
+
+**Valid style presets** (case-sensitive):
+
+- `Tactician` — concise, mechanics-first
+- `Lorekeeper` — setting-rich, context-heavy
+- `Cheerleader` — encouraging, positive framing
+- `Rules-Lawyer Lite` — RAW citations with brief reasoning
+
+> **Coming in Phase 38:** a stateful conversational dialog will replace the
+> one-shot pipe syntax — the bot will ask the three questions across
+> separate messages. The pipe-args form will continue to work for power
+> users who prefer a single command. See `.planning/ROADMAP.md` Phase 38.
 
 ### `:pf player note <text>`
 
@@ -126,18 +148,22 @@ timeout-based auto-resolution — every canonization is operator-driven.
 
 A typical first-session flow for a new player:
 
-1. Player runs `:pf player start` in any Discord channel where the
-   Pathfinder bot is present.
-2. Bot walks through three prompts (character_name, preferred_name,
-   style_preset). Replies with the path to the new profile.md.
-3. Player runs `:pf player style list` to preview options (this works even
-   if onboarding wasn't quite complete, since `list` is gate-exempt).
-4. Player begins capturing memory: `:pf player note ...`,
-   `:pf player npc ...`, `:pf player ask ...`.
-5. Operator (GM) periodically runs `:pf player canonize <q_id> green|red`
+1. (Optional) Run `:pf player style list` to preview the four style
+   presets. This works without onboarding because `list` is gate-exempt.
+2. Run `:pf player start <character_name> | <preferred_name> | <style_preset>`
+   in any Discord channel where the Pathfinder bot is present. The bot
+   replies with the path to the newly created `profile.md`.
+3. Begin capturing memory: `:pf player note ...`, `:pf player npc ...`,
+   `:pf player ask ...`.
+4. The operator (GM) periodically runs `:pf player canonize <q_id> green|red`
    to lock yellow questions into per-player canon.
-6. Across sessions, `:pf player recall <topic>` surfaces past notes ranked
+5. Across sessions, `:pf player recall <topic>` surfaces past notes ranked
    by keyword + recency.
+
+**Re-running `:pf player start`** is idempotent — it overwrites
+`profile.md` with the latest values. Use this to change your character
+name or preferred name. Use `:pf player style set <preset>` to change
+just the style preset without re-typing the other fields.
 
 ## Foundry Chat Memory Projection
 
@@ -160,6 +186,38 @@ Idempotency is per-record per-target — re-running a live import on the
 same inbox produces zero new writes (FCM-04). The dedupe state is stored
 in-place at `<inbox_dir>/.foundry_chat_import_state.json` with three
 arrays: `imported_keys`, `player_projection_keys`, `npc_projection_keys`.
+
+## Troubleshooting
+
+### `:pf player start` says "Usage:..."
+You called it with no arguments. Provide all three pipe-separated fields:
+
+```
+:pf player start <character_name> | <preferred_name> | <style_preset>
+```
+
+### `:pf player start` says "Invalid style preset"
+The preset is case-sensitive and must be one of: `Tactician`,
+`Lorekeeper`, `Cheerleader`, `Rules-Lawyer Lite`. Note the hyphen in
+"Rules-Lawyer Lite".
+
+### `:pf player note` (or any verb) says "onboard first"
+The onboarding gate is closed. Run `:pf player start ...` to write your
+profile. The orchestrator checks `players/{slug}/profile.md` for
+`onboarded: true` before any non-`start`/non-`style-list` verb.
+
+### Recall returns nothing
+`:pf player recall` only searches **your** namespace at
+`players/{slug}/*`, never the global vault. If you've never written a
+note, ask, npc record, or todo, recall has nothing to find. Empty query
+returns most-recent items; a query filters by keyword.
+
+### Two players seem to share an NPC note
+They don't. Each `:pf player npc <name> <note>` writes to
+`players/{slug}/npcs/{npc_slug}.md` — a per-player file. The global NPC
+note at `mnemosyne/pf2e/npcs/{npc_slug}.md` is owned by the GM
+(`:npc create` / `:npc update`) and is never written by `:pf player`
+verbs.
 
 ## See Also
 
