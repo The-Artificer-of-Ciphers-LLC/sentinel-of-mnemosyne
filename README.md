@@ -44,7 +44,7 @@ The design goal is maximum flexibility with a stable, narrow core API. You add a
 | Module | Purpose | Status |
 |---|---|---|
 | Core | Routing, context, Obsidian writes | Working (Sentinel Core v0.50) |
-| Pathfinder 2e DM | NPC management, dialogue, session notes, harvest, rules RAG, ingest | Working (Pathfinder module v1.0) |
+| Pathfinder 2e DM | NPC management, dialogue, session notes, harvest, rules RAG, ingest | Working (Pathfinder module v1.1) |
 | Music Lesson Tracker | Practice logs, chord ideas, progress | Planned v0.6 |
 | Coder Interface | AI-assisted module development (uses Pi harness) | Planned v0.7 |
 | Personal Finance | OFX import, spending analysis, budgets | Planned v0.8 |
@@ -140,7 +140,7 @@ docker compose -f docker-compose.ghcr.yml up -d
 ```
 
 For complete deployment details (env, validation, troubleshooting), see:
-- [Installation Guide (Sentinel Core v0.50 / Pathfinder module v1.0)](docs/INSTALLATION-v0.50.md)
+- [Installation Guide (Sentinel Core v0.50 / Pathfinder module v1.1)](docs/INSTALLATION-v0.50.md)
 - [Core Architecture](docs/ARCHITECTURE-Core.md)
 
 **6. Verify containers are healthy**
@@ -250,7 +250,7 @@ sentinel-of-mnemosyne/
 ├── interfaces/
 │   ├── discord/                # Discord bot (/sen command)
 │   └── messages/               # Apple Messages bridge (Mac-native component)
-├── modules/                    # Module containers (Pathfinder module currently v1.0)
+├── modules/                    # Module containers (Pathfinder module currently v1.1)
 ├── skills/                     # Skill files for module dispatch
 ├── secrets/                    # Secret files (gitignored — one file per secret)
 ├── security/                   # Security tooling
@@ -287,7 +287,7 @@ Non-secret configuration lives in `.env`. See `.env.example` for the full list w
 
 ## Documentation
 
-- [Installation Guide (Sentinel Core v0.50 / Pathfinder module v1.0)](docs/INSTALLATION-v0.50.md) — operator setup and validation
+- [Installation Guide (Sentinel Core v0.50 / Pathfinder module v1.1)](docs/INSTALLATION-v0.50.md) — operator setup and validation
 - [Product Requirements Document](docs/PRD-Sentinel-of-Mnemosyne.md) — vision, modules, milestones
 - [Core Architecture](docs/ARCHITECTURE-Core.md) — technical decisions, API specs, Docker layout
 - [Contributing Guide](CONTRIBUTING.md) — how to build modules and interfaces
@@ -297,7 +297,7 @@ Non-secret configuration lives in `.env`. See `.env.example` for the full list w
 
 ## Status
 
-This repo currently ships **Sentinel Core v0.50** and **Pathfinder module v1.0**.
+This repo currently ships **Sentinel Core v0.50** and **Pathfinder module v1.1**.
 
 Module versions are independent from Sentinel Core versions.
 

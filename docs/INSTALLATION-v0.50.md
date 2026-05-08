@@ -1,4 +1,8 @@
-# Sentinel Installation Guide (v0.50)
+# Sentinel Installation Guide (Sentinel Core v0.50 / Pathfinder module v1.1)
+
+## Versioning note
+- Sentinel Core and Sentinel modules version independently.
+- Current shipped baseline: Sentinel Core `v0.50`, Pathfinder module `v1.1`.
 
 ## 1) Prerequisites
 - Docker Desktop with Compose v2
