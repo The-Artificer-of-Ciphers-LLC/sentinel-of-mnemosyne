@@ -19,19 +19,55 @@ from pathfinder_types import (
 )
 
 
+_VALID_STYLE_PRESETS = ("Tactician", "Lorekeeper", "Cheerleader", "Rules-Lawyer Lite")
+_USAGE = (
+    "Usage: `:pf player start <character_name> | <preferred_name> | <style_preset>`\n"
+    "Style presets: " + ", ".join(f"`{p}`" for p in _VALID_STYLE_PRESETS) + ".\n"
+    "Multi-step onboarding dialog tracked under Phase 38."
+)
+
+
 class PlayerStartCommand(PathfinderCommand):
-    """Handle ``:pf player start`` — onboard a player and create their vault profile."""
+    """Handle ``:pf player start`` — onboard a player and create their vault profile.
+
+    Until Phase 38 ships the multi-step dialog, this verb takes pipe-separated
+    args: ``character_name | preferred_name | style_preset``. With no args it
+    returns a usage message instead of letting the route 422.
+    """
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
         user_id = str(request.user_id)
-        payload = {"user_id": user_id}
+        rest = (request.rest or "").strip()
+        if not rest:
+            return PathfinderResponse(kind="text", content=_USAGE)
+
+        parts = [p.strip() for p in rest.split("|")]
+        if len(parts) != 3 or not all(parts):
+            return PathfinderResponse(kind="text", content=_USAGE)
+
+        character_name, preferred_name, style_preset = parts
+        if style_preset not in _VALID_STYLE_PRESETS:
+            return PathfinderResponse(
+                kind="text",
+                content=(
+                    f"Invalid style preset `{style_preset}`. Valid: "
+                    + ", ".join(f"`{p}`" for p in _VALID_STYLE_PRESETS)
+                ),
+            )
+
+        payload = {
+            "user_id": user_id,
+            "character_name": character_name,
+            "preferred_name": preferred_name,
+            "style_preset": style_preset,
+        }
         result = await request.sentinel_client.post_to_module(
             "modules/pathfinder/player/onboard", payload, request.http_client
         )
         path = result.get("path", "?")
         return PathfinderResponse(
             kind="text",
-            content=f"Player onboarded. Profile: `{path}`",
+            content=f"Player onboarded as `{preferred_name}` ({style_preset}). Profile: `{path}`",
         )
 
 

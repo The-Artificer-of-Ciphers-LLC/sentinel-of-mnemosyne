@@ -22,7 +22,25 @@ from pathfinder_types import PathfinderRequest
 # --- :pf player start -------------------------------------------------------
 
 
-async def test_player_start_posts_to_onboard_route():
+async def test_player_start_with_empty_rest_returns_usage_no_post():
+    """Empty rest must not 422 the route — return usage hint instead (Phase 38 stop-gap)."""
+    from pathfinder_player_adapter import PlayerStartCommand
+
+    cmd = PlayerStartCommand()
+    client = AsyncMock()
+    client.post_to_module = AsyncMock()
+    request = PathfinderRequest(
+        noun="player", verb="start", rest="", user_id="u1", sentinel_client=client
+    )
+    response = await cmd.handle(request)
+    assert client.post_to_module.await_count == 0
+    assert response.kind == "text"
+    assert "Usage" in response.content
+    assert "character_name" in response.content
+
+
+async def test_player_start_with_args_posts_full_onboard_payload():
+    """Pipe-separated args satisfy the /player/onboard Pydantic contract."""
     from pathfinder_player_adapter import PlayerStartCommand
 
     cmd = PlayerStartCommand()
@@ -33,7 +51,7 @@ async def test_player_start_posts_to_onboard_route():
     request = PathfinderRequest(
         noun="player",
         verb="start",
-        rest="",
+        rest="Kael Stormblade | Kael | Tactician",
         user_id="u1",
         sentinel_client=client,
     )
@@ -44,6 +62,28 @@ async def test_player_start_posts_to_onboard_route():
     payload = args[1]
     assert payload["user_id"] == "u1"
     assert isinstance(payload["user_id"], str)
+    assert payload["character_name"] == "Kael Stormblade"
+    assert payload["preferred_name"] == "Kael"
+    assert payload["style_preset"] == "Tactician"
+
+
+async def test_player_start_rejects_invalid_style_preset():
+    from pathfinder_player_adapter import PlayerStartCommand
+
+    cmd = PlayerStartCommand()
+    client = AsyncMock()
+    client.post_to_module = AsyncMock()
+    request = PathfinderRequest(
+        noun="player",
+        verb="start",
+        rest="Kael | Kael | Bard-Mode",
+        user_id="u1",
+        sentinel_client=client,
+    )
+    response = await cmd.handle(request)
+    assert client.post_to_module.await_count == 0
+    assert response.kind == "text"
+    assert "Invalid style preset" in response.content
 
 
 # --- :pf player note --------------------------------------------------------
