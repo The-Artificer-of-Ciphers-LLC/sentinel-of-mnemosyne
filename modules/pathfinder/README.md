@@ -122,7 +122,7 @@ see `app/main.py:REGISTRATION_PAYLOAD` for the complete list.
 | POST | `/player/npc` | Per-player NPC knowledge |
 | POST | `/player/todo` | Append to `todo.md` |
 | POST | `/player/recall` | Deterministic keyword + recency recall |
-| POST | `/player/canonize` | Yellow → green/red rule outcome with provenance |
+| POST | `/player/canonize` | Record yellow/green/red rule outcome with operator-chosen `question_id` provenance |
 | POST | `/player/style` | Set / list style preset |
 | GET  | `/player/state` | Read profile state (orchestrator gate / debug) |
 

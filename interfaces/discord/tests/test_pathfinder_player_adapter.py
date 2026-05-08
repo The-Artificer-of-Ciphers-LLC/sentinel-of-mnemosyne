@@ -134,11 +134,16 @@ async def test_player_note_empty_returns_usage():
 
 
 async def test_player_ask_payload_shape():
+    """Adapter must send `text`, not `question` — the route's PlayerAskRequest
+    schema was aligned to `text` per plan-37-08 SUMMARY (RED-test-driven).
+    Adapter shipped sending `question` and 422'd live; UAT-18 caught it."""
     from pathfinder_player_adapter import PlayerAskCommand
 
     cmd = PlayerAskCommand()
     client = AsyncMock()
-    client.post_to_module = AsyncMock(return_value={"question_id": "q-1"})
+    client.post_to_module = AsyncMock(
+        return_value={"ok": True, "slug": "p-x", "path": "mnemosyne/pf2e/players/p-x/questions.md"}
+    )
     request = PathfinderRequest(
         noun="player",
         verb="ask",
@@ -146,12 +151,17 @@ async def test_player_ask_payload_shape():
         user_id="u1",
         sentinel_client=client,
     )
-    await cmd.handle(request)
+    response = await cmd.handle(request)
     args = client.post_to_module.call_args[0]
     assert args[0] == "modules/pathfinder/player/ask"
     payload = args[1]
     assert payload["user_id"] == "u1"
-    assert payload["question"] == "What rule applies to vital strike?"
+    assert payload["text"] == "What rule applies to vital strike?"
+    assert "question" not in payload  # explicit regression guard
+    # Response references the vault path, not a fabricated question_id.
+    assert response.kind == "text"
+    assert "questions.md" in response.content
+    assert "id: `?`" not in response.content
 
 
 # --- :pf player npc <name> <note> -------------------------------------------

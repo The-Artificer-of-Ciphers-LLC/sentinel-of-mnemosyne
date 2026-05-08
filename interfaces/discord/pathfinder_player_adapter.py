@@ -96,20 +96,26 @@ class PlayerAskCommand(PathfinderCommand):
     """Handle ``:pf player ask <question>`` — log a question for the GM."""
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
-        question = request.rest.strip()
-        if not question:
+        text = request.rest.strip()
+        if not text:
             return PathfinderResponse(
                 kind="text", content="Usage: `:pf player ask <question>`"
             )
         user_id = str(request.user_id)
-        payload = {"user_id": user_id, "question": question}
+        # Route's PlayerAskRequest schema requires `text` (not `question`) — see
+        # plan-37-08 SUMMARY: the route was aligned to the RED test's `text`
+        # field, but this adapter shipped sending `question` and 422'd live.
+        payload = {"user_id": user_id, "text": text}
         result = await request.sentinel_client.post_to_module(
             "modules/pathfinder/player/ask", payload, request.http_client
         )
-        question_id = result.get("question_id", "?")
+        # Route returns {ok, slug, path} — no question_id is generated; the
+        # questions.md append is a free-form line. Operator finds the entry
+        # in the vault to canonize it later.
+        path = result.get("path", "?")
         return PathfinderResponse(
             kind="text",
-            content=f"Question logged (id: `{question_id}`). The GM will see it.",
+            content=f"Question logged at `{path}`. The GM can canonize it via `:pf player canonize`.",
         )
 
 

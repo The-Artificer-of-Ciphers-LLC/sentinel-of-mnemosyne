@@ -69,7 +69,7 @@ Sentinel does not summarize or react.
 
 ```
 :pf player note Found a hidden door behind the tapestry.
-→ "noted."
+→ Note recorded for player. Inbox: `mnemosyne/pf2e/players/<slug>/inbox.md`
 ```
 
 ### `:pf player ask <question>`
@@ -78,20 +78,24 @@ Queue a rules or lore question for later canonization. v1 contract:
 **store-only — no LLM call**. The question persists in `questions.md` until
 the operator runs `:pf player canonize` against it.
 
+The route does **not** generate a question_id. The operator picks an id
+when canonizing — typically a short slug they invent (e.g. `q-sneak-grab`).
+
 ```
 :pf player ask Does Sneak Attack work on grabbed targets?
-→ "queued (question_id=q-1710000000)"
+→ Question logged at `mnemosyne/pf2e/players/<slug>/questions.md`. The GM can canonize it via `:pf player canonize`.
 ```
 
 ### `:pf player npc <npc_name> <note>`
 
 Record per-player NPC knowledge. The note lands at
 `players/{slug}/npcs/{npc_slug}.md` and is **never** mixed with the global
-`mnemosyne/pf2e/npcs/{npc_slug}.md` note (PVL-07 isolation).
+`mnemosyne/pf2e/npcs/{npc_slug}.md` note (PVL-07 isolation). The first
+whitespace-bounded token is the NPC name; everything after is the note.
 
 ```
-:pf player npc "Varek" Allied — owes me a favor from the dragon hunt.
-→ "noted at players/<slug>/npcs/varek.md"
+:pf player npc Varek Allied — owes me a favor from the dragon hunt.
+→ Personal note on **Varek** recorded. Path: `mnemosyne/pf2e/players/<slug>/npcs/varek.md`
 ```
 
 Two players writing different notes about the same NPC produce two distinct
@@ -101,11 +105,14 @@ files; neither sees the other's view.
 
 Deterministic keyword + recency recall over the player's own namespace. v1:
 no LLM, no embeddings — keyword count + recency-weighted scoring. Empty
-query returns most-recent notes.
+query returns most-recent notes; a query filters to keyword matches.
 
 ```
 :pf player recall dragon
-→ Returns up to 10 ranked snippets from players/<slug>/* with score + path.
+→ Recall (3 hits):
+  - Found a hidden door behind the tapestry.
+  - Allied — owes me a favor from the dragon hunt.
+  - ...
 ```
 
 ### `:pf player todo <text>`
@@ -114,35 +121,52 @@ Append a todo line to `players/{slug}/todo.md`.
 
 ```
 :pf player todo Buy alchemist's fire before next session.
-→ "todo added."
+→ Todo recorded. Path: `mnemosyne/pf2e/players/<slug>/todo.md`
 ```
 
 ### `:pf player style [list | set <preset>]`
 
 Manage the per-player style preset that influences how the assistant
-phrases responses (Tactician / Lorekeeper / Cheerleader / Rules-Lawyer
-Lite). `list` is read-only and exempt from the onboarding gate; `set`
-requires onboarding.
+phrases responses. `list` is read-only and exempt from the onboarding
+gate; `set` requires onboarding.
 
 ```
 :pf player style list
-→ "Tactician, Lorekeeper, Cheerleader, Rules-Lawyer Lite"
+→ Available style presets:
+  - Cheerleader
+  - Lorekeeper
+  - Rules-Lawyer Lite
+  - Tactician
 
 :pf player style set Lorekeeper
-→ "style set: Lorekeeper"
+→ Style preset set to **Lorekeeper**.
 ```
 
-### `:pf player canonize <question_id> <green|red> [reason]`
+The `set` form persists `style_preset` into `players/{slug}/profile.md`
+frontmatter via GET-then-PUT (preserves the rest of the profile).
 
-Operator-authorized 8th verb (added 2026-05-06). Records a yellow→green or
-yellow→red rule outcome in `players/{slug}/canonization.md` with provenance
-back to the originating `question_id` from `:pf player ask`. v1: NO
-timeout-based auto-resolution — every canonization is operator-driven.
+### `:pf player canonize <outcome> <question_id> <rule_text>`
+
+Operator-authorized verb that records a rule outcome in
+`players/{slug}/canonization.md` with provenance back to a
+question. v1: every canonization is operator-driven (no
+timeout-based auto-resolution).
+
+**Argument order:** `<outcome>` first, then `<question_id>`, then the
+free-form `<rule_text>` (which may contain spaces).
+
+**Valid outcomes:** `yellow`, `green`, `red` (lowercase, exact). Use
+`yellow` to mark a question as still ambiguous, `green` for a confirmed
+ruling, `red` for an explicit disallow.
 
 ```
-:pf player canonize q-1710000000 green Sneak Attack triggers on grabbed targets per RAW.
-→ "canonized: q-1710000000 → green"
+:pf player canonize green q-sneak-grab Sneak Attack triggers on grabbed targets per RAW.
+→ Ruling canonized (green). Path: `mnemosyne/pf2e/players/<slug>/canonization.md`
 ```
+
+The `question_id` is operator-chosen — there is no auto-generated id from
+`:pf player ask`. Pick a short, unique slug that you'll recognize when
+reviewing `canonization.md` later.
 
 ## Onboarding Flow
 
