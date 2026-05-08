@@ -163,7 +163,7 @@ The Sentinel of Mnemosyne is a self-hosted, containerized AI assistant platform.
 docker compose up
 
 # Start core + Discord interface + Pathfinder module
-./sentinel.sh --discord --pathfinder up -d
+./sentinel.sh --discord --pf2e up -d
 ```
 
 `sentinel.sh` builds the compose invocation from flags. The `include` directive resolves paths relative to each included file's directory — no `-f` flag stacking.
@@ -657,7 +657,7 @@ ARGS=()
 for arg in "$@"; do
   case "$arg" in
     --discord)    PROFILES+=("discord") ;;
-    --pathfinder) PROFILES+=("pathfinder") ;;
+    --pf2e)       PROFILES+=("pf2e") ;;
     --music)      PROFILES+=("music") ;;
     --finance)    PROFILES+=("finance") ;;
     --pi)         PROFILES+=("pi") ;;
@@ -674,7 +674,7 @@ docker compose "${PROFILE_FLAGS[@]}" "${ARGS[@]}"
 
 # Usage:
 # ./sentinel.sh --discord up -d
-# ./sentinel.sh --discord --pathfinder up -d
+# ./sentinel.sh --discord --pf2e up -d
 # ./sentinel.sh --pi up -d          # activate Pi harness (v0.7 scope)
 # ./sentinel.sh down
 ```
@@ -757,12 +757,12 @@ Goal: Deliver a module under the Path B contract.
 
 **Step 3 — Compose integration**
 - Add `modules/pathfinder/docker-compose.yml`
-- Add `--pathfinder` case to `sentinel.sh`
+- Add `--pf2e` case to `sentinel.sh` (the docker-profile name `pf2e` is shorter and matches the compose file's `profiles: ["pf2e"]`; the module's logical registry name `pathfinder` is independent — see CLAUDE.md "D-12: Docker profile != module registry name")
 
 **Step 4 — Verify proxy**
 - `POST /modules/pathfinder/npcs` via sentinel-core → proxied to pathfinder container
 
-**Phase complete:** `./sentinel.sh --discord --pathfinder up -d` starts the full stack.
+**Phase complete:** `./sentinel.sh --discord --pf2e up -d` starts the full stack.
 
 ---
 

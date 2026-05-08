@@ -43,8 +43,8 @@ The design goal is maximum flexibility with a stable, narrow core API. You add a
 
 | Module | Purpose | Status |
 |---|---|---|
-| Core | Routing, context, Obsidian writes | Working (v0.50) |
-| Pathfinder 2e DM | NPC management, dialogue, session notes, harvest, rules RAG, ingest | Working (v0.50) |
+| Core | Routing, context, Obsidian writes | Working (Sentinel Core v0.50) |
+| Pathfinder 2e DM | NPC management, dialogue, session notes, harvest, rules RAG, ingest | Working (Pathfinder module v1.0) |
 | Music Lesson Tracker | Practice logs, chord ideas, progress | Planned v0.6 |
 | Coder Interface | AI-assisted module development (uses Pi harness) | Planned v0.7 |
 | Personal Finance | OFX import, spending analysis, budgets | Planned v0.8 |
@@ -140,7 +140,7 @@ docker compose -f docker-compose.ghcr.yml up -d
 ```
 
 For complete deployment details (env, validation, troubleshooting), see:
-- [Installation Guide (v0.50)](docs/INSTALLATION-v0.50.md)
+- [Installation Guide (Sentinel Core v0.50 / Pathfinder module v1.0)](docs/INSTALLATION-v0.50.md)
 - [Core Architecture](docs/ARCHITECTURE-Core.md)
 
 **6. Verify containers are healthy**
@@ -164,7 +164,7 @@ docker compose -f docker-compose.ghcr.yml logs -f sentinel-core
 Flags:
   --discord      Start Discord bot interface
   --pi           Start Pi harness (optional coding tool)
-  --pathfinder   Start Pathfinder 2e DM module (v0.50, shipped)
+  --pf2e         Start Pathfinder 2e DM module (v0.5, shipped)
   --music        Start Music Lesson Tracker module (v0.6, planned)
   --finance      Start Personal Finance module (v0.8, planned)
   --trader       Start Stock Trader module (v0.9, planned)
@@ -173,7 +173,7 @@ Flags:
 Examples:
   ./sentinel.sh up -d                          # Core only
   ./sentinel.sh --discord up -d                # Core + Discord
-  ./sentinel.sh --discord --pathfinder up -d   # Core + Discord + Pathfinder
+  ./sentinel.sh --discord --pf2e up -d   # Core + Discord + Pathfinder
   ./sentinel.sh down                           # Stop all services
 ```
 
@@ -197,7 +197,7 @@ See `interfaces/discord/` for setup details.
 Each module ships as a Docker Compose override file. To add a module:
 
 ```bash
-./sentinel.sh --discord --pathfinder up -d
+./sentinel.sh --discord --pf2e up -d
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build your own module.
@@ -258,7 +258,7 @@ sentinel-of-mnemosyne/
 ├── interfaces/
 │   ├── discord/                # Discord bot (/sen command)
 │   └── messages/               # Apple Messages bridge (Mac-native component)
-├── modules/                    # Module containers (Pathfinder shipped in v0.50)
+├── modules/                    # Module containers (Pathfinder module currently v1.0)
 ├── skills/                     # Skill files for module dispatch
 ├── secrets/                    # Secret files (gitignored — one file per secret)
 ├── security/                   # Security tooling
@@ -295,7 +295,7 @@ Non-secret configuration lives in `.env`. See `.env.example` for the full list w
 
 ## Documentation
 
-- [Installation Guide (v0.50)](docs/INSTALLATION-v0.50.md) — operator setup and validation
+- [Installation Guide (Sentinel Core v0.50 / Pathfinder module v1.0)](docs/INSTALLATION-v0.50.md) — operator setup and validation
 - [Product Requirements Document](docs/PRD-Sentinel-of-Mnemosyne.md) — vision, modules, milestones
 - [Core Architecture](docs/ARCHITECTURE-Core.md) — technical decisions, API specs, Docker layout
 - [Contributing Guide](CONTRIBUTING.md) — how to build modules and interfaces
@@ -305,7 +305,9 @@ Non-secret configuration lives in `.env`. See `.env.example` for the full list w
 
 ## Status
 
-This project is at **v0.50**.
+This repo currently ships **Sentinel Core v0.50** and **Pathfinder module v1.0**.
+
+Module versions are independent from Sentinel Core versions.
 
 Shipped and validated:
 - Sentinel Core route/context/startup reliability improvements
