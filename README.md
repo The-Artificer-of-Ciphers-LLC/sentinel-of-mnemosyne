@@ -206,38 +206,30 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to build your own module.
 
 ## Discord Commands
 
-The bot responds to `/sen <message>` in allowed channels.
+The bot responds to `/sen <message>` in allowed channels. Each
+invocation creates a public thread; replies inside the thread continue
+the conversation. Subcommands are prefixed with `:` inside the thread.
 
-To use a subcommand, prefix your message with `:`:
+**Quick reference** — most common verbs:
 
 | Command | What it does |
 |---|---|
-| `/sen :help` | List all subcommands |
-| `/sen :capture <text>` | Capture text to Obsidian inbox |
-| `/sen :next` | What to work on next based on your goals |
-| `/sen :health` | Vault health check |
-| `/sen :goals` | Show current active goals |
-| `/sen :reminders` | Show current time-bound reminders |
-| `/sen :ralph` | Batch process inbox queue |
-| `/sen :pipeline` | Run full 6 Rs processing pipeline |
-| `/sen :reweave` | Backward pass to update older notes |
-| `/sen :check` | Validate schema compliance |
-| `/sen :rethink` | Review observations and tensions |
-| `/sen :refactor` | Suggest vault restructuring |
-| `/sen :tasks` | Show task queue |
-| `/sen :stats` | Vault metrics |
-| `/sen :graph` | Graph analysis |
-| `/sen :learn <topic>` | Research a topic and capture to vault |
-| `/sen :remember <observation>` | Capture a methodology observation |
-| `/sen :revisit <note>` | Revisit and update a note |
-| `/sen :connect <note>` | Find connections for a note |
-| `/sen :review <note>` | Verify note quality |
-| `/sen :seed <content>` | Drop raw content into inbox/ |
-| `/sen :plugin:help` | List plugin commands |
-| `/sen :plugin:health` | Plugin health check |
-| `/sen :plugin:architect` | Architecture review |
+| `/sen <message>` | Free-form chat with the Sentinel |
+| `/sen :help` | List all subcommands grouped by category |
+| `/sen :capture <text>` | Capture an insight to `inbox/` for processing |
+| `/sen :next` | What should I work on next? |
+| `/sen :stats` | Vault metrics (note count, orphans, link density) |
+| `/sen :pf <noun> <verb> ...` | Pathfinder 2e module — see USER-GUIDE |
 
-Any reply in a Sentinel thread also triggers the AI — no slash command needed.
+**Full reference** — every shipped verb, every example response,
+including the Pathfinder 2e module's eight noun namespaces (`npc`,
+`harvest`, `rule`, `session`, `ingest`, `cartosia`, `foundry`,
+`player`):
+
+→ [docs/USER-GUIDE.md](docs/USER-GUIDE.md)
+
+Any reply in a Sentinel thread also triggers the AI — no slash command
+needed.
 
 ---
 
