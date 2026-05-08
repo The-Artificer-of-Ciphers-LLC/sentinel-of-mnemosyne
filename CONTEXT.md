@@ -236,6 +236,23 @@ phase_37_contract_drift:
     lesson: "doc examples must be copy-pasted from real adapter output, not transcribed from intent; verifier should diff doc claims against UAT output"
     status: fixed
 
+doc_audit_findings:
+  - ref: DOC-001
+    fact: "README.md (3x) + ARCHITECTURE-Core.md (5x) prescribed --pathfinder flag, but shipped sentinel.sh only recognises --pf2e; new-user install instructions silently broke at the up step"
+    canonical: "docker profile name = pf2e (compose.yml), module registry name = pathfinder (REGISTRATION_PAYLOAD); intentional split per CLAUDE.md D-12"
+    caught_by: "audit triggered by /technical-writer 'confirm all verbs and commands'"
+    status: fixed
+  - ref: DOC-002
+    fact: "README.md /sen subcommand table is correct but incomplete — 12 listed, ~25 shipped (missing :seed, :connect, :review, :graph, :learn, :remember, :note, :tasks, :stats, :vault-sweep, :inbox, plus all 10 :plugin:* commands)"
+    impact: "completeness, not correctness — every listed entry verified accurate"
+    canonical: "interfaces/discord/command_router.py + bot.py _SUBCOMMAND_PROMPTS / _PLUGIN_PROMPTS"
+    status: noted_not_fixed (out of audit scope; expansion is a separate writing task)
+  - ref: DOC-003
+    fact: "USER-GUIDE.md only documents :pf player verbs; :pf rule/session/npc/foundry/cartosia/ingest noun namespaces ship without user-facing docs"
+    impact: "user-facing reference incomplete for non-player :pf verbs"
+    canonical_source: "interfaces/discord/pathfinder_dispatch.py COMMANDS dict"
+    status: noted_not_fixed (expansion task)
+
 verifier_blind_spots:
   - "adapter→route contract drift invisible when adapter tests mock the HTTP boundary"
   - "verifier PASS requires goal-backward trace from success criterion to behavioral test that exercises the production seam, not the mocked seam"
