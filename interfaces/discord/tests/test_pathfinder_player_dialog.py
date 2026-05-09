@@ -170,3 +170,164 @@ async def test_delete_draft_calls_http_delete():
     call = http.delete.call_args
     url = call.args[0] if call.args else call.kwargs.get("url", "")
     assert url.endswith("/vault/mnemosyne/pf2e/players/_drafts/42-u-1.md")
+
+
+# ---------------------------------------------------------------------------
+# Task 2: start_dialog + resume_dialog (SPEC Req 1, 7)
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_thread(thread_id: int = 999) -> MagicMock:
+    """Build a Discord Thread stand-in: .id, .send (AsyncMock), .edit (AsyncMock)."""
+    fake = MagicMock()
+    fake.id = thread_id
+    fake.send = AsyncMock()
+    fake.edit = AsyncMock()
+    return fake
+
+
+async def test_start_dialog_creates_public_thread(monkeypatch):
+    """start_dialog creates a PUBLIC thread, PUTs initial draft, posts char-name prompt."""
+    import bot as bot_module
+    import discord
+
+    from pathfinder_player_dialog import start_dialog, QUESTIONS
+
+    fake_thread = _make_fake_thread(thread_id=999)
+    invoking_channel = MagicMock()
+    invoking_channel.create_thread = AsyncMock(return_value=fake_thread)
+
+    http = AsyncMock()
+    http.put = AsyncMock(return_value=_fake_resp(200, ""))
+
+    monkeypatch.setattr(bot_module, "_persist_thread_id", AsyncMock())
+    bot_module.SENTINEL_THREAD_IDS.discard(999)
+
+    try:
+        result = await start_dialog(
+            invoking_channel=invoking_channel,
+            user_id="u-1",
+            message_author_display_name="alice",
+            http_client=http,
+        )
+
+        assert invoking_channel.create_thread.await_count == 1
+        kwargs = invoking_channel.create_thread.call_args.kwargs
+        assert "Onboarding" in kwargs["name"]
+        assert "alice" in kwargs["name"]
+        assert kwargs["type"] == discord.ChannelType.public_thread  # Pitfall 1
+        assert kwargs["auto_archive_duration"] == 60
+
+        assert http.put.await_count == 1
+        put_call = http.put.call_args
+        url = put_call.args[0] if put_call.args else put_call.kwargs.get("url", "")
+        assert url.endswith("/_drafts/999-u-1.md")
+        body = (put_call.args[1] if len(put_call.args) >= 2
+                else put_call.kwargs.get("data") or put_call.kwargs.get("content"))
+        body_str = body.decode() if isinstance(body, bytes) else body
+        assert "step: character_name" in body_str
+
+        assert fake_thread.send.await_count == 1
+        sent = fake_thread.send.call_args
+        sent_text = sent.args[0] if sent.args else sent.kwargs.get("content", "")
+        assert sent_text == QUESTIONS["character_name"]
+
+        assert result is fake_thread
+    finally:
+        bot_module.SENTINEL_THREAD_IDS.discard(999)
+
+
+async def test_start_dialog_thread_name_truncated_to_100_chars(monkeypatch):
+    """Discord caps thread names at 100 chars — start_dialog must truncate."""
+    import bot as bot_module
+
+    from pathfinder_player_dialog import start_dialog
+
+    fake_thread = _make_fake_thread(thread_id=1001)
+    invoking_channel = MagicMock()
+    invoking_channel.create_thread = AsyncMock(return_value=fake_thread)
+    http = AsyncMock()
+    http.put = AsyncMock(return_value=_fake_resp(200, ""))
+
+    monkeypatch.setattr(bot_module, "_persist_thread_id", AsyncMock())
+    bot_module.SENTINEL_THREAD_IDS.discard(1001)
+    try:
+        await start_dialog(
+            invoking_channel=invoking_channel,
+            user_id="u-1",
+            message_author_display_name="x" * 200,
+            http_client=http,
+        )
+        kwargs = invoking_channel.create_thread.call_args.kwargs
+        assert len(kwargs["name"]) <= 100
+    finally:
+        bot_module.SENTINEL_THREAD_IDS.discard(1001)
+
+
+async def test_start_dialog_registers_thread_id_in_sentinel_set(monkeypatch):
+    """Newly-created onboarding thread MUST be added to SENTINEL_THREAD_IDS (D-11 inverse)."""
+    import bot as bot_module
+
+    from pathfinder_player_dialog import start_dialog
+
+    fake_thread = _make_fake_thread(thread_id=4242)
+    invoking_channel = MagicMock()
+    invoking_channel.create_thread = AsyncMock(return_value=fake_thread)
+    http = AsyncMock()
+    http.put = AsyncMock(return_value=_fake_resp(200, ""))
+
+    monkeypatch.setattr(bot_module, "_persist_thread_id", AsyncMock())
+    bot_module.SENTINEL_THREAD_IDS.discard(4242)
+    try:
+        await start_dialog(
+            invoking_channel=invoking_channel,
+            user_id="u-1",
+            message_author_display_name="alice",
+            http_client=http,
+        )
+        assert 4242 in bot_module.SENTINEL_THREAD_IDS
+    finally:
+        bot_module.SENTINEL_THREAD_IDS.discard(4242)
+
+
+async def test_resume_dialog_reposts_current_step():
+    """resume_dialog re-posts QUESTIONS for the draft's CURRENT step (Req 7)."""
+    from pathfinder_player_dialog import resume_dialog, QUESTIONS
+
+    body = _fake_draft_body(
+        step="preferred_name",
+        thread_id=42,
+        user_id="u-1",
+        character_name="Kaela",
+    )
+    http = AsyncMock()
+    http.get = AsyncMock(return_value=_fake_resp(200, body))
+    fake_thread = _make_fake_thread(thread_id=42)
+
+    result = await resume_dialog(thread=fake_thread, user_id="u-1", http_client=http)
+
+    assert fake_thread.send.await_count == 1
+    sent = fake_thread.send.call_args
+    sent_text = sent.args[0] if sent.args else sent.kwargs.get("content", "")
+    assert sent_text == QUESTIONS["preferred_name"]
+    assert QUESTIONS["preferred_name"] in result
+
+
+async def test_resume_dialog_does_not_reset_existing_answers():
+    """resume_dialog MUST NOT mutate the draft (Req 7 acceptance)."""
+    from pathfinder_player_dialog import resume_dialog
+
+    body = _fake_draft_body(
+        step="preferred_name",
+        thread_id=42,
+        user_id="u-1",
+        character_name="Kaela",
+    )
+    http = AsyncMock()
+    http.get = AsyncMock(return_value=_fake_resp(200, body))
+    http.put = AsyncMock(return_value=_fake_resp(200, ""))
+    fake_thread = _make_fake_thread(thread_id=42)
+
+    await resume_dialog(thread=fake_thread, user_id="u-1", http_client=http)
+
+    assert http.put.await_count == 0
