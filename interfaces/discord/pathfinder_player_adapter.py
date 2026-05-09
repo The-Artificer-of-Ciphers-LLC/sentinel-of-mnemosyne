@@ -143,6 +143,9 @@ class PlayerNoteCommand(PathfinderCommand):
     """Handle ``:pf player note <text>`` — append a free-form note to the player's inbox."""
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
+        rejection = await reject_if_draft_open(request)
+        if rejection is not None:
+            return rejection
         text = request.rest.strip()
         if not text:
             return PathfinderResponse(
@@ -164,6 +167,9 @@ class PlayerAskCommand(PathfinderCommand):
     """Handle ``:pf player ask <question>`` — log a question for the GM."""
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
+        rejection = await reject_if_draft_open(request)
+        if rejection is not None:
+            return rejection
         text = request.rest.strip()
         if not text:
             return PathfinderResponse(
@@ -191,6 +197,9 @@ class PlayerNpcCommand(PathfinderCommand):
     """Handle ``:pf player npc <npc_name> <note>`` — record a personal NPC note."""
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
+        rejection = await reject_if_draft_open(request)
+        if rejection is not None:
+            return rejection
         rest = request.rest.strip()
         if not rest:
             return PathfinderResponse(
@@ -219,6 +228,9 @@ class PlayerRecallCommand(PathfinderCommand):
     """Handle ``:pf player recall [query]`` — fetch personal recall snippets."""
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
+        rejection = await reject_if_draft_open(request)
+        if rejection is not None:
+            return rejection
         query = request.rest.strip()
         user_id = str(request.user_id)
         payload = {"user_id": user_id, "query": query}
@@ -245,6 +257,9 @@ class PlayerTodoCommand(PathfinderCommand):
     """Handle ``:pf player todo <text>`` — add an item to the player's todo list."""
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
+        rejection = await reject_if_draft_open(request)
+        if rejection is not None:
+            return rejection
         text = request.rest.strip()
         if not text:
             return PathfinderResponse(
@@ -269,6 +284,9 @@ class PlayerStyleCommand(PathfinderCommand):
     """
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
+        rejection = await reject_if_draft_open(request)
+        if rejection is not None:
+            return rejection
         rest = request.rest.strip()
         user_id = str(request.user_id)
 
@@ -401,6 +419,38 @@ async def _list_user_draft_thread_ids(user_id: str, *, http_client) -> list[int]
     return out
 
 
+async def reject_if_draft_open(request: PathfinderRequest) -> PathfinderResponse | None:
+    """Phase 38 mid-dialog guard. See SPEC Req 5, D-05/D-07/D-08.
+
+    GET ``/vault/mnemosyne/pf2e/players/_drafts/`` ; filter for
+    ``*-{user_id}.md`` ; if any matches, return a rejection ``PathfinderResponse``
+    listing every active dialog thread link via Discord ``<#thread_id>`` mention
+    syntax.
+
+    Returns ``None`` if no draft exists for this user — caller proceeds with
+    normal flow. Returns ``None`` on 404 (drafts dir absent — RESEARCH §Pitfall 4).
+    """
+    user_id = str(request.user_id)
+    thread_ids = await _list_user_draft_thread_ids(
+        user_id, http_client=request.http_client
+    )
+    if not thread_ids:
+        return None
+    links = ", ".join(f"<#{tid}>" for tid in thread_ids)
+    if len(thread_ids) == 1:
+        text = (
+            f"You have an onboarding dialog open in {links}. "
+            f"Reply there to continue, or run `:pf player cancel` to abort."
+        )
+    else:
+        text = (
+            f"You have onboarding dialogs open in {links}. "
+            f"Reply in one of those threads to continue, or run "
+            f"`:pf player cancel` from inside the thread you want to abort."
+        )
+    return PathfinderResponse(kind="text", content=text)
+
+
 class PlayerCancelCommand(PathfinderCommand):
     """Handle ``:pf player cancel`` — abort an in-flight onboarding dialog.
 
@@ -480,6 +530,9 @@ class PlayerCanonizeCommand(PathfinderCommand):
     """Handle ``:pf player canonize <outcome> <question_id> <rule_text>`` — promote a ruling."""
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
+        rejection = await reject_if_draft_open(request)
+        if rejection is not None:
+            return rejection
         rest = request.rest.strip()
         if not rest:
             return PathfinderResponse(
