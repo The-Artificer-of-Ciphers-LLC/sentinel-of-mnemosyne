@@ -163,6 +163,7 @@ from pathfinder_session_adapter import (  # noqa: E402, F401
 )
 from pathfinder_player_adapter import (  # noqa: E402, F401
     PlayerAskCommand,
+    PlayerCancelCommand,
     PlayerCanonizeCommand,
     PlayerNoteCommand,
     PlayerNpcCommand,
@@ -218,3 +219,4 @@ COMMANDS["player"]["recall"] = PlayerRecallCommand()
 COMMANDS["player"]["todo"] = PlayerTodoCommand()
 COMMANDS["player"]["style"] = PlayerStyleCommand()
 COMMANDS["player"]["canonize"] = PlayerCanonizeCommand()
+COMMANDS["player"]["cancel"] = PlayerCancelCommand()

@@ -311,6 +311,171 @@ class PlayerStyleCommand(PathfinderCommand):
         )
 
 
+_DRAFT_DIR_REL = "mnemosyne/pf2e/players/_drafts"
+
+
+def _vault_drafts_listing_url() -> str:
+    """Vault URL for the ``_drafts/`` directory listing.
+
+    Matches the URL convention in ``pathfinder_player_dialog._vault_url`` —
+    OBSIDIAN_API_URL or its default, ``/vault/``, then the relative path with
+    a trailing slash so the Local REST API returns a directory listing.
+    """
+    import os
+    base = os.environ.get(
+        "OBSIDIAN_API_URL", "http://host.docker.internal:27123"
+    ).rstrip("/")
+    return f"{base}/vault/{_DRAFT_DIR_REL}/"
+
+
+def _vault_drafts_headers() -> dict:
+    """Bearer-key headers, mirroring ``pathfinder_player_dialog._vault_headers``."""
+    import os
+    try:
+        from bot import _read_secret
+        key = _read_secret("obsidian_api_key", os.environ.get("OBSIDIAN_API_KEY", ""))
+    except Exception:
+        key = os.environ.get("OBSIDIAN_API_KEY", "")
+    return {"Authorization": f"Bearer {key}"}
+
+
+def _parse_draft_filenames(payload) -> list[str]:
+    """Extract filenames from the drafts-listing response.
+
+    Honours the dual-shape contract (RESEARCH §Pitfall 5): the Local REST API
+    returns either a list of filenames or ``{"files": [{"path": "..."}]}``.
+    """
+    if isinstance(payload, list):
+        return [str(p) for p in payload if isinstance(p, str)]
+    if isinstance(payload, dict):
+        files = payload.get("files")
+        if isinstance(files, list):
+            out: list[str] = []
+            for entry in files:
+                if isinstance(entry, dict):
+                    p = entry.get("path") or entry.get("name")
+                    if isinstance(p, str):
+                        out.append(p)
+                elif isinstance(entry, str):
+                    out.append(entry)
+            return out
+    return []
+
+
+async def _list_user_draft_thread_ids(user_id: str, *, http_client) -> list[int]:
+    """List thread_ids for every in-flight draft owned by ``user_id``.
+
+    GETs ``_drafts/`` (404-tolerant per RESEARCH §Pitfall 4), parses both the
+    array and object shapes (Pitfall 5), filters to ``*-{user_id}.md``, and
+    returns the parsed thread_id ints in the order they appeared.
+    """
+    try:
+        resp = await http_client.get(
+            _vault_drafts_listing_url(),
+            headers=_vault_drafts_headers(),
+            timeout=10.0,
+        )
+    except Exception:
+        return []
+    status = getattr(resp, "status_code", 200)
+    if status == 404:
+        return []
+    if status >= 400:
+        return []
+    try:
+        body = resp.json()
+    except Exception:
+        return []
+    filenames = _parse_draft_filenames(body)
+    suffix = f"-{user_id}.md"
+    out: list[int] = []
+    for name in filenames:
+        # Strip any leading directory components — the listing may include
+        # full paths (object-shape) or bare filenames (array-shape).
+        leaf = name.rsplit("/", 1)[-1]
+        if not leaf.endswith(suffix):
+            continue
+        head = leaf[: -len(suffix)]
+        if head.isdigit():
+            out.append(int(head))
+    return out
+
+
+class PlayerCancelCommand(PathfinderCommand):
+    """Handle ``:pf player cancel`` — abort an in-flight onboarding dialog.
+
+    Phase 38, SPEC Requirement 6, D-10, D-16, D-17.
+
+    From inside the dialog thread: cancel that thread directly.
+    From any other channel: cancel ALL of the user's in-flight dialogs (D-17
+    symmetry — NO "pick one" branch). Per-thread failures aggregate; the loop
+    never aborts.
+    """
+
+    async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
+        import discord
+
+        import pathfinder_player_dialog as ppd
+
+        user_id = str(request.user_id)
+        channel = request.channel
+
+        if _is_real_thread(channel):
+            text = await ppd.cancel_dialog(
+                thread=channel, user_id=user_id, http_client=request.http_client
+            )
+            return PathfinderResponse(kind="text", content=text)
+
+        # Cancel from a non-thread channel — D-17 symmetry: archive ALL drafts.
+        thread_ids = await _list_user_draft_thread_ids(
+            user_id, http_client=request.http_client
+        )
+        if not thread_ids:
+            return PathfinderResponse(
+                kind="text", content="No onboarding dialog in progress."
+            )
+
+        # Resolve the bot singleton lazily — importing at module scope creates a
+        # circular dep (bot imports pathfinder_dispatch which imports this module).
+        from bot import bot as discord_bot
+
+        failures: list[int] = []
+        for tid in thread_ids:
+            thread = discord_bot.get_channel(tid)
+            if thread is None:
+                # Orphan draft — clean up the file directly.
+                try:
+                    delete_draft = getattr(ppd, "delete_draft", None)
+                    if delete_draft is not None:
+                        await delete_draft(
+                            tid, user_id, http_client=request.http_client
+                        )
+                except Exception:
+                    pass
+                failures.append(tid)
+                continue
+            try:
+                await ppd.cancel_dialog(
+                    thread=thread,
+                    user_id=user_id,
+                    http_client=request.http_client,
+                )
+            except discord.HTTPException:
+                failures.append(tid)
+            except Exception:
+                failures.append(tid)
+
+        n = len(thread_ids)
+        if n == 1:
+            base = "Cancelled the onboarding dialog."
+        else:
+            base = f"Cancelled {n} onboarding dialogs."
+        if failures:
+            links = ", ".join(f"<#{tid}>" for tid in failures)
+            base += f" (Note: archive failed for {links} — drafts cleaned up.)"
+        return PathfinderResponse(kind="text", content=base)
+
+
 class PlayerCanonizeCommand(PathfinderCommand):
     """Handle ``:pf player canonize <outcome> <question_id> <rule_text>`` — promote a ruling."""
 
