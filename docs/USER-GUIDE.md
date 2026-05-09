@@ -515,25 +515,10 @@ options before onboarding.
 
 #### `:pf player start`
 
-Onboard yourself. Provide your character name, preferred name, and style
-preset as **pipe-separated arguments**. Writes `players/{slug}/profile.md`
+Onboard yourself. The default flow is a multi-step conversational dialog
+hosted in a Discord thread; a one-shot pipe-syntax form is preserved for
+power users and scripting. Both paths write `players/{slug}/profile.md`
 with `onboarded: true` so the other verbs unlock.
-
-**Syntax:**
-
-```
-:pf player start <character_name> | <preferred_name> | <style_preset>
-```
-
-**Example:**
-
-```
-:pf player start Kael Stormblade | Kael | Tactician
-→ Player onboarded as `Kael` (Tactician). Profile: `mnemosyne/pf2e/players/p-<hash>/profile.md`
-```
-
-**With no arguments**, the bot returns a usage hint listing valid style
-presets — it does **not** call the route or partially onboard you.
 
 **Valid style presets** (case-sensitive):
 
@@ -542,10 +527,79 @@ presets — it does **not** call the route or partially onboard you.
 - `Cheerleader` — encouraging, positive framing
 - `Rules-Lawyer Lite` — RAW citations with brief reasoning
 
-> **Coming in Phase 38:** a stateful conversational dialog will replace the
-> one-shot pipe syntax — the bot will ask the three questions across
-> separate messages. The pipe-args form will continue to work for power
-> users who prefer a single command. See `.planning/ROADMAP.md` Phase 38.
+##### Multi-Step Onboarding Dialog
+
+Running `:pf player start` with **no arguments** opens a private-feeling
+onboarding thread and walks you through three questions. Reply in plain
+text inside the thread — the bot does not invoke the AI on your replies,
+each one is consumed as the answer to the current step.
+
+**Flow:**
+
+```
+:pf player start
+→ (bot creates a thread named "Onboarding — <your display name>")
+→ What is your character's name?
+
+  Kael Stormblade
+→ How would you like me to address you?
+
+  Kael
+→ Pick a style: Tactician, Lorekeeper, Cheerleader, Rules-Lawyer Lite
+
+  Tactician
+→ Player onboarded as `Kael` (Tactician). Profile: `mnemosyne/pf2e/players/<slug>/profile.md`
+   (the thread is then archived)
+```
+
+**Restart safety.** The draft persists in the vault at
+`mnemosyne/pf2e/players/_drafts/{thread_id}-{user_id}.md` until you
+complete or cancel. If the bot restarts mid-dialog, your prior answers
+are preserved and the next reply continues where you left off. Re-issuing
+`:pf player start` inside the same thread re-asks the current step rather
+than restarting from the top.
+
+**Mid-dialog command rejection.** While you have an open dialog, other
+`:pf player <verb>` commands (`note`, `ask`, `npc`, `recall`, `todo`,
+`style`, `canonize`) are blocked and the bot replies with a link back to
+your open thread. Finish the dialog or run `:pf player cancel` to abort.
+
+##### One-Shot Pipe Syntax (alternative)
+
+For scripted onboarding or operator setup, the pipe-separated form skips
+the dialog entirely and onboards in a single message:
+
+```
+:pf player start <character_name> | <preferred_name> | <style_preset>
+```
+
+Example:
+
+```
+:pf player start Kael Stormblade | Kael | Tactician
+→ Player onboarded as `Kael` (Tactician). Profile: `mnemosyne/pf2e/players/p-<hash>/profile.md`
+```
+
+This path does **not** create a thread and does **not** write a draft —
+it calls `/player/onboard` directly with the four-field payload. It
+remains supported indefinitely.
+
+#### `:pf player cancel`
+
+Abort an open onboarding dialog. Deletes the draft file from the vault,
+posts a cancel acknowledgement, and archives the dialog thread.
+
+```
+:pf player cancel
+→ Cancelled the onboarding dialog.
+```
+
+- With **no draft** in progress: the bot replies `No onboarding dialog in progress.`
+- With **one draft**: cancels and archives that thread (you may run cancel
+  from inside the dialog thread or from any other channel).
+- With **multiple drafts** (parallel onboarding in different threads): all
+  drafts are cancelled and all corresponding threads archived; the reply
+  reads `Cancelled N onboarding dialogs.`
 
 #### `:pf player note <text>`
 
