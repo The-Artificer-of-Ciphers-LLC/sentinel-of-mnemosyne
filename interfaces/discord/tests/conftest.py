@@ -160,6 +160,18 @@ _repo_root = os.path.join(os.path.dirname(__file__), "..", "..", "..")
 sys.path.insert(0, os.path.abspath(_repo_root))
 
 
+# Pre-import pathfinder_player_dialog so test_dialog_router's stub helper picks
+# up the REAL module instead of registering an empty ModuleType (which would
+# pollute sys.modules and break test_pathfinder_player_dialog when collected
+# alphabetically after test_dialog_router). Phase 38-05 collection-order fix.
+try:  # noqa: SIM105 — keep import-error path explicit for diagnostics
+    import pathfinder_player_dialog  # noqa: F401
+except Exception:
+    # If the real module fails to import (e.g. during early phases), let the
+    # test that triggers it surface the real error rather than masking here.
+    pass
+
+
 OBSIDIAN_BASE_URL = os.environ.get("OBSIDIAN_BASE_URL", "http://host.docker.internal:27124")
 OBSIDIAN_API_KEY = os.environ.get("OBSIDIAN_API_KEY", "")
 

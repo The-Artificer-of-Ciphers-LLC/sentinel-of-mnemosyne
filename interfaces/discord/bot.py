@@ -489,16 +489,22 @@ async def _route_message(
     attachments: list | None = None,
     channel=None,
 ) -> "str | dict":
-    return await discord_router_bridge.route_message(
-        user_id=user_id,
-        message=message,
-        attachments=attachments,
-        channel=channel,
-        command_router=command_router,
-        handle_subcommand=handle_sentask_subcommand,
-        call_core=_call_core,
-        subcommand_help=SUBCOMMAND_HELP,
-    )
+    # Phase 38 D-01: route through the bridge with sentinel_client + a fresh
+    # httpx.AsyncClient so the dialog_router pre-gate can run. on_message body
+    # remains untouched (D-04); only this call site gains additive kwargs.
+    async with httpx.AsyncClient() as http_client:
+        return await discord_router_bridge.route_message(
+            user_id=user_id,
+            message=message,
+            attachments=attachments,
+            channel=channel,
+            command_router=command_router,
+            handle_subcommand=handle_sentask_subcommand,
+            call_core=_call_core,
+            subcommand_help=SUBCOMMAND_HELP,
+            sentinel_client=_sentinel_client,
+            http_client=http_client,
+        )
 
 
 async def handle_sentask_subcommand(
