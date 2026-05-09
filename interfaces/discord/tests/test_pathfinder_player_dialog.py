@@ -713,3 +713,73 @@ async def test_cancel_dialog_archive_swallows_http_exception():
         assert "cancelled" in result.lower()
     finally:
         bot_module.SENTINEL_THREAD_IDS.discard(88)
+
+
+async def test_start_dialog_from_inside_thread_hoists_to_parent_channel(monkeypatch):
+    """Regression: invoking :pf player start from inside a Sentinel thread must create
+    the onboarding thread off the parent text channel, not the invoking thread.
+
+    Discord rejects thread-on-thread creation with `'Thread' object has no attribute
+    'create_thread'` (or AttributeError on the public API). The user's normal Sentinel
+    chat lives in a thread, so this is the dominant flow.
+    """
+    import bot as bot_module
+    import discord
+
+    from pathfinder_player_dialog import start_dialog
+
+    fake_thread = _make_fake_thread(thread_id=777)
+
+    # Parent text channel exposes create_thread; invoking channel is a Thread.
+    parent_channel = MagicMock()
+    parent_channel.create_thread = AsyncMock(return_value=fake_thread)
+
+    invoking_thread = MagicMock(spec=discord.Thread)
+    invoking_thread.parent = parent_channel
+    # If the bug regresses, the test will fail because invoking_thread has no create_thread.
+
+    http = AsyncMock()
+    http.put = AsyncMock(return_value=_fake_resp(200, ""))
+
+    monkeypatch.setattr(bot_module, "_persist_thread_id", AsyncMock())
+    bot_module.SENTINEL_THREAD_IDS.discard(777)
+
+    try:
+        result = await start_dialog(
+            invoking_channel=invoking_thread,
+            user_id="u-1",
+            http_client=http,
+            display_name="CrankyOldNerd",
+        )
+        # Onboarding thread was created off the PARENT, not the invoking thread.
+        assert parent_channel.create_thread.await_count == 1
+        assert result is fake_thread
+        assert 777 in bot_module.SENTINEL_THREAD_IDS
+    finally:
+        bot_module.SENTINEL_THREAD_IDS.discard(777)
+
+
+async def test_start_dialog_from_thread_with_no_parent_raises(monkeypatch):
+    """Edge: orphan thread (parent is None — DM or deleted channel) must raise rather
+    than silently fall through to the broken `Thread.create_thread` path."""
+    import bot as bot_module
+    import discord
+
+    from pathfinder_player_dialog import start_dialog
+
+    invoking_thread = MagicMock(spec=discord.Thread)
+    invoking_thread.parent = None
+
+    http = AsyncMock()
+    monkeypatch.setattr(bot_module, "_persist_thread_id", AsyncMock())
+
+    try:
+        await start_dialog(
+            invoking_channel=invoking_thread,
+            user_id="u-1",
+            http_client=http,
+            display_name="Test",
+        )
+        raise AssertionError("expected RuntimeError on parentless thread")
+    except RuntimeError as exc:
+        assert "parent" in str(exc).lower()

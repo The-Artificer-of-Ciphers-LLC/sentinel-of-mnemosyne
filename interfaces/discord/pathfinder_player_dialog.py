@@ -175,11 +175,29 @@ async def start_dialog(
             "start_dialog requires either message_author_display_name or display_name"
         )
     name = f"Onboarding — {effective_name}"[:100]
-    thread = await invoking_channel.create_thread(
-        name=name,
-        type=discord.ChannelType.public_thread,
-        auto_archive_duration=60,
-    )
+    # Discord threads cannot host child threads. discord.Thread doesn't expose
+    # create_thread at all — calling it raises AttributeError. When the user runs
+    # `:pf player start` from inside an existing Sentinel chat thread (the dominant
+    # flow), hoist the onboarding thread onto the parent text channel so it remains
+    # a sibling, not a child. We duck-type via AttributeError because the test
+    # conftest stubs discord.Thread = object, which makes isinstance() useless.
+    try:
+        thread = await invoking_channel.create_thread(
+            name=name,
+            type=discord.ChannelType.public_thread,
+            auto_archive_duration=60,
+        )
+    except AttributeError:
+        parent = getattr(invoking_channel, "parent", None)
+        if parent is None:
+            raise RuntimeError(
+                "Cannot create onboarding thread: invoking thread has no parent channel"
+            )
+        thread = await parent.create_thread(
+            name=name,
+            type=discord.ChannelType.public_thread,
+            auto_archive_duration=60,
+        )
     # Register the new thread so on_message routes through Sentinel (D-11 inverse).
     from bot import SENTINEL_THREAD_IDS, _persist_thread_id
 
