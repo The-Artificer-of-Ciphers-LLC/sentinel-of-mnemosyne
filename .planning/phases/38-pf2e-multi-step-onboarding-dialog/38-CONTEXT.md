@@ -73,6 +73,15 @@ Downstream agents MUST read `38-SPEC.md` before planning or implementing. Requir
 - **D-15:** `pathfinder_player_adapter.py` keeps the existing pipe-syntax `PlayerStartCommand` for one-shot use AND gains a new no-args branch that calls into `pathfinder_player_dialog.start_dialog(...)` to create the thread + draft. The adapter file remains the single registration surface for `:pf player start`.
 - **D-16:** New `PlayerCancelCommand` lives in `pathfinder_player_adapter.py` next to `PlayerStartCommand` and is registered in `pathfinder_dispatch.py` alongside the other verbs.
 
+### Multi-Draft Cancel Symmetry (added 2026-05-09 from checker C1)
+- **D-17:** `:pf player cancel` issued from a non-dialog channel with N drafts archives ALL N threads symmetrically — there is no "pick one" branch and no asking the user to disambiguate. The adapter:
+  1. Lists `_drafts/` and filters to `*-{user_id}.md` to enumerate every thread_id with an in-flight draft for this user.
+  2. Iterates sequentially over each thread_id: calls `pathfinder_player_dialog.cancel_dialog(thread=bot.get_channel(tid), user_id=..., http_client=...)` which deletes the draft file, calls `Thread.edit(archived=True)`, and discards the id from `SENTINEL_THREAD_IDS`.
+  3. Aggregates per-thread failures (e.g. `discord.HTTPException` on archive of one thread, `bot.get_channel` returning `None`) into a list — failure of any single archive does NOT abort the loop. Drafts with unreachable threads still get the draft file deleted (vault-side cleanup).
+  4. Replies with a single text response: `Cancelled the onboarding dialog.` for N=1, or `Cancelled N onboarding dialogs.` for N>1. If any thread failed to archive cleanly, append a diagnostic line listing the affected `<#thread_id>` mentions.
+
+  This preserves the locked "list-everything" / "no surprises" symmetry of D-08 (multi-draft rejection lists every link) and the D-10 invariant that cancel from outside the dialog thread is allowed.
+
 ### Claude's Discretion
 - Draft frontmatter field order and YAML formatting style (preserve readability — match existing player vault file style)
 - Exact wording of the rejection message and the cancel-acknowledgement message (must contain the required information per D-07/D-10, but phrasing is open)
@@ -99,8 +108,12 @@ Downstream agents MUST read `38-SPEC.md` before planning or implementing. Requir
 
 ### Player adapter & onboarding route
 - `interfaces/discord/pathfinder_player_adapter.py:22` — `_VALID_STYLE_PRESETS` tuple (reuse for validation)
-- `interfaces/discord/pathfinder_player_adapter.py:30-71` — Existing `PlayerStartCommand` pipe-syntax path (preserve for regression)
+- `interfaces/discord/pathfinder_player_adapter.py:23-27` — `_USAGE` constant (the existing usage-string tuple — preserve byte-for-byte; the no-args branch wraps it for the legacy fallback path only when the operator explicitly invokes pipe syntax incorrectly)
+- `interfaces/discord/pathfinder_player_adapter.py:30-71` — Existing `PlayerStartCommand` pipe-syntax path (preserve byte-for-byte for regression)
+- `interfaces/discord/pathfinder_dispatch.py:111-126` — `PathfinderRequest` construction site (new `author_display_name` field plumbed in here)
 - `interfaces/discord/pathfinder_dispatch.py:168-211` — Verb registration surface for `start`/`cancel`
+- `interfaces/discord/bot.py:536` — `async def _persist_thread_id(thread_id: int) -> None` (reuse pattern for vault writes)
+- `interfaces/discord/bot.py:708` — `bot = SentinelBot()` singleton (used by `PlayerCancelCommand` for `bot.get_channel(thread_id)` resolution)
 - `modules/pathfinder/` — `/player/onboard` route (do NOT modify; reuse unchanged)
 - `mnemosyne/pf2e/players/{slug}/profile.md` — Output artifact format (Phase 37)
 
@@ -120,7 +133,8 @@ Downstream agents MUST read `38-SPEC.md` before planning or implementing. Requir
 - `_VALID_STYLE_PRESETS` (pathfinder_player_adapter.py:22) — tuple of valid style strings; reuse in dialog validation
 - `PathfinderCommand` / `PathfinderRequest` / `PathfinderResponse` (pathfinder_types) — existing command-class hierarchy; `PlayerCancelCommand` slots in
 - `request.sentinel_client.post_to_module(...)` — async POST to module routes; reuse for `/player/onboard` call on completion
-- `SENTINEL_THREAD_IDS` set + `_persist_thread_id` (bot.py) — thread tracking + persistence infrastructure already exists for new dialog threads
+- `SENTINEL_THREAD_IDS` set + `_persist_thread_id` (bot.py:536) — thread tracking + persistence infrastructure already exists for new dialog threads
+- `bot` singleton (bot.py:708) — used by `PlayerCancelCommand` for `bot.get_channel(thread_id)` resolution when cancel is issued from a non-thread channel
 - Existing pipe-syntax `PlayerStartCommand.handle()` — pattern for assembling the four-field payload; the dialog completion path produces the same payload
 
 ### Established Patterns
@@ -144,6 +158,7 @@ Downstream agents MUST read `38-SPEC.md` before planning or implementing. Requir
 - Question wording (D-13) is the operator's preferred phrasing — ship it as-is.
 - Rejection message must include the active dialog thread link via Discord `<#thread_id>` mention so the player can click through.
 - Multi-draft handling (D-08) was an emergent constraint from the "yes, parallel dialogs allowed" decision in SPEC — surface every thread, not the first.
+- Multi-draft cancel symmetry (D-17) is the cancel-side mirror of D-08: when N drafts exist, cancel ALL N rather than asking the user to pick one.
 
 </specifics>
 
@@ -162,3 +177,4 @@ Downstream agents MUST read `38-SPEC.md` before planning or implementing. Requir
 
 *Phase: 38-pf2e-multi-step-onboarding-dialog*
 *Context gathered: 2026-05-08*
+*D-17 appended 2026-05-09 from checker feedback C1*
