@@ -254,11 +254,10 @@ async def test_acceptance_02_thread_reply_updates_draft_no_ai(monkeypatch):
     assert "step: preferred_name" in body
     assert "character_name: Kaela" in body
 
-    # Thread received the next prompt.
-    assert fake_thread.send.await_count == 1
-    sent = fake_thread.send.call_args
-    sent_text = sent.args[0] if sent.args else sent.kwargs.get("content", "")
-    assert sent_text == QUESTIONS["preferred_name"]
+    # Bridge returns the next prompt as text. bot.py's response_renderer is
+    # responsible for posting it to the channel — consume_as_answer must NOT
+    # post directly (in-module thread.send would double-post; UAT G-03).
+    assert fake_thread.send.await_count == 0
     assert result == QUESTIONS["preferred_name"]
 
 
@@ -588,11 +587,12 @@ async def test_acceptance_08_start_with_draft_in_thread_resumes_no_reset(monkeyp
     )
     response = await PlayerStartCommand().handle(request)
 
-    # Resume re-posts the CURRENT step's prompt — preferred_name, not character_name.
-    assert channel.send.await_count == 1
-    sent = channel.send.call_args
-    sent_text = sent.args[0] if sent.args else sent.kwargs.get("content", "")
-    assert sent_text == QUESTIONS["preferred_name"]
+    # Resume returns the CURRENT step's prompt — preferred_name, not character_name.
+    # resume_dialog must NOT post directly; bot.py's response_renderer sends
+    # the returned text (UAT G-03 — in-module thread.send would double-post).
+    assert channel.send.await_count == 0
+    assert response.kind == "text"
+    assert response.content == QUESTIONS["preferred_name"]
 
     # Draft NOT mutated: byte-stable, no new PUTs.
     assert vault._files == snapshot_before

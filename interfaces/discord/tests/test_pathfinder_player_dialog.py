@@ -306,11 +306,10 @@ async def test_resume_dialog_reposts_current_step():
 
     result = await resume_dialog(thread=fake_thread, user_id="u-1", http_client=http)
 
-    assert fake_thread.send.await_count == 1
-    sent = fake_thread.send.call_args
-    sent_text = sent.args[0] if sent.args else sent.kwargs.get("content", "")
-    assert sent_text == QUESTIONS["preferred_name"]
-    assert QUESTIONS["preferred_name"] in result
+    # resume_dialog must NOT post directly — bot's response_renderer sends the
+    # returned text. In-module thread.send would double-post (UAT G-03).
+    assert fake_thread.send.await_count == 0
+    assert result == QUESTIONS["preferred_name"]
 
 
 async def test_resume_dialog_does_not_reset_existing_answers():
@@ -374,7 +373,7 @@ async def test_consume_as_answer_first_step_advances_to_preferred_name():
     fake_thread = _make_fake_thread(thread_id=42)
     sentinel_client = _make_sentinel_client()
 
-    await consume_as_answer(
+    result = await consume_as_answer(
         thread=fake_thread,
         user_id="u-1",
         message_text="Kaela",
@@ -387,10 +386,10 @@ async def test_consume_as_answer_first_step_advances_to_preferred_name():
     assert "step: preferred_name" in body_str
     assert "character_name: Kaela" in body_str
 
-    assert fake_thread.send.await_count == 1
-    sent = fake_thread.send.call_args
-    sent_text = sent.args[0] if sent.args else sent.kwargs.get("content", "")
-    assert sent_text == QUESTIONS["preferred_name"]
+    # consume_as_answer must NOT post directly — bot.py's response_renderer
+    # sends the returned text. In-module thread.send would double-post (UAT G-03).
+    assert fake_thread.send.await_count == 0
+    assert result == QUESTIONS["preferred_name"]
 
     assert sentinel_client.post_to_module.await_count == 0
 
@@ -412,7 +411,7 @@ async def test_consume_as_answer_second_step_advances_to_style_preset():
     fake_thread = _make_fake_thread(thread_id=42)
     sentinel_client = _make_sentinel_client()
 
-    await consume_as_answer(
+    result = await consume_as_answer(
         thread=fake_thread,
         user_id="u-1",
         message_text="Kae",
@@ -425,9 +424,9 @@ async def test_consume_as_answer_second_step_advances_to_style_preset():
     assert "preferred_name: Kae" in body_str
     assert "step: style_preset" in body_str
 
-    sent = fake_thread.send.call_args
-    sent_text = sent.args[0] if sent.args else sent.kwargs.get("content", "")
-    assert sent_text == QUESTIONS["style_preset"]
+    # No in-module send (UAT G-03); bot's response_renderer handles posting.
+    assert fake_thread.send.await_count == 0
+    assert result == QUESTIONS["style_preset"]
 
     assert sentinel_client.post_to_module.await_count == 0
 
@@ -542,7 +541,7 @@ async def test_consume_as_answer_invalid_style_preset_reasks():
     fake_thread = _make_fake_thread(thread_id=42)
     sentinel_client = _make_sentinel_client()
 
-    await consume_as_answer(
+    result = await consume_as_answer(
         thread=fake_thread,
         user_id="u-1",
         message_text="Wizard",
@@ -553,11 +552,10 @@ async def test_consume_as_answer_invalid_style_preset_reasks():
     assert sentinel_client.post_to_module.await_count == 0
     assert http.put.await_count == 0
 
-    assert fake_thread.send.await_count == 1
-    sent = fake_thread.send.call_args
-    sent_text = sent.args[0] if sent.args else sent.kwargs.get("content", "")
+    # No in-module send (UAT G-03); bot's response_renderer handles posting.
+    assert fake_thread.send.await_count == 0
     for preset in ("Tactician", "Lorekeeper", "Cheerleader", "Rules-Lawyer Lite"):
-        assert preset in sent_text
+        assert preset in result
 
 
 async def test_consume_as_answer_archive_swallows_already_archived():

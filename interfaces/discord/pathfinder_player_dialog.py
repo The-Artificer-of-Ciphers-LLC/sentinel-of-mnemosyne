@@ -219,16 +219,17 @@ async def start_dialog(
 
 
 async def resume_dialog(*, thread, user_id: str, http_client) -> str:
-    """Re-post the prompt for the draft's CURRENT step. Does NOT mutate the draft."""
+    """Return the prompt for the draft's CURRENT step. Does NOT mutate the draft.
+
+    The caller (bot.py on_message via response_renderer) is responsible for
+    posting the returned text to the thread. Sending here would double-post.
+    """
     draft = await load_draft(thread.id, str(user_id), http_client=http_client)
     if draft is None:
         # Defensive: caller pre-checks; if we got here, restart at step 0 without persisting.
-        await thread.send(QUESTIONS[STEPS[0]])
         return QUESTIONS[STEPS[0]]
     step = draft.get("step", STEPS[0])
-    question = QUESTIONS.get(step, QUESTIONS[STEPS[0]])
-    await thread.send(question)
-    return question
+    return QUESTIONS.get(step, QUESTIONS[STEPS[0]])
 
 
 # --- Step advancement / completion / cancel ---
@@ -264,7 +265,12 @@ async def consume_as_answer(
     sentinel_client,
     http_client,
 ) -> str:
-    """Advance the dialog one step. On final step, POST /player/onboard + cleanup."""
+    """Advance the dialog one step. On final step, POST /player/onboard + cleanup.
+
+    Returns the response text. The caller (bot.py on_message via
+    response_renderer) is responsible for posting it to the thread —
+    sending here would double-post (UAT G-03).
+    """
     draft = await load_draft(thread.id, str(user_id), http_client=http_client)
     if draft is None:
         # Defensive — caller (dialog_router) pre-checks. Safety net: do nothing.
@@ -275,28 +281,22 @@ async def consume_as_answer(
     if step == "style_preset":
         normalised = _normalise_style_preset(answer)
         if normalised is None:
-            msg = (
+            return (
                 f"`{answer}` isn't a valid style. Please choose one of: "
                 + ", ".join(_VALID_STYLE_PRESETS)
                 + "."
             )
-            await thread.send(msg)
-            return msg
         draft["style_preset"] = normalised
     elif step in ("character_name", "preferred_name"):
         if not answer:
-            msg = QUESTIONS[step]
-            await thread.send(msg)
-            return msg
+            return QUESTIONS[step]
         draft[step] = answer
 
     idx = STEPS.index(step)
     if idx + 1 < len(STEPS):
         draft["step"] = STEPS[idx + 1]
         await save_draft(thread.id, str(user_id), draft, http_client=http_client)
-        next_q = QUESTIONS[STEPS[idx + 1]]
-        await thread.send(next_q)
-        return next_q
+        return QUESTIONS[STEPS[idx + 1]]
 
     # Final step — POST to /player/onboard with the four-field payload.
     payload = {
@@ -310,13 +310,11 @@ async def consume_as_answer(
     )
     path = result.get("path", "?") if isinstance(result, dict) else "?"
     await delete_draft(thread.id, str(user_id), http_client=http_client)
-    success = (
+    await _archive_and_discard(thread)
+    return (
         f"Player onboarded as `{draft['preferred_name']}` "
         f"({draft['style_preset']}). Profile: `{path}`"
     )
-    await thread.send(success)
-    await _archive_and_discard(thread)
-    return success
 
 
 async def cancel_dialog(*, thread, user_id: str, http_client) -> str:
