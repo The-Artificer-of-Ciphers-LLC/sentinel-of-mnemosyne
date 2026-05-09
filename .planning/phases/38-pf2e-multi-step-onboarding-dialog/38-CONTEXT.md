@@ -184,3 +184,87 @@ Downstream agents MUST read `38-SPEC.md` before planning or implementing. Requir
 *Phase: 38-pf2e-multi-step-onboarding-dialog*
 *Context gathered: 2026-05-08*
 *D-17 appended 2026-05-09 from checker feedback C1*
+
+---
+
+## Architecture Map (post-execution)
+
+Appended 2026-05-09 at the end of Phase 38 execution (plan 38-09). Captures
+the as-shipped wiring, file inventory, and test → requirement coverage map
+for the multi-step onboarding dialog.
+
+### New modules
+
+| File | Role |
+|------|------|
+| `interfaces/discord/dialog_router.py` | Pre-router gate. Single entrypoint `maybe_consume_as_answer(...)` returns the bot's response on a draft hit, or `None` to fall through to `command_router.route_message`. Hit conditions per D-02: no `:` prefix AND channel is a `discord.Thread` AND a draft file exists at `mnemosyne/pf2e/players/_drafts/{thread.id}-{user_id}.md`. |
+| `interfaces/discord/pathfinder_player_dialog.py` | Dialog state machine. Owns question strings (`QUESTIONS` dict per D-13), step ordering (`STEPS` tuple), draft frontmatter read/write, `start_dialog(...)`, `consume_as_answer(...)`, `cancel_dialog(...)`. Validates style preset against `_VALID_STYLE_PRESETS` re-imported from `pathfinder_player_adapter` (D-14). |
+
+### Modified modules (additive only)
+
+| File | Change | Decision ref |
+|------|--------|--------------|
+| `interfaces/discord/discord_router_bridge.py` | Wires `dialog_router.maybe_consume_as_answer` ahead of `command_router.route_message`. | D-01 |
+| `interfaces/discord/command_router.py` | Additive `author_display_name: str \| None = None` pass-through kwarg threaded to `pf_dispatch`. No new branches, no inspection of the value. | D-03 + D-18 |
+| `interfaces/discord/bot.py` | `_pf_dispatch` gains `author_display_name` kwarg; `on_message` callsite populates it from `message.author.display_name`. The thread guard at `bot.py:668` is byte-unchanged. | D-04 |
+| `interfaces/discord/pathfinder_dispatch.py` | Registers `PlayerCancelCommand` alongside `PlayerStartCommand` (D-16); plumbs `author_display_name` into `PathfinderRequest`. | D-16 |
+| `interfaces/discord/pathfinder_bridge.py` | Forwards `author_display_name` from dispatch into the request envelope. | D-16 |
+| `interfaces/discord/pathfinder_types.py` | Adds `author_display_name: str \| None` field to `PathfinderRequest`. | D-16 |
+| `interfaces/discord/pathfinder_player_adapter.py` | `PlayerStartCommand` gains a no-args branch that calls `pathfinder_player_dialog.start_dialog(...)`; pipe-syntax branch preserved byte-for-byte. New `PlayerCancelCommand` next to it. Mid-dialog rejection guard via `reject_if_draft_open(...)` lookup over `_drafts/`. | D-15, D-16, D-05..D-08 |
+
+### Untouched (proven by `git diff --stat`)
+
+- `modules/pathfinder/` — zero diff. The `/player/onboard` route is reused unchanged.
+- `interfaces/discord/bot.py:668` `on_message` thread guard — byte-unchanged.
+
+### Vault layout addition
+
+```
+mnemosyne/pf2e/players/_drafts/{thread_id}-{user_id}.md
+```
+
+Frontmatter fields: `step`, `thread_id`, `user_id`, `character_name?`,
+`preferred_name?`, `started_at`. Created by `start_dialog`, mutated by
+`consume_as_answer`, deleted by completion or `cancel_dialog`. Per-player
+isolation invariant from PVL-07 extends to these draft files (the slug
+prefix `_drafts/` lives inside the player vault hierarchy).
+
+### Routing flow
+
+```
+Discord on_message
+  └─ bot._route_message
+       └─ discord_router_bridge.route_message
+            ├─ dialog_router.maybe_consume_as_answer
+            │     ├─ HIT  → consume_as_answer (advance step or complete → POST /player/onboard)
+            │     └─ MISS → fall through ↓
+            └─ command_router.route_message
+                 └─ pf_dispatch
+                      ├─ PlayerStartCommand
+                      │     ├─ no args → pathfinder_player_dialog.start_dialog (creates thread + draft)
+                      │     └─ pipe args → /player/onboard direct (one-shot, byte-for-byte preserved)
+                      ├─ PlayerCancelCommand → pathfinder_player_dialog.cancel_dialog (multi-draft symmetric per D-17)
+                      └─ other player verbs → reject_if_draft_open guard, then route as before
+```
+
+### Test → SPEC requirement coverage
+
+| SPEC req | Test file(s) |
+|---------|--------------|
+| 1. Thread-hosted dialog | `tests/test_pathfinder_player_dialog.py`, `tests/test_phase38_integration.py` |
+| 2. Plain-text answer capture | `tests/test_dialog_router.py`, `tests/test_pathfinder_player_dialog.py` |
+| 3. Vault-backed draft persistence | `tests/test_pathfinder_player_dialog.py`, `tests/test_phase38_integration.py` |
+| 4. Completion calls `/player/onboard` | `tests/test_pathfinder_player_dialog.py`, `tests/test_phase38_integration.py` |
+| 5. Mid-dialog command rejection | `tests/test_pathfinder_player_adapter.py`, `tests/test_phase38_integration.py` |
+| 6. Cancel verb (with + without draft, multi-draft) | `tests/test_pathfinder_player_adapter.py`, `tests/test_pathfinder_player_dialog.py` |
+| 7. Restart-start resume | `tests/test_pathfinder_player_dialog.py` |
+| 10. RED-before-production ordering | Verified by `git log --diff-filter=A` — see 38-09-SUMMARY.md |
+
+### Test file inventory
+
+- `tests/test_dialog_router.py` (NEW, 11.5K)
+- `tests/test_pathfinder_player_dialog.py` (NEW, 25.5K)
+- `tests/test_phase38_integration.py` (NEW acceptance suite, 23.3K)
+- `tests/test_pathfinder_player_adapter.py` (MODIFIED — added cancel + rejection cases, 38.5K)
+- `tests/test_pathfinder_player_dispatch.py` (UNCHANGED reference, 2.2K)
+
