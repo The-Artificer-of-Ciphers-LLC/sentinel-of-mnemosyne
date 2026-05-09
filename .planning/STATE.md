@@ -4,14 +4,14 @@ milestone: v0.5
 milestone_name: — The Dungeon
 status: verifying
 stopped_at: Completed 38-03 RED tests
-last_updated: "2026-05-09T14:00:56.001Z"
+last_updated: "2026-05-09T14:10:29.892Z"
 last_activity: 2026-05-09
 progress:
   total_phases: 11
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 63
-  completed_plans: 62
-  percent: 98
+  completed_plans: 63
+  percent: 100
 ---
 
 # Project State
@@ -102,6 +102,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 38 P03 | 25min | 3 tasks | 1 files |
 | Phase 38 P06 | 599 | 2 tasks | 8 files |
 | Phase 38 P08 | 8min | 2 tasks | 1 files |
+| Phase 38-pf2e-multi-step-onboarding-dialog P09 | 18min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -153,6 +154,7 @@ Recent decisions affecting current work:
 - [Phase ?]: D-15: PlayerStartCommand no-args opens dialog (38-06)
 - [Phase ?]: D-17: PlayerCancel multi-draft archive-all symmetry (38-06)
 - [Phase ?]: author_display_name plumbed end-to-end (38-06)
+- [Phase ?]: Phase 38 closeout: dialog-first UX shipped with pipe-syntax as one-shot alternative; criterion 10 RED-before-production verified by git-log timestamp comparison
 
 ### Pending Todos
 
@@ -185,7 +187,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-09T14:00:38.838Z
+Last session: 2026-05-09T14:10:20.949Z
 Stopped at: Completed 38-03 RED tests
 Resume file: 
 
