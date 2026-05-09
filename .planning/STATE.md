@@ -4,14 +4,14 @@ milestone: v0.5
 milestone_name: — The Dungeon
 status: verifying
 stopped_at: Completed 38-03 RED tests
-last_updated: "2026-05-09T05:10:54.576Z"
+last_updated: "2026-05-09T05:24:22.648Z"
 last_activity: 2026-05-09
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 63
-  completed_plans: 59
-  percent: 94
+  completed_plans: 60
+  percent: 95
 ---
 
 # Project State
@@ -100,6 +100,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 37 P13 | 10min | 2 tasks | 4 files |
 | Phase 38 P02 | 117 | 1 tasks | 1 files |
 | Phase 38 P03 | 25min | 3 tasks | 1 files |
+| Phase 38 P06 | 599 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -148,6 +149,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Canonize provenance uses 'question:{id}' substring (not wikilink) since /player/ask stores questions as raw text without per-question files
 - [Phase ?]: Plan 37-12: Projection wired into POST /foundry/messages/import via read-then-merge state file shared between importer and projector
 - [Phase ?]: 37-13: PlayerStyleCommand defaults to action=list on empty rest
+- [Phase ?]: D-15: PlayerStartCommand no-args opens dialog (38-06)
+- [Phase ?]: D-17: PlayerCancel multi-draft archive-all symmetry (38-06)
+- [Phase ?]: author_display_name plumbed end-to-end (38-06)
 
 ### Pending Todos
 
@@ -180,7 +184,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-09T05:10:54.504Z
+Last session: 2026-05-09T05:24:09.784Z
 Stopped at: Completed 38-03 RED tests
 Resume file: 
 

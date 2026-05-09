@@ -592,4 +592,4 @@ Plans:
   6. Existing pipe-separated one-shot syntax from the v0.5 mitigation continues to work unchanged (regression coverage)
   7. All new behavior covered by Wave 0 RED tests (TDD)
 **Status:** Planned (not yet started)
-**Plans:** 5/9 plans executed
+**Plans:** 6/9 plans executed
