@@ -14,7 +14,7 @@ instances to ``dispatch``; production uses the ``COMMANDS`` registry.
 from __future__ import annotations
 
 import typing
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal, Protocol
 
 
@@ -52,6 +52,7 @@ class PathfinderRequest:
     valid_relations: frozenset[str] | None = None  # bridge-supplied
     extract_thread_history: typing.Callable | None = None  # bridge-supplied
     builders: dict[str, typing.Any] | None = None  # bridge-supplied
+    author_display_name: str | None = None  # bridge-supplied: message.author.display_name (Phase 38)
 
 
 @dataclass(frozen=True)
