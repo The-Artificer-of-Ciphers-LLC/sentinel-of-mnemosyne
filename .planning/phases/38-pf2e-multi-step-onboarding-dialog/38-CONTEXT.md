@@ -82,6 +82,12 @@ Downstream agents MUST read `38-SPEC.md` before planning or implementing. Requir
 
   This preserves the locked "list-everything" / "no surprises" symmetry of D-08 (multi-draft rejection lists every link) and the D-10 invariant that cancel from outside the dialog thread is allowed.
 
+### Router Seam — D-03 Refinement (added 2026-05-09 during 38-06 execution)
+- **D-18:** `command_router.py` may carry **additive optional kwargs threaded through the bridge stack** (default-None pass-through plumbing for downstream handlers). The sealed promise of D-03 is **no new routing behavior, no new branches, no new awareness of subcommand semantics** — not byte-immutability of the file.
+  - Allowed: appending `author_display_name: str | None = None` (or similar pass-through fields) to `route_message` / `handle_subcommand` signatures and forwarding them to `pf_dispatch`.
+  - Still forbidden: any code that inspects, branches on, or transforms the new kwargs inside `command_router`.
+  - Authorized retroactively for commit `af83958` (38-06 author_display_name plumbing) — the +10/-1 diff is purely additive forwarding with no behavioral change.
+
 ### Claude's Discretion
 - Draft frontmatter field order and YAML formatting style (preserve readability — match existing player vault file style)
 - Exact wording of the rejection message and the cancel-acknowledgement message (must contain the required information per D-07/D-10, but phrasing is open)
