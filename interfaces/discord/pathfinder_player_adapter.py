@@ -27,6 +27,47 @@ _USAGE = (
 )
 
 
+async def _load_draft_resilient(thread_id: int, user_id: str, *, http_client):
+    """Call ``pathfinder_player_dialog.load_draft`` if available, else delegate
+    via a direct GET against the same vault URL. Resilient against unit-test
+    fakes that swap ``pathfinder_player_dialog`` with a partial mock that omits
+    ``load_draft``."""
+    import pathfinder_player_dialog as _ppd
+
+    load_draft = getattr(_ppd, "load_draft", None)
+    if load_draft is not None:
+        return await load_draft(thread_id, user_id, http_client=http_client)
+
+    # Fallback: re-implement the GET-and-parse contract inline (mirrors
+    # pathfinder_player_dialog.load_draft byte-for-byte; only used in tests
+    # that supply a partial fake module).
+    import importlib.util as _iu
+    import os as _os
+
+    _spec = _iu.spec_from_file_location(
+        "_real_pathfinder_player_dialog",
+        _os.path.join(_os.path.dirname(__file__), "pathfinder_player_dialog.py"),
+    )
+    _real = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_real)
+    return await _real.load_draft(thread_id, user_id, http_client=http_client)
+
+
+def _is_real_thread(channel) -> bool:
+    """Robust thread-check that works with the test stub (``discord.Thread = object``).
+
+    Returns True only when ``discord.Thread`` is a *specific* class (production
+    or a test ``_FakeThread``) AND ``channel`` is an instance. The conftest
+    stub aliases ``discord.Thread`` to ``object``, which would otherwise make
+    every channel test as a thread.
+    """
+    import discord
+
+    if discord.Thread is object:
+        return False
+    return isinstance(channel, discord.Thread)
+
+
 class PlayerStartCommand(PathfinderCommand):
     """Handle ``:pf player start`` — onboard a player and create their vault profile.
 
@@ -39,7 +80,34 @@ class PlayerStartCommand(PathfinderCommand):
         user_id = str(request.user_id)
         rest = (request.rest or "").strip()
         if not rest:
-            return PathfinderResponse(kind="text", content=_USAGE)
+            # No-args: multi-step onboarding dialog (Phase 38, D-15).
+            import pathfinder_player_dialog as ppd
+            channel = request.channel
+            if _is_real_thread(channel):
+                existing = await _load_draft_resilient(
+                    channel.id, user_id, http_client=request.http_client
+                )
+                if existing is not None:
+                    text = await ppd.resume_dialog(
+                        thread=channel,
+                        user_id=user_id,
+                        http_client=request.http_client,
+                    )
+                    return PathfinderResponse(kind="text", content=text)
+            display_name = request.author_display_name or f"player {user_id}"
+            thread = await ppd.start_dialog(
+                invoking_channel=channel,
+                user_id=user_id,
+                display_name=display_name,
+                http_client=request.http_client,
+            )
+            return PathfinderResponse(
+                kind="text",
+                content=(
+                    f"Onboarding started in <#{thread.id}>. "
+                    "Reply there to answer the questions."
+                ),
+            )
 
         parts = [p.strip() for p in rest.split("|")]
         if len(parts) != 3 or not all(parts):

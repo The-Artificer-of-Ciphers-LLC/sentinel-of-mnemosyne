@@ -158,16 +158,23 @@ async def start_dialog(
     *,
     invoking_channel,
     user_id: str,
-    message_author_display_name: str,
     http_client,
+    message_author_display_name: str | None = None,
+    display_name: str | None = None,
 ) -> "discord.Thread":
     """Create the onboarding thread, persist the first draft, post Q1.
 
-    Caller MUST provide a non-None ``message_author_display_name``. The no-args
-    branch in PlayerStartCommand (Phase 38-06) substitutes
-    ``f"player {user_id}"`` if request.author_display_name is None.
+    Caller MUST provide a display name as either ``message_author_display_name``
+    (legacy 38-04 contract) or ``display_name`` (38-06 adapter contract). The
+    no-args branch in PlayerStartCommand substitutes ``f"player {user_id}"``
+    if request.author_display_name is None.
     """
-    name = f"Onboarding — {message_author_display_name}"[:100]
+    effective_name = message_author_display_name if message_author_display_name is not None else display_name
+    if effective_name is None:
+        raise TypeError(
+            "start_dialog requires either message_author_display_name or display_name"
+        )
+    name = f"Onboarding — {effective_name}"[:100]
     thread = await invoking_channel.create_thread(
         name=name,
         type=discord.ChannelType.public_thread,

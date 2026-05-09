@@ -22,21 +22,12 @@ from pathfinder_types import PathfinderRequest
 # --- :pf player start -------------------------------------------------------
 
 
-async def test_player_start_with_empty_rest_returns_usage_no_post():
-    """Empty rest must not 422 the route — return usage hint instead (Phase 38 stop-gap)."""
-    from pathfinder_player_adapter import PlayerStartCommand
-
-    cmd = PlayerStartCommand()
-    client = AsyncMock()
-    client.post_to_module = AsyncMock()
-    request = PathfinderRequest(
-        noun="player", verb="start", rest="", user_id="u1", sentinel_client=client
-    )
-    response = await cmd.handle(request)
-    assert client.post_to_module.await_count == 0
-    assert response.kind == "text"
-    assert "Usage" in response.content
-    assert "character_name" in response.content
+# NOTE: ``test_player_start_with_empty_rest_returns_usage_no_post`` was the
+# Phase 37 stop-gap test that locked the legacy "empty rest → usage hint"
+# behaviour. Phase 38 D-15 replaces that stop-gap with the multi-step dialog
+# (see ``test_player_start_no_args_creates_thread_and_draft`` below). Removing
+# this test is authorized by 38-06's plan ("12 existing tests still GREEN" —
+# i.e. 13 originals minus this stop-gap).
 
 
 async def test_player_start_with_args_posts_full_onboard_payload():

@@ -441,6 +441,7 @@ async def _pf_dispatch(
     user_id: str,
     attachments: list | None = None,
     channel=None,
+    author_display_name: str | None = None,
 ) -> "str | dict":
     """Route ':pf <noun> <verb> <rest>' to pathfinder module endpoints.
 
@@ -480,6 +481,7 @@ async def _pf_dispatch(
             extract_thread_history=_extract_thread_history,
             map_http_status=pathfinder_error_mapper.map_http_status,
             log_error=logger.error,
+            author_display_name=author_display_name,
         )
 
 
@@ -488,6 +490,7 @@ async def _route_message(
     message: str,
     attachments: list | None = None,
     channel=None,
+    author_display_name: str | None = None,
 ) -> "str | dict":
     # Phase 38 D-01: route through the bridge with sentinel_client + a fresh
     # httpx.AsyncClient so the dialog_router pre-gate can run. on_message body
@@ -504,6 +507,7 @@ async def _route_message(
             subcommand_help=SUBCOMMAND_HELP,
             sentinel_client=_sentinel_client,
             http_client=http_client,
+            author_display_name=author_display_name,
         )
 
 
@@ -513,6 +517,7 @@ async def handle_sentask_subcommand(
     user_id: str,
     attachments: list | None = None,
     channel=None,
+    author_display_name: str | None = None,
 ) -> "str | dict":
     return await discord_router_bridge.handle_subcommand(
         subcmd=subcmd,
@@ -523,6 +528,7 @@ async def handle_sentask_subcommand(
         command_router=command_router,
         kwargs={
             "pf_dispatch": _pf_dispatch,
+            "author_display_name": author_display_name,
             "call_core": _call_core,
             "call_core_note": _call_core_note,
             "call_core_inbox_list": _call_core_inbox_list,
@@ -700,6 +706,7 @@ class SentinelBot(discord.Client):
                 message.content,
                 attachments=list(message.attachments),
                 channel=message.channel,
+                author_display_name=getattr(message.author, "display_name", None),
             )
 
         await response_renderer.send_rendered_response(message.channel.send, ai_response)

@@ -14,6 +14,7 @@ async def route_message(
     handle_subcommand,
     call_core,
     subcommand_help: str,
+    author_display_name: str | None = None,
 ) -> "str | dict":
     if message.startswith(":"):
         parts = message[1:].split(" ", 1)
@@ -25,6 +26,7 @@ async def route_message(
             user_id,
             attachments=attachments,
             channel=channel,
+            author_display_name=author_display_name,
         )
 
     msg_lower = message.lower()
@@ -54,9 +56,16 @@ async def handle_subcommand(
     plugin_prompts: dict[str, str],
     subcommand_prompts: dict[str, str],
     subcommand_help: str,
+    author_display_name: str | None = None,
 ) -> "str | dict":
     if subcmd == "pf":
-        return await pf_dispatch(args, user_id, attachments=attachments, channel=channel)
+        return await pf_dispatch(
+            args,
+            user_id,
+            attachments=attachments,
+            channel=channel,
+            author_display_name=author_display_name,
+        )
 
     if subcmd == "help":
         return subcommand_help

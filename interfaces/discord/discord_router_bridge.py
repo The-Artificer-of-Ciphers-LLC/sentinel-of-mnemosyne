@@ -29,6 +29,7 @@ async def route_message(
     subcommand_help: str,
     sentinel_client=None,
     http_client=None,
+    author_display_name: str | None = None,
 ):
     # Pre-router gate (D-01). When the caller has wired the dialog dependencies,
     # try to consume this message as an onboarding answer first.
@@ -51,6 +52,7 @@ async def route_message(
         handle_subcommand=handle_subcommand,
         call_core=call_core,
         subcommand_help=subcommand_help,
+        author_display_name=author_display_name,
     )
 
 

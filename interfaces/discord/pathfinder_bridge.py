@@ -24,7 +24,6 @@ import httpx
 
 from pathfinder_dispatch import dispatch
 from pathfinder_types import (
-    PathfinderRequest,
     PathfinderResponse,
 )
 
@@ -87,6 +86,7 @@ async def dispatch_pf(
     extract_thread_history=None,
     map_http_status,
     log_error,
+    author_display_name: str | None = None,
 ):
     """Bridge: parse args → build request → dispatch → render response.
 
@@ -139,6 +139,7 @@ async def dispatch_pf(
             valid_relations=valid_relations,
             builders=builders or {},
             extract_thread_history=extract_thread_history,
+            author_display_name=author_display_name,
         )
 
         return _render_response(response)

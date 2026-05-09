@@ -58,6 +58,7 @@ async def dispatch(
     valid_relations: frozenset[str],
     builders: dict,  # builder function name → callable (injected by bridge)
     extract_thread_history=None,  # injected by bridge for npc say
+    author_display_name: str | None = None,  # Phase 38: message.author.display_name
 ) -> PathfinderResponse:
     """Look up the command from the registry and handle it.
 
@@ -123,6 +124,7 @@ async def dispatch(
         valid_relations=valid_relations,
         extract_thread_history=extract_thread_history,
         builders=builders,
+        author_display_name=author_display_name,
     )
 
     return await command.handle(request)
