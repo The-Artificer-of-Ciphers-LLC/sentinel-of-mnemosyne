@@ -477,13 +477,20 @@ async def test_consume_as_answer_final_step_calls_onboard_route():
         del_url = http.delete.call_args.args[0] if http.delete.call_args.args else http.delete.call_args.kwargs.get("url", "")
         assert del_url.endswith("/_drafts/999-u-1.md")
 
+        # Success message posted directly to thread BEFORE archive (UAT G-04 —
+        # post-after-archive auto-unarchives the thread).
+        assert fake_thread.send.await_count == 1
+        success_sent = fake_thread.send.call_args.args[0] if fake_thread.send.call_args.args else fake_thread.send.call_args.kwargs.get("content", "")
+        assert "onboarded" in success_sent.lower()
+        assert "mnemosyne/pf2e/players/k/profile.md" in success_sent
+
         assert fake_thread.edit.await_count == 1
         assert fake_thread.edit.call_args.kwargs.get("archived") is True
 
         assert 999 not in bot_module.SENTINEL_THREAD_IDS
 
-        assert "onboarded" in result.lower()
-        assert "mnemosyne/pf2e/players/k/profile.md" in result
+        # Empty-string sentinel — bot's response_renderer no-ops (UAT G-04).
+        assert result == ""
     finally:
         bot_module.SENTINEL_THREAD_IDS.discard(999)
 
@@ -592,8 +599,12 @@ async def test_consume_as_answer_archive_swallows_already_archived():
         # Onboard + delete must have happened BEFORE the failing archive call.
         assert sentinel_client.post_to_module.await_count == 1
         assert http.delete.await_count == 1
-        assert isinstance(result, str)
-        assert "onboarded" in result.lower()
+        # Success posted to thread even when archive subsequently fails.
+        assert fake_thread.send.await_count == 1
+        success_sent = fake_thread.send.call_args.args[0] if fake_thread.send.call_args.args else fake_thread.send.call_args.kwargs.get("content", "")
+        assert "onboarded" in success_sent.lower()
+        # Empty-string sentinel — bot's response_renderer no-ops (UAT G-04).
+        assert result == ""
     finally:
         bot_module.SENTINEL_THREAD_IDS.discard(42)
 
@@ -658,13 +669,21 @@ async def test_cancel_dialog_with_existing_draft_deletes_and_archives():
         del_url = http.delete.call_args.args[0] if http.delete.call_args.args else http.delete.call_args.kwargs.get("url", "")
         assert del_url.endswith("/_drafts/777-u-1.md")
 
+        # Ack must be posted directly to the thread BEFORE archive (UAT G-04 —
+        # any post after archive auto-unarchives). consume_as_answer/cancel_dialog
+        # own the send for terminal messages; bot's response_renderer is a no-op.
+        assert fake_thread.send.await_count == 1
+        ack_sent = fake_thread.send.call_args.args[0] if fake_thread.send.call_args.args else fake_thread.send.call_args.kwargs.get("content", "")
+        assert "cancelled" in ack_sent.lower()
+        assert ":pf player start" in ack_sent
+
         assert fake_thread.edit.await_count == 1
         assert fake_thread.edit.call_args.kwargs.get("archived") is True
 
         assert 777 not in bot_module.SENTINEL_THREAD_IDS
 
-        assert "cancelled" in result.lower()
-        assert ":pf player start" in result
+        # Sentinel return value: empty string signals "already sent — bot, no-op".
+        assert result == ""
     finally:
         bot_module.SENTINEL_THREAD_IDS.discard(777)
 
@@ -708,7 +727,12 @@ async def test_cancel_dialog_archive_swallows_http_exception():
     try:
         result = await cancel_dialog(thread=fake_thread, user_id="u-1", http_client=http)
         assert http.delete.await_count == 1
-        assert "cancelled" in result.lower()
+        # Ack still posted to the thread even when archive subsequently fails.
+        assert fake_thread.send.await_count == 1
+        ack_sent = fake_thread.send.call_args.args[0] if fake_thread.send.call_args.args else fake_thread.send.call_args.kwargs.get("content", "")
+        assert "cancelled" in ack_sent.lower()
+        # Empty-string sentinel — bot's response_renderer no-ops (UAT G-04).
+        assert result == ""
     finally:
         bot_module.SENTINEL_THREAD_IDS.discard(88)
 

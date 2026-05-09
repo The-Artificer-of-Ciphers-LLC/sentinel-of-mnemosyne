@@ -505,9 +505,17 @@ async def test_acceptance_06_cancel_with_draft_deletes_and_acks(monkeypatch):
     assert channel.edit.await_count == 1
     assert channel.edit.call_args.kwargs.get("archived") is True
 
+    # Cancel ack posted DIRECTLY to the dialog thread BEFORE archive (UAT G-04)
+    # — Discord auto-unarchives on any new message, so post-must-precede-archive.
+    assert channel.send.await_count == 1
+    ack_sent = channel.send.call_args.args[0] if channel.send.call_args.args else channel.send.call_args.kwargs.get("content", "")
+    assert "cancelled" in ack_sent.lower()
+    assert ":pf player start" in ack_sent
+
+    # PathfinderResponse content is the empty-string sentinel — bot's
+    # response_renderer no-ops since the dialog already sent the ack.
     assert response.kind == "text"
-    assert "cancelled" in response.content.lower()
-    assert ":pf player start" in response.content
+    assert response.content == ""
     assert sentinel_client.post_to_module.await_count == 0
 
 

@@ -310,18 +310,39 @@ async def consume_as_answer(
     )
     path = result.get("path", "?") if isinstance(result, dict) else "?"
     await delete_draft(thread.id, str(user_id), http_client=http_client)
-    await _archive_and_discard(thread)
-    return (
+    success = (
         f"Player onboarded as `{draft['preferred_name']}` "
         f"({draft['style_preset']}). Profile: `{path}`"
     )
+    # Send success BEFORE archive — any message after archive auto-unarchives
+    # the thread, defeating the lifecycle invariant (UAT G-04).
+    try:
+        await thread.send(success)
+    except Exception:
+        logger.warning("consume_as_answer: success send failed for %s", thread.id)
+    await _archive_and_discard(thread)
+    return ""  # already sent — signal to bot.py response_renderer to no-op
 
 
 async def cancel_dialog(*, thread, user_id: str, http_client) -> str:
-    """Delete the draft, archive the thread, and return the cancel acknowledgement."""
+    """Delete the draft, post the cancel ack, then archive the thread.
+
+    Returns the cancel-ack text on the no-draft path (caller's response_renderer
+    sends it to the invoking channel). On the with-draft path, posts the ack
+    DIRECTLY to the dialog thread first, archives, and returns "" so bot.py's
+    response_renderer skips its send. Discord auto-unarchives a thread on any
+    new message, so the post-must-precede-archive ordering is required to make
+    archival actually stick (UAT G-04).
+    """
     draft = await load_draft(thread.id, str(user_id), http_client=http_client)
     if draft is None:
         return "No onboarding dialog in progress."
+    ack = "Onboarding cancelled. Run `:pf player start` to begin again."
     await delete_draft(thread.id, str(user_id), http_client=http_client)
+    # Send ack BEFORE archive — any message after archive auto-unarchives.
+    try:
+        await thread.send(ack)
+    except Exception:
+        logger.warning("cancel_dialog: thread.send failed for %s", thread.id)
     await _archive_and_discard(thread)
-    return "Onboarding cancelled. Run `:pf player start` to begin again."
+    return ""  # already sent — signal to bot.py response_renderer to no-op
