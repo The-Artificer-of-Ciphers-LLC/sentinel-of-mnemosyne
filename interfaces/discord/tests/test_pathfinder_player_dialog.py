@@ -331,3 +331,385 @@ async def test_resume_dialog_does_not_reset_existing_answers():
     await resume_dialog(thread=fake_thread, user_id="u-1", http_client=http)
 
     assert http.put.await_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Task 3: consume_as_answer + cancel_dialog (SPEC Req 2, 4, 6)
+# ---------------------------------------------------------------------------
+
+
+def _put_body(http: AsyncMock) -> str:
+    """Extract the body string of the most recent http.put call."""
+    call = http.put.call_args
+    body = (call.args[1] if len(call.args) >= 2
+            else call.kwargs.get("data") or call.kwargs.get("content"))
+    return body.decode() if isinstance(body, bytes) else body
+
+
+def _make_sentinel_client() -> MagicMock:
+    """Build a sentinel_client with AsyncMock post_to_module + chat/call_core stubs.
+
+    chat/call_core are AsyncMock so the test can prove they were NOT called.
+    """
+    client = MagicMock()
+    client.post_to_module = AsyncMock(return_value={"path": "mnemosyne/pf2e/players/k/profile.md"})
+    client.chat = AsyncMock()
+    client.call_core = AsyncMock()
+    return client
+
+
+async def test_consume_as_answer_first_step_advances_to_preferred_name():
+    """Replying at step=character_name advances to step=preferred_name; AI not invoked."""
+    from pathfinder_player_dialog import consume_as_answer, QUESTIONS
+
+    body = _fake_draft_body(
+        step="character_name",
+        thread_id=42,
+        user_id="u-1",
+        started_at="2026-05-08T00:00:00Z",
+    )
+    http = AsyncMock()
+    http.get = AsyncMock(return_value=_fake_resp(200, body))
+    http.put = AsyncMock(return_value=_fake_resp(200, ""))
+    fake_thread = _make_fake_thread(thread_id=42)
+    sentinel_client = _make_sentinel_client()
+
+    await consume_as_answer(
+        thread=fake_thread,
+        user_id="u-1",
+        message_text="Kaela",
+        sentinel_client=sentinel_client,
+        http_client=http,
+    )
+
+    assert http.put.await_count == 1
+    body_str = _put_body(http)
+    assert "step: preferred_name" in body_str
+    assert "character_name: Kaela" in body_str
+
+    assert fake_thread.send.await_count == 1
+    sent = fake_thread.send.call_args
+    sent_text = sent.args[0] if sent.args else sent.kwargs.get("content", "")
+    assert sent_text == QUESTIONS["preferred_name"]
+
+    assert sentinel_client.post_to_module.await_count == 0
+
+
+async def test_consume_as_answer_second_step_advances_to_style_preset():
+    """Replying at step=preferred_name preserves character_name and advances to style_preset."""
+    from pathfinder_player_dialog import consume_as_answer, QUESTIONS
+
+    body = _fake_draft_body(
+        step="preferred_name",
+        thread_id=42,
+        user_id="u-1",
+        character_name="Kaela",
+        started_at="2026-05-08T00:00:00Z",
+    )
+    http = AsyncMock()
+    http.get = AsyncMock(return_value=_fake_resp(200, body))
+    http.put = AsyncMock(return_value=_fake_resp(200, ""))
+    fake_thread = _make_fake_thread(thread_id=42)
+    sentinel_client = _make_sentinel_client()
+
+    await consume_as_answer(
+        thread=fake_thread,
+        user_id="u-1",
+        message_text="Kae",
+        sentinel_client=sentinel_client,
+        http_client=http,
+    )
+
+    body_str = _put_body(http)
+    assert "character_name: Kaela" in body_str
+    assert "preferred_name: Kae" in body_str
+    assert "step: style_preset" in body_str
+
+    sent = fake_thread.send.call_args
+    sent_text = sent.args[0] if sent.args else sent.kwargs.get("content", "")
+    assert sent_text == QUESTIONS["style_preset"]
+
+    assert sentinel_client.post_to_module.await_count == 0
+
+
+async def test_consume_as_answer_final_step_calls_onboard_route():
+    """Final step posts /player/onboard, deletes draft, archives thread, removes id."""
+    import bot as bot_module
+
+    from pathfinder_player_dialog import consume_as_answer
+
+    body = _fake_draft_body(
+        step="style_preset",
+        thread_id=999,
+        user_id="u-1",
+        character_name="Kaela",
+        preferred_name="Kae",
+        started_at="2026-05-08T00:00:00Z",
+    )
+    http = AsyncMock()
+    http.get = AsyncMock(return_value=_fake_resp(200, body))
+    http.put = AsyncMock(return_value=_fake_resp(200, ""))
+    http.delete = AsyncMock(return_value=_fake_resp(200, ""))
+    fake_thread = _make_fake_thread(thread_id=999)
+    sentinel_client = _make_sentinel_client()
+
+    bot_module.SENTINEL_THREAD_IDS.add(999)
+    try:
+        result = await consume_as_answer(
+            thread=fake_thread,
+            user_id="u-1",
+            message_text="Lorekeeper",
+            sentinel_client=sentinel_client,
+            http_client=http,
+        )
+
+        assert sentinel_client.post_to_module.await_count == 1
+        post_args = sentinel_client.post_to_module.call_args
+        assert post_args.args[0] == "modules/pathfinder/player/onboard"
+        payload = post_args.args[1]
+        assert payload == {
+            "user_id": "u-1",
+            "character_name": "Kaela",
+            "preferred_name": "Kae",
+            "style_preset": "Lorekeeper",
+        }
+
+        assert http.delete.await_count == 1
+        del_url = http.delete.call_args.args[0] if http.delete.call_args.args else http.delete.call_args.kwargs.get("url", "")
+        assert del_url.endswith("/_drafts/999-u-1.md")
+
+        assert fake_thread.edit.await_count == 1
+        assert fake_thread.edit.call_args.kwargs.get("archived") is True
+
+        assert 999 not in bot_module.SENTINEL_THREAD_IDS
+
+        assert "onboarded" in result.lower()
+        assert "mnemosyne/pf2e/players/k/profile.md" in result
+    finally:
+        bot_module.SENTINEL_THREAD_IDS.discard(999)
+
+
+async def test_consume_as_answer_style_preset_case_insensitive_normalised():
+    """Lowercase 'lorekeeper' is normalised to canonical 'Lorekeeper' in the payload."""
+    import bot as bot_module
+
+    from pathfinder_player_dialog import consume_as_answer
+
+    body = _fake_draft_body(
+        step="style_preset",
+        thread_id=42,
+        user_id="u-1",
+        character_name="Kaela",
+        preferred_name="Kae",
+    )
+    http = AsyncMock()
+    http.get = AsyncMock(return_value=_fake_resp(200, body))
+    http.put = AsyncMock(return_value=_fake_resp(200, ""))
+    http.delete = AsyncMock(return_value=_fake_resp(200, ""))
+    fake_thread = _make_fake_thread(thread_id=42)
+    sentinel_client = _make_sentinel_client()
+
+    bot_module.SENTINEL_THREAD_IDS.add(42)
+    try:
+        await consume_as_answer(
+            thread=fake_thread,
+            user_id="u-1",
+            message_text="lorekeeper",
+            sentinel_client=sentinel_client,
+            http_client=http,
+        )
+        payload = sentinel_client.post_to_module.call_args.args[1]
+        assert payload["style_preset"] == "Lorekeeper"
+    finally:
+        bot_module.SENTINEL_THREAD_IDS.discard(42)
+
+
+async def test_consume_as_answer_invalid_style_preset_reasks():
+    """Invalid style preset re-asks (no PUT, no POST) and lists the four valid presets."""
+    from pathfinder_player_dialog import consume_as_answer
+
+    body = _fake_draft_body(
+        step="style_preset",
+        thread_id=42,
+        user_id="u-1",
+        character_name="Kaela",
+        preferred_name="Kae",
+    )
+    http = AsyncMock()
+    http.get = AsyncMock(return_value=_fake_resp(200, body))
+    http.put = AsyncMock(return_value=_fake_resp(200, ""))
+    http.delete = AsyncMock(return_value=_fake_resp(200, ""))
+    fake_thread = _make_fake_thread(thread_id=42)
+    sentinel_client = _make_sentinel_client()
+
+    await consume_as_answer(
+        thread=fake_thread,
+        user_id="u-1",
+        message_text="Wizard",
+        sentinel_client=sentinel_client,
+        http_client=http,
+    )
+
+    assert sentinel_client.post_to_module.await_count == 0
+    assert http.put.await_count == 0
+
+    assert fake_thread.send.await_count == 1
+    sent = fake_thread.send.call_args
+    sent_text = sent.args[0] if sent.args else sent.kwargs.get("content", "")
+    for preset in ("Tactician", "Lorekeeper", "Cheerleader", "Rules-Lawyer Lite"):
+        assert preset in sent_text
+
+
+async def test_consume_as_answer_archive_swallows_already_archived():
+    """An already-archived thread (HTTPException on edit) does not re-raise (Pitfall 2)."""
+    import bot as bot_module
+    import discord
+
+    from pathfinder_player_dialog import consume_as_answer
+
+    body = _fake_draft_body(
+        step="style_preset",
+        thread_id=42,
+        user_id="u-1",
+        character_name="Kaela",
+        preferred_name="Kae",
+    )
+    http = AsyncMock()
+    http.get = AsyncMock(return_value=_fake_resp(200, body))
+    http.put = AsyncMock(return_value=_fake_resp(200, ""))
+    http.delete = AsyncMock(return_value=_fake_resp(200, ""))
+    fake_thread = _make_fake_thread(thread_id=42)
+    fake_thread.edit = AsyncMock(side_effect=discord.HTTPException("already archived"))
+    sentinel_client = _make_sentinel_client()
+
+    bot_module.SENTINEL_THREAD_IDS.add(42)
+    try:
+        result = await consume_as_answer(
+            thread=fake_thread,
+            user_id="u-1",
+            message_text="Tactician",
+            sentinel_client=sentinel_client,
+            http_client=http,
+        )
+        # Onboard + delete must have happened BEFORE the failing archive call.
+        assert sentinel_client.post_to_module.await_count == 1
+        assert http.delete.await_count == 1
+        assert isinstance(result, str)
+        assert "onboarded" in result.lower()
+    finally:
+        bot_module.SENTINEL_THREAD_IDS.discard(42)
+
+
+async def test_consume_as_answer_does_not_invoke_ai():
+    """consume_as_answer MUST NOT call sentinel_client.chat or call_core (SPEC Req 2)."""
+    import bot as bot_module
+
+    from pathfinder_player_dialog import consume_as_answer
+
+    body = _fake_draft_body(
+        step="style_preset",
+        thread_id=42,
+        user_id="u-1",
+        character_name="Kaela",
+        preferred_name="Kae",
+    )
+    http = AsyncMock()
+    http.get = AsyncMock(return_value=_fake_resp(200, body))
+    http.put = AsyncMock(return_value=_fake_resp(200, ""))
+    http.delete = AsyncMock(return_value=_fake_resp(200, ""))
+    fake_thread = _make_fake_thread(thread_id=42)
+    sentinel_client = _make_sentinel_client()
+
+    bot_module.SENTINEL_THREAD_IDS.add(42)
+    try:
+        await consume_as_answer(
+            thread=fake_thread,
+            user_id="u-1",
+            message_text="Cheerleader",
+            sentinel_client=sentinel_client,
+            http_client=http,
+        )
+        assert sentinel_client.chat.await_count == 0
+        assert sentinel_client.call_core.await_count == 0
+    finally:
+        bot_module.SENTINEL_THREAD_IDS.discard(42)
+
+
+async def test_cancel_dialog_with_existing_draft_deletes_and_archives():
+    """cancel_dialog with a draft: DELETE, archive, remove from set, return cancel text."""
+    import bot as bot_module
+
+    from pathfinder_player_dialog import cancel_dialog
+
+    body = _fake_draft_body(
+        step="preferred_name",
+        thread_id=777,
+        user_id="u-1",
+        character_name="Kaela",
+    )
+    http = AsyncMock()
+    http.get = AsyncMock(return_value=_fake_resp(200, body))
+    http.delete = AsyncMock(return_value=_fake_resp(200, ""))
+    fake_thread = _make_fake_thread(thread_id=777)
+
+    bot_module.SENTINEL_THREAD_IDS.add(777)
+    try:
+        result = await cancel_dialog(thread=fake_thread, user_id="u-1", http_client=http)
+
+        assert http.delete.await_count == 1
+        del_url = http.delete.call_args.args[0] if http.delete.call_args.args else http.delete.call_args.kwargs.get("url", "")
+        assert del_url.endswith("/_drafts/777-u-1.md")
+
+        assert fake_thread.edit.await_count == 1
+        assert fake_thread.edit.call_args.kwargs.get("archived") is True
+
+        assert 777 not in bot_module.SENTINEL_THREAD_IDS
+
+        assert "cancelled" in result.lower()
+        assert ":pf player start" in result
+    finally:
+        bot_module.SENTINEL_THREAD_IDS.discard(777)
+
+
+async def test_cancel_dialog_with_no_draft_returns_no_progress_message():
+    """cancel_dialog with 404 draft returns the exact no-progress text and no side effects."""
+    from pathfinder_player_dialog import cancel_dialog
+
+    http = AsyncMock()
+    http.get = AsyncMock(return_value=_fake_resp(404, ""))
+    http.delete = AsyncMock(return_value=_fake_resp(200, ""))
+    fake_thread = _make_fake_thread(thread_id=42)
+
+    result = await cancel_dialog(thread=fake_thread, user_id="u-1", http_client=http)
+
+    assert result == "No onboarding dialog in progress."
+    assert http.delete.await_count == 0
+    assert fake_thread.edit.await_count == 0
+
+
+async def test_cancel_dialog_archive_swallows_http_exception():
+    """cancel_dialog still returns cancel text after Thread.edit HTTPException (Pitfall 2)."""
+    import bot as bot_module
+    import discord
+
+    from pathfinder_player_dialog import cancel_dialog
+
+    body = _fake_draft_body(
+        step="preferred_name",
+        thread_id=88,
+        user_id="u-1",
+        character_name="Kaela",
+    )
+    http = AsyncMock()
+    http.get = AsyncMock(return_value=_fake_resp(200, body))
+    http.delete = AsyncMock(return_value=_fake_resp(200, ""))
+    fake_thread = _make_fake_thread(thread_id=88)
+    fake_thread.edit = AsyncMock(side_effect=discord.HTTPException("already archived"))
+
+    bot_module.SENTINEL_THREAD_IDS.add(88)
+    try:
+        result = await cancel_dialog(thread=fake_thread, user_id="u-1", http_client=http)
+        assert http.delete.await_count == 1
+        assert "cancelled" in result.lower()
+    finally:
+        bot_module.SENTINEL_THREAD_IDS.discard(88)
