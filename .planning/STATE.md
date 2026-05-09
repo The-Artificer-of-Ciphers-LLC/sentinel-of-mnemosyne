@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
 status: executing
-stopped_at: Phase 38 context gathered
-last_updated: "2026-05-09T03:05:34.600Z"
+stopped_at: Phase 38 planned (9 plans, 7 waves)
+last_updated: "2026-05-09T04:24:03.941Z"
 last_activity: 2026-05-07
 progress:
   total_phases: 11
   completed_phases: 9
-  total_plans: 54
+  total_plans: 63
   completed_plans: 54
-  percent: 100
+  percent: 86
 ---
 
 # Project State
@@ -178,9 +178,9 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-09T03:05:34.585Z
-Stopped at: Phase 38 context gathered
-Resume file: .planning/phases/38-pf2e-multi-step-onboarding-dialog/38-CONTEXT.md
+Last session: 2026-05-09T04:24:03.931Z
+Stopped at: Phase 38 planned (9 plans, 7 waves)
+Resume file: .planning/phases/38-pf2e-multi-step-onboarding-dialog/38-01-PLAN.md
 
 **Completed Phase:** 35 (Foundry VTT Event Ingest) — 6 plans — 2026-04-25 — FVT-01..03 shipped; webhook-first fallback + PNACORSMiddleware gap closure
 
