@@ -4,14 +4,14 @@ milestone: v0.5
 milestone_name: — The Dungeon
 status: verifying
 stopped_at: Completed 38-03 RED tests
-last_updated: "2026-05-09T05:00:18.084Z"
+last_updated: "2026-05-09T05:10:54.576Z"
 last_activity: 2026-05-09
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 63
-  completed_plans: 57
-  percent: 90
+  completed_plans: 59
+  percent: 94
 ---
 
 # Project State
@@ -180,10 +180,10 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-09T05:00:18.074Z
+Last session: 2026-05-09T05:10:54.504Z
 Stopped at: Completed 38-03 RED tests
 Resume file: 
 
-**Completed Phase:** 35 (Foundry VTT Event Ingest) — 6 plans — 2026-04-25 — FVT-01..03 shipped; webhook-first fallback + PNACORSMiddleware gap closure
+None
 
 **Next Plan:** 36 Plan 01 — Wave 0 RED TDD stubs for test_npcs.py (7 test functions)
