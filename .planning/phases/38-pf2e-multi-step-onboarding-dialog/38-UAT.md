@@ -68,11 +68,39 @@ result: pending
 
 ### 7. Mid-dialog rejection from another channel
 expected: Run `:pf player start` again to open a new dialog, answer the first question only, then go to a DIFFERENT channel and run `:pf player note "test note"`. Bot replies with the rejection template linking back to the dialog thread (e.g. "You have an onboarding dialog open in <#thread-mention>..."). Confirm `mnemosyne/pf2e/players/<slug>/notes.md` was NOT created or appended.
-result: pending
+result: pass
+notes: |
+  Confirmed live: `:pf player note "test note"` from outside the onboarding
+  thread triggered the rejection text. Logs show GET /_drafts/ 200 OK followed
+  by NO POST to /modules/pathfinder/player/note — note write blocked at the
+  guard layer. _list_user_draft_thread_ids verified live to return the active
+  draft's thread_id. D-05/D-07/D-08 all working.
+
+  OBSERVATION (not a regression, per locked SPEC D-02): plain-text replies in
+  the user's main Sentinel chat thread (not the onboarding thread) DO engage
+  the AI normally. This is by design — dialog_router is per-thread. The user
+  must reply IN the onboarding thread to advance the dialog. If a future phase
+  wants a global "you have a dialog elsewhere" nudge on plain text, that would
+  be scope-expansion (new requirement).
 
 ### 8. :pf player cancel deletes draft and archives thread
 expected: From inside the onboarding thread, run `:pf player cancel`. Bot replies "Cancelled the onboarding dialog." Thread becomes archived. The `_drafts/` file for that thread/user is gone from the vault.
-result: pending
+result: pass
+notes: |
+  Live walk-through (after G-04 fix): "What is your character's name?" → "Katrina"
+  → "How would you like me to address you?" → ":pf player cancel" →
+  "Onboarding cancelled. Run :pf player start to begin again." Thread archived
+  (visible momentarily). User typed "test" → Discord auto-unarchived the thread
+  per its UX → on_message correctly routed plain text to AI ("Loud and clear—
+  everything is running smooth here. What's the plan for today?"). Draft
+  deleted from vault. SPEC criterion 6 met.
+
+  OBSERVATION: Discord's auto-unarchive-on-message behavior means the user
+  CAN still type in the thread after cancel — Discord reactivates archived
+  threads on any new post. Our code archives correctly; Discord overrides
+  the visible state on subsequent activity. SPEC didn't require Thread.edit(
+  locked=True), so this is in-spec. Future enhancement could add `locked=True`
+  to prevent reactivation.
 
 ### 9. Restart-resume preserves draft
 expected: Run `:pf player start`, answer the character-name question only, restart the bot, then post the next answer in the same thread. Bot accepts the answer and posts the style-preset prompt — no "session expired" error, no re-asking the first question.
@@ -85,9 +113,9 @@ result: pending
 ## Summary
 
 total: 10
-passed: 5
+passed: 8
 issues: 0
-pending: 5
+pending: 2
 skipped: 0
 notes: |
   Tests 2 (no-args creates thread), 3 (plain-text answer captured),
@@ -98,6 +126,13 @@ notes: |
   caught and fixed mid-UAT. Live-bot is now healthy through Test 6 inclusive.
 
 ## Gaps
+
+### G-04 — Cancel didn't actually archive the thread (FIXED in UAT)
+- **Discovered:** Test 8 — `:pf player cancel` produced the ack text, but the thread stayed open and the user could continue typing commands in it.
+- **Cause:** Discord auto-unarchives any thread on new-message receipt. Sequence was: `_archive_and_discard()` → `await thread.edit(archived=True)` → bot's response_renderer posts ack via `thread.send()` → Discord un-archives. The bot's own ack reply silently undid the archive.
+- **Why automated tests missed it:** unit tests assert `thread.edit(archived=True)` was called — they verify the API call but not the post-condition. The conftest fake `_FakeThread.send` doesn't model Discord's auto-unarchive semantics.
+- **Fix:** Invert ordering — `cancel_dialog` and the completion branch of `consume_as_answer` now `thread.send(ack)` FIRST, then archive, then return `""` (empty-string sentinel). `response_renderer` short-circuits empty strings (`if not response: return`) so the bot doesn't double-send. Same behavioral target (user sees the ack), correct ordering preserves the archive.
+- **Status:** RESOLVED — 86 tests GREEN, image rebuilt, container recreated.
 
 ### G-03 — Every dialog response posted twice (FIXED in UAT)
 - **Discovered:** Tests 2-5 — completed onboarding successfully but every bot reply ("How would you like me to address you?", "Pick a style:...", "Player onboarded as...") appeared twice in Discord.
