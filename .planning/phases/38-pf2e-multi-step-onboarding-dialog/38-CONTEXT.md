@@ -65,10 +65,14 @@ Downstream agents MUST read `38-SPEC.md` before planning or implementing. Requir
   QUESTIONS = {
       "character_name": "What is your character's name?",
       "preferred_name": "How would you like me to address you?",
-      "style_preset": "Pick a style: Tactician, Lorekeeper, Cheerleader, Rules-Lawyer Lite",
+      "style_preset": (
+          "Pick a style — reply with a number or the name:\n"
+          "1) Tactician\n2) Lorekeeper\n3) Cheerleader\n4) Rules-Lawyer Lite"
+      ),
   }
   ```
   Step values are literal strings (not Enum) — they round-trip through YAML frontmatter as strings anyway.
+  **Refined 2026-05-10 (UAT G-06):** style_preset prompt is a 1-4 numbered list and `_normalise_style_preset` accepts numeric answers in addition to case-insensitive names with trailing-punctuation tolerance.
 - **D-14:** Style-preset answer validation reuses the existing `_VALID_STYLE_PRESETS` tuple from `pathfinder_player_adapter.py:22` (re-exported or imported from there to avoid duplication). Invalid preset → bot re-asks the same question with the valid-preset list, draft `step` unchanged.
 - **D-15:** `pathfinder_player_adapter.py` keeps the existing pipe-syntax `PlayerStartCommand` for one-shot use AND gains a new no-args branch that calls into `pathfinder_player_dialog.start_dialog(...)` to create the thread + draft. The adapter file remains the single registration surface for `:pf player start`.
 - **D-16:** New `PlayerCancelCommand` lives in `pathfinder_player_adapter.py` next to `PlayerStartCommand` and is registered in `pathfinder_dispatch.py` alongside the other verbs.

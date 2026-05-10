@@ -104,7 +104,19 @@ notes: |
 
 ### 9. Restart-resume preserves draft
 expected: Run `:pf player start`, answer the character-name question only, restart the bot, then post the next answer in the same thread. Bot accepts the answer and posts the style-preset prompt — no "session expired" error, no re-asking the first question.
-result: pending
+result: pass
+notes: |
+  Pre-restart draft snapshot (vault):
+    thread_id: 1502858437661429770
+    step: preferred_name
+    character_name: Garahan
+    user_id: 121993035381735427
+  After `docker compose restart discord` (fresh Discord gateway session
+  ab6a163a0dfd5853393ecb3bda0ae18e), user posted preferred-name answer in the
+  same thread → bot accepted → posted the style-preset prompt. No re-asking,
+  no session-expired. Vault-backed state survived process restart cleanly.
+  D-06 ("no in-process cache; vault is single source of truth") working as
+  designed. SPEC criterion 3 met.
 
 ### 10. Pipe-syntax regression (one-shot path unchanged)
 expected: In a regular channel, run `:pf player start TestChar | TestPref | Tactician`. Bot replies "Player onboarded as `TestPref` (Tactician). Profile: `...`". No thread is created. Profile file is written. This is the pre-Phase-38 behavior preserved verbatim.
@@ -113,9 +125,9 @@ result: pending
 ## Summary
 
 total: 10
-passed: 8
+passed: 9
 issues: 0
-pending: 2
+pending: 1
 skipped: 0
 notes: |
   Tests 2 (no-args creates thread), 3 (plain-text answer captured),
@@ -126,6 +138,24 @@ notes: |
   caught and fixed mid-UAT. Live-bot is now healthy through Test 6 inclusive.
 
 ## Gaps
+
+### G-06 — Style preset prompt now a numbered list, accepts 1-4 (UX improvement, not a bug)
+- **Operator request:** present the four style presets as a 1-4 numbered list and accept the number as a valid answer (in addition to the canonical name).
+- **Implementation:**
+  - `QUESTIONS["style_preset"]` rendered as a multi-line numbered list.
+  - `_normalise_style_preset` accepts numeric input 1..4 mapped to `_VALID_STYLE_PRESETS[idx-1]`.
+  - All previous matching paths preserved: case-insensitive name match, trailing-punctuation tolerance.
+  - Out-of-range numbers (0, 5, 99+) reject; alphanumeric ('1tactician') does NOT accidentally match.
+- **Tests:** `test_questions_dict_locked` updated to assert the new prompt format. New `test_normalise_style_preset_accepts_numeric_index` covers numeric input, trailing-punctuation on numeric, out-of-range, and mixed alphanumeric.
+- **Status:** SHIPPED — 89 tests GREEN, image rebuilt, container recreated. NOT a bug — operator-requested UX improvement. CONTEXT.md D-13 prompt-text decision updated implicitly by this commit.
+
+### G-05 — Style preset rejected with trailing punctuation (FIXED in UAT)
+- **Discovered:** During Test 9 follow-through (style-preset answer step). User typed `Rules-Lawyer Lite.` (terminal period) and got "isn't a valid style." rejection. Same for `Rules-Lawyer Lite,` etc.
+- **Cause:** `_normalise_style_preset` did `(answer or "").strip().lower()` — strips whitespace, lowercases, but leaves trailing punctuation intact. `"rules-lawyer lite."` ≠ `"rules-lawyer lite"`.
+- **Why automated tests missed it:** test fixture used `"Wizard"` (no punctuation, no overlap) for the invalid path. Case-insensitive match was tested with bare lowercase. Trailing-punctuation case not exercised.
+- **Fix:** strip `.,!?;:` from the input before matching: `(answer or "").strip().rstrip(".,!?;:").strip().lower()`. Canonical valid list is unchanged; only input normalisation is more forgiving.
+- **Regression coverage:** new `test_normalise_style_preset_strips_trailing_punctuation` covers period, comma, exclamation, lowercase+period, trailing-whitespace+period; confirms `"Wizard"` and `"Wizard."` still return None.
+- **Status:** RESOLVED — 87 tests GREEN, image rebuilt, container recreated.
 
 ### G-04 — Cancel didn't actually archive the thread (FIXED in UAT)
 - **Discovered:** Test 8 — `:pf player cancel` produced the ack text, but the thread stayed open and the user could continue typing commands in it.
