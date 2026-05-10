@@ -805,3 +805,27 @@ async def test_start_dialog_from_thread_with_no_parent_raises(monkeypatch):
         raise AssertionError("expected RuntimeError on parentless thread")
     except RuntimeError as exc:
         assert "parent" in str(exc).lower()
+
+
+async def test_normalise_style_preset_strips_trailing_punctuation():
+    """UAT G-05: 'Rules-Lawyer Lite.' (trailing period) must validate.
+
+    Users naturally type with terminal punctuation. The valid-list match
+    strips trailing `.,!?;:` (and surrounding whitespace) before comparing.
+    Case-insensitive matching from RESEARCH Q10 is preserved.
+    """
+    from pathfinder_player_dialog import _normalise_style_preset
+
+    # Trailing period — the original UAT bug.
+    assert _normalise_style_preset("Rules-Lawyer Lite.") == "Rules-Lawyer Lite"
+    # Lowercase + trailing period.
+    assert _normalise_style_preset("rules-lawyer lite.") == "Rules-Lawyer Lite"
+    # Trailing comma.
+    assert _normalise_style_preset("Tactician,") == "Tactician"
+    # Trailing exclamation.
+    assert _normalise_style_preset("Lorekeeper!") == "Lorekeeper"
+    # Trailing whitespace + period.
+    assert _normalise_style_preset("Cheerleader. ") == "Cheerleader"
+    # Still rejects genuinely invalid inputs.
+    assert _normalise_style_preset("Wizard") is None
+    assert _normalise_style_preset("Wizard.") is None

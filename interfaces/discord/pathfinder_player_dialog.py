@@ -249,8 +249,14 @@ async def _archive_and_discard(thread) -> None:
 
 
 def _normalise_style_preset(answer: str) -> str | None:
-    """Case-insensitive match → canonical-case preset, or None if invalid (RESEARCH Q10)."""
-    target = (answer or "").strip().lower()
+    """Case-insensitive match → canonical-case preset, or None if invalid (RESEARCH Q10).
+
+    Trailing punctuation (`.`, `,`, `!`, `?`, `;`, `:`) is stripped before
+    matching — users naturally type with terminal punctuation (e.g.
+    "Rules-Lawyer Lite.") and the spec's valid-list shouldn't reject that.
+    UAT G-05 fix.
+    """
+    target = (answer or "").strip().rstrip(".,!?;:").strip().lower()
     for preset in _VALID_STYLE_PRESETS:
         if preset.lower() == target:
             return preset
