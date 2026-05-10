@@ -591,5 +591,5 @@ Plans:
   5. Mid-dialog reconnect (bot restart) recovers the in-flight dialog from the vault — transient state survives bot restart for at least 24h
   6. Existing pipe-separated one-shot syntax from the v0.5 mitigation continues to work unchanged (regression coverage)
   7. All new behavior covered by Wave 0 RED tests (TDD)
-**Status:** Planned (not yet started)
+**Status:** ✅ COMPLETE (2026-05-10) — 9 plans, 7 waves, 10/10 UAT criteria PASS, 6 mid-UAT fixes (G-01..G-06)
 **Plans:** 9/9 plans complete

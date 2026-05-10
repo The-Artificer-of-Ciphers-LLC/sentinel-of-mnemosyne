@@ -21,17 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 37 — pf2e-per-player-memory
+**Current focus:** Phase 38 — pf2e-multi-step-onboarding-dialog (shipped)
 
 ## Current Position
 
-Phase: 37 (pf2e-per-player-memory) — ✅ COMPLETE (2026-05-07)
-Plan: 14 of 14 ✅ — Phase 37 closeout: E2E isolation regression + foundry import idempotency tests, USER-GUIDE.md created, architecture map appended to 37-CONTEXT.md. Plan 37-14 also fixed a silent identity-resolver-shape bug in routes/foundry from plan 37-12.
-Next: Phase 38 (TBD) or v0.6 milestone planning
-Prior Phase: 35 (Foundry VTT Event Ingest) — ✅ COMPLETE (FVT-01..03, 6 plans, 2026-04-25)
-Milestone: v0.5 The Dungeon — ✅ COMPLETE (9/9 phases complete: 28, 29, 30, 31, 32, 33, 34, 35, 36)
-Status: Phase complete — ready for verification
-Last activity: 2026-05-09
+Phase: 38 (pf2e-multi-step-onboarding-dialog) — ✅ COMPLETE (2026-05-10) — 10/10 UAT PASS, pushed to origin/main
+Plan: 9 of 9 ✅ — Wave 0 RED tests, Wave 1-4 implementation, Wave 5 E2E acceptance, Wave 6 closeout. 6 mid-UAT fixes (G-01..G-06): pyyaml dep, thread-on-thread, dup sends, archive ordering, trailing punctuation, numbered-list UX.
+Next: v0.6 milestone planning, OR Phase 39 (TBD)
+Prior Phase: 37 (PF2E Per-Player Memory) — ✅ COMPLETE (2026-05-07)
+Milestone: v0.5 The Dungeon — ✅ COMPLETE (10/10 phases including Phase 38)
+Status: Phase shipped — ready for next phase or milestone close
+Last activity: 2026-05-10
 
 ## Milestone Progress
 
