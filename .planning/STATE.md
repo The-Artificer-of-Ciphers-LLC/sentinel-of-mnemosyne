@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: — The Dungeon
 status: verifying
-stopped_at: Phase 38 execution complete (9/9 plans)
-last_updated: "2026-05-09T14:11:35.967Z"
+stopped_at: Phase 38 UAT complete (10/10 PASS, 6 mid-UAT fixes G-01..G-06)
+last_updated: "2026-05-10T03:03:25.758Z"
 last_activity: 2026-05-09
 progress:
   total_phases: 11
@@ -187,10 +187,10 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-09T14:11:35.956Z
-Stopped at: Phase 38 execution complete (9/9 plans)
+Last session: 2026-05-10T03:03:25.752Z
+Stopped at: Phase 38 UAT complete (10/10 PASS, 6 mid-UAT fixes G-01..G-06)
 Resume file: 
 
-.planning/phases/38-pf2e-multi-step-onboarding-dialog/38-09-SUMMARY.md
+.planning/phases/38-pf2e-multi-step-onboarding-dialog/38-UAT.md
 
 **Next Plan:** 36 Plan 01 — Wave 0 RED TDD stubs for test_npcs.py (7 test functions)

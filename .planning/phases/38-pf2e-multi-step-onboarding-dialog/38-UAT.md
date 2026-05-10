@@ -1,5 +1,5 @@
 ---
-status: testing
+status: complete
 phase: 38-pf2e-multi-step-onboarding-dialog
 source:
   - 38-01-SUMMARY.md
@@ -120,15 +120,33 @@ notes: |
 
 ### 10. Pipe-syntax regression (one-shot path unchanged)
 expected: In a regular channel, run `:pf player start TestChar | TestPref | Tactician`. Bot replies "Player onboarded as `TestPref` (Tactician). Profile: `...`". No thread is created. Profile file is written. This is the pre-Phase-38 behavior preserved verbatim.
-result: pending
+result: pass
+notes: |
+  Live verification: ":pf player start RegressionTest | RT | Tactician" →
+  "Player onboarded as RT (Tactician). Profile: mnemosyne/pf2e/players/p-3071e202906d/profile.md".
+  No thread created, no questions asked, route invoked directly with the
+  four-field payload — exactly the pre-Phase-38 behavior. SPEC criterion 9
+  (pipe-syntax regression) confirmed live. The 4 GREEN-on-day-zero
+  regression contracts in 38-03 already verified the same shape against the
+  test fixture; this UAT proves the live binding.
 
 ## Summary
 
 total: 10
-passed: 9
+passed: 10
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
+verdict: PHASE 38 ACCEPTED — 10/10 acceptance criteria validated live
+gap_log:
+  - G-01 pyyaml missing from Dockerfile (FIXED)
+  - G-02 thread-on-thread crash on :pf player start in a thread (FIXED)
+  - G-03 every dialog response posted twice (FIXED)
+  - G-04 archive un-done by bot's own ack reply (FIXED)
+  - G-05 trailing punctuation rejected on style preset (FIXED)
+  - G-06 numbered-list style prompt + numeric answer (UX improvement, shipped)
+fix_commit_count: 6 mid-UAT
+test_count_final: 89 GREEN across 4 Phase-38 test files
 notes: |
   Tests 2 (no-args creates thread), 3 (plain-text answer captured),
   4 (second answer + style prompt), 5 (case-insensitive style → completion +
