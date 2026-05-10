@@ -32,7 +32,13 @@ STEPS: tuple[str, str, str] = ("character_name", "preferred_name", "style_preset
 QUESTIONS: dict[str, str] = {
     "character_name": "What is your character's name?",
     "preferred_name": "How would you like me to address you?",
-    "style_preset": "Pick a style: Tactician, Lorekeeper, Cheerleader, Rules-Lawyer Lite",
+    "style_preset": (
+        "Pick a style — reply with a number or the name:\n"
+        "1) Tactician\n"
+        "2) Lorekeeper\n"
+        "3) Cheerleader\n"
+        "4) Rules-Lawyer Lite"
+    ),
 }
 
 
@@ -249,14 +255,27 @@ async def _archive_and_discard(thread) -> None:
 
 
 def _normalise_style_preset(answer: str) -> str | None:
-    """Case-insensitive match → canonical-case preset, or None if invalid (RESEARCH Q10).
+    """Resolve a player's style-preset answer to a canonical preset name, or None.
 
-    Trailing punctuation (`.`, `,`, `!`, `?`, `;`, `:`) is stripped before
-    matching — users naturally type with terminal punctuation (e.g.
-    "Rules-Lawyer Lite.") and the spec's valid-list shouldn't reject that.
-    UAT G-05 fix.
+    Accepts three input forms:
+      1. Numeric index 1..4 matching the preset's position in _VALID_STYLE_PRESETS
+         (e.g. "1" → "Tactician"). Trailing punctuation tolerated ("1." → "Tactician").
+      2. Case-insensitive name match (e.g. "tactician" → "Tactician") — RESEARCH Q10.
+      3. Case-insensitive name match with trailing punctuation stripped (UAT G-05).
+
+    Whitespace on both sides is always stripped first.
     """
-    target = (answer or "").strip().rstrip(".,!?;:").strip().lower()
+    cleaned = (answer or "").strip().rstrip(".,!?;:").strip()
+    if not cleaned:
+        return None
+    # Numeric index path (1..len(_VALID_STYLE_PRESETS)).
+    if cleaned.isdigit():
+        idx = int(cleaned) - 1
+        if 0 <= idx < len(_VALID_STYLE_PRESETS):
+            return _VALID_STYLE_PRESETS[idx]
+        return None
+    # Name match (case-insensitive).
+    target = cleaned.lower()
     for preset in _VALID_STYLE_PRESETS:
         if preset.lower() == target:
             return preset

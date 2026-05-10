@@ -64,15 +64,24 @@ async def test_steps_tuple_locked():
 
 
 async def test_questions_dict_locked():
-    """QUESTIONS dict locks each prompt verbatim (D-13)."""
+    """QUESTIONS dict locks each prompt verbatim (D-13).
+
+    style_preset is a numbered-list prompt as of UAT G-06 (operator-approved
+    behavior change) — see test_normalise_style_preset_accepts_numeric_index
+    for the corresponding answer-side support.
+    """
     from pathfinder_player_dialog import QUESTIONS
 
     assert QUESTIONS["character_name"] == "What is your character's name?"
     assert QUESTIONS["preferred_name"] == "How would you like me to address you?"
-    assert (
-        QUESTIONS["style_preset"]
-        == "Pick a style: Tactician, Lorekeeper, Cheerleader, Rules-Lawyer Lite"
+    expected_style_prompt = (
+        "Pick a style — reply with a number or the name:\n"
+        "1) Tactician\n"
+        "2) Lorekeeper\n"
+        "3) Cheerleader\n"
+        "4) Rules-Lawyer Lite"
     )
+    assert QUESTIONS["style_preset"] == expected_style_prompt
 
 
 async def test_draft_path_format():
@@ -829,3 +838,22 @@ async def test_normalise_style_preset_strips_trailing_punctuation():
     # Still rejects genuinely invalid inputs.
     assert _normalise_style_preset("Wizard") is None
     assert _normalise_style_preset("Wizard.") is None
+
+
+async def test_normalise_style_preset_accepts_numeric_index():
+    """UAT G-06: numeric answers 1..4 map to canonical preset names."""
+    from pathfinder_player_dialog import _normalise_style_preset
+
+    assert _normalise_style_preset("1") == "Tactician"
+    assert _normalise_style_preset("2") == "Lorekeeper"
+    assert _normalise_style_preset("3") == "Cheerleader"
+    assert _normalise_style_preset("4") == "Rules-Lawyer Lite"
+    # Trailing punctuation tolerated on numeric inputs too.
+    assert _normalise_style_preset("1.") == "Tactician"
+    assert _normalise_style_preset(" 4 ") == "Rules-Lawyer Lite"
+    # Out-of-range numbers reject.
+    assert _normalise_style_preset("0") is None
+    assert _normalise_style_preset("5") is None
+    assert _normalise_style_preset("99") is None
+    # Mixed alphanumeric does NOT accidentally match (still goes through name path).
+    assert _normalise_style_preset("1tactician") is None
