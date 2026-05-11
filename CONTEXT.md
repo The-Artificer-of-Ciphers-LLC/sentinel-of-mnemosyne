@@ -330,4 +330,49 @@ obsidian_path_gotcha:
   fact: "mnemosyne/ is the local git-ignored directory holding vault content on disk, but Obsidian REST API paths are relative to the vault root — self/identity.md in code = /vault/self/identity.md in REST = <obsidian_vault_root>/self/identity.md on disk, not mnemosyne/self/identity.md"
   implication: "when writing vault files via curl or code, use /vault/self/X not /vault/mnemosyne/self/X"
   status: documented
+
+warm_tier_retrieval_overhaul_2026-05-11:
+  symptom: "Sentinel knows a note exists (mentions filename/metadata) but cannot produce note body content (lyrics, synth patches, etc.); user demonstrated with learning/omie wise production chart gm 110bpm halftime with lyrics and bass patch.md"
+  root_causes:
+    - ref: WARM-001
+      fact: "_format_search_results only passed search snippet (matches[0].context, ~20 chars) to LLM — never fetched note body"
+      fix: "_append_warm_tier now calls vault.read_note() in parallel for each top result; full body injected; snippet is fallback if read fails"
+      files: "sentinel-core/app/services/message_processing.py"
+      status: fixed
+    - ref: WARM-002
+      fact: "SEARCH_SCORE_THRESHOLD=0.5 filtered every result — Obsidian /search/simple/ returns negative BM25 scores (-6 to -207 in live vault); threshold was calibrated against a false assumption of positive scores"
+      evidence: "omie wise note scores -120.86; sweep noise at -202; sessions at -6"
+      fix: "threshold changed to -200.0; missing-score default changed from 0.0 to float('-inf')"
+      files: "sentinel-core/app/services/message_processing.py"
+      status: fixed
+    - ref: WARM-003
+      fact: "ops/sessions/ results dominate search rankings because session summaries contain verbatim conversation text — they always score better than knowledge notes for any query the user just sent"
+      fix: "warm-tier exclusion list expanded: now filters ops/ (all), _trash/, self/ — these are hot-tier content or archived files, not knowledge retrieval targets"
+      prior_exclusions: "ops/sessions/, ops/sweeps/ only"
+      current_exclusions: "ops/, _trash/, self/"
+      files: "sentinel-core/app/services/message_processing.py"
+      status: fixed
+    - ref: WARM-004
+      fact: "Obsidian /search/simple/ is conjunctive AND — adding extra terms reduces recall; long conversational queries ('what do you know about the omie wise synthwave I wanted to do') return only 2 results (both ops/sessions/) that then get filtered, leaving warm tier empty"
+      obsidian_search_behavior: "OR keyword is NOT a boolean operator — treated as a literal term; conjunctive AND is the only mode; more terms = fewer matches"
+      fix: "_best_search_query() extracts the longest consecutive run of non-stopword words from the message; 'what do you know about the omie wise synthwave' → 'omie wise synthwave'; queries > 5 words use this extracted run instead of the full message"
+      files: "sentinel-core/app/services/message_processing.py"
+      status: fixed
+  needs_live_verification:
+    action: "docker compose build sentinel-core && docker compose up -d sentinel-core, then ask in Discord: 'what do you know about the omie wise synthwave I wanted to do' — Sentinel should return full lyrics and bass patch content from the note, not just metadata"
+    note: "281 tests pass; offline query simulation confirms chart in top-3; live smoke test not completed due to context exhaustion"
+  architectural_note:
+    fact: "Obsidian /search/simple/ is keyword BM25 and will always rank short documents above long detailed notes; a long production chart (1959 tokens) loses to shorter notes on score"
+    future_work: "vault sweeper already builds embeddings via litellm; wiring those into a vector-search path in vault.find() would solve the ranking problem permanently without query-engineering heuristics"
+    current_mitigation: "_best_search_query() + expanded exclusions work for the common cases but are heuristics, not a principled fix"
+  test_coverage:
+    new_tests_added:
+      - "test_warm_tier_injects_full_note_content_not_snippet — verifies read_note() called and full body in context"
+      - "test_warm_tier_excludes_ops_session_and_sweep_paths — verifies ops/ paths blocked even when score passes threshold"
+      - "test_warm_tier_result_missing_score_defaults_to_negative_infinity — renamed from _defaults_to_zero"
+    all_tests: "281 passed"
+  commits:
+    - "fix(warm-tier): fetch full note body instead of search snippet"
+    - "fix(warm-tier): calibrate score threshold for Obsidian's negative BM25 scores"
+    - "fix(warm-tier): broaden exclusions and use longest-run query for long messages"
 ```
