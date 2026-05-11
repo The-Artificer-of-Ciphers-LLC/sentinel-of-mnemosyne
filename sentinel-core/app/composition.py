@@ -317,6 +317,7 @@ async def build_application(
             http_client,
             settings.lmstudio_base_url or DEFAULT_LMSTUDIO_BASE_URL,
             settings.embedding_model,
+            api_key=settings.lmstudio_api_key or "lm-studio",
         )
 
     if module_registry is None:

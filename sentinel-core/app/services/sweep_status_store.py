@@ -27,6 +27,11 @@ def set_sweep_status_from_report(report) -> None:
     )
 
 
+def patch_sweep_status(**kwargs) -> None:
+    """Update individual fields in the live status store."""
+    _SWEEP_STATUS.update(kwargs)
+
+
 def reset_sweep_status() -> None:
     _SWEEP_STATUS.update(
         sweep_id=None,

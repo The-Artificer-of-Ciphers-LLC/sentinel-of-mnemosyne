@@ -38,12 +38,15 @@ async def embed_texts(
     *,
     api_base: str,
     model: str | None = None,
+    api_key: str = "lm-studio",
     timeout: float = 60.0,
 ) -> list[list[float]]:
     """Return one float-vector per input text. Caller handles failures.
 
     ``model`` defaults to ``f"openai/{settings.embedding_model}"`` resolved at
     call time. Callers that pass an explicit ``model=`` win.
+    ``api_key`` must be non-empty for litellm even on local endpoints that
+    don't actually validate it — defaults to "lm-studio".
     """
     resolved_model = model or _default_model()
     try:
@@ -51,6 +54,7 @@ async def embed_texts(
             model=resolved_model,
             input=list(texts),
             api_base=api_base,
+            api_key=api_key,
             timeout=timeout,
         )
     except litellm.BadRequestError as exc:
@@ -96,6 +100,7 @@ class Embeddings:
         http_client: object,
         base_url: str,
         model: str,
+        api_key: str = "",
     ) -> None:
         self._http_client = http_client
         # /v1 suffix normalisation — ensure exactly one trailing /v1
@@ -105,6 +110,8 @@ class Embeddings:
         self._api_base = normalised
         # Provider prefix added here, not stored in settings (260502-1zv D-03)
         self._model = f"openai/{model}" if not model.startswith("openai/") else model
+        # litellm requires a non-empty api_key even for local endpoints
+        self._api_key = api_key or "lm-studio"
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         """Return one float-vector per input text."""
@@ -112,4 +119,5 @@ class Embeddings:
             texts,
             api_base=self._api_base,
             model=self._model,
+            api_key=self._api_key,
         )

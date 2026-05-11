@@ -89,19 +89,20 @@ async def start_sweep(
                         lines.append(f"- {e}")
                     lines.append("")
                 await vault.write_note(report_path, "\n".join(lines))
-                cur = get_status()
-                cur["status"] = "dry-run-complete"
-                cur["report_path"] = report_path
-                cur["topic_moves"] = report.topic_moves
-                cur["noise_moved"] = report.noise_moved
-                cur["duplicates_moved"] = report.duplicates_moved
-                cur["files_processed"] = report.files_processed
-                cur["files_total"] = report.files_total
+                patch_sweep_status(
+                    status="dry-run-complete",
+                    report_path=report_path,
+                    topic_moves=report.topic_moves,
+                    noise_moved=report.noise_moved,
+                    duplicates_moved=report.duplicates_moved,
+                    files_processed=report.files_processed,
+                    files_total=report.files_total,
+                )
             except SweepInProgressError:
-                get_status()["status"] = "blocked"
+                patch_sweep_status(status="blocked")
             except Exception as exc:
                 logger.exception("dry-run sweep crashed: %s", exc)
-                get_status()["status"] = "error"
+                patch_sweep_status(status="error")
 
         runner.schedule(_dry_runner())
         return {"sweep_id": sweep_id, "status": "dry-running", "report_path": report_path}
