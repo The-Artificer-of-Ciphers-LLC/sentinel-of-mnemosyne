@@ -961,6 +961,54 @@ async def test_warm_tier_result_missing_score_defaults_to_zero(mock_ai_provider)
     assert captured_messages[1]["content"] == "test query"
 
 
+async def test_warm_tier_injects_full_note_content_not_snippet(mock_ai_provider):
+    """Warm tier fetches full note body via read_note() and injects it — not just the search snippet.
+
+    Regression guard for the Omie Wise retrieval bug: Sentinel knew a note existed
+    (from find() snippet) but never fetched its full content, so lyrics/synth patches
+    were invisible to the LLM even when the user explicitly asked for them.
+    """
+    full_note_body = "# Omie Wise Production Chart\n\nLyrics: Down by the river where the willows weep\nBass patch: filter cutoff 80Hz, LFO rate 0.3"
+    full_content_vault = AsyncMock()
+    full_content_vault.get_user_context.return_value = None
+    full_content_vault.read_self_context.return_value = ""
+    full_content_vault.get_recent_sessions.return_value = []
+    full_content_vault.write_session_summary.return_value = None
+    full_content_vault.find.return_value = [
+        {
+            "filename": "learning/omie-wise.md",
+            "score": 1.2,
+            "matches": [{"match": {"start": 0, "end": 20}, "context": "Omie Wise Production"}],
+        }
+    ]
+    full_content_vault.read_note.return_value = full_note_body
+
+    captured_messages = []
+
+    async def capturing_complete(messages):
+        captured_messages.extend(messages)
+        return "Here are the lyrics..."
+
+    mock_ai_provider.complete.side_effect = capturing_complete
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.vault = full_content_vault
+        app.state.ai_provider = mock_ai_provider
+        resp = await client.post(
+            "/message",
+            json={"content": "show me the lyrics we came up with", "user_id": "trekkie"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+    # Full note body must appear in injected context — not just the snippet
+    vault_content = captured_messages[1]["content"]
+    assert "Down by the river where the willows weep" in vault_content
+    assert "Bass patch: filter cutoff 80Hz" in vault_content
+    # Confirm read_note was called with the matched filename
+    full_content_vault.read_note.assert_called_once_with("learning/omie-wise.md")
+
+
 # ---------------------------------------------------------------------------
 # Wave 6 tests — Phase 10 session path migration (ops/sessions/)
 # RED until Plan 10-02 changes message.py line 216 to use ops/sessions/.

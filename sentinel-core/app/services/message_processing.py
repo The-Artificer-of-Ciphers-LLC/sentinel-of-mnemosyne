@@ -173,22 +173,34 @@ class MessageProcessor:
         if not relevant_results:
             return
 
-        vault_block = self._format_search_results(relevant_results[:3])
+        top_results = relevant_results[:3]
+        paths = [r.get("filename", "") for r in top_results]
+        raw_contents = await asyncio.gather(
+            *[self._vault.read_note(p) for p in paths],
+            return_exceptions=True,
+        )
+
+        vault_block = self._format_search_results(top_results, paths, raw_contents)
         safe_vault = self._budget.truncate(vault_block, budget)
         filtered_vault = self._injection_filter.wrap_context(safe_vault)
         messages.append({"role": "user", "content": filtered_vault})
         messages.append({"role": "assistant", "content": "Understood."})
 
     @staticmethod
-    @staticmethod
-    def _format_search_results(results: list[dict]) -> str:
+    def _format_search_results(
+        results: list[dict], paths: list[str], contents: list
+    ) -> str:
         lines = ["Relevant vault notes:"]
-        for r in results:
-            filename = r.get("filename", "unknown")
-            matches = r.get("matches", [])
-            snippet = matches[0].get("context", "").strip() if matches else ""
-            lines.append(f"- **{filename}**: {snippet}" if snippet else f"- **{filename}**")
-        return "\n".join(lines)
+        for r, path, content in zip(results, paths, contents):
+            filename = r.get("filename", path or "unknown")
+            if isinstance(content, str) and content.strip():
+                lines.append(f"### {filename}\n\n{content.strip()}")
+            else:
+                # full read failed — fall back to search snippet
+                matches = r.get("matches", [])
+                snippet = matches[0].get("context", "").strip() if matches else ""
+                lines.append(f"- **{filename}**: {snippet}" if snippet else f"- **{filename}**")
+        return "\n\n".join(lines)
 
     @staticmethod
     def _build_session_summary(
