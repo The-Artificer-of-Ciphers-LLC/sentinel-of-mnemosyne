@@ -8,12 +8,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from app.errors import (
-    ContextError,
     ContextLengthError,
-    InternalError,
     MessageProcessingError,
     ProviderUnavailableError,
-    SecurityError,
 )
 from app.services.token_budget import TokenBudget, TokenLimitError
 
@@ -136,6 +133,7 @@ class MessageProcessor:
             "self/goals.md",
             "self/relationships.md",
             "ops/reminders.md",
+            "self/learning-areas.md",
         ]
         gather_results = await asyncio.gather(
             *[self._vault.read_self_context(p) for p in self_paths],

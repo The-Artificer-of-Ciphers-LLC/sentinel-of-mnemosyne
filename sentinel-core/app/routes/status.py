@@ -47,6 +47,7 @@ async def debug_context(
         "self/goals.md",
         "self/relationships.md",
         "ops/reminders.md",
+        "self/learning-areas.md",
     ]
     results = await asyncio.gather(
         *[obsidian.read_self_context(p) for p in self_paths],
