@@ -290,4 +290,44 @@ dockerfile_dep_check_phase_37:
   fact: "no new Python deps introduced in Phase 37"
   imports: stdlib + fastapi + pydantic + yaml (all pre-existing)
   dual_ship_required: false
+
+vault_sweep_bugs_fixed_2026-05-11:
+  - ref: SWEEP-001
+    fact: "embed_texts / Embeddings did not pass api_key to litellm.aembedding; litellm requires non-empty api_key even for local LM Studio endpoints that do not validate it"
+    symptom: "sweep stuck at 88/88 files_processed, never advancing past embedding step; no LLM activity visible"
+    fix: "added api_key param to embed_texts (default 'lm-studio') and Embeddings.__init__; composition.py passes settings.lmstudio_api_key or 'lm-studio'"
+    files: "app/clients/embeddings.py, app/composition.py"
+    status: fixed
+  - ref: SWEEP-002
+    fact: "note_sweep_runner._dry_runner used get_status() which returns dict(_SWEEP_STATUS) — a copy; mutations to the copy never persisted, status stuck on 'running' forever"
+    symptom: "dry-run sweep completes (logs show warning + finish) but GET /vault/sweep/status always returns status=running"
+    fix: "added patch_sweep_status(**kwargs) to sweep_status_store that mutates _SWEEP_STATUS directly; _dry_runner now calls patch_sweep_status() instead of get_status()[...] ="
+    files: "app/services/sweep_status_store.py, app/services/note_sweep_runner.py"
+    status: fixed
+  - ref: SWEEP-003
+    fact: "ruff formatter drops imports it classifies as unused on every file save/format pass; affected both classify_note re-export in note.py and patch_sweep_status import in note_sweep_runner.py"
+    rule: "intentional re-exports for test patching require # noqa: F401; imports used only in nested closures (like _dry_runner) survive only if formatter does not reorder the import block"
+    mitigation: "classify_note import carries # noqa: F401; patch_sweep_status import must be present — verify after any formatter run touches note_sweep_runner.py"
+    status: ongoing_vigilance
+
+vault_sweep_features_added_2026-05-11:
+  - ref: FEAT-001
+    fact: "vault sweeper now accepts source_folder param to scope walk to a specific vault folder instead of the whole vault"
+    api: "POST /vault/sweep/start body: {user_id, source_folder: str = '', force_reclassify, dry_run}"
+    threading: "SweepStartRequest.source_folder → start_sweep(source_folder) → run_sweep(source_folder) → walk_vault(client, root=source_folder)"
+    note: "walk_vault already had root param — feature was exposing it, not adding new logic"
+    status: shipped
+
+hot_tier_learning_areas_2026-05-11:
+  fact: "self/learning-areas.md added to _SELF_PATHS in message_processing.py and status.py; read on every message alongside identity/methodology/goals/relationships/reminders"
+  vault_path: "self/learning-areas.md (vault root, NOT mnemosyne/self/)"
+  content: "operator-maintained summary of active learning domains (music production, bass, Coincert, Spanish, health)"
+  removal: "delete vault file + revert one-line addition in message_processing.py and status.py self_paths lists"
+  gotcha: "Obsidian REST API paths for self/ files are relative to vault root, not to the mnemosyne/ subfolder on disk — writing to /vault/mnemosyne/self/X is a different path than /vault/self/X"
+  status: active
+
+obsidian_path_gotcha:
+  fact: "mnemosyne/ is the local git-ignored directory holding vault content on disk, but Obsidian REST API paths are relative to the vault root — self/identity.md in code = /vault/self/identity.md in REST = <obsidian_vault_root>/self/identity.md on disk, not mnemosyne/self/identity.md"
+  implication: "when writing vault files via curl or code, use /vault/self/X not /vault/mnemosyne/self/X"
+  status: documented
 ```
