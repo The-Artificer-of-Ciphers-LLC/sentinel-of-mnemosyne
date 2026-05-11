@@ -17,7 +17,14 @@ from app.services.token_budget import TokenBudget, TokenLimitError
 
 logger = logging.getLogger(__name__)
 
-SEARCH_SCORE_THRESHOLD = 0.5
+# Obsidian /search/simple/ returns BM25-variant scores that are negative for most queries.
+# Calibrated against real data: relevant content notes land around -120, irrelevant ops/sweep
+# noise lands around -202. A floor of -200 correctly admits the former and rejects the latter.
+SEARCH_SCORE_THRESHOLD = -200.0
+
+# Paths excluded from warm-tier injection: session summaries are already in the hot tier,
+# and sweep reports are operational noise with no user-knowledge value.
+_WARM_TIER_EXCLUDE_PREFIXES = ("ops/sessions/", "ops/sweeps/")
 
 
 @dataclass(frozen=True)
@@ -169,7 +176,11 @@ class MessageProcessor:
 
     async def _append_warm_tier(self, messages: list[dict], req: MessageRequest, budget: int) -> None:
         search_results = await self._vault.find(req.content)
-        relevant_results = [r for r in search_results if r.get("score", 0.0) >= SEARCH_SCORE_THRESHOLD]
+        relevant_results = [
+            r for r in search_results
+            if r.get("score", float("-inf")) >= SEARCH_SCORE_THRESHOLD
+            and not r.get("filename", "").startswith(_WARM_TIER_EXCLUDE_PREFIXES)
+        ]
         if not relevant_results:
             return
 

@@ -924,13 +924,13 @@ async def test_warm_tier_injected_when_score_meets_threshold(mock_ai_provider):
     assert "garbled pf2e content" not in vault_content
 
 
-async def test_warm_tier_result_missing_score_defaults_to_zero(mock_ai_provider):
-    """Results without a 'score' key default to 0.0 and are excluded by the threshold gate (MEM-08b)."""
+async def test_warm_tier_result_missing_score_defaults_to_negative_infinity(mock_ai_provider):
+    """Results without a 'score' key default to -inf and are excluded by the threshold gate (MEM-08b)."""
     no_score_obsidian = AsyncMock()
     no_score_obsidian.get_user_context.return_value = None
     no_score_obsidian.get_recent_sessions.return_value = []
     no_score_obsidian.write_session_summary.return_value = None
-    # Result with no score field — should be treated as 0.0 and filtered out
+    # Result with no score field — should be treated as -inf and filtered out
     no_score_obsidian.find.return_value = [
         {
             "filename": "some/note.md",
@@ -956,9 +956,76 @@ async def test_warm_tier_result_missing_score_defaults_to_zero(mock_ai_provider)
         )
 
     assert resp.status_code == 200
-    # No vault pair injected — missing score treated as 0.0, below threshold
+    # No vault pair injected — missing score treated as -inf, below threshold
     assert len(captured_messages) == 2
     assert captured_messages[1]["content"] == "test query"
+
+
+async def test_warm_tier_excludes_ops_session_and_sweep_paths(mock_ai_provider):
+    """ops/sessions/ and ops/sweeps/ paths are excluded from warm tier even when score passes threshold.
+
+    Session summaries already appear in the hot tier; injecting them again via warm tier
+    wastes the search budget and crowds out actual knowledge notes. Sweep reports are
+    operational noise with no user-knowledge value.
+    """
+    from app.routes.message import SEARCH_SCORE_THRESHOLD
+
+    ops_heavy_vault = AsyncMock()
+    ops_heavy_vault.get_user_context.return_value = None
+    ops_heavy_vault.read_self_context.return_value = ""
+    ops_heavy_vault.get_recent_sessions.return_value = []
+    ops_heavy_vault.write_session_summary.return_value = None
+    # Session and sweep results outrank the actual knowledge note on score,
+    # but only the knowledge note should reach the LLM context.
+    ops_heavy_vault.find.return_value = [
+        {
+            "filename": "ops/sessions/2026-05-11/user-12-00-00.md",
+            "score": SEARCH_SCORE_THRESHOLD + 50,  # best score — but ops/sessions/ excluded
+            "matches": [{"match": {"start": 0, "end": 20}, "context": "session content"}],
+        },
+        {
+            "filename": "ops/sweeps/dry-run-2026-05-11.md",
+            "score": SEARCH_SCORE_THRESHOLD + 10,  # good score — but ops/sweeps/ excluded
+            "matches": [{"match": {"start": 0, "end": 20}, "context": "sweep report"}],
+        },
+        {
+            "filename": "learning/omie-wise.md",
+            "score": SEARCH_SCORE_THRESHOLD + 5,  # lower score — but NOT ops, so included
+            "matches": [{"match": {"start": 0, "end": 20}, "context": "Omie Wise lyrics"}],
+        },
+    ]
+    ops_heavy_vault.read_note.return_value = "# Omie Wise\n\nFull lyrics here."
+
+    captured_messages = []
+
+    async def capturing_complete(messages):
+        captured_messages.extend(messages)
+        return "Got it"
+
+    mock_ai_provider.complete.side_effect = capturing_complete
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.vault = ops_heavy_vault
+        app.state.ai_provider = mock_ai_provider
+        resp = await client.post(
+            "/message",
+            json={"content": "show me the lyrics", "user_id": "trekkie"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+    # Vault pair should be injected (learning note passes all filters)
+    assert len(captured_messages) == 4
+    vault_content = captured_messages[1]["content"]
+    # Ops paths must not appear
+    assert "ops/sessions" not in vault_content
+    assert "ops/sweeps" not in vault_content
+    assert "session content" not in vault_content
+    assert "sweep report" not in vault_content
+    # The knowledge note content must appear
+    assert "Omie Wise" in vault_content or "Full lyrics here" in vault_content
+    # read_note called only for the learning note (ops paths never reached)
+    ops_heavy_vault.read_note.assert_called_once_with("learning/omie-wise.md")
 
 
 async def test_warm_tier_injects_full_note_content_not_snippet(mock_ai_provider):
