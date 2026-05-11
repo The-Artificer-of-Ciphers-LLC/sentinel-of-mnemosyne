@@ -26,6 +26,35 @@ SEARCH_SCORE_THRESHOLD = -200.0
 # and sweep reports are operational noise with no user-knowledge value.
 _WARM_TIER_EXCLUDE_PREFIXES = ("ops/sessions/", "ops/sweeps/")
 
+# Common English function words stripped before keyword-mode vault search.
+# Obsidian /search/simple/ is conjunctive: every term must appear in the document.
+# For long conversational queries (>5 words) this kills recall — session summaries
+# (which contain the verbatim question) score higher than the actual knowledge notes.
+# We instead search with each content keyword in parallel, then merge by filename.
+_SEARCH_STOPWORDS = frozenset(
+    "a about all also an and any are as at be been by can could "
+    "did do does for from get go had has have he her here his how "
+    "i if in is it its just let may me might more my no not of or "
+    "our out see she should so some than that the their then there "
+    "they this to up us was we were what when where which who will "
+    "with would you your".split()
+)
+
+# Queries longer than this many words switch to per-keyword parallel search.
+_KEYWORD_SEARCH_THRESHOLD = 5
+
+
+def _extract_keywords(content: str) -> list[str]:
+    """Return deduplicated non-stopword tokens from content, preserving order."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for word in content.lower().split():
+        token = word.strip(".,!?;:\"'")
+        if token and token not in _SEARCH_STOPWORDS and token not in seen:
+            seen.add(token)
+            result.append(token)
+    return result
+
 
 @dataclass(frozen=True)
 class _ContextBudget:
@@ -175,7 +204,28 @@ class MessageProcessor:
         messages.append({"role": "assistant", "content": "Understood."})
 
     async def _append_warm_tier(self, messages: list[dict], req: MessageRequest, budget: int) -> None:
-        search_results = await self._vault.find(req.content)
+        words = req.content.split()
+        if len(words) > _KEYWORD_SEARCH_THRESHOLD:
+            keywords = _extract_keywords(req.content)[:5]
+            if keywords:
+                results_lists = await asyncio.gather(
+                    *[self._vault.find(kw) for kw in keywords],
+                    return_exceptions=True,
+                )
+                by_file: dict[str, dict] = {}
+                for results in results_lists:
+                    if not isinstance(results, list):
+                        continue
+                    for r in results:
+                        fn = r.get("filename", "")
+                        if fn not in by_file or r.get("score", float("-inf")) > by_file[fn].get("score", float("-inf")):
+                            by_file[fn] = r
+                search_results: list[dict] = list(by_file.values())
+            else:
+                search_results = await self._vault.find(req.content)
+        else:
+            search_results = await self._vault.find(req.content)
+
         relevant_results = [
             r for r in search_results
             if r.get("score", float("-inf")) >= SEARCH_SCORE_THRESHOLD
