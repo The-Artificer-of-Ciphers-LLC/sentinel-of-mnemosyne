@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Awaitable, Callable
 
 from app.errors import SweepInProgressError
+from app.services.sweep_status_store import patch_sweep_status
 from app.services.task_runner import AsyncioTaskRunner, TaskRunner
 from app.services.vault_sweeper import _set_status, get_status, run_sweep
 
