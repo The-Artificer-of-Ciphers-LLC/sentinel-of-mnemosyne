@@ -20,7 +20,7 @@ from pydantic import BaseModel
 
 from app.errors import EntryNotFound, InboxChangedConflict
 from app.services.inbox import INBOX_PATH, parse_inbox, render_for_discord
-from app.services.note_classifier import classify_note  # re-exported for tests
+from app.services.note_classifier import classify_note  # noqa: F401 — re-exported for test patching
 from app.services.note_intake import NoteIntake
 from app.state import get_route_context
 
@@ -116,6 +116,7 @@ class SweepStartRequest(BaseModel):
     user_id: str
     force_reclassify: bool = False
     dry_run: bool = False  # preview moves without modifying the vault
+    source_folder: str = ""  # restrict sweep to a specific vault folder; "" = whole vault
 
 
 def _is_admin_route(user_id: str) -> bool:
@@ -143,6 +144,7 @@ async def vault_sweep_start(req: SweepStartRequest, request: Request):
         embedder=embedder,
         force_reclassify=req.force_reclassify,
         dry_run=req.dry_run,
+        source_folder=req.source_folder,
     )
 
 

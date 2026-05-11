@@ -36,6 +36,7 @@ async def start_sweep(
     embedder: Callable[[list[str]], Awaitable[list[float]]],
     force_reclassify: bool,
     dry_run: bool,
+    source_folder: str = "",
     task_runner: TaskRunner | None = None,
 ) -> dict:
     sweep_id = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -55,6 +56,7 @@ async def start_sweep(
                     force_reclassify=force_reclassify,
                     status_callback=_set_status,
                     dry_run=True,
+                    source_folder=source_folder,
                 )
                 lines = [
                     f"# Dry-run sweep report — {sweep_id}",
@@ -114,6 +116,7 @@ async def start_sweep(
                 embedder,
                 force_reclassify=force_reclassify,
                 status_callback=_set_status,
+                source_folder=source_folder,
             )
             _set_status(report)
         except SweepInProgressError:

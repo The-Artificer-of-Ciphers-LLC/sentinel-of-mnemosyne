@@ -13,7 +13,6 @@ Lockfile sentinel ``ops/sweeps/_in-progress.md`` prevents overlapping sweeps
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from typing import AsyncIterator, Awaitable, Callable
 
 import numpy as np
@@ -21,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from app.errors import SweepInProgressError
 from app.markdown_frontmatter import join_frontmatter, split_frontmatter
-from app.time_utils import _iso_utc, _parse_iso, _today_str
+from app.time_utils import _iso_utc, _today_str
 from sentinel_shared.embedding_codec import decode_embedding, encode_embedding
 from sentinel_shared.similarity import cosine_similarity, find_dup_clusters
 
@@ -231,6 +230,7 @@ async def run_sweep(
     force_reclassify: bool = False,
     status_callback: Callable[[SweepReport], None] | None = None,
     dry_run: bool = False,
+    source_folder: str = "",
 ) -> SweepReport:
     """Walk vault, classify, embed, de-dup, relocate-misplaced, move-to-trash.
 
@@ -259,7 +259,7 @@ async def run_sweep(
     try:
         # 1. Walk → freeze list at start
         paths: list[str] = []
-        async for p in walk_vault(client):
+        async for p in walk_vault(client, root=source_folder):
             paths.append(p)
         report.files_total = len(paths)
 
