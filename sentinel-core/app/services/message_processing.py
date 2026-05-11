@@ -24,7 +24,10 @@ SEARCH_SCORE_THRESHOLD = -200.0
 
 # Paths excluded from warm-tier injection: session summaries are already in the hot tier,
 # and sweep reports are operational noise with no user-knowledge value.
-_WARM_TIER_EXCLUDE_PREFIXES = ("ops/sessions/", "ops/sweeps/")
+# All ops/ content is operational Sentinel state (sessions, sweeps, observations, reminders).
+# self/ is already injected by the hot tier. _trash/ is archived files.
+# None of these belong in warm-tier knowledge retrieval.
+_WARM_TIER_EXCLUDE_PREFIXES = ("ops/", "_trash/", "self/")
 
 # Common English function words stripped before keyword-mode vault search.
 # Obsidian /search/simple/ is conjunctive: every term must appear in the document.
@@ -54,6 +57,33 @@ def _extract_keywords(content: str) -> list[str]:
             seen.add(token)
             result.append(token)
     return result
+
+
+def _best_search_query(content: str) -> str:
+    """Extract the longest run of consecutive non-stopword words from content.
+
+    Obsidian /search/simple/ is conjunctive: every term must appear in the result.
+    A run of adjacent content words (e.g. "omie wise synthwave" from "what do you
+    know about the omie wise synthwave") forms a specific AND-query that matches the
+    target note without admitting generic matches from single function words.
+    Falls back to the full content string if no run is found.
+    """
+    words = content.lower().split()
+    tokens = [w.strip(".,!?;:\"'") for w in words]
+    indexed = [(i, t) for i, t in enumerate(tokens) if t and t not in _SEARCH_STOPWORDS]
+    if not indexed:
+        return content
+    runs: list[list[tuple[int, str]]] = []
+    current: list[tuple[int, str]] = [indexed[0]]
+    for prev, curr in zip(indexed, indexed[1:]):
+        if curr[0] == prev[0] + 1:
+            current.append(curr)
+        else:
+            runs.append(current)
+            current = [curr]
+    runs.append(current)
+    best = max(runs, key=len)
+    return " ".join(t for _, t in best)
 
 
 @dataclass(frozen=True)
@@ -206,23 +236,8 @@ class MessageProcessor:
     async def _append_warm_tier(self, messages: list[dict], req: MessageRequest, budget: int) -> None:
         words = req.content.split()
         if len(words) > _KEYWORD_SEARCH_THRESHOLD:
-            keywords = _extract_keywords(req.content)[:5]
-            if keywords:
-                results_lists = await asyncio.gather(
-                    *[self._vault.find(kw) for kw in keywords],
-                    return_exceptions=True,
-                )
-                by_file: dict[str, dict] = {}
-                for results in results_lists:
-                    if not isinstance(results, list):
-                        continue
-                    for r in results:
-                        fn = r.get("filename", "")
-                        if fn not in by_file or r.get("score", float("-inf")) > by_file[fn].get("score", float("-inf")):
-                            by_file[fn] = r
-                search_results: list[dict] = list(by_file.values())
-            else:
-                search_results = await self._vault.find(req.content)
+            query = _best_search_query(req.content)
+            search_results = await self._vault.find(query)
         else:
             search_results = await self._vault.find(req.content)
 
