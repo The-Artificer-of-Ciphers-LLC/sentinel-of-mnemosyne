@@ -56,7 +56,6 @@ def setup_app_state():
     mock_settings = MagicMock()
     mock_settings.ai_provider = "lmstudio"
     mock_settings.model_name = "test-model"
-    mock_settings.pi_harness_url = "http://pi-harness:3000"
 
     app.state.vault = mock_obsidian
     app.state.ai_provider = mock_ai_provider

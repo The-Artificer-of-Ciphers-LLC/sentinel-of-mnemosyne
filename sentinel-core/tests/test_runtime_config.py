@@ -7,7 +7,6 @@ def test_runtime_config_from_settings_maps_required_fields():
     settings = SimpleNamespace(
         model_name="m1",
         ai_provider="lmstudio",
-        pi_harness_url="http://pi",
         lmstudio_base_url="http://lm",
         embedding_model="emb",
     )
@@ -17,6 +16,5 @@ def test_runtime_config_from_settings_maps_required_fields():
     assert isinstance(cfg, RuntimeConfig)
     assert cfg.model_name == "m1"
     assert cfg.ai_provider == "lmstudio"
-    assert cfg.pi_harness_url == "http://pi"
     assert cfg.lmstudio_base_url == "http://lm"
     assert cfg.embedding_model == "emb"

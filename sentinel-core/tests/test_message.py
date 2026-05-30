@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock
 os.environ.setdefault("SENTINEL_API_KEY", "test-key-for-pytest")
 
 from app.main import app
-from app.clients.pi_adapter import PiAdapterClient
 from app.config import settings
 from app.services.message_processing import MessageProcessor
 from app.services.provider_router import ProviderUnavailableError
@@ -433,33 +432,6 @@ async def test_context_truncated_to_budget():
 
     # After truncation the full array fits within 400 tokens → 200 response
     assert resp.status_code == 200
-
-
-async def test_send_messages_sends_array():
-    """PiAdapterClient.send_messages() POSTs {messages: [...]} to bridge /prompt."""
-    import json
-
-    captured = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/prompt":
-            captured.update(json.loads(request.content))
-            return httpx.Response(200, json={"content": "ok"})
-        return httpx.Response(404)
-
-    async with AsyncClient(transport=httpx.MockTransport(handler), base_url="http://test") as client:
-        adapter = PiAdapterClient(client, "http://test")
-        messages = [
-            {"role": "user", "content": "ctx"},
-            {"role": "assistant", "content": "Understood."},
-            {"role": "user", "content": "hello"},
-        ]
-        result = await adapter.send_messages(messages)
-
-    assert result == "ok"
-    assert "messages" in captured
-    assert captured["messages"] == messages
-    assert "message" not in captured  # must NOT send legacy field
 
 
 async def test_ai_provider_called(mock_ai_provider):

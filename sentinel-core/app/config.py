@@ -25,7 +25,6 @@ def _read_secret(name: str, env_fallback: str = "") -> str:
 
 class Settings(BaseSettings):
     lmstudio_base_url: str = "http://host.docker.internal:1234/v1"
-    pi_harness_url: str = "http://pi-harness:3000"
     sentinel_api_key: str  # Required — no default. Startup fails fast if missing.
     model_name: str = "gemma-4-e4b-it-mlx"
     # LM Studio embedding model id (no provider prefix — `openai/` is added at

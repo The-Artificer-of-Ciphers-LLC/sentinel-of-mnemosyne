@@ -4,7 +4,7 @@ Sentinel Core — FastAPI application entry point.
 Architecture:
   POST /message → APIKeyMiddleware → token guard → AI provider
   GET  /health  → always 200, reports obsidian status as non-blocking field
-  GET  /status  → authenticated system status (obsidian, pi_harness, ai_provider)
+  GET  /status  → authenticated system status (obsidian, ai_provider)
   GET  /context/{user_id} → authenticated debug context dump
 
 Lifespan delegates startup wiring and policy enforcement to
@@ -75,7 +75,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="Sentinel Core",
-    version="0.50.2",
+    version="0.50.3",
     description="Sentinel of Mnemosyne — Core message processing API",
     lifespan=lifespan,
 )

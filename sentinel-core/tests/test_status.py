@@ -37,7 +37,6 @@ def setup_app_state(mock_obsidian, mock_http_client):
     app.state.http_client = mock_http_client
     app.state.ai_provider_name = "lmstudio"
     app.state.settings = MagicMock()
-    app.state.settings.pi_harness_url = "http://pi-harness:3000"
     app.state.route_ctx = RouteContext(
         vault=app.state.vault,
         settings=app.state.settings,
@@ -47,7 +46,7 @@ def setup_app_state(mock_obsidian, mock_http_client):
 
 
 async def test_status_all_up(mock_obsidian, mock_http_client):
-    """When obsidian up and pi /health=200, returns status=ok."""
+    """When obsidian is up, returns status=ok."""
     mock_obsidian.check_health.return_value = True
     mock_http_client.get.return_value.status_code = 200
 
@@ -71,20 +70,6 @@ async def test_status_obsidian_down(mock_obsidian, mock_http_client):
     data = resp.json()
     assert data["status"] == "degraded"
     assert data["obsidian"] == "unreachable"
-
-
-async def test_status_pi_down(mock_obsidian, mock_http_client):
-    """When pi /health request fails, returns status=ok with pi_harness=unreachable (Pi is not a health gate)."""
-    mock_obsidian.check_health.return_value = True
-    mock_http_client.get.side_effect = Exception("connection refused")
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.get("/status", headers=AUTH_HEADERS)
-
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["status"] == "ok"
-    assert data["pi_harness"] == "unreachable"
 
 
 async def test_status_includes_ai_provider(mock_obsidian, mock_http_client):

@@ -2,13 +2,8 @@
 # Requires Docker Compose v2.20+ (Docker Desktop 4.22+)
 # Add future modules and interfaces as include entries here.
 # Never use `docker compose -f` stacking — use include only.
-#
-# Pi harness is NOT in the base stack — it is an opt-in power tool.
-# Activate via: ./sentinel.sh --pi up
-# Pi harness feature scope: v0.7. See ARCHITECTURE-Core.md.
 include:
   - path: sentinel-core/compose.yml
-  - path: pi-harness/compose.yml         # profiles: [pi] inside — only starts with ./sentinel.sh --pi
   - path: interfaces/discord/compose.yml  # DO NOT COMMENT — restored 3x, required for Discord interface
   - path: security/pentest-agent/compose.yml
   - path: modules/pathfinder/compose.yml  # profiles: [pf2e] inside — activate with ./sentinel.sh --pf2e up

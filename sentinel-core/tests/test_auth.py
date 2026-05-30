@@ -41,10 +41,8 @@ async def test_health_bypasses_auth():
 
 async def test_auth_accepts_valid_key():
     """POST /message with correct X-Sentinel-Key passes auth (not 401)."""
-    import httpx
     from unittest.mock import AsyncMock
     from app.config import settings
-    from app.clients.pi_adapter import PiAdapterClient
 
     from app.services.injection_filter import InjectionFilter
 
@@ -54,7 +52,6 @@ async def test_auth_accepts_valid_key():
         "settings",
         "injection_filter",
         "output_scanner",
-        "pi_adapter",
         "ai_provider",
         "message_processor",
         "route_ctx",
@@ -75,15 +72,6 @@ async def test_auth_accepts_valid_key():
         mock_output_scanner = AsyncMock()
         mock_output_scanner.scan.return_value = (True, None)
         app.state.output_scanner = mock_output_scanner
-
-        # Pi harness mock — connect error so route falls through to ai_provider
-        def pi_handler(request: httpx.Request) -> httpx.Response:
-            raise httpx.ConnectError("not running in test")
-
-        pi_http = httpx.AsyncClient(
-            transport=httpx.MockTransport(pi_handler), base_url="http://pi-harness"
-        )
-        app.state.pi_adapter = PiAdapterClient(pi_http, "http://pi-harness")
 
         # AI provider mock — returns a response so route completes successfully
         mock_ai = AsyncMock()

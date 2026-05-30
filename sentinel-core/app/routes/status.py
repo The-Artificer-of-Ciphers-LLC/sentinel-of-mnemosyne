@@ -28,7 +28,6 @@ async def system_status(request: Request) -> JSONResponse:
         {
             "status": "ok" if snapshot.obsidian_ok else "degraded",
             "obsidian": "ok" if snapshot.obsidian_ok else "unreachable",
-            "pi_harness": "ok" if snapshot.pi_ok else "unreachable",
             "ai_provider": ai_provider,
         }
     )
