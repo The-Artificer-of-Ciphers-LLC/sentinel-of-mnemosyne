@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 import app.foundry as _foundry
 from app.config import settings
 from app.foundry_chat_import import import_nedb_chatlogs_from_inbox
+from sentinel_shared.model_profiles import get_profile
 
 logger = logging.getLogger(__name__)
 

@@ -59,7 +59,10 @@ class ObsidianClient:
             f"{self._base_url}/vault/{path}",
             headers={**self._headers, "Content-Type": "text/markdown"},
             content=content.encode("utf-8"),
-            timeout=10.0,
+            # 120s ceiling: large chat-import session notes (~900 KB) intermittently
+            # exceed the previous 10s limit, causing ReadTimeout and preventing
+            # projection from running (NPC history never written).
+            timeout=120.0,
         )
         resp.raise_for_status()
 

@@ -151,7 +151,12 @@ async def test_npc_history_append_existing_section():
     # Heading and content must be supplied; operation must be append
     flat = list(args) + list(kwargs.values())
     assert "Foundry Chat History" in flat
-    assert row in flat
+    # The row is now wrapped with leading/trailing newlines so each appended entry
+    # starts on its own line (fix for rows-run-together bug). Assert the row content
+    # is present within the content arg rather than asserting exact equality.
+    assert any(isinstance(v, str) and row in v for v in flat), (
+        f"expected row content {row!r} to appear within one of the patch_heading args; got {flat!r}"
+    )
     assert kwargs.get("operation") == "append" or "append" in flat
     # And put_note must NOT have been used in the existing-section branch
     assert obsidian.put_note.await_count == 0

@@ -84,18 +84,47 @@ async def test_registration_payload_correct(monkeypatch):
     assert call_kwargs.kwargs["json"]["base_url"] == "http://pf2e-module:8000"
 
 
-def test_registration_payload_has_16_routes():
-    """Phase 35 Wave 3: REGISTRATION_PAYLOAD grows from 15 -> 16 with the foundry/event route.
+def test_registration_payload_routes_present_and_unique():
+    """Guards that REGISTRATION_PAYLOAD contains all required routes, has no duplicates,
+    and that every route entry carries a non-empty description.
 
-    The 16th entry is {'path': 'foundry/event', ...} covering FVT-01..03 (Foundry VTT event
-    ingest — roll and chat events from sentinel-connector.js).
+    This test intentionally does NOT assert a frozen count — the count grows as new
+    routes ship, and a stale magic number would have to be updated on every addition.
+    Instead it asserts the real contract:
+      - No duplicate route paths.
+      - A required set of shipped routes is always present.
+      - Every route entry has a non-empty 'description' field.
     """
     from app.main import REGISTRATION_PAYLOAD
 
     routes = REGISTRATION_PAYLOAD["routes"]
-    assert len(routes) == 16, (
-        f"Expected 16 registered routes after Phase 35 Wave 3, got {len(routes)}"
-    )
     paths = [r["path"] for r in routes]
-    assert "rule" in paths, f"'rule' missing from registration payload: {paths}"
-    assert "foundry/event" in paths, f"'foundry/event' missing from registration payload: {paths}"
+
+    # No duplicate paths — each route must be registered exactly once.
+    assert len(paths) == len(set(paths)), (
+        f"Duplicate route paths detected in REGISTRATION_PAYLOAD: {paths}"
+    )
+
+    # Required routes that must always be present.
+    required = {
+        "healthz",
+        "rule",
+        "session",
+        "harvest",
+        "foundry/event",
+        "foundry/messages/import",
+        "npc/create",
+        "npc/import",
+        "player/onboard",
+        "player/state",
+    }
+    missing = required - set(paths)
+    assert not missing, (
+        f"Required routes missing from REGISTRATION_PAYLOAD: {missing}\nAll paths: {paths}"
+    )
+
+    # Every route must carry a non-empty description.
+    empty_desc = [r["path"] for r in routes if not r.get("description", "").strip()]
+    assert not empty_desc, (
+        f"Routes with empty/missing description: {empty_desc}"
+    )

@@ -149,9 +149,10 @@ async def project_foundry_chat_memory(
       identity_resolver: callable (speaker_token) -> ("player"|"npc"|"unknown", slug_or_raw).
         Tests pass a sync callable; production may pass an async coroutine factory —
         both are tolerated via _maybe_await.
-      npc_matcher: callable (speaker_token) -> npc_slug | None. Currently only
-        invoked when the resolver returns "npc" with an unresolved slug, as a
-        defence-in-depth fallback. Sync or async accepted.
+      npc_matcher: callable (speaker_token) -> npc_slug | None. Invoked as a
+        defence-in-depth fallback when the resolver returns "npc" with an
+        unresolved slug, AND as a rescue path when the resolver returns "unknown"
+        (handles case-sensitive miss in the roster lookup). Sync or async accepted.
       options: reserved for future per-record section overrides; currently unused.
 
     Returns:
@@ -167,6 +168,10 @@ async def project_foundry_chat_memory(
     # Track in-run additions separately so dedupe within a single run also fires.
     new_player_keys: set[str] = set()
     new_npc_keys: set[str] = set()
+
+    # Per-call cache: speaker_token -> resolved npc slug (or None if unresolvable).
+    # Populated lazily so each distinct unknown speaker is probed at most once.
+    _npc_matcher_cache: dict[str, str | None] = {}
 
     player_updates = 0
     npc_updates = 0
@@ -265,7 +270,45 @@ async def project_foundry_chat_memory(
                 )
             continue
 
-        # kind == "unknown" or anything else
+        # kind == "unknown" or anything else — rescue via npc_matcher before
+        # giving up. Foundry aliases are capitalized ("Bandit") but the roster
+        # keys are lowercased slugs, so the identity_resolver case-sensitive
+        # lookup fails. npc_matcher uses .lower() and vault probes, so it
+        # correctly resolves these speakers. A per-call cache avoids probing
+        # the same speaker token more than once within a single import run.
+        if speaker_token not in _npc_matcher_cache:
+            try:
+                _matched = npc_matcher(speaker_token)
+                _matched = await _maybe_await(_matched)
+            except Exception:
+                logger.exception(
+                    "npc_matcher raised for unknown speaker %r", speaker_token
+                )
+                _matched = None
+            _npc_matcher_cache[speaker_token] = _matched or None
+
+        rescued_slug = _npc_matcher_cache[speaker_token]
+
+        if rescued_slug:
+            key = _projection_key(record, "npc_history")
+            if key in npc_keys or key in new_npc_keys:
+                npc_deduped += 1
+                continue
+            new_npc_keys.add(key)
+            npc_updates += 1
+            logger.info(
+                "project_foundry_chat_memory: rescued unknown speaker %r → npc %s key=%s",
+                speaker_token,
+                rescued_slug,
+                key,
+            )
+            if not dry_run:
+                row = _build_row(record, key)
+                await append_npc_history_row(
+                    str(rescued_slug), row=row, obsidian=obsidian_client
+                )
+            continue
+
         if speaker_token not in unmatched_seen:
             unmatched_seen.add(speaker_token)
             unmatched_speakers.append(speaker_token)
