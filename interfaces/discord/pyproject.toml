@@ -1,7 +1,3 @@
-[build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "sentinel-discord"
 version = "0.2.0"
@@ -9,12 +5,24 @@ requires-python = ">=3.12"
 dependencies = [
     "discord.py>=2.7.0",
     "httpx>=0.28.1",
+    "pyyaml>=6.0",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "pyyaml>=6.0",
 ]
 
 [tool.pytest.ini_options]
@@ -22,3 +30,4 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+pythonpath = [".", "../.."]
