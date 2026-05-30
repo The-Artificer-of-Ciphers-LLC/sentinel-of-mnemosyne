@@ -178,10 +178,13 @@ from pathfinder_player_adapter import (  # noqa: E402, F401
 register_star("harvest", HarvestCommand())
 
 # Rule: each sub-verb is a separate command.
+# The wildcard handler catches free-text queries (e.g. "rule How does flanking work?")
+# where the question starts in the verb position.  Named verbs take precedence.
 COMMANDS.setdefault("rule", {})["query"] = RuleQueryCommand()
 COMMANDS["rule"]["list"] = RuleListCommand()
 COMMANDS["rule"]["show"] = RuleShowCommand()
 COMMANDS["rule"]["history"] = RuleHistoryCommand()
+COMMANDS["rule"]["*"] = RuleQueryCommand()
 
 # Session: each sub-verb is a separate command.
 COMMANDS.setdefault("session", {})["start"] = SessionStartCommand()

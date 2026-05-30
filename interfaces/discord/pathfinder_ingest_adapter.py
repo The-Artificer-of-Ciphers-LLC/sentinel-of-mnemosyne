@@ -23,7 +23,15 @@ class IngestCommand(PathfinderCommand):
                 kind="text", content="Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command."
             )
 
-        tokens = [t for t in request.rest.split() if t]
+        # Reconstruct the full arg string from parts (excluding the noun at parts[0]).
+        # This is necessary because parse_pf_args splits on the first two spaces only
+        # (maxsplit=2), placing the second token in `verb` and the remainder in `rest`.
+        # The archive path appears as parts[1] (== verb), so we must include it.
+        if request.parts and len(request.parts) >= 2:
+            raw_args = " ".join(request.parts[1:])
+        else:
+            raw_args = (request.verb + " " + request.rest).strip() if request.verb else request.rest
+        tokens = [t for t in raw_args.split() if t]
         archive_path: str | None = None
         live = False
         force_flag = False
@@ -112,7 +120,14 @@ class CartosiaCommand(PathfinderCommand):
                 kind="text", content="Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command."
             )
 
-        tokens = [t for t in request.rest.split() if t]
+        # Reconstruct the full arg string from parts (excluding the noun at parts[0]).
+        # See IngestCommand for the explanation: the archive path lands in parts[1]
+        # (== verb) because parse_pf_args splits with maxsplit=2.
+        if request.parts and len(request.parts) >= 2:
+            raw_args = " ".join(request.parts[1:])
+        else:
+            raw_args = (request.verb + " " + request.rest).strip() if request.verb else request.rest
+        tokens = [t for t in raw_args.split() if t]
         archive_path: str | None = None
         live = False
         force_flag = False

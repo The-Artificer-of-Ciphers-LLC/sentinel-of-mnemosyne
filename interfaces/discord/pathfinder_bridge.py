@@ -66,6 +66,12 @@ def _render_response(response: PathfinderResponse) -> str | dict:
             "filename": response.filename,
         }
 
+    if response.kind == "suppressed":
+        # Command has already sent and edited the Discord message (e.g. placeholder
+        # UX for slow queries).  Return a sentinel dict so callers know not to send
+        # another message.
+        return {"type": "suppressed"}
+
     # Fallback (should not happen with proper typing).
     return f"Error: unknown response kind '{response.kind}'."
 
