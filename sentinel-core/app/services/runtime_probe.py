@@ -14,7 +14,6 @@ from app.vault import Vault
 @dataclass(frozen=True)
 class RuntimeProbeSnapshot:
     obsidian_ok: bool
-    pi_ok: bool
     embedding_loaded: bool
 
 
@@ -22,22 +21,13 @@ async def probe_runtime(
     *,
     vault: Vault | None,
     http_client: httpx.AsyncClient | None,
-runtime_config: RuntimeConfig,
+    runtime_config: RuntimeConfig,
     include_embedding_probe: bool,
 ) -> RuntimeProbeSnapshot:
     obsidian_ok = False
     if vault is not None:
         try:
             obsidian_ok = await vault.check_health()
-        except Exception:
-            pass
-
-    pi_ok = False
-    pi_url = runtime_config.pi_harness_url
-    if http_client and pi_url:
-        try:
-            resp = await http_client.get(f"{pi_url}/health", timeout=5.0)
-            pi_ok = resp.status_code == 200
         except Exception:
             pass
 
@@ -54,6 +44,5 @@ runtime_config: RuntimeConfig,
 
     return RuntimeProbeSnapshot(
         obsidian_ok=obsidian_ok,
-        pi_ok=pi_ok,
         embedding_loaded=embedding_loaded,
     )

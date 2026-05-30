@@ -22,7 +22,6 @@ def setup_app_state():
     app.state.vault = MagicMock()
     app.state.ai_provider_name = "lmstudio"
     app.state.settings = MagicMock()
-    app.state.settings.pi_harness_url = "http://pi-harness:3000"
     app.state.injection_filter = MagicMock()
     app.state.output_scanner = MagicMock()
     app.state.route_ctx = RouteContext(

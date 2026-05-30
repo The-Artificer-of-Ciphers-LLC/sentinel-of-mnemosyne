@@ -20,13 +20,6 @@ def test_retry_wait_is_tenacity_wait():
     assert isinstance(retry_config.RETRY_WAIT, WaitBaseT)
 
 
-def test_no_duplicate_stop_in_pi_adapter():
-    import inspect
-    import importlib
-    src = inspect.getsource(importlib.import_module("app.clients.pi_adapter"))
-    assert "stop_after_attempt(3)" not in src
-
-
 def test_no_duplicate_stop_in_litellm_provider():
     import inspect
     import importlib

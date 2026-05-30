@@ -14,7 +14,6 @@ for arg in "$@"; do
     --finance)    PROFILES+=("finance") ;;
     --trader)     PROFILES+=("trader") ;;
     --coder)      PROFILES+=("coder") ;;
-    --pi)         PROFILES+=("pi") ;;
     *)            ARGS+=("$arg") ;;
   esac
 done
@@ -26,7 +25,7 @@ done
 
 # On teardown, include all known opt-in profiles so profiled services (e.g. pi-harness)
 # are stopped even when the caller didn't pass their --flag.
-ALL_KNOWN_PROFILES=(pi discord pf2e music finance trader coder)
+ALL_KNOWN_PROFILES=(discord pf2e music finance trader coder)
 for arg in ${ARGS[@]+"${ARGS[@]}"}; do
   if [[ "$arg" == "down" ]]; then
     for p in "${ALL_KNOWN_PROFILES[@]}"; do

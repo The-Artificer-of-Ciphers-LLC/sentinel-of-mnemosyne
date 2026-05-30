@@ -22,10 +22,9 @@ A self-hosted, containerized AI assistant platform built for personal use. The S
   Claude API         Music/Finance next)
   Ollama (future)
 
-[ Pi Harness ] — optional, ./sentinel.sh --pi, scoped to v0.7 (Coder module)
 ```
 
-**Request flow:** Sentinel Core calls LiteLLM directly for all chat. The Pi harness is NOT in the default message path — it is an optional coding tool started only with the `--pi` flag and scoped to the v0.7 Coder module.
+**Request flow:** Sentinel Core calls LiteLLM directly for all chat.
 
 All components are Docker containers. LM Studio runs natively on a Mac Mini. The Obsidian vault is a local folder on your Mac — plain markdown files you always own.
 
@@ -46,7 +45,7 @@ The design goal is maximum flexibility with a stable, narrow core API. You add a
 | Core | Routing, context, Obsidian writes | Working (Sentinel Core v0.50) |
 | Pathfinder 2e DM | NPC management, dialogue, session notes, harvest, rules RAG, ingest | Working (Pathfinder module v1.1) |
 | Music Lesson Tracker | Practice logs, chord ideas, progress | Planned v0.6 |
-| Coder Interface | AI-assisted module development (uses Pi harness) | Planned v0.7 |
+| Coder Interface | AI-assisted module development | Planned v0.7 |
 | Personal Finance | OFX import, spending analysis, budgets | Planned v0.8 |
 | Stock Trader | Research + rule-constrained paper/live trading | Planned v0.9 |
 | Media Discovery | ListenBrainz + Discogs wantlist integration | Future |
@@ -163,7 +162,6 @@ docker compose -f docker-compose.ghcr.yml logs -f sentinel-core
 
 Flags:
   --discord      Start Discord bot interface
-  --pi           Start Pi harness (optional coding tool)
   --pf2e         Start Pathfinder 2e DM module (v0.5, shipped)
   --music        Start Music Lesson Tracker module (v0.6, planned)
   --finance      Start Personal Finance module (v0.8, planned)
@@ -239,14 +237,13 @@ needed.
 sentinel-of-mnemosyne/
 ├── docker-compose.yml          # Core + includes for all services (Compose v2.20+)
 ├── .env.example                # Non-secret configuration template
-├── sentinel.sh                 # docker compose wrapper with --discord, --pi, etc. flags
+├── sentinel.sh                 # docker compose wrapper with --discord, --pf2e, etc. flags
 ├── sentinel-core/              # Python/FastAPI core container
 │   ├── app/                    # Application code
 │   │   ├── clients/            # LiteLLM provider, Obsidian client
 │   │   ├── routes/             # /message, /modules, /status, /health
 │   │   └── services/           # ProviderRouter, InjectionFilter, OutputScanner
 │   └── compose.yml
-├── pi-harness/                 # Pi coding-agent container (optional — --pi flag)
 ├── interfaces/
 │   ├── discord/                # Discord bot (/sen command)
 │   └── messages/               # Apple Messages bridge (Mac-native component)
@@ -280,8 +277,6 @@ Non-secret configuration lives in `.env`. See `.env.example` for the full list w
 | `SENTINEL_API_KEY` | In `secrets/sentinel_api_key` — shared secret for interface auth |
 | `DISCORD_ALLOWED_CHANNELS` | Comma-separated channel IDs (empty = all channels) |
 | `LOG_LEVEL` | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| `PI_MODEL` | Model name for Pi harness — only needed with `--pi` flag |
-| `PI_HARNESS_URL` | Pi harness address — only needed with `--pi` flag |
 
 ---
 
@@ -313,7 +308,7 @@ Current baseline:
 - Automated tests: 279 passed, 12 skipped
 - Live smoke checks: `/health`, `/status`, `/modules`, `/note/classify`, `/message`
 
-Core architecture: LiteLLM-direct chat, with optional Pi harness (`--pi`) for future coder workflows.
+Core architecture: LiteLLM-direct chat via ProviderRouter (LM Studio, Claude, Ollama, llama.cpp).
 
 ---
 

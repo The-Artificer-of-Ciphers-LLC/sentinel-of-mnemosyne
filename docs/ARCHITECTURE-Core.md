@@ -1,7 +1,7 @@
 # Sentinel of Mnemosyne — Core Architecture
 **Version:** 0.50
 **Date:** 2026-05-06
-**Scope:** Core system (Path B) — Interface layer, Sentinel Core container, AI provider layer, Module API gateway, Obsidian vault. Pi harness is optional (v0.7 scope, `--pi` flag only).
+**Scope:** Core system (Path B) — Interface layer, Sentinel Core container, AI provider layer, Module API gateway, Obsidian vault.
 
 ---
 
@@ -41,8 +41,6 @@ The Sentinel of Mnemosyne is a self-hosted, containerized AI assistant platform.
               │  REST API plugin         │
               └──────────────────────────┘
 
-[ Pi Harness ] — optional, only with sentinel.sh --pi flag, v0.7 scope
-
 **v0.50 release snapshot:**
 - Core route seam uses `RouteContext` (`app.state.route_ctx`) with strict access.
 - Startup wiring/policy centralized in `initialize_startup()`.
@@ -66,27 +64,23 @@ The Sentinel of Mnemosyne is a self-hosted, containerized AI assistant platform.
 ### ADR-001: LiteLLM-Direct for Chat; Module API Gateway for Extensibility
 
 **Status:** Accepted (2026-04-20)
-**Decision:** Use LiteLLM-direct for all chat completions. Implement a module API gateway in sentinel-core. Demote Pi harness to an optional advanced tool scoped to v0.7.
+**Decision:** Use LiteLLM-direct for all chat completions. Implement a module API gateway in sentinel-core.
 
-**Context:** Phase 25 shipped LiteLLM-direct as the working chat path. Phase 27 formalizes this as the canonical architecture (Path B). The original design (Path A) described Pi harness as the primary AI execution layer, but Pi was never in the critical message path in the deployed system. Continuing to maintain Path A documentation creates confusion for AI agents reading these docs as source of truth.
+**Context:** Phase 25 shipped LiteLLM-direct as the working chat path. Phase 27 formalizes this as the canonical architecture (Path B). The original design (Path A) described Pi harness as the primary AI execution layer, but Pi was never in the critical message path in the deployed system. Pi harness has been fully removed as of v0.50.2.
 
 **What Path B gives us:**
 - Single, direct, auditable chat path: sentinel-core → LiteLLM → AI provider
 - Module containers are independently deployable FastAPI apps that register with sentinel-core at startup
 - sentinel-core proxies module requests — callers need only know sentinel-core's address
-- No dependency on Pi harness for core chat functionality
-- Pi harness remains available as an advanced coding tool via `./sentinel.sh --pi` (v0.7 scope)
 
 **Rationale:**
 - Simpler message path — fewer hops, easier to reason about
 - Module containers are independently testable and deployable; sentinel-core is the stable hub
-- Pi harness is a powerful but heavy dependency for core chat; LiteLLM-direct is lighter and already working
 - Path B was already the operational reality as of Phase 25
 
 **Consequences:**
 - sentinel-core is the single process that must be running for chat and module routing to work
 - Module containers must implement `POST /register` and call it at startup
-- Pi harness is not started unless `--pi` flag is passed to `sentinel.sh`
 
 ---
 
@@ -240,27 +234,6 @@ LLAMACPP_MODEL=local-model
 ```
 
 **Exposed port:** `8000` (internal Docker network)
-
----
-
-### 3.2 Pi Harness Container (Optional — v0.7 scope)
-
-**Status:** Optional. Not started unless `./sentinel.sh --pi` flag is passed.
-**Language:** Node.js 22 LTS
-**Package:** `@mariozechner/pi-coding-agent` (pinned version)
-**Base image:** `node:22-slim`
-
-The Pi harness is an advanced coding tool for interactive code-generation tasks. It is **not** in the standard chat message path. When activated, it runs as a parallel environment alongside sentinel-core.
-
-**Environment variables:**
-```
-LMSTUDIO_BASE_URL=http://192.168.x.x:1234/v1
-LMSTUDIO_API_KEY=
-PI_MODEL=<model-id-as-shown-in-lmstudio>
-PI_SKILLS_PATH=/app/skills
-```
-
-**Exposed port:** `3000` (RPC endpoint, internal network only — Fastify bridge)
 
 ---
 
@@ -660,7 +633,6 @@ for arg in "$@"; do
     --pf2e)       PROFILES+=("pf2e") ;;
     --music)      PROFILES+=("music") ;;
     --finance)    PROFILES+=("finance") ;;
-    --pi)         PROFILES+=("pi") ;;
     *)            ARGS+=("$arg") ;;
   esac
 done
@@ -675,7 +647,6 @@ docker compose "${PROFILE_FLAGS[@]}" "${ARGS[@]}"
 # Usage:
 # ./sentinel.sh --discord up -d
 # ./sentinel.sh --discord --pf2e up -d
-# ./sentinel.sh --pi up -d          # activate Pi harness (v0.7 scope)
 # ./sentinel.sh down
 ```
 
@@ -711,13 +682,6 @@ sentinel-of-mnemosyne/
 │           ├── model_registry.py   ← ModelRegistry (live fetch + seed fallback)
 │           ├── module_registry.py  ← ModuleRegistry (in-memory, populated at runtime)
 │           └── token_guard.py      ← context-window token limit enforcement
-│
-├── pi-harness/                     ← optional Node.js 22 LTS pi container (v0.7)
-│   ├── Dockerfile
-│   ├── docker-compose.yml          ← included only with --pi flag
-│   ├── package.json
-│   ├── settings.json
-│   └── entrypoint.sh
 │
 ├── interfaces/
 │   └── discord/
