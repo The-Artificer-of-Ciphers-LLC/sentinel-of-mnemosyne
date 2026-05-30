@@ -129,6 +129,61 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
+# Success statuses returned by append_npc_history_row that represent a real write.
+_NPC_APPEND_SUCCESS = frozenset({"appended", "created"})
+
+
+async def _do_npc_append(
+    *,
+    record: dict,
+    key: str,
+    npc_slug: str,
+    dry_run: bool,
+    obsidian_client: Any,
+    new_npc_keys: set[str],
+    unmatched_seen: set[str],
+    unmatched_speakers: list[str],
+    speaker_token: str,
+) -> bool:
+    """Attempt to append an NPC history row for one record.
+
+    In dry_run mode: always counts as a write (no real call). Returns True.
+    In live mode: calls append_npc_history_row; returns True only when the
+    return value is in _NPC_APPEND_SUCCESS ("appended" or "created"). If the
+    NPC note is missing ("skipped (npc note missing)"), returns False and marks
+    the speaker as unmatched so it surfaces in the report.
+
+    The caller is responsible for dedupe-key checking before calling this
+    function. The key is added to new_npc_keys only when this function
+    returns True.
+    """
+    if dry_run:
+        # Dry-run: count and dedupe as if the write happened; no real call.
+        new_npc_keys.add(key)
+        return True
+
+    row = _build_row(record, key)
+    status = await append_npc_history_row(npc_slug, row=row, obsidian=obsidian_client)
+    if status in _NPC_APPEND_SUCCESS:
+        new_npc_keys.add(key)
+        return True
+
+    # Write was skipped (NPC note missing). Treat speaker as unmatched so the
+    # caller can surface it, but do NOT add the dedupe key — on a future run
+    # when the note is created, the row must still be written.
+    logger.warning(
+        "_do_npc_append: npc note missing for slug=%s speaker=%r (status=%r); "
+        "treating as unmatched",
+        npc_slug,
+        speaker_token,
+        status,
+    )
+    if speaker_token not in unmatched_seen:
+        unmatched_seen.add(speaker_token)
+        unmatched_speakers.append(speaker_token)
+    return False
+
+
 async def project_foundry_chat_memory(
     *,
     records: list[dict],
@@ -138,6 +193,8 @@ async def project_foundry_chat_memory(
     identity_resolver: Callable[[str], Any],
     npc_matcher: Callable[[str], Any],
     options: dict | None = None,
+    project_player_maps: bool = True,
+    project_npc_history: bool = True,
 ) -> dict:
     """Project Foundry chat records into per-player and per-NPC memory.
 
@@ -154,6 +211,10 @@ async def project_foundry_chat_memory(
         unresolved slug, AND as a rescue path when the resolver returns "unknown"
         (handles case-sensitive miss in the roster lookup). Sync or async accepted.
       options: reserved for future per-record section overrides; currently unused.
+      project_player_maps: when False, player-classified records are skipped entirely
+        (no write, no key saved, not added to unmatched).
+      project_npc_history: when False, npc-classified records (including unknown-rescue)
+        are skipped entirely (no write, no key saved, not added to unmatched).
 
     Returns:
       dict with keys: player_updates, npc_updates, player_deduped, npc_deduped,
@@ -209,6 +270,8 @@ async def project_foundry_chat_memory(
         kind, payload = classification
 
         if kind == "player":
+            if not project_player_maps:
+                continue
             slug = str(payload)
             key = _projection_key(record, "player_map")
             if (
@@ -229,6 +292,8 @@ async def project_foundry_chat_memory(
             continue
 
         if kind == "npc":
+            if not project_npc_history:
+                continue
             npc_slug = payload if payload else None
             if not npc_slug:
                 # Defence-in-depth fallback to npc_matcher.
@@ -256,18 +321,25 @@ async def project_foundry_chat_memory(
             if key in npc_keys or key in new_npc_keys:
                 npc_deduped += 1
                 continue
-            new_npc_keys.add(key)
-            npc_updates += 1
+
             logger.info(
                 "project_foundry_chat_memory: appending npc history row for %s key=%s",
                 npc_slug,
                 key,
             )
-            if not dry_run:
-                row = _build_row(record, key)
-                await append_npc_history_row(
-                    str(npc_slug), row=row, obsidian=obsidian_client
-                )
+            wrote = await _do_npc_append(
+                record=record,
+                key=key,
+                npc_slug=str(npc_slug),
+                dry_run=dry_run,
+                obsidian_client=obsidian_client,
+                new_npc_keys=new_npc_keys,
+                unmatched_seen=unmatched_seen,
+                unmatched_speakers=unmatched_speakers,
+                speaker_token=speaker_token,
+            )
+            if wrote:
+                npc_updates += 1
             continue
 
         # kind == "unknown" or anything else — rescue via npc_matcher before
@@ -276,6 +348,10 @@ async def project_foundry_chat_memory(
         # lookup fails. npc_matcher uses .lower() and vault probes, so it
         # correctly resolves these speakers. A per-call cache avoids probing
         # the same speaker token more than once within a single import run.
+        if not project_npc_history:
+            # Unknown + NPC history disabled: skip entirely (do not add to unmatched).
+            continue
+
         if speaker_token not in _npc_matcher_cache:
             try:
                 _matched = npc_matcher(speaker_token)
@@ -294,19 +370,26 @@ async def project_foundry_chat_memory(
             if key in npc_keys or key in new_npc_keys:
                 npc_deduped += 1
                 continue
-            new_npc_keys.add(key)
-            npc_updates += 1
+
             logger.info(
                 "project_foundry_chat_memory: rescued unknown speaker %r → npc %s key=%s",
                 speaker_token,
                 rescued_slug,
                 key,
             )
-            if not dry_run:
-                row = _build_row(record, key)
-                await append_npc_history_row(
-                    str(rescued_slug), row=row, obsidian=obsidian_client
-                )
+            wrote = await _do_npc_append(
+                record=record,
+                key=key,
+                npc_slug=str(rescued_slug),
+                dry_run=dry_run,
+                obsidian_client=obsidian_client,
+                new_npc_keys=new_npc_keys,
+                unmatched_seen=unmatched_seen,
+                unmatched_speakers=unmatched_speakers,
+                speaker_token=speaker_token,
+            )
+            if wrote:
+                npc_updates += 1
             continue
 
         if speaker_token not in unmatched_seen:

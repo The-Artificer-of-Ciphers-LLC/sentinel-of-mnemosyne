@@ -110,6 +110,15 @@ async def test_state_file_persists_player_and_npc_keys(tmp_path):
     from app.foundry_memory_projection import project_foundry_chat_memory
 
     obsidian = _make_obsidian()
+    # NPC note must exist for append_npc_history_row to perform a real write;
+    # if get_note returns None the note is missing → write is skipped → key not
+    # saved (Fix 1 correctness). Return a stub note body for NPC paths only.
+    async def _get_note(path: str) -> str | None:
+        if "/npcs/" in path:
+            return "# Goblin Boss\n\nA fierce foe.\n"
+        return None
+    obsidian.get_note = _get_note
+
     state_path = tmp_path / ".foundry_chat_import_state.json"
     records = [
         _record(_id="m1", speaker="Valeros", content="hi"),

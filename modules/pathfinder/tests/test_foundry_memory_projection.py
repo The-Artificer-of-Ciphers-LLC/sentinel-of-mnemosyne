@@ -667,3 +667,274 @@ async def test_npc_history_rows_are_newline_separated(tmp_path):
             f"two timestamps on one line — rows are running together:\n{line!r}\n"
             f"full section:\n{section_tail!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Fix 1 regression: gate dedupe key / npc_updates on real write result
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_npc_missing_note_not_counted_and_row_written_on_rerun(tmp_path):
+    """Fix 1: when append_npc_history_row returns 'skipped (npc note missing)',
+    npc_updates must be 0, speaker must appear in unmatched_speakers, and the
+    dedupe key must NOT be saved — so a subsequent run with the note present
+    writes the row and counts it (npc_updates==1).
+    """
+    from app.foundry_memory_projection import project_foundry_chat_memory
+
+    state_path = tmp_path / ".foundry_chat_import_state.json"
+    records = [_record(_id="npc-miss-1", speaker="Wraith", content="Boo!", timestamp=1710001000000)]
+    resolver = _make_identity_resolver(alias_map={}, npc_roster={"wraith": "wraith"})
+    matcher = _make_npc_matcher({"wraith": "wraith"})
+
+    # --- Run 1: NPC note is MISSING (get_note returns None for NPC paths) ---
+    obsidian_missing = AsyncMock()
+    obsidian_missing.get_note = AsyncMock(return_value=None)
+    obsidian_missing.put_note = AsyncMock(return_value=None)
+    obsidian_missing.patch_heading = AsyncMock(return_value=None)
+
+    result_miss = await project_foundry_chat_memory(
+        records=records,
+        dry_run=False,
+        obsidian_client=obsidian_missing,
+        dedupe_store_path=state_path,
+        identity_resolver=resolver,
+        npc_matcher=matcher,
+    )
+
+    # append_npc_history_row returned "skipped (npc note missing)" → must not count.
+    assert result_miss["npc_updates"] == 0, (
+        f"expected npc_updates==0 when note missing, got {result_miss['npc_updates']}"
+    )
+    # Speaker must surface in unmatched so the operator knows writes are failing.
+    assert "Wraith" in result_miss["unmatched_speakers"], (
+        f"expected 'Wraith' in unmatched_speakers, got {result_miss['unmatched_speakers']}"
+    )
+    # Dedupe key must NOT be in state file — retry must be allowed.
+    import json as _json
+    if state_path.exists():
+        saved = _json.loads(state_path.read_text(encoding="utf-8"))
+        npc_keys_saved = saved.get("npc_projection_keys", [])
+        assert npc_keys_saved == [], (
+            f"expected empty npc_projection_keys after skipped write, got {npc_keys_saved!r}"
+        )
+
+    # --- Run 2: NPC note NOW EXISTS — same record must be written (not deduped) ---
+    obsidian_present = AsyncMock()
+    # Note body without the history section → triggers "created" branch.
+    obsidian_present.get_note = AsyncMock(
+        return_value="# Wraith\n\nA spectral foe.\n"
+    )
+    obsidian_present.put_note = AsyncMock(return_value=None)
+    obsidian_present.patch_heading = AsyncMock(return_value=None)
+
+    result_write = await project_foundry_chat_memory(
+        records=records,
+        dry_run=False,
+        obsidian_client=obsidian_present,
+        dedupe_store_path=state_path,
+        identity_resolver=resolver,
+        npc_matcher=matcher,
+    )
+
+    assert result_write["npc_updates"] == 1, (
+        f"expected npc_updates==1 on rerun with note present, got {result_write['npc_updates']}; "
+        f"unmatched={result_write['unmatched_speakers']}"
+    )
+    # The NPC note must have received the row via put_note (created branch).
+    npc_put_calls = [
+        c for c in obsidian_present.put_note.await_args_list
+        if c.args and "/npcs/wraith.md" in str(c.args[0])
+    ]
+    assert npc_put_calls, (
+        "expected put_note targeting mnemosyne/pf2e/npcs/wraith.md on rerun; "
+        f"put_note calls: {obsidian_present.put_note.await_args_list}"
+    )
+    body_written = npc_put_calls[0].args[1]
+    assert "Boo!" in body_written, (
+        f"expected row content 'Boo!' in written NPC note body; got:\n{body_written!r}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_dry_run_npc_missing_note_still_counts(tmp_path):
+    """Fix 1 dry-run parity: in dry_run mode, no real append is called so the
+    note-missing gate does not apply. npc_updates must be 1 (unchanged from
+    pre-fix behavior) and the dedupe key must NOT be saved (dry_run never saves).
+    """
+    from app.foundry_memory_projection import project_foundry_chat_memory
+
+    state_path = tmp_path / ".foundry_chat_import_state.json"
+    records = [_record(_id="dry-npc-1", speaker="Specter", content="Whooooo", timestamp=1710002000000)]
+    resolver = _make_identity_resolver(alias_map={}, npc_roster={"specter": "specter"})
+    matcher = _make_npc_matcher({"specter": "specter"})
+
+    obsidian = AsyncMock()
+    obsidian.get_note = AsyncMock(return_value=None)  # note missing
+    obsidian.put_note = AsyncMock(return_value=None)
+    obsidian.patch_heading = AsyncMock(return_value=None)
+
+    result = await project_foundry_chat_memory(
+        records=records,
+        dry_run=True,
+        obsidian_client=obsidian,
+        dedupe_store_path=state_path,
+        identity_resolver=resolver,
+        npc_matcher=matcher,
+    )
+
+    # Dry-run must preserve metric shape: count as if the write happened.
+    assert result["npc_updates"] == 1, (
+        f"dry_run: expected npc_updates==1 even when note would be missing; "
+        f"got {result['npc_updates']}"
+    )
+    # No obsidian calls in dry-run.
+    assert obsidian.get_note.await_count == 0
+    assert obsidian.put_note.await_count == 0
+    # State file must not be written in dry-run.
+    assert not state_path.exists(), "dry_run must not write state file"
+
+
+# ---------------------------------------------------------------------------
+# Fix 2 regression: independently-gated projection targets
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_project_npc_history_true_player_maps_false_skips_player_writes(tmp_path):
+    """Fix 2 (a): project_player_maps=False with a player-classified speaker →
+    no write_player_map_section call and no player key saved to state.
+    The NPC speaker must still be processed normally (project_npc_history=True).
+    """
+    from app.foundry_memory_projection import project_foundry_chat_memory
+
+    state_path = tmp_path / ".foundry_chat_import_state.json"
+    records = [
+        _record(_id="p1", speaker="Valeros", content="I attack!", timestamp=1710003000000),
+        _record(_id="n1", speaker="Goblin Boss", content="Flee!", timestamp=1710003001000),
+    ]
+    resolver = _make_identity_resolver(
+        alias_map={"Valeros": "u1"},
+        npc_roster={"goblin boss": "goblin-boss"},
+    )
+    matcher = _make_npc_matcher({"goblin boss": "goblin-boss"})
+
+    obsidian = AsyncMock()
+    # NPC note exists (with history section) so patch_heading is used.
+    obsidian.get_note = AsyncMock(
+        return_value="# Goblin Boss\n\n## Foundry Chat History\n"
+    )
+    obsidian.put_note = AsyncMock(return_value=None)
+    obsidian.patch_heading = AsyncMock(return_value=None)
+
+    result = await project_foundry_chat_memory(
+        records=records,
+        dry_run=False,
+        obsidian_client=obsidian,
+        dedupe_store_path=state_path,
+        identity_resolver=resolver,
+        npc_matcher=matcher,
+        project_player_maps=False,
+        project_npc_history=True,
+    )
+
+    # Player writes must be completely absent.
+    player_put_calls = [
+        c for c in obsidian.put_note.await_args_list
+        if c.args and "/players/" in str(c.args[0])
+    ]
+    assert player_put_calls == [], (
+        f"expected no player-map put_note calls with project_player_maps=False; "
+        f"got: {player_put_calls}"
+    )
+    assert result["player_updates"] == 0, (
+        f"expected player_updates==0, got {result['player_updates']}"
+    )
+
+    # Player key must not be saved in state.
+    import json as _json
+    saved = _json.loads(state_path.read_text(encoding="utf-8"))
+    assert saved.get("player_projection_keys", []) == [], (
+        f"expected empty player_projection_keys with project_player_maps=False; "
+        f"got {saved['player_projection_keys']!r}"
+    )
+
+    # NPC processing must still work normally.
+    assert result["npc_updates"] == 1, (
+        f"expected npc_updates==1 (NPC enabled), got {result['npc_updates']}"
+    )
+    assert obsidian.patch_heading.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_project_npc_history_false_player_maps_true_skips_npc_writes(tmp_path):
+    """Fix 2 (b): project_npc_history=False with an npc-classified speaker →
+    no append_npc_history_row call and no npc key saved to state.
+    The player speaker must still be processed normally (project_player_maps=True).
+    """
+    from app.foundry_memory_projection import project_foundry_chat_memory
+
+    state_path = tmp_path / ".foundry_chat_import_state.json"
+    records = [
+        _record(_id="p2", speaker="Merisiel", content="Sneaking...", timestamp=1710004000000),
+        _record(_id="n2", speaker="Troll", content="Smash!", timestamp=1710004001000),
+    ]
+    resolver = _make_identity_resolver(
+        alias_map={"Merisiel": "u2"},
+        npc_roster={"troll": "troll"},
+    )
+    matcher = _make_npc_matcher({"troll": "troll"})
+
+    obsidian = AsyncMock()
+    obsidian.get_note = AsyncMock(return_value=None)
+    obsidian.put_note = AsyncMock(return_value=None)
+    obsidian.patch_heading = AsyncMock(return_value=None)
+
+    result = await project_foundry_chat_memory(
+        records=records,
+        dry_run=False,
+        obsidian_client=obsidian,
+        dedupe_store_path=state_path,
+        identity_resolver=resolver,
+        npc_matcher=matcher,
+        project_player_maps=True,
+        project_npc_history=False,
+    )
+
+    # NPC writes must be completely absent.
+    npc_put_calls = [
+        c for c in obsidian.put_note.await_args_list
+        if c.args and "/npcs/" in str(c.args[0])
+    ]
+    assert npc_put_calls == [], (
+        f"expected no NPC put_note calls with project_npc_history=False; "
+        f"got: {npc_put_calls}"
+    )
+    assert obsidian.patch_heading.await_count == 0, (
+        f"expected no patch_heading calls with project_npc_history=False; "
+        f"got: {obsidian.patch_heading.await_count}"
+    )
+    assert result["npc_updates"] == 0, (
+        f"expected npc_updates==0, got {result['npc_updates']}"
+    )
+
+    # NPC key must not be saved in state.
+    import json as _json
+    saved = _json.loads(state_path.read_text(encoding="utf-8"))
+    assert saved.get("npc_projection_keys", []) == [], (
+        f"expected empty npc_projection_keys with project_npc_history=False; "
+        f"got {saved['npc_projection_keys']!r}"
+    )
+
+    # Player processing must still work normally.
+    assert result["player_updates"] == 1, (
+        f"expected player_updates==1 (player maps enabled), got {result['player_updates']}"
+    )
+    player_put_calls = [
+        c for c in obsidian.put_note.await_args_list
+        if c.args and "/players/" in str(c.args[0])
+    ]
+    assert player_put_calls, (
+        "expected a put_note call targeting mnemosyne/pf2e/players/ for the player record"
+    )
