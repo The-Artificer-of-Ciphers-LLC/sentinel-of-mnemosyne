@@ -140,10 +140,15 @@ async def append_npc_history_row(
         return "skipped (npc note missing)"
 
     if _NPC_HISTORY_SECTION_RE.search(body):
+        # Prefix the row with a newline so each appended entry starts on its
+        # own line regardless of what the section body currently ends with.
+        # Obsidian patch_heading/append concatenates verbatim — without the
+        # leading \n, successive rows would run together on the same line.
+        safe_row = "\n" + row.strip() + "\n"
         await obsidian.patch_heading(
             path,
             _NPC_HISTORY_HEADING,
-            row,
+            safe_row,
             operation="append",
         )
         return "appended"

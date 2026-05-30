@@ -443,6 +443,8 @@ async def import_nedb_chatlogs_from_inbox(
             dedupe_store_path=_dedupe_state_path(inbox),
             identity_resolver=identity_resolver,
             npc_matcher=npc_matcher,
+            project_player_maps=project_player_maps,
+            project_npc_history=project_npc_history,
         )
 
     result = {
