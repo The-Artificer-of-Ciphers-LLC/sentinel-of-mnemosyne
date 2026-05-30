@@ -65,7 +65,7 @@ class PathfinderResponse:
       - ``file``  -> bytes + filename (export, pdf)
     """
 
-    kind: Literal["text", "embed", "file"]
+    kind: Literal["text", "embed", "file", "suppressed"]
     content: str = ""  # for text responses (error messages, plain text)
     embed_data: dict | None = None  # for embed responses (raw data from sentinel-core)
     embed_builder: str | None = None  # name of the builder function to call

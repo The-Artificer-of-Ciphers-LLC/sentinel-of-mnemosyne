@@ -12,8 +12,10 @@ from pathfinder_types import PathfinderRequest
 
 async def test_handle_harvest_usage_when_missing_names():
     cmd = pathfinder_harvest_adapter.HarvestCommand()
+    # parts mirrors production: only ["harvest"] → len==1 → no names → usage
     request = PathfinderRequest(
-        noun="harvest", verb="*", rest="", user_id="u1"
+        noun="harvest", verb="*", rest="", user_id="u1",
+        parts=["harvest"],
     )
     response = await cmd.handle(request)
     assert "Usage" in response.content
@@ -26,9 +28,11 @@ async def test_handle_harvest_posts_names_and_wraps_embed():
         "name": "Boar",
         "path": "/vault/harvest/boar.md",
     })
+    # parts mirrors production: "harvest Boar,Wolf" → ["harvest", "Boar,Wolf"]
     request = PathfinderRequest(
         noun="harvest", verb="*", rest="Boar,Wolf",
         user_id="u1", sentinel_client=client,
+        parts=["harvest", "Boar,Wolf"],
     )
     response = await cmd.handle(request)
     assert response.kind == "embed"

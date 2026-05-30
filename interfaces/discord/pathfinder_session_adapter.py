@@ -60,18 +60,29 @@ class SessionStartCommand(PathfinderCommand):
 
 
 class SessionShowCommand(PathfinderCommand):
-    """Handle ``:pf session show``."""
+    """Handle ``:pf session show``.
+
+    Uses a placeholder UX: sends a "Retrieving session…" message immediately,
+    calls the module, then edits the placeholder with the embed result.
+    Returns ``kind="suppressed"`` so the bridge does not send a second message.
+    """
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
+        placeholder = None
+        if request.channel is not None:
+            placeholder = await request.channel.send("⏳ Retrieving session…")
+
         result = await request.sentinel_client.post_to_module(
             "modules/pathfinder/session", {"verb": "show"}, request.http_client
         )
-        return PathfinderResponse(
-            kind="embed",
-            embed_data=result,
-            embed_builder="build_session_embed",
-            builders=request.builders,
-        )
+
+        if placeholder is not None:
+            builders = request.builders or {}
+            builder = builders.get("build_session_embed")
+            embed = builder(result) if builder else None
+            await placeholder.edit(content="", embed=embed)
+
+        return PathfinderResponse(kind="suppressed")
 
 
 class SessionEndCommand(PathfinderCommand):

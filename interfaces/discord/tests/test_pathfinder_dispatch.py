@@ -82,6 +82,7 @@ class TestDispatchRouting:
             noun="unknown",
             verb="foo",
             rest="",
+            parts=["unknown", "foo"],
             user_id="u1",
             channel=None,
             attachments=None,
@@ -97,11 +98,15 @@ class TestDispatchRouting:
 
     @pytest.mark.asyncio
     async def test_dispatch_unknown_verb(self):
-        """Unknown verb for known noun returns text error."""
+        """Unknown verb for known noun (session) returns text error.
+        Note: rule now accepts free-text queries via wildcard, so session is
+        used here — it has fixed verbs (start/show/end) and no wildcard handler.
+        """
         response = await pathfinder_dispatch.dispatch(
-            noun="rule",
+            noun="session",
             verb="foobar",
             rest="",
+            parts=["session", "foobar"],
             user_id="u1",
             channel=None,
             attachments=None,
@@ -113,16 +118,20 @@ class TestDispatchRouting:
             builders={},
         )
         assert response.kind == "text"
-        assert "Unknown `rule` sub-command" in response.content
+        assert "Unknown `session` sub-command" in response.content
 
     @pytest.mark.asyncio
     async def test_dispatch_harvest_wildcard(self):
-        """Harvest uses wildcard handler (no sub-verbs)."""
+        """Harvest uses wildcard handler (no sub-verbs).
+        With parts=["harvest"] (noun only, no name tokens), HarvestCommand returns
+        a usage error text response.
+        """
         mock_client = AsyncMock()
         response = await pathfinder_dispatch.dispatch(
             noun="harvest",
-            verb="anything",  # ignored, wildcard used
+            verb="*",  # ignored, wildcard used
             rest="",  # no names → usage error (text response)
+            parts=["harvest"],  # no name tokens → len==1 → usage
             user_id="u1",
             channel=None,
             attachments=None,
@@ -147,8 +156,10 @@ class TestHarvestCommand:
     async def test_harvest_no_names(self):
         """Empty rest → usage error."""
         cmd = COMMANDS["harvest"]["*"]
+        # parts mirrors production: ["harvest"] only → len==1 → no names
         request = PathfinderRequest(
-            noun="harvest", verb="*", rest="", user_id="u1"
+            noun="harvest", verb="*", rest="", user_id="u1",
+            parts=["harvest"],
         )
         response = await cmd.handle(request)
         assert response.kind == "text"
@@ -163,9 +174,11 @@ class TestHarvestCommand:
             "name": "Test Character",
             "path": "/vault/harvest/test-character.md",
         })
+        # parts mirrors production: "harvest Test Character" → ["harvest", "Test", "Character"]
         request = PathfinderRequest(
             noun="harvest", verb="*", rest="Test Character",
             user_id="u1", sentinel_client=mock_client,
+            parts=["harvest", "Test", "Character"],
         )
 
         response = await cmd.handle(request)
