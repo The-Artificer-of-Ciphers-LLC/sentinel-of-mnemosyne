@@ -271,7 +271,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="pf2e Module",
-    version="0.1.0",
+    version="1.1.1",
     description="Pathfinder 2e module for Sentinel of Mnemosyne",
     lifespan=lifespan,
 )
