@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 0.50.1)'
+        description: 'Release version (e.g. 0.50.2)'
         required: true
-        default: '0.50.1'
+        default: '0.50.2'
 
 jobs:
   dry-run:
