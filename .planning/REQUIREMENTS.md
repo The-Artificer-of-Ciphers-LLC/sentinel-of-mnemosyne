@@ -83,8 +83,8 @@
 
 - [x] **MEM-01**: The Sentinel assembles recalled memory for every message through a single Recall module, and the `/context/{user_id}` endpoint uses that same module (no duplicated assembly logic)
 - [x] **MEM-02**: Recall policy — relevance threshold, namespace exclusions (including `ops/`), and per-tier context budgets — is consolidated as explicit configuration rather than inline constants
-- [ ] **MEM-03**: The Sentinel recalls relevant vault content by meaning (semantic/vector search over note embeddings), not only exact keyword matches
-- [ ] **MEM-04**: Keyword and semantic recall results are merged into one ranked recall set (hybrid retrieval)
+- [x] **MEM-03**: The Sentinel recalls relevant vault content by meaning (semantic/vector search over note embeddings), not only exact keyword matches
+- [x] **MEM-04**: Keyword and semantic recall results are merged into one ranked recall set (hybrid retrieval)
 - [x] **MEM-05**: Semantic recall reads embeddings from a sweeper-maintained index (no per-note HTTP read at query time) and skips notes whose embedding model no longer matches the active model
 - [ ] **MEM-06**: The recent-session window is a tunable retention policy rather than a fixed 3-turn / two-day limit
 - [ ] **MEM-07**: Sessions older than the hot window are recalled via the index instead of being dropped

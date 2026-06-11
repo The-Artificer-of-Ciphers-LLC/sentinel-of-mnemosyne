@@ -764,12 +764,12 @@ Plans:
   3. Notes whose `embedding_model` frontmatter value does not match the active embedding model are skipped and not returned as recall candidates
   4. Keyword and semantic results are merged into one ranked list via RRF (k≈60) before being returned in `RecalledContext.warm`
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 Plans:
 **Wave 1**
 
 - [x] 40-01-PLAN.md — Sweeper emits ops/sweeps/embedding-index.json (model + content-hash, incremental rebuild, search_document: prefix) via the Vault seam
-- [ ] 40-02-PLAN.md — RetrievalStrategy Protocol + KeywordRecall + SemanticRecall + RecallConfig tunables + RRF merge (k≈60) + ADR-0004 supersession
+- [x] 40-02-PLAN.md — RetrievalStrategy Protocol + KeywordRecall + SemanticRecall + RecallConfig tunables + RRF merge (k≈60) + ADR-0004 supersession
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
