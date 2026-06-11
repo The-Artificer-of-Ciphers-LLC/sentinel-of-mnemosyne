@@ -280,7 +280,7 @@ _Depth: standard_
 
 ## Resolution (2026-06-11)
 
-All findings reviewed against the actual code and the pre-refactor original. 4 genuine defects fixed; 3 dispositioned as preserved-behavior / by-design. Full suite after fixes: **287 passed, 12 skipped**.
+All findings reviewed against the actual code and the pre-refactor original. 6 defects fixed (CR-02, CR-01, WR-02, IN-01, then WR-03 + WR-01 as a user-approved hardening pass); IN-02 kept by design. Full suite after all fixes: **289 passed, 12 skipped**.
 
 | ID | Verdict | Resolution |
 |----|---------|------------|
@@ -288,6 +288,6 @@ All findings reviewed against the actual code and the pre-refactor original. 4 g
 | CR-01 | Real (type lied; not a prod crash — `build_application` always wires recall) | FIXED — explicit `None` guard before `ctx.recall.assemble()` in `status.py:48-49`. Commit `937dd08` |
 | WR-02 | Real private-method coupling | FIXED — `Recall._allocate` promoted to public `allocate()`; caller updated. Commit `d43bafc` |
 | IN-01 | Real minor | FIXED — `_ContextBudget` removed from `recall.__all__`. Commit `c820060` |
-| WR-03 | NOT a regression | PRESERVED — original used sequential awaits with identical exception propagation; inner gathers use `return_exceptions=True` in both. Adding it to the outer gather would make behavior more lenient than the original (out of scope for a behavior-preserving extraction). |
-| WR-01 | NOT a regression | PRESERVED — original `_format_search_results` also emitted a bare filename for empty bodies; refactor preserves that behavior. |
+| WR-03 | Outer gather hardening (user-approved behavior change) | FIXED — outer `asyncio.gather` in `assemble()` now uses `return_exceptions=True` and coerces a failed tier to `[]` with a logged warning (graceful degradation instead of 500). New test `test_assemble_degrades_gracefully_when_sessions_tier_raises`. Commit `d494074` |
+| WR-01 | Empty-body filtering (user-approved behavior change) | FIXED — `_warm_search` now skips appending a `SearchResult` whose body is empty. New test `test_warm_skips_empty_body_result_but_keeps_sibling_with_body`. Commit `6003f7c` |
 | IN-02 | Working as designed | KEPT — the `message_processing` re-export of `_WARM_TIER_EXCLUDE_PREFIXES` exists precisely so existing tests keep importing it (Test-Rewrite Ban). |
