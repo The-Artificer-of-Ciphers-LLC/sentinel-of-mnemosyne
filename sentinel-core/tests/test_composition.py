@@ -174,6 +174,7 @@ async def test_initialize_startup_pins_route_context_and_minimal_state(
         embeddings=SimpleNamespace(embed=AsyncMock(return_value=[])),
         module_registry={},
         ai_provider_name="lmstudio",
+        recall=None,
     )
 
     async def _fake_build_application(_settings, _http_client):
@@ -207,6 +208,7 @@ async def test_initialize_startup_returns_warning_when_vault_unreachable(
         embeddings=SimpleNamespace(embed=AsyncMock(return_value=[])),
         module_registry={},
         ai_provider_name="lmstudio",
+        recall=None,
     )
 
     async def _fake_build_application(_settings, _http_client):
@@ -236,6 +238,7 @@ async def test_initialize_startup_raises_when_persona_missing(monkeypatch):
         embeddings=SimpleNamespace(embed=AsyncMock(return_value=[])),
         module_registry={},
         ai_provider_name="lmstudio",
+        recall=None,
     )
 
     async def _fake_build_application(_settings, _http_client):

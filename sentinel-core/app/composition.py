@@ -22,6 +22,7 @@ from app.clients.embeddings import DEFAULT_LMSTUDIO_BASE_URL, Embeddings
 from app.clients.litellm_provider import LiteLLMProvider
 from app.services.injection_filter import InjectionFilter
 from app.services.message_processing import MessageProcessor
+from app.services.recall import Recall
 from app.services.model_registry import build_model_registry
 from app.services.model_selector import (
     _ORIGINAL_PREFIXES,
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
     from app.services.message_processing import MessageProcessor
     from app.services.model_registry import ModelInfo
     from app.services.output_scanner import OutputScanner
+    from app.services.recall import Recall
     from app.vault import Vault
 
 
@@ -84,6 +86,7 @@ class AppGraph:
     injection_filter: "InjectionFilter"
     output_scanner: "OutputScanner"
     message_processor: "MessageProcessor"
+    recall: "Recall"
     module_registry: dict[str, Any]
     embeddings: "Embeddings"
     note_classifier_fn: Callable[[str], Awaitable[Any]]
@@ -242,6 +245,7 @@ async def build_application(
     provider_bundle: "ProviderRouterBundle | None" = None,
     injection_filter: "InjectionFilter | None" = None,
     output_scanner: "OutputScanner | None" = None,
+    recall: "Recall | None" = None,
     embeddings: "Embeddings | None" = None,
     message_processor: "MessageProcessor | None" = None,
     module_registry: "dict[str, Any] | None" = None,
@@ -304,12 +308,16 @@ async def build_application(
     if output_scanner is None:
         output_scanner = OutputScanner(ai_provider=ai_provider)
 
+    if recall is None:
+        recall = Recall(vault=vault)
+
     if message_processor is None:
         message_processor = MessageProcessor(
             vault=vault,
             ai_provider=ai_provider,
             injection_filter=injection_filter,
             output_scanner=output_scanner,
+            recall=recall,
         )
 
     if embeddings is None:
@@ -358,6 +366,7 @@ async def build_application(
         injection_filter=injection_filter,
         output_scanner=output_scanner,
         message_processor=message_processor,
+        recall=recall,
         module_registry=module_registry,
         embeddings=embeddings,
         note_classifier_fn=note_classifier_fn,
@@ -381,6 +390,7 @@ async def initialize_startup(
         embedder=graph.embeddings.embed,
         module_registry=graph.module_registry,
         ai_provider_name=graph.ai_provider_name,
+        recall=graph.recall,
     )
     app.state.settings = graph.settings
     app.state.vault = graph.vault

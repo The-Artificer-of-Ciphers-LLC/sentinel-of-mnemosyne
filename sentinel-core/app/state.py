@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
     from app.config import Settings
     from app.services.message_processing import MessageProcessor
+    from app.services.recall import Recall
     from app.vault import Vault
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ class RouteContext:
     embedder: Callable[[list[str]], Awaitable[list[float]]] = _missing_embedder
     module_registry: dict[str, Any] = field(default_factory=dict)
     ai_provider_name: str | None = None
+    recall: "Recall | None" = None
 
 
 def get_route_context(request: Request) -> RouteContext:
