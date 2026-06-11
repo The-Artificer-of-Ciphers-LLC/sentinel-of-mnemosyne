@@ -22,7 +22,7 @@ from app.clients.embeddings import DEFAULT_LMSTUDIO_BASE_URL, Embeddings
 from app.clients.litellm_provider import LiteLLMProvider
 from app.services.injection_filter import InjectionFilter
 from app.services.message_processing import MessageProcessor
-from app.services.recall import Recall
+from app.services.recall import Recall, RecallConfig, SemanticRecall
 from app.services.model_registry import build_model_registry
 from app.services.model_selector import (
     _ORIGINAL_PREFIXES,
@@ -308,8 +308,30 @@ async def build_application(
     if output_scanner is None:
         output_scanner = OutputScanner(ai_provider=ai_provider)
 
+    # Embeddings MUST be constructed before the recall guard so embeddings.embed
+    # is available to inject into SemanticRecall (D-12 / wiring constraint).
+    if embeddings is None:
+        embeddings = Embeddings(
+            http_client,
+            settings.lmstudio_base_url or DEFAULT_LMSTUDIO_BASE_URL,
+            settings.embedding_model,
+            api_key=settings.lmstudio_api_key or "lm-studio",
+        )
+
     if recall is None:
-        recall = Recall(vault=vault)
+        # Construct SemanticRecall with the no-prefix active_model (D-12).
+        # active_model is settings.embedding_model (no "openai/" prefix) so the
+        # exact-string comparison in SemanticRecall matches the embedding_model
+        # written by vault_sweeper.py.  Do NOT use embeddings._model — it has
+        # the "openai/" prefix and would make every model-match fail.
+        _config = RecallConfig()
+        _semantic = SemanticRecall(
+            vault,
+            embed_fn=embeddings.embed,
+            active_model=settings.embedding_model,
+            config=_config,
+        )
+        recall = Recall(vault=vault, config=_config, semantic_strategy=_semantic)
 
     if message_processor is None:
         message_processor = MessageProcessor(
@@ -318,14 +340,6 @@ async def build_application(
             injection_filter=injection_filter,
             output_scanner=output_scanner,
             recall=recall,
-        )
-
-    if embeddings is None:
-        embeddings = Embeddings(
-            http_client,
-            settings.lmstudio_base_url or DEFAULT_LMSTUDIO_BASE_URL,
-            settings.embedding_model,
-            api_key=settings.lmstudio_api_key or "lm-studio",
         )
 
     if module_registry is None:
