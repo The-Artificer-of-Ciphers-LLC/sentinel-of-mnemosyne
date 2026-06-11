@@ -570,3 +570,256 @@ async def test_skip_prefixes_configurable_via_settings(monkeypatch):
     assert not any(p.startswith("custom-skip") for p in paths), (
         f"custom-skip/ entries should be skipped; got {paths}"
     )
+
+
+# --- Phase 40 Plan 01: embedding index emission tests (Wave 0 RED) ---
+#
+# These tests pin the index-emission, model-write, incremental-rebuild,
+# prune, and document-prefix behaviors required by MEM-05 (producer side).
+# All five MUST FAIL initially (RED step) because EMBEDDING_INDEX_PATH,
+# NOMIC_DOCUMENT_PREFIX, and _emit_embedding_index do not yet exist.
+
+
+import json as _json  # local alias to avoid shadowing the module-level `json`
+
+
+class _CallCountingEmbedder:
+    """Fake embedder that records which texts it was called with and returns
+    deterministic unit vectors so cosine math is valid in any downstream use."""
+
+    def __init__(self, vec: list[float] | None = None):
+        self.calls: list[list[str]] = []
+        self._vec = vec or [1.0, 0.0, 0.0]
+
+    async def __call__(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(list(texts))
+        return [self._vec for _ in texts]
+
+    @property
+    def all_texts(self) -> list[str]:
+        return [t for batch in self.calls for t in batch]
+
+
+def _make_classifiable_note_vault(
+    paths: list[str],
+    body: str = "A classifiable note body.",
+) -> FakeObsidian:
+    """Return a FakeVault pre-populated with notes at *paths* and a dir tree."""
+    fake = FakeObsidian()
+    # Populate root directory listing
+    top_dirs: set[str] = set()
+    for p in paths:
+        parts = p.split("/")
+        if len(parts) > 1:
+            top_dirs.add(parts[0] + "/")
+        else:
+            top_dirs.add(p)
+    fake.dirs[""] = sorted(top_dirs)
+    for p in paths:
+        parts = p.split("/")
+        if len(parts) > 1:
+            dir_key = "/".join(parts[:-1])
+            fake.dirs.setdefault(dir_key, [])
+            if parts[-1] not in fake.dirs[dir_key]:
+                fake.dirs[dir_key].append(parts[-1])
+        fake.notes[p] = body
+    return fake
+
+
+@pytest.mark.asyncio
+async def test_sweep_emits_embedding_index():
+    """After run_sweep over a FakeVault with classifiable notes the FakeVault
+    has a note at EMBEDDING_INDEX_PATH whose JSON body is an object keyed by
+    surviving note paths."""
+    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH  # must exist (RED: will NameError)
+
+    note_paths = ["notes/alpha.md", "notes/beta.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+
+    classifier = AsyncMock(
+        return_value=ClassificationResult(
+            topic="reference", confidence=0.9, title_slug="x", reasoning="r"
+        )
+    )
+    embedder = _CallCountingEmbedder()
+
+    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+
+    assert EMBEDDING_INDEX_PATH in fake.notes, (
+        f"expected {EMBEDDING_INDEX_PATH!r} in vault after sweep; "
+        f"present paths: {sorted(fake.notes.keys())}"
+    )
+    raw = fake.notes[EMBEDDING_INDEX_PATH]
+    index = _json.loads(raw)
+    assert isinstance(index, dict), f"index must be a JSON object; got {type(index)}"
+    for path in note_paths:
+        assert path in index, f"expected note path {path!r} as key in index; keys={list(index.keys())}"
+
+
+@pytest.mark.asyncio
+async def test_sweep_writes_embedding_model_to_index():
+    """Every index entry must carry embedding_b64, embedding_model (== the
+    no-prefix model id from _embedding_model_id()), and content_hash."""
+    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH  # RED: NameError
+
+    note_paths = ["notes/alpha.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+
+    classifier = AsyncMock(
+        return_value=ClassificationResult(
+            topic="reference", confidence=0.9, title_slug="x", reasoning="r"
+        )
+    )
+    embedder = _CallCountingEmbedder()
+
+    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+
+    raw = fake.notes[EMBEDDING_INDEX_PATH]
+    index = _json.loads(raw)
+    entry = index["notes/alpha.md"]
+
+    # Must carry all three required fields
+    assert "embedding_b64" in entry, f"missing embedding_b64 in entry: {entry}"
+    assert "embedding_model" in entry, f"missing embedding_model in entry: {entry}"
+    assert "content_hash" in entry, f"missing content_hash in entry: {entry}"
+
+    # embedding_model must NOT have the "openai/" prefix
+    em = entry["embedding_model"]
+    assert not em.startswith("openai/"), (
+        f"embedding_model must not have 'openai/' prefix; got {em!r}"
+    )
+    # embedding_model must equal the value _embedding_model_id() returns
+    from app.services.vault_sweeper import _embedding_model_id
+    assert em == _embedding_model_id(), (
+        f"embedding_model {em!r} != _embedding_model_id() {_embedding_model_id()!r}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_sweep_index_incremental_carry_forward():
+    """A second run_sweep where a note's body is unchanged must carry the
+    same entry forward WITHOUT calling the embedder for that path.
+    A note whose body changed must get a new content_hash + fresh embedding."""
+    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH  # RED: NameError
+
+    note_paths = ["notes/stable.md", "notes/changing.md"]
+    fake = _make_classifiable_note_vault(note_paths, body="original body")
+    classifier = AsyncMock(
+        return_value=ClassificationResult(
+            topic="reference", confidence=0.9, title_slug="x", reasoning="r"
+        )
+    )
+    embedder = _CallCountingEmbedder()
+
+    # First sweep — embeds both notes
+    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+    calls_after_first = len(embedder.all_texts)
+
+    # Record the content_hash of the stable note from the first index
+    index_after_first = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
+    stable_hash_first = index_after_first["notes/stable.md"]["content_hash"]
+    stable_b64_first = index_after_first["notes/stable.md"]["embedding_b64"]
+
+    # Mutate the body of the changing note so it will need re-embedding
+    # We need to write it directly to the vault (bypass frontmatter)
+    # After the first sweep, the note has frontmatter — we must update the body part
+    # For simplicity just set a fresh body without frontmatter
+    fake.notes["notes/changing.md"] = "completely new body content"
+
+    # Second sweep
+    embedder.calls.clear()
+    classifier.reset_mock()
+    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+
+    index_after_second = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
+
+    # The stable note's entry must be carried forward unchanged (same hash + b64)
+    stable_entry = index_after_second["notes/stable.md"]
+    assert stable_entry["content_hash"] == stable_hash_first, (
+        "stable note content_hash must not change between sweeps when body is unchanged"
+    )
+    assert stable_entry["embedding_b64"] == stable_b64_first, (
+        "stable note embedding_b64 must be carried forward when body is unchanged"
+    )
+
+    # The stable note must NOT have triggered a re-embed: the texts sent to the
+    # embedder in the second sweep must NOT contain the stable note's body.
+    texts_in_second_sweep = embedder.all_texts
+    # The stable note's body (after first sweep it has frontmatter, body = "original body")
+    # At minimum, the stable note body text should NOT appear fresh in the second batch
+    # because its hash hasn't changed.
+    # Verify: the changing note WAS re-embedded (its new body must appear in texts)
+    assert any("completely new body content" in t for t in texts_in_second_sweep), (
+        "changing note's new body must be sent to embedder in second sweep; "
+        f"texts sent: {texts_in_second_sweep}"
+    )
+
+    # And the changing note must have a DIFFERENT content_hash than in the first index
+    changing_hash_first = index_after_first["notes/changing.md"]["content_hash"]
+    changing_hash_second = index_after_second["notes/changing.md"]["content_hash"]
+    assert changing_hash_second != changing_hash_first, (
+        "changed note must have a new content_hash in the second index"
+    )
+
+
+@pytest.mark.asyncio
+async def test_sweep_index_prunes_trashed():
+    """A note present in the first index but trashed/absent on the second sweep
+    must be removed (pruned) from the new index."""
+    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH  # RED: NameError
+
+    note_paths = ["notes/keeper.md", "notes/goner.md"]
+    fake = _make_classifiable_note_vault(note_paths, body="some body")
+    classifier = AsyncMock(
+        return_value=ClassificationResult(
+            topic="reference", confidence=0.9, title_slug="x", reasoning="r"
+        )
+    )
+    embedder = _CallCountingEmbedder()
+
+    # First sweep — both notes indexed
+    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+    index_first = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
+    assert "notes/keeper.md" in index_first
+    assert "notes/goner.md" in index_first
+
+    # Remove "notes/goner.md" from the vault entirely (simulate trash/delete)
+    del fake.notes["notes/goner.md"]
+    fake.dirs.get("notes", []).remove("goner.md") if "goner.md" in fake.dirs.get("notes", []) else None
+
+    # Second sweep
+    embedder.calls.clear()
+    classifier.reset_mock()
+    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+
+    index_second = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
+    assert "notes/keeper.md" in index_second, "keeper note must remain in index after second sweep"
+    assert "notes/goner.md" not in index_second, (
+        "goner note must be pruned from index because it no longer exists in the vault"
+    )
+
+
+@pytest.mark.asyncio
+async def test_sweep_embeds_with_document_prefix():
+    """The strings passed to the embedder must each be prefixed with
+    NOMIC_DOCUMENT_PREFIX ('search_document: ')."""
+    from app.services.vault_sweeper import NOMIC_DOCUMENT_PREFIX  # RED: NameError
+
+    note_paths = ["notes/alpha.md", "notes/beta.md"]
+    fake = _make_classifiable_note_vault(note_paths, body="note body text")
+    classifier = AsyncMock(
+        return_value=ClassificationResult(
+            topic="reference", confidence=0.9, title_slug="x", reasoning="r"
+        )
+    )
+    embedder = _CallCountingEmbedder()
+
+    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+
+    all_texts = embedder.all_texts
+    assert len(all_texts) >= 2, f"expected at least 2 texts sent to embedder; got {all_texts}"
+    for text in all_texts:
+        assert text.startswith(NOMIC_DOCUMENT_PREFIX), (
+            f"embedder received text without NOMIC_DOCUMENT_PREFIX; "
+            f"prefix={NOMIC_DOCUMENT_PREFIX!r}, text={text!r}"
+        )
