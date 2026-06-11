@@ -1,11 +1,10 @@
 """System status and debug endpoints — RD-05 / STUB-06."""
 
-import asyncio
-
 from fastapi import APIRouter, Path, Request
 from starlette.responses import JSONResponse
 
 from app.runtime_config import runtime_config_from_settings
+from app.services.recall import MessageRequest
 from app.services.runtime_probe import probe_runtime
 from app.state import get_route_context
 
@@ -39,29 +38,20 @@ async def debug_context(
     user_id: str = Path(..., pattern=r"^[a-zA-Z0-9_-]+$"),
 ) -> JSONResponse:
     ctx = get_route_context(request)
-    obsidian = ctx.vault
-    self_paths = [
-        "self/identity.md",
-        "self/methodology.md",
-        "self/goals.md",
-        "self/relationships.md",
-        "ops/reminders.md",
-        "self/learning-areas.md",
-    ]
-    results = await asyncio.gather(
-        *[obsidian.read_self_context(p) for p in self_paths],
-        return_exceptions=True,
+    fake_req = MessageRequest(
+        content="",
+        user_id=user_id,
+        model_name="",
+        context_window=ctx.context_window,
+        stop_sequences=None,
     )
-    context_files = {
-        path: text
-        for path, text in zip(self_paths, results)
-        if isinstance(text, str) and text
-    }
-    sessions = await obsidian.get_recent_sessions(user_id)
+    recalled = await ctx.recall.assemble(fake_req, budget=ctx.context_window)
     return JSONResponse(
         {
             "user_id": user_id,
-            "context_files": context_files,
-            "recent_sessions_count": len(sessions),
+            "self_context": recalled.self_context,
+            "sessions": recalled.sessions,
+            "warm": [{"path": r.path, "score": r.score} for r in recalled.warm],
+            "recent_sessions_count": len(recalled.sessions),
         }
     )
