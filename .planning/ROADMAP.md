@@ -764,8 +764,8 @@ Plans:
   3. Notes whose `embedding_model` frontmatter value does not match the active embedding model are skipped and not returned as recall candidates
   4. Keyword and semantic results are merged into one ranked list via RRF (k≈60) before being returned in `RecalledContext.warm`
 
-**Plans:** 6 plans (3 shipped + 3 gap-closure from UAT blocker)
-**Status note:** Reopened for gap closure 2026-06-11 — live UAT surfaced a production-down blocker: the first-boot startup rebuild ran a FULL destructive sweep and RELOCATED `sentinel/persona.md`, crash-looping the next boot. Plans 40-04..06 close it.
+**Plans:** 7 plans (3 shipped + 4 gap-closure from UAT blocker; 40-07 added per cross-AI review to make the .json/.md fallback a tested atomic change)
+**Status note:** Reopened for gap closure 2026-06-11 — live UAT surfaced a production-down blocker: the first-boot startup rebuild ran a FULL destructive sweep and RELOCATED `sentinel/persona.md`, crash-looping the next boot. Plans 40-04..07 close it (40-04/05/06 revised + 40-07 added on 2026-06-11 to incorporate cross-AI review feedback in 40-REVIEWS.md).
 Plans:
 **Wave 1**
 
@@ -780,12 +780,16 @@ Plans:
 
 **Wave 1 (gap)**
 
-- [ ] 40-04-PLAN.md — Index-only startup rebuild (`rebuild_embedding_index`, replaces destructive `run_sweep` at boot) + embeddings-degraded abort guard so a sweep never relocates/trashes on bad classifications
-- [ ] 40-05-PLAN.md — Vault-seam protected-namespace guard (`PROTECTED_NAMESPACES`/`is_protected_path`/`ProtectedPathError`): `sentinel/` can never be relocated or trashed by any caller
+- [ ] 40-04-PLAN.md — Index-only startup rebuild (`rebuild_embedding_index`, replaces destructive `run_sweep` at boot) + RUNTIME safe-to-mutate probe (embedding AND classifier readiness, evaluated inside run_sweep) + degraded-index invariant (no new content_hash without a fresh vector) + per-branch ProtectedPathError catch-and-continue + admin-endpoint probe wiring
+- [ ] 40-05-PLAN.md — Vault-seam protected-namespace guard (`PROTECTED_NAMESPACES`/`is_protected_path`/`ProtectedPathError`): enumerated protected set, SOURCE + DESTINATION protection — protected paths can never be relocated/trashed by any caller, nor can content be relocated INTO a protected namespace
 
-**Wave 2 (gap)** *(blocked on 40-04 + 40-05)*
+**Wave 2 (gap)** *(blocked on 40-04)*
 
-- [ ] 40-06-PLAN.md — Operator blast-radius audit script + live UAT re-run (.json index round-trip / .md fallback, paraphrase recall, persona-survives-boot) — autonomous: false
+- [ ] 40-07-PLAN.md — Single-source the index path (`EMBEDDING_INDEX_PATH` == `RecallConfig.index_path`) + extension-aware fenced-JSON encode/decode so the `.json`→`.md` fallback is ONE atomic, pre-tested dual-constant change (both-extensions round-trip regression test)
+
+**Wave 3 (gap)** *(blocked on 40-04 + 40-05 + 40-07)*
+
+- [ ] 40-06-PLAN.md — Operator blast-radius audit script (TWO modes: provenance scan + inventory/namespace-policy scan for provenance-less damage, `--since` incident window, `--dry-run`) + live UAT re-run (index round-trip of 40-07's selected path, paraphrase recall, persona-survives-boot-and-sweep) — autonomous: false
 
 **UI hint**: no
 
