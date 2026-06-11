@@ -62,7 +62,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [ ] **Phase 37: PF2E Per-Player Memory** — Per-player vault namespace, onboarding, recall, canonization, and deterministic Foundry chat memory projection (combines Player Interaction Vault + Foundry Chat Memory PRDs)
 - [x] **Phase 38: PF2E Multi-Step Onboarding Dialog** — Stateful conversational onboarding flow for `:pf player start` (completed 2026-05-10)
 - [x] **Phase 39: Extract the Recall Module** — Retrieval becomes a first-class `Recall` module returning `RecalledContext`; `MessageProcessor` and `GET /context/{user_id}` both delegate to it (completed 2026-06-11)
-- [ ] **Phase 40: Semantic Recall** — `RetrievalStrategy` seam with `KeywordRecall` + `SemanticRecall`; sweeper embeddings become live retrieval data via RRF hybrid merge
+- [x] **Phase 40: Semantic Recall** — `RetrievalStrategy` seam with `KeywordRecall` + `SemanticRecall`; sweeper embeddings become live retrieval data via RRF hybrid merge (completed 2026-06-11)
 - [ ] **Phase 41: Typed SessionSummary + Retention** — Typed `SessionSummary` + tunable `RetentionPolicy`; sessions older than the hot window recalled via index instead of dropped
 
 ## Phase Details
@@ -764,7 +764,7 @@ Plans:
   3. Notes whose `embedding_model` frontmatter value does not match the active embedding model are skipped and not returned as recall candidates
   4. Keyword and semantic results are merged into one ranked list via RRF (k≈60) before being returned in `RecalledContext.warm`
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 **Wave 1**
 
@@ -773,7 +773,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 40-03-PLAN.md — Wire SemanticRecall into Recall at composition root + non-blocking startup rebuild + end-to-end hybrid-recall proof
+- [x] 40-03-PLAN.md — Wire SemanticRecall into Recall at composition root + non-blocking startup rebuild + end-to-end hybrid-recall proof
 
 **UI hint**: no
 
