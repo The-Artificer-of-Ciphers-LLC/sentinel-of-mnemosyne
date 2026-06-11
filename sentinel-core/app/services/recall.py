@@ -304,11 +304,31 @@ class Recall:
         Per-tier truncation is the responsibility of ``MessageProcessor``
         (D-04); ``assemble`` returns untruncated content.
         """
-        self_context, sessions, warm = await asyncio.gather(
+        _self_raw, _sessions_raw, _warm_raw = await asyncio.gather(
             self._hot_self(),
             self._hot_sessions(request.user_id),
             self._warm_search(request.content),
+            return_exceptions=True,
         )
+
+        if isinstance(_self_raw, BaseException):
+            logger.warning("recall tier failed: %r", _self_raw)
+            self_context: list[str] = []
+        else:
+            self_context = _self_raw
+
+        if isinstance(_sessions_raw, BaseException):
+            logger.warning("recall tier failed: %r", _sessions_raw)
+            sessions: list[str] = []
+        else:
+            sessions = _sessions_raw
+
+        if isinstance(_warm_raw, BaseException):
+            logger.warning("recall tier failed: %r", _warm_raw)
+            warm: list[SearchResult] = []
+        else:
+            warm = _warm_raw
+
         return RecalledContext(
             self_context=self_context,
             sessions=sessions,

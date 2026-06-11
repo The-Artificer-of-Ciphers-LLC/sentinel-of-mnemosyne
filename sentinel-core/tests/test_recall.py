@@ -196,3 +196,44 @@ async def test_empty_content_skips_find():
     assert find_call_count == 0, (
         f"find() should not be called for empty content, but was called {find_call_count} times"
     )
+
+
+# ---------------------------------------------------------------------------
+# WR-03: graceful degradation when a tier raises (FIX A)
+# ---------------------------------------------------------------------------
+
+
+async def test_assemble_degrades_gracefully_when_sessions_tier_raises():
+    """WR-03: if _hot_sessions raises, assemble() returns sessions=[] and
+    still populates the other tiers — does not propagate the exception.
+    """
+    vault = FakeVault(
+        notes={
+            "self/identity.md": "I am the user — identity content",
+            "notes/topic.md": "unique degrade test content keyword",
+        }
+    )
+
+    async def raising_sessions(user_id: str, limit: int = 3) -> list[str]:
+        raise RuntimeError("simulated session tier failure")
+
+    vault.get_recent_sessions = raising_sessions  # type: ignore[method-assign]
+
+    recall = Recall(vault=vault)
+    # Must not raise; must return a valid RecalledContext
+    result = await recall.assemble(
+        make_request(content="unique degrade test content keyword"), budget=8192
+    )
+
+    assert isinstance(result, RecalledContext)
+    assert result.sessions == [], (
+        "sessions should be empty when the tier raises, not propagate the exception"
+    )
+    # self_context should still be populated (tier was not broken)
+    assert any("identity content" in s for s in result.self_context), (
+        "self_context should still be populated when only the sessions tier fails"
+    )
+    # warm should still be populated
+    assert any(r.path == "notes/topic.md" for r in result.warm), (
+        "warm tier should still be populated when only the sessions tier fails"
+    )
