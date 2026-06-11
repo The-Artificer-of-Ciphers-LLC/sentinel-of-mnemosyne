@@ -1,8 +1,47 @@
 # ADR-0004 — Semantic recall: a RetrievalStrategy seam inside Recall, and the sweeper's embeddings go live
 
-**Status:** proposed (design converged in architecture review; no production code yet)
+**Status:** accepted
 **Date:** 2026-06-11
+**Implemented:** 2026-06-11 (Phase 40, Plans 01–02)
 **Related:** ADR-0003 (Recall module), ADR-0002 (Vault seam location)
+
+---
+
+## Supersession Note (D-01/D-02 — Phase 40)
+
+The "read embeddings in place from note frontmatter" data-source language in the original Decision
+section below is **superseded** by the sidecar-index decision adopted in Phase 40 Context D-01/D-02:
+
+**Superseded text:** "SemanticRecall reads embeddings **in place** from note frontmatter (the sweeper
+already writes them)"
+
+**Superseding decision:**
+- The vault sweeper emits a single sidecar index at `ops/sweeps/embedding-index.json` (keyed by
+  vault-relative note path; each entry carries `{ embedding_b64, embedding_model, content_hash }`).
+- `SemanticRecall` reads this index **once** via `vault.read_note("ops/sweeps/embedding-index.json")`
+  and caches it in memory behind a short TTL (60 s default). This produces **zero per-note Obsidian
+  REST calls at query time** — satisfying MEM-05.
+- The index is persisted through the Vault seam: the sweeper writes it via `vault.write_note()` (a
+  single REST PUT per sweep — atomic replace at the API level). No `tempfile`/`os.replace` (the
+  vault is REST-only; no Docker volume mount — D-08 REVISED / A6).
+- Freshness is maintained by TTL (not local-file mtime, which is unavailable over REST — D-09
+  REVISED). One index read per TTL window satisfies MEM-05.
+- The per-note `embedding_b64` frontmatter field (written by the sweeper since Phase 38) is still
+  maintained but is no longer the retrieval path for SemanticRecall — the sidecar index is the
+  canonical source of truth.
+
+**Why changed:** Research confirmed the vault is REST-only (Obsidian Local REST API via Docker;
+no local filesystem mount visible to sentinel-core). The "read embeddings in place from frontmatter"
+approach would have required N per-note REST reads at query time — directly violating MEM-05. The
+sidecar-index + TTL-cache approach satisfies MEM-05 with at most one REST read per TTL window.
+The per-entry `embedding_model` field enables exact-string model-mismatch detection (D-12/D-13)
+and silent degrade when all entries are stale (D-14 / WR-03 pattern reuse).
+
+**Original design narrative preserved below** — this supersession note records only the data-source
+change; the `RetrievalStrategy` Protocol shape, adapter names, and merge-policy decisions are
+unchanged and implemented as described.
+
+---
 
 ## Context
 
