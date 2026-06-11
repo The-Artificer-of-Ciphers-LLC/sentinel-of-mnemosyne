@@ -451,6 +451,13 @@ async def initialize_startup(
                 "Startup embedding-index rebuild failed (non-fatal): %r", exc
             )
 
-    asyncio.create_task(_startup_rebuild())
+    # WR-02: keep a strong reference to the task so it can't be GC-collected
+    # before completion. Store on app.state and register a done-callback that
+    # discards the reference once the task finishes.
+    _rebuild_task = asyncio.create_task(_startup_rebuild())
+    app.state.startup_rebuild_task = _rebuild_task
+    _rebuild_task.add_done_callback(
+        lambda t: setattr(app.state, "startup_rebuild_task", None)
+    )
 
     return StartupResult(graph=graph, warnings=warnings)

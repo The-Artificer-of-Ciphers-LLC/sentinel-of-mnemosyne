@@ -304,6 +304,16 @@ async def _emit_embedding_index(
 
     # Update / insert entries for survivors that have embeddings
     if embeddings:
+        # WR-06: if embedder returned fewer vectors than survivors, log and record
+        # the mismatch instead of silently breaking mid-loop.
+        if len(embeddings) < len(survivors):
+            msg = (
+                f"_emit_embedding_index: embedder returned {len(embeddings)} vectors "
+                f"for {len(survivors)} survivors — index will be partial"
+            )
+            logger.warning("sweep: %s", msg)
+            report.errors.append(msg)
+
         for idx, (path, _fm, rest, _cls) in enumerate(survivors):
             if idx >= len(embeddings):
                 break

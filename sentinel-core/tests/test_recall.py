@@ -874,3 +874,78 @@ async def test_context_empty_query_skips_embedding():
         f"embed_fn must NOT be called for empty content (D-16), "
         f"was called {embed_call_count} times"
     )
+
+
+# ---------------------------------------------------------------------------
+# CR-02: per-entry decode/dimension resilience
+# ---------------------------------------------------------------------------
+
+
+async def test_semantic_resilient_to_corrupt_and_wrong_dim_entries():
+    """CR-02: a corrupt entry + a wrong-dimension entry do not kill semantic results.
+
+    Fixture index has three entries:
+    - notes/good.md  — valid embedding at query dimension → should appear in results
+    - notes/corrupt.md — invalid base64 (not decodeable) → must be skipped, not raised
+    - notes/wrongdim.md — valid base64 but dimension != query dimension → must be skipped
+
+    SemanticRecall.search() must:
+    1. Return the good entry (not []) — i.e. not raise out of the loop
+    2. Skip (not raise on) the corrupt entry
+    3. Skip (not raise on) the wrong-dimension entry
+    """
+    from app.services.recall import SemanticRecall
+    import base64
+    import struct
+
+    model = "test-model-v1"
+
+    # Good entry: [1.0, 0.0, 0.0] — 3 floats, cosine ≈ 0.90 with fake_embedder query
+    good_vec = [1.0, 0.0, 0.0]
+    good_b64 = encode_embedding(good_vec)
+
+    # Corrupt entry: not valid base64
+    corrupt_b64 = "!!!NOT_VALID_BASE64!!!"
+
+    # Wrong-dimension entry: encode a 5-float vector (query is 3-dim from fake_embedder)
+    wrong_dim_b64 = encode_embedding([1.0, 0.0, 0.0, 0.0, 0.0])
+
+    index = {
+        "notes/good.md": {
+            "embedding_b64": good_b64,
+            "embedding_model": model,
+            "content_hash": "aabbccdd00000000",
+        },
+        "notes/corrupt.md": {
+            "embedding_b64": corrupt_b64,
+            "embedding_model": model,
+            "content_hash": "eeff001100000000",
+        },
+        "notes/wrongdim.md": {
+            "embedding_b64": wrong_dim_b64,
+            "embedding_model": model,
+            "content_hash": "11223344000000000",
+        },
+    }
+
+    config = RecallConfig(semantic_cosine_floor=0.50)
+    vault = FakeVault()
+    vault.notes[config.index_path] = json.dumps(index)
+
+    semantic = SemanticRecall(vault=vault, embed_fn=fake_embedder, active_model=model, config=config)
+
+    # Must not raise even though two entries are malformed
+    results = await semantic.search("test query", budget=10)
+
+    paths = [r.path for r in results]
+
+    assert "notes/good.md" in paths, (
+        f"Good entry should still be returned despite corrupt/wrong-dim siblings. "
+        f"Got paths: {paths}"
+    )
+    assert "notes/corrupt.md" not in paths, (
+        "Corrupt-base64 entry must be skipped, not raise"
+    )
+    assert "notes/wrongdim.md" not in paths, (
+        "Wrong-dimension entry must be skipped, not raise"
+    )

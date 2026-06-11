@@ -346,18 +346,57 @@ class SemanticRecall:
         """Reload the embedding index via vault.read_note() if the TTL has expired.
 
         Uses monotonic clock for the TTL check (immune to wall-clock drift).
-        On any JSON parse failure, self._index is reset to {} (T-40-05 Tampering mitigation).
+
+        CR-01: stamp _index_loaded_at BEFORE the await so that a failed read
+        still advances the TTL window and won't hammer the vault on every call.
+        On failure, the previously-cached index (if any) is kept intact.
+        On success, parse the result and update self._index.
+
+        WR-05: validate the parsed value is a dict; treat non-dict JSON (null,
+        list, string) as an absent/corrupt index and log a warning.
         """
         now = time.monotonic()
         if now - self._index_loaded_at <= self._config.index_ttl_seconds:
             return  # cache is fresh
+
+        # CR-01: advance the TTL stamp first so a failed read doesn't trigger
+        # a storm of retries on consecutive calls within the same TTL window.
+        self._index_loaded_at = time.monotonic()
+
         try:
             raw = await self._vault.read_note(self._config.index_path)
-            self._index = json.loads(raw) if raw and raw.strip() else {}
         except Exception as exc:
-            logger.warning("SemanticRecall: failed to load index at %r: %r", self._config.index_path, exc)
+            logger.warning(
+                "SemanticRecall: failed to load index at %r: %r — keeping cached index",
+                self._config.index_path, exc,
+            )
+            # Keep self._index unchanged (previously-cached data, or {} if no prior load).
+            return
+
+        if not raw or not raw.strip():
             self._index = {}
-        self._index_loaded_at = time.monotonic()
+            return
+
+        try:
+            parsed = json.loads(raw)
+        except Exception as exc:
+            logger.warning(
+                "SemanticRecall: index JSON parse error at %r: %r — treating as empty",
+                self._config.index_path, exc,
+            )
+            self._index = {}
+            return
+
+        # WR-05: top-level must be a dict; null/list/str is treated as absent.
+        if not isinstance(parsed, dict):
+            logger.warning(
+                "SemanticRecall: index at %r has unexpected type %r (expected dict) — treating as empty",
+                self._config.index_path, type(parsed).__name__,
+            )
+            self._index = {}
+            return
+
+        self._index = parsed
 
     async def _get_query_vec(self, query: str) -> list[float] | None:
         """Embed query with nomic search_query: prefix; use bounded dict cache.
@@ -415,6 +454,15 @@ class SemanticRecall:
         candidates: list[tuple[float, str]] = []  # (cosine, path)
         matched_model_count = 0
 
+        # CR-02: sanity cap on base64 string length before decoding.
+        # A 4096-dim float32 vector = 4096*4 = 16384 bytes → ~21848 base64 chars.
+        # Cap at 256 KB of base64 (a tampered entry would need to be absurdly large
+        # to trigger an allocation attack; this still comfortably covers any realistic
+        # embedding dimension while bounding the risk from corrupt/tampered entries).
+        _MAX_B64_LEN = 256 * 1024  # 256 KB
+
+        query_dim = len(qv)  # dimension of the query vector for mismatch checks
+
         for path, entry in self._index.items():
             # T-40-07: apply exclude_prefixes fence (same as KeywordRecall)
             if path.startswith(self._config.exclude_prefixes):
@@ -426,14 +474,41 @@ class SemanticRecall:
                 continue
             matched_model_count += 1
 
-            raw = decode_embedding(entry.get("embedding_b64", ""))
-            if not raw:
-                # Pitfall 4: zero-length embedding → skip (T-40-06)
-                logger.warning("SemanticRecall: zero-length embedding for %r, skipping", path)
-                continue
+            # CR-02: wrap the decode + cosine step so one bad entry never kills
+            # the entire result set; just skip the offending entry.
+            try:
+                b64 = entry.get("embedding_b64", "")
 
-            nv = np.asarray(raw, dtype=np.float32)
-            sim = float(cosine_similarity(qv, nv))
+                # CR-02: length cap — skip implausibly large entries before decode
+                if len(b64) > _MAX_B64_LEN:
+                    logger.warning(
+                        "SemanticRecall: embedding_b64 for %r exceeds cap (%d > %d), skipping",
+                        path, len(b64), _MAX_B64_LEN,
+                    )
+                    continue
+
+                raw = decode_embedding(b64)
+                if not raw:
+                    # Pitfall 4: zero-length embedding → skip (T-40-06)
+                    logger.warning("SemanticRecall: zero-length embedding for %r, skipping", path)
+                    continue
+
+                # CR-02: dimension mismatch guard — skip instead of letting cosine crash
+                if len(raw) != query_dim:
+                    logger.warning(
+                        "SemanticRecall: dimension mismatch for %r (%d vs query %d), skipping",
+                        path, len(raw), query_dim,
+                    )
+                    continue
+
+                nv = np.asarray(raw, dtype=np.float32)
+                sim = float(cosine_similarity(qv, nv))
+            except Exception as exc:
+                logger.warning(
+                    "SemanticRecall: error decoding/scoring %r: %r — skipping entry",
+                    path, exc,
+                )
+                continue
 
             if sim < self._config.semantic_cosine_floor:
                 # D-11: cosine floor gates weak candidates before RRF

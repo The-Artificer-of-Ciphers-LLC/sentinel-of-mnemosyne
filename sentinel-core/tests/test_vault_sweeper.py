@@ -890,7 +890,7 @@ def test_index_path_roundtrips_through_vault_seam():
             "content_hash": "deadbeef00000000",
         },
         "notes/beta.md": {
-            "embedding_b64": "AAAAAACAP wAAAAAAAA==",
+            "embedding_b64": "AAAAAAAAgD8AAAAA",
             "embedding_model": "text-embedding-nomic-embed-text-v1.5",
             "content_hash": "cafebabe00000000",
         },
