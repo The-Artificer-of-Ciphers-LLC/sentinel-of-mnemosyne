@@ -294,24 +294,14 @@ class KeywordRecall:
             return []
 
         top = relevant[:budget]
-        paths = [r.get("filename", "") for r in top]
-        raw_contents = await asyncio.gather(
-            *[self._vault.read_note(p) for p in paths],
-            return_exceptions=True,
-        )
 
-        results: list[SearchResult] = []
-        for r, path, body in zip(top, paths, raw_contents):
-            if isinstance(body, str) and body.strip():
-                note_body = body
-            else:
-                matches = r.get("matches", [])
-                note_body = matches[0].get("context", "").strip() if matches else ""
-            if not note_body.strip():
-                # WR-01: skip contentless notes
-                continue
-            results.append(SearchResult(path=r["filename"], score=r["score"], body=note_body))
-        return results
+        # Return stub SearchResults with body="" — Recall._warm_search reads real bodies
+        # for post-RRF survivors only (A5: ≤ warm_top_n reads, not budget reads).
+        # WR-01 empty-body skip is applied in Recall._warm_search after the body read.
+        return [
+            SearchResult(path=r["filename"], score=r["score"], body="")
+            for r in top
+        ]
 
 
 # ---------------------------------------------------------------------------

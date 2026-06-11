@@ -692,6 +692,8 @@ def obsidian_with_search_results():
             "matches": [{"match": {"start": 0, "end": 17}, "context": "I am a developer."}],
         }
     ]
+    # Recall._warm_search reads bodies post-RRF; provide a real string so WR-01 doesn't skip.
+    mock.read_note.return_value = "# trekkie\n\nI am a developer."
     return mock
 
 
@@ -710,6 +712,8 @@ def obsidian_with_context_and_search():
             "matches": [{"match": {"start": 0, "end": 17}, "context": "I am a developer."}],
         }
     ]
+    # Recall._warm_search reads bodies post-RRF; provide a real string so WR-01 doesn't skip.
+    mock.read_note.return_value = "# trekkie\n\nI am a developer."
     return mock
 
 
@@ -886,6 +890,8 @@ async def test_warm_tier_injected_when_score_meets_threshold(mock_ai_provider):
             "matches": [{"match": {"start": 0, "end": 20}, "context": "garbled pf2e content"}],
         },
     ]
+    # Recall._warm_search reads bodies post-RRF; provide a real string so WR-01 doesn't skip.
+    mixed_score_obsidian.read_note.return_value = "# Sing Better\n\nCompleted the Sing Better course."
     captured_messages = []
 
     async def capturing_complete(messages):

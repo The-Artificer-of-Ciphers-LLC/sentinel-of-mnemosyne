@@ -7,8 +7,31 @@ sys.modules state is clean) and asserts that the public names resolve correctly.
 """
 from __future__ import annotations
 
+import os
+import pathlib
 import subprocess
 import sys
+
+
+def _subprocess_env() -> dict[str, str]:
+    """Build a subprocess environment that mirrors the pytest/app import environment.
+
+    pytest resolves sentinel_shared via pyproject.toml pythonpath = [".", "../shared"].
+    The subprocess needs the same PYTHONPATH so module-top-level imports in
+    recall.py (from sentinel_shared.*) do not raise ModuleNotFoundError.
+    """
+    # sentinel-core/ directory (parent of this test file's tests/ dir)
+    sentinel_core = pathlib.Path(__file__).parent.parent.resolve()
+    # sentinel_shared lives at repo/shared/ (one level above sentinel-core/)
+    shared_dir = (sentinel_core.parent / "shared").resolve()
+
+    extra_paths = [str(sentinel_core), str(shared_dir)]
+    existing = os.environ.get("PYTHONPATH", "")
+    if existing:
+        extra_paths.append(existing)
+    new_pythonpath = os.pathsep.join(extra_paths)
+
+    return {**os.environ, "PYTHONPATH": new_pythonpath}
 
 
 def test_recall_imports_before_message_processing() -> None:
@@ -20,10 +43,14 @@ def test_recall_imports_before_message_processing() -> None:
         "assert hasattr(r, 'SEARCH_SCORE_THRESHOLD'), 'SEARCH_SCORE_THRESHOLD missing'; "
         "print('ok')"
     )
+    # sentinel-core/ as cwd mirrors how pytest/app resolve package roots
+    sentinel_core = pathlib.Path(__file__).parent.parent.resolve()
     result = subprocess.run(
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
+        cwd=str(sentinel_core),
+        env=_subprocess_env(),
     )
     assert result.returncode == 0, (
         f"Circular-import detected when importing recall first.\n"
