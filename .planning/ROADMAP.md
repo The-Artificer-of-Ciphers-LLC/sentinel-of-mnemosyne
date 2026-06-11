@@ -61,7 +61,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [ ] **Phase 36: Foundry NPC Pull Import** — Import existing Foundry NPCs into the Sentinel vault
 - [ ] **Phase 37: PF2E Per-Player Memory** — Per-player vault namespace, onboarding, recall, canonization, and deterministic Foundry chat memory projection (combines Player Interaction Vault + Foundry Chat Memory PRDs)
 - [x] **Phase 38: PF2E Multi-Step Onboarding Dialog** — Stateful conversational onboarding flow for `:pf player start` (completed 2026-05-10)
-- [ ] **Phase 39: Extract the Recall Module** — Retrieval becomes a first-class `Recall` module returning `RecalledContext`; `MessageProcessor` and `GET /context/{user_id}` both delegate to it
+- [x] **Phase 39: Extract the Recall Module** — Retrieval becomes a first-class `Recall` module returning `RecalledContext`; `MessageProcessor` and `GET /context/{user_id}` both delegate to it (completed 2026-06-11)
 - [ ] **Phase 40: Semantic Recall** — `RetrievalStrategy` seam with `KeywordRecall` + `SemanticRecall`; sweeper embeddings become live retrieval data via RRF hybrid merge
 - [ ] **Phase 41: Typed SessionSummary + Retention** — Typed `SessionSummary` + tunable `RetentionPolicy`; sessions older than the hot window recalled via index instead of dropped
 
@@ -737,7 +737,7 @@ Plans:
   3. Relevance threshold, namespace exclusion list (including `ops/`), and per-tier budget ratios are readable from `RecallConfig` rather than scattered inline constants
   4. `tests/test_recall.py` against `FakeVault` passes without going through `MessageProcessor` or the AI provider
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 **Wave 1**
 
@@ -749,7 +749,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 39-03-PLAN.md — Wave 3: GET /context/{user_id} delegates to ctx.recall.assemble(), duplicated assembly deleted + test fixture recall wiring (MEM-01, success criterion #2)
+- [x] 39-03-PLAN.md — Wave 3: GET /context/{user_id} delegates to ctx.recall.assemble(), duplicated assembly deleted + test fixture recall wiring (MEM-01, success criterion #2)
 
 ### Phase 40: Semantic Recall
 
