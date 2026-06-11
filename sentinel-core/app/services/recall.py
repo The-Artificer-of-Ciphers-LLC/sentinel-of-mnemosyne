@@ -12,9 +12,16 @@ never contains chat messages or injection-wrapped text. Presentation concerns
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Awaitable, Callable, Protocol, runtime_checkable
+
+import numpy as np
+
+from sentinel_shared.embedding_codec import decode_embedding
+from sentinel_shared.similarity import cosine_similarity
 
 if TYPE_CHECKING:
     from app.vault import Vault
@@ -308,6 +315,200 @@ class KeywordRecall:
 
 
 # ---------------------------------------------------------------------------
+# SemanticRecall adapter — cosine search over TTL-cached embedding sidecar
+# ---------------------------------------------------------------------------
+
+
+class SemanticRecall:
+    """Semantic retrieval adapter over the sweeper-maintained embedding sidecar.
+
+    Reads ``ops/sweeps/embedding-index.json`` once via vault.read_note() and
+    caches it in memory for ``config.index_ttl_seconds``. Never calls vault.find()
+    or performs per-note REST reads at query time (MEM-05, D-09 REVISED, D-01).
+
+    Model-mismatch entries (embedding_model != active_model) are skipped per
+    D-12/D-13. All-mismatch degrades to [] with a WARNING (D-14). Blank query
+    returns [] without calling embed_fn (D-16).
+
+    Bodies are returned as empty strings; Recall._warm_search reads real bodies
+    for post-RRF survivors (Open Question 3 / A5 — cheaper: 3 reads vs 20).
+    """
+
+    def __init__(
+        self,
+        vault: "Vault",
+        *,
+        embed_fn: Callable[[list[str]], Awaitable[list[list[float]]]],
+        active_model: str,
+        config: RecallConfig,
+    ) -> None:
+        self._vault = vault
+        self._embed_fn = embed_fn
+        self._active_model = active_model  # exact string, no "openai/" prefix (D-12)
+        self._config = config
+        # In-memory TTL cache for the index
+        self._index: dict[str, dict] = {}
+        self._index_loaded_at: float = 0.0  # monotonic timestamp of last load
+        # Bounded dict cache for query vectors, keyed on (query_text, active_model)
+        self._vec_cache: dict[tuple[str, str], list[float]] = {}
+
+    async def _load_index_if_stale(self) -> None:
+        """Reload the embedding index via vault.read_note() if the TTL has expired.
+
+        Uses monotonic clock for the TTL check (immune to wall-clock drift).
+        On any JSON parse failure, self._index is reset to {} (T-40-05 Tampering mitigation).
+        """
+        now = time.monotonic()
+        if now - self._index_loaded_at <= self._config.index_ttl_seconds:
+            return  # cache is fresh
+        try:
+            raw = await self._vault.read_note(self._config.index_path)
+            self._index = json.loads(raw) if raw and raw.strip() else {}
+        except Exception as exc:
+            logger.warning("SemanticRecall: failed to load index at %r: %r", self._config.index_path, exc)
+            self._index = {}
+        self._index_loaded_at = time.monotonic()
+
+    async def _get_query_vec(self, query: str) -> list[float] | None:
+        """Embed query with nomic search_query: prefix; use bounded dict cache.
+
+        Returns None on embed_fn failure (WR-03) or if embed_fn returns empty result.
+        """
+        key = (query, self._active_model)
+        if key in self._vec_cache:
+            return self._vec_cache[key]
+
+        prefixed = f"{NOMIC_QUERY_PREFIX}{query}"
+        try:
+            vecs = await self._embed_fn([prefixed])
+            vec = vecs[0] if vecs else []
+        except Exception as exc:
+            logger.warning("SemanticRecall: embed_fn failed: %r", exc)
+            return None
+
+        if not vec:
+            return None
+
+        # Bounded FIFO eviction when cache is full (Pitfall 9)
+        if len(self._vec_cache) >= self._config.semantic_lru_size:
+            oldest_key = next(iter(self._vec_cache))
+            del self._vec_cache[oldest_key]
+
+        self._vec_cache[key] = vec
+        return vec
+
+    async def search(self, query: str, *, budget: int) -> list[SearchResult]:
+        """Cosine search over in-memory index.
+
+        Returns [] on blank query, empty/absent index, embed failure, or
+        all-mismatch model (D-14 silent degrade). Bodies are always empty
+        strings — Recall reads them after RRF trim (A5).
+        """
+        # D-16: blank query early exit — do NOT call embed_fn
+        if not query.strip():
+            return []
+
+        await self._load_index_if_stale()
+
+        if not self._index:
+            logger.warning(
+                "SemanticRecall: index is empty or absent at %r", self._config.index_path
+            )
+            return []
+
+        query_vec = await self._get_query_vec(query)
+        if query_vec is None:
+            return []
+
+        qv = np.asarray(query_vec, dtype=np.float32)
+
+        candidates: list[tuple[float, str]] = []  # (cosine, path)
+        matched_model_count = 0
+
+        for path, entry in self._index.items():
+            # T-40-07: apply exclude_prefixes fence (same as KeywordRecall)
+            if path.startswith(self._config.exclude_prefixes):
+                continue
+
+            em = entry.get("embedding_model", "")
+            if not em or em != self._active_model:
+                # D-12/D-13: exact-string mismatch or missing → skip
+                continue
+            matched_model_count += 1
+
+            raw = decode_embedding(entry.get("embedding_b64", ""))
+            if not raw:
+                # Pitfall 4: zero-length embedding → skip (T-40-06)
+                logger.warning("SemanticRecall: zero-length embedding for %r, skipping", path)
+                continue
+
+            nv = np.asarray(raw, dtype=np.float32)
+            sim = float(cosine_similarity(qv, nv))
+
+            if sim < self._config.semantic_cosine_floor:
+                # D-11: cosine floor gates weak candidates before RRF
+                continue
+
+            candidates.append((sim, path))
+
+        if matched_model_count == 0 and self._index:
+            # D-14: all-mismatch silent degrade — keyword-only via WR-03 path
+            logger.warning(
+                "SemanticRecall: all %d index entries mismatch active model %r"
+                " — degrading to keyword-only",
+                len(self._index),
+                self._active_model,
+            )
+            return []
+
+        # Sort by cosine desc, tie-break on path for determinism
+        candidates.sort(key=lambda t: (-t[0], t[1]))
+        top = candidates[:budget]
+
+        # Return stub SearchResults with body="" — Recall reads bodies post-RRF (A5)
+        return [SearchResult(path=path, score=sim, body="") for sim, path in top]
+
+
+# ---------------------------------------------------------------------------
+# _rrf_merge helper — Reciprocal Rank Fusion
+# ---------------------------------------------------------------------------
+
+
+def _rrf_merge(
+    lists: list[list[SearchResult]],
+    *,
+    k: int = 60,
+    top_n: int = 3,
+) -> list[SearchResult]:
+    """Reciprocal Rank Fusion over multiple SearchResult lists.
+
+    Each list contributes 1/(k + rank_1based) to each path's cumulative score.
+    Paths in only one list still get scored from that list.
+    Final list is sorted descending by RRF score (tie-break on path for
+    determinism), trimmed to top_n.
+
+    The returned SearchResult.score is the RRF score — not BM25 or cosine.
+    Downstream consumers (MessageProcessor) only use .body, so this is safe.
+    """
+    scores: dict[str, float] = {}
+    bodies: dict[str, str] = {}
+
+    for ranked_list in lists:
+        for rank_0, result in enumerate(ranked_list):
+            rank_1 = rank_0 + 1  # 1-based rank per RRF formula
+            scores[result.path] = scores.get(result.path, 0.0) + 1.0 / (k + rank_1)
+            bodies.setdefault(result.path, result.body)  # keep first body seen
+
+    # Sort by RRF score desc; secondary sort on path for determinism
+    fused = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
+
+    return [
+        SearchResult(path=path, score=rrf_score, body=bodies[path])
+        for path, rrf_score in fused[:top_n]
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Recall class
 # ---------------------------------------------------------------------------
 
@@ -322,9 +523,22 @@ class Recall:
     as a presentation concern (D-04).
     """
 
-    def __init__(self, vault: "Vault", *, config: RecallConfig | None = None) -> None:
+    def __init__(
+        self,
+        vault: "Vault",
+        *,
+        config: RecallConfig | None = None,
+        keyword_strategy: "RetrievalStrategy | None" = None,
+        semantic_strategy: "RetrievalStrategy | None" = None,
+    ) -> None:
         self._vault = vault
         self._config = config or RecallConfig()
+        # Default keyword strategy = KeywordRecall wrapping this vault+config
+        self._keyword_strategy: RetrievalStrategy = (
+            keyword_strategy or KeywordRecall(vault, self._config)
+        )
+        # semantic_strategy=None means keyword-only graceful mode (D-14 / D-17)
+        self._semantic_strategy: RetrievalStrategy | None = semantic_strategy
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -357,58 +571,68 @@ class Recall:
         )
 
     async def _warm_search(self, content: str) -> list[SearchResult]:
-        """Search the vault for warm-tier context relevant to ``content``.
+        """RRF orchestrator: gather keyword + semantic results, merge, read bodies.
 
-        Returns ``[]`` immediately when content is empty — avoids calling
-        vault.find() with an empty query (Pitfall 8, Option A).
+        Returns ``[]`` immediately when content is empty (Pitfall 8, Option A).
 
-        Raw Vault dicts are translated to ``SearchResult`` at this boundary;
-        they never leak past this method.
+        Algorithm (MEM-04, D-17):
+        1. Run keyword and semantic strategies concurrently (asyncio.gather).
+        2. Coerce any BaseException result to [] with a WARNING (WR-03 reuse).
+        3. Merge via Reciprocal Rank Fusion (k=rrf_k) → trim to warm_top_n.
+        4. Read note bodies for the post-RRF survivors only (≤ warm_top_n reads).
+        5. Apply WR-01 empty-body skip on the final body reads.
+
+        When semantic_strategy is None, only keyword results are used (graceful
+        keyword-only mode, D-17). All Phase-39 behavior is preserved.
         """
         if not content.strip():
             return []
 
-        words = content.split()
-        if len(words) > _KEYWORD_SEARCH_THRESHOLD:
-            query = _best_search_query(content)
+        # Build coroutines for concurrent execution
+        kw_coro = self._keyword_strategy.search(content, budget=self._config.keyword_top_k)
+
+        if self._semantic_strategy is not None:
+            sem_coro = self._semantic_strategy.search(content, budget=self._config.semantic_top_k)
+            raw_kw, raw_sem = await asyncio.gather(kw_coro, sem_coro, return_exceptions=True)
         else:
-            query = content
+            raw_kw = await asyncio.gather(kw_coro, return_exceptions=True)
+            raw_kw = raw_kw[0]
+            raw_sem = []
 
-        search_results = await self._vault.find(query)
+        # Coerce exceptions to [] — WR-03 graceful degradation pattern (reused)
+        lists: list[list[SearchResult]] = []
+        for raw in (raw_kw, raw_sem):
+            if isinstance(raw, BaseException):
+                logger.warning("retrieval strategy failed: %r", raw)
+                lists.append([])
+            else:
+                lists.append(raw)
 
-        relevant = [
-            r for r in search_results
-            if r.get("score", float("-inf")) >= self._config.relevance_threshold
-            and not r.get("filename", "").startswith(self._config.exclude_prefixes)
-        ]
-        if not relevant:
+        # RRF merge → trim to warm_top_n (stub bodies only at this point)
+        merged = _rrf_merge(lists, k=self._config.rrf_k, top_n=self._config.warm_top_n)
+
+        if not merged:
             return []
 
-        top = relevant[: self._config.warm_top_n]
-        paths = [r.get("filename", "") for r in top]
-        raw_contents = await asyncio.gather(
-            *[self._vault.read_note(p) for p in paths],
+        # Read real bodies for the post-RRF survivors (A5: ≤ warm_top_n reads)
+        survivor_paths = [r.path for r in merged]
+        raw_bodies = await asyncio.gather(
+            *[self._vault.read_note(p) for p in survivor_paths],
             return_exceptions=True,
         )
 
         results: list[SearchResult] = []
-        for r, path, body in zip(top, paths, raw_contents):
+        for survivor, path, body in zip(merged, survivor_paths, raw_bodies):
             if isinstance(body, str) and body.strip():
                 note_body = body
             else:
-                # Full note read failed — fall back to search snippet
-                matches = r.get("matches", [])
-                note_body = matches[0].get("context", "").strip() if matches else ""
+                # Full note read failed — body stub (no snippet available post-RRF)
+                note_body = survivor.body  # may be "" from SemanticRecall stub
             if not note_body.strip():
-                # Skip contentless notes — do not surface empty-body SearchResults
+                # WR-01: skip contentless notes — do not surface empty-body SearchResults
                 continue
-            results.append(
-                SearchResult(
-                    path=r["filename"],
-                    score=r["score"],
-                    body=note_body,
-                )
-            )
+            results.append(SearchResult(path=path, score=survivor.score, body=note_body))
+
         return results
 
     # ------------------------------------------------------------------
