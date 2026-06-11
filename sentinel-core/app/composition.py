@@ -11,6 +11,7 @@ This module is introduced incrementally:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
@@ -424,5 +425,32 @@ async def initialize_startup(
                 "sentinel/persona.md missing from Vault — operator setup required (see README)"
             )
         logger.info("Persona loaded from vault (%d chars)", len(persona))
+
+    # D-06: non-blocking startup index rebuild so a cold start (no prior
+    # embedding-index.json) becomes semantically searchable without operator
+    # action.  Fires run_sweep() in a background task — failure logs a WARNING
+    # and never crashes startup (T-40-12 mitigated, reusing the lifespan's
+    # Obsidian-unavailable graceful path).
+    #
+    # On-demand rebuild trigger (D-06): the EXISTING admin-gated
+    # POST /vault/sweep/start route (note.py) also runs run_sweep() via
+    # start_sweep() and therefore re-emits the embedding index — no new
+    # unauthenticated surface is introduced (T-40-09).
+    from app.services.vault_sweeper import run_sweep as _run_sweep
+
+    async def _startup_rebuild() -> None:
+        try:
+            await _run_sweep(
+                graph.vault,
+                graph.note_classifier_fn,
+                graph.embeddings.embed,
+            )
+            logger.info("Startup embedding-index rebuild complete")
+        except Exception as exc:
+            logger.warning(
+                "Startup embedding-index rebuild failed (non-fatal): %r", exc
+            )
+
+    asyncio.create_task(_startup_rebuild())
 
     return StartupResult(graph=graph, warnings=warnings)
