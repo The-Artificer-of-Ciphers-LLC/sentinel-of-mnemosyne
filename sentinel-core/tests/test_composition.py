@@ -251,5 +251,43 @@ async def test_initialize_startup_raises_when_persona_missing(monkeypatch):
         await initialize_startup(app, SimpleNamespace(), object())
 
 
+async def test_build_application_wires_semantic_recall_with_no_prefix_active_model(http_client):
+    """Composition wiring assertion (T-40-11, D-12): build_application produces a Recall
+    whose injected SemanticRecall.active_model equals settings.embedding_model (no 'openai/' prefix).
+
+    Proves that the composition root uses settings.embedding_model (bare model id)
+    and NOT embeddings._model (which carries the 'openai/' prefix). An 'openai/'
+    prefix would make every exact-string model-match in SemanticRecall fail (D-12).
+    """
+    from app.services.recall import SemanticRecall
+
+    settings = _settings(embedding_model="nomic-embed-text-v1.5")
+    vault = _FakeVault()
+
+    # Pass recall=None to exercise the full 'if recall is None:' wiring path
+    graph = await build_application(
+        settings, http_client, vault=vault, recall=None
+    )
+
+    assert isinstance(graph.recall, object), "graph.recall should be a Recall instance"
+    # Access the injected semantic strategy
+    semantic_strategy = graph.recall._semantic_strategy  # type: ignore[attr-defined]
+    assert semantic_strategy is not None, (
+        "Recall must have a SemanticRecall strategy wired by build_application"
+    )
+    assert isinstance(semantic_strategy, SemanticRecall), (
+        f"Expected SemanticRecall, got {type(semantic_strategy)}"
+    )
+    # The active_model must be the bare settings value, NOT prefixed with 'openai/'
+    assert semantic_strategy._active_model == settings.embedding_model, (
+        f"SemanticRecall.active_model should be {settings.embedding_model!r} "
+        f"(no 'openai/' prefix, D-12), got {semantic_strategy._active_model!r}"
+    )
+    assert not semantic_strategy._active_model.startswith("openai/"), (
+        f"active_model must NOT have 'openai/' prefix (D-12, T-40-11), "
+        f"got {semantic_strategy._active_model!r}"
+    )
+
+
 # Suppress unused-import warning when running with json available
 _ = json

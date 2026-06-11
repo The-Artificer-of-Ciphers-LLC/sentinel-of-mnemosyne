@@ -768,3 +768,109 @@ async def test_rrf_merge_combines_both_strategies():
     )
     assert "notes/b.md" in paths, "note_B (keyword-only, rank 2) should be present"
     assert "notes/c.md" in paths, "note_C (semantic-only, rank 1) should be present"
+
+
+# ---------------------------------------------------------------------------
+# Task 3: End-to-end paraphrase integration test + empty-query /context regression
+# ---------------------------------------------------------------------------
+
+
+async def test_end_to_end_paraphrase_recall():
+    """End-to-end: a paraphrase query surfaces note_A through the composed Recall.
+
+    Exercises the FULL composed path (SemanticRecall + KeywordRecall + RRF +
+    body-read) proving MEM-03, MEM-04, MEM-05 work together:
+
+    Setup:
+    - note_A has embedding [1.0, 0.0, 0.0] — close to the query vector from
+      fake_embedder ([0.9, 0.436, 0.0]; cosine ≈ 0.90 > 0.50 floor)
+    - note_B is the ONLY keyword hit (fake_find returns note_B, not note_A)
+    - Both notes have real bodies so post-RRF body-read returns non-empty content
+
+    After RRF merge: note_A must appear in warm even though keyword-only missed it
+    (semantic recall adds value). note_A body must be non-empty (Recall reads it
+    post-RRF, not from the index stub).
+    """
+    from app.services.recall import SemanticRecall
+
+    model = "test-model-v1"
+    note_a_vec = [1.0, 0.0, 0.0]  # cosine ≈ 0.90 with fake_embedder query vector
+
+    config = RecallConfig(semantic_cosine_floor=0.50)
+    vault = FakeVault()
+    vault.notes["notes/b.md"] = "keyword only content not related to note_a"
+    vault.notes["notes/a.md"] = "paraphrase target body — semantic recall surfaces this"
+    vault.notes[config.index_path] = json.dumps(
+        make_fixture_index(["notes/a.md"], [note_a_vec], model)
+    )
+
+    # Keyword search returns ONLY note_B — note_A is NOT a keyword match
+    async def fake_find_keyword_only(query: str) -> list[dict]:
+        return [{"filename": "notes/b.md", "score": -100.0, "matches": []}]
+
+    vault.find = fake_find_keyword_only  # type: ignore[method-assign]
+
+    semantic = SemanticRecall(vault=vault, embed_fn=fake_embedder, active_model=model, config=config)
+    recall = Recall(vault=vault, semantic_strategy=semantic, config=config)
+
+    result = await recall.assemble(make_request(content="paraphrase query end to end"), budget=8192)
+
+    warm_paths = [r.path for r in result.warm]
+    assert "notes/a.md" in warm_paths, (
+        f"note_A (semantic hit) should appear in warm via RRF even though keyword missed it. "
+        f"Warm paths: {warm_paths}"
+    )
+
+    # Body must be non-empty — Recall reads real bodies post-RRF (A5)
+    note_a_results = [r for r in result.warm if r.path == "notes/a.md"]
+    assert note_a_results, "note_A should be in warm results"
+    assert note_a_results[0].body.strip(), (
+        f"note_A body should be non-empty (read post-RRF), got: {note_a_results[0].body!r}"
+    )
+    assert "paraphrase target body" in note_a_results[0].body, (
+        f"note_A body should contain the fixture content; got: {note_a_results[0].body!r}"
+    )
+
+
+async def test_context_empty_query_skips_embedding():
+    """D-16 end-to-end: empty content (/context path) returns without calling embed_fn.
+
+    The /context/{user_id} debug route passes content="" into Recall.assemble.
+    This test verifies that the full composed Recall path (with a wired
+    SemanticRecall) never invokes embed_fn when content is blank — preserving D-16
+    through the entire composition stack, not just at the SemanticRecall unit level.
+    """
+    from app.services.recall import SemanticRecall
+
+    model = "test-model-v1"
+    note_a_vec = [1.0, 0.0, 0.0]
+
+    embed_call_count = 0
+
+    async def counting_embedder(texts: list[str]) -> list[list[float]]:
+        nonlocal embed_call_count
+        embed_call_count += 1
+        return [[0.9, 0.436, 0.0] for _ in texts]
+
+    config = RecallConfig(semantic_cosine_floor=0.50)
+    vault = FakeVault()
+    vault.notes["notes/a.md"] = "semantic note body content"
+    vault.notes[config.index_path] = json.dumps(
+        make_fixture_index(["notes/a.md"], [note_a_vec], model)
+    )
+
+    semantic = SemanticRecall(
+        vault=vault, embed_fn=counting_embedder, active_model=model, config=config
+    )
+    recall = Recall(vault=vault, semantic_strategy=semantic, config=config)
+
+    # content="" simulates the /context/{user_id} path (D-16)
+    result = await recall.assemble(make_request(content=""), budget=8192)
+
+    assert result.warm == [], (
+        f"Empty content should yield warm=[], got: {result.warm}"
+    )
+    assert embed_call_count == 0, (
+        f"embed_fn must NOT be called for empty content (D-16), "
+        f"was called {embed_call_count} times"
+    )
