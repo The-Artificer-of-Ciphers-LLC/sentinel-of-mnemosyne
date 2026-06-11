@@ -17,8 +17,8 @@
 - **D-05:** Incremental rebuild via content-hash: only re-embed notes whose content-hash changed; carry unchanged entries forward; prune entries for deleted/trashed notes.
 - **D-06:** Index updates on periodic sweep AND via on-demand rebuild trigger (startup pass and/or admin endpoint — exact mechanism finalized in planning).
 - **D-07:** On-disk format: JSON object keyed by path: `{ "path/to/note.md": { embedding_b64, embedding_model, content_hash }, ... }`.
-- **D-08:** Atomic write: temp file + `os.replace()` on same filesystem.
-- **D-09:** SemanticRecall loads index once into memory; reloads only when file mtime changes.
+- **D-08 (REVISED — A6/REST_ONLY):** Vault is REST-only (no local mount). Index persisted THROUGH the Vault: sweeper writes `ops/sweeps/embedding-index.json` via `vault.write_note()` (single REST PUT = atomic replace at API level, like the existing lockfile). NO `tempfile`/`os.replace`.
+- **D-09 (REVISED — A6/REST_ONLY):** SemanticRecall reads the index once via `vault.read_note()` and caches in memory; freshness via a cheap version/TTL check (planner's discretion), NOT local-file mtime. One cached read at query time satisfies MEM-05.
 - **D-10:** Merge = RRF k≈60; each strategy contributes top-20 candidates; fused list capped at `warm_top_n=3`.
 - **D-11:** Tunable cosine floor in RecallConfig gates semantic candidates before RRF; each strategy keeps own score semantics.
 - **D-12:** Active model = `Embeddings` client's model id; comparison is exact-string against each entry's `embedding_model`.
