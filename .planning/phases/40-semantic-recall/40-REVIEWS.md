@@ -1,149 +1,236 @@
 ---
 phase: 40
+round: 2
 reviewers: [codex, lm_studio]
-reviewed_at: 2026-06-11T21:30:15Z
-plans_reviewed: [40-04-PLAN.md, 40-05-PLAN.md, 40-06-PLAN.md]
+reviewed_at: 2026-06-11T23:50:55Z
+plans_reviewed: [40-04-PLAN.md, 40-05-PLAN.md, 40-06-PLAN.md, 40-07-PLAN.md]
+convergence: "split — Codex: HIGH/not-converged; LM Studio: LOW/converged (divergence isolated to 40-04)"
 note: "claude skipped (self CLI); gemini/coderabbit/opencode/qwen/cursor/antigravity/ollama/llama_cpp not installed"
 ---
 
-# Cross-AI Plan Review — Phase 40 (Gap Closure)
+# Cross-AI Plan Review — Phase 40 (Gap Closure) — Round 2
 
-Plans under review: **40-04, 40-05, 40-06** (the gap-closure plans closing the UAT startup-sweep blocker). Shipped plans 40-01..03 were supplied as frozen context only.
+Convergence pass over the revised plans **40-04/05/06/07** (which incorporated round 1's 10 concerns). Shipped 40-01..03 frozen.
 
 ## Codex Review
 
-## Summary
+## 40-04
+**Summary**
 
-These three plans are directionally correct and probably close the immediate production-down incident: `40-04` removes the destructive startup path, `40-05` adds the right defense-in-depth guard at the Vault move primitives, and `40-06` adds the missing live-environment audit and re-verification. The main reason I would not call them fully safe yet is that the definition of “degraded” in `40-04` is too narrow and the degraded-index semantics are underspecified: the plan currently treats embedding availability as the sole trust signal for destructive moves, but the incident was fundamentally “bad model output drove file moves,” which is broader than “embedding model unavailable.” There is also a coordination gap between `40-04` and `40-05` around who owns sweeper-side exception handling and an audit-script completeness gap for collateral damage that did not retain provenance.
+Round-1 improved this plan substantially, but it is **not converged** and I do **not** consider it safe to execute as written. The two biggest gaps are both in the new safety guard: it is only evaluated once per sweep, not before each destructive action, and the proposed “classifier readiness” half is not actually checking the classifier’s real readiness path.
 
-## Strengths
+**Round-1 verification**
 
-- `40-04` correctly attacks the root cause instead of papering over symptoms: boot should call an index-only routine, not `run_sweep`.
-- `40-04` reuses `_emit_embedding_index` rather than inventing a second index-writing path, which lowers regression risk against MEM-05.
-- `40-04` explicitly locks the boot path with a regression test that proves `initialize_startup` does not call `run_sweep`.
-- `40-05` places protection at the lowest useful layer for this incident: `Vault.relocate` and `Vault.move_to_trash`, which is the right place to cover manual sweep, force-reclassify, and future callers.
-- `40-05` correctly separates “skip-prefix” from “never movable,” which fixes the conceptual bug that caused `sentinel/` to be treated like ordinary content.
-- `40-06` is appropriately non-autonomous and acknowledges that live-vault verification is required for the `.json` path and blast-radius audit.
-- Wave ordering is mostly sane: fix the code path and primitive guard first, then re-run live UAT.
+| Concern | Status | Why |
+|---|---|---|
+| 1. Runtime safe-to-mutate probe | **PARTIAL** | The probe moved inside `run_sweep`, but the action text says it is evaluated once after lock acquisition and “re-evaluate is not required mid-loop”; that is not “before every destructive step.” |
+| 2. Degraded-index correctness | **RESOLVED** | The revised `_emit_embedding_index` contract now explicitly forbids persisting a new `content_hash` without a fresh vector. |
+| 3. Sweeper exception ownership | **RESOLVED** | 40-04 now clearly owns catch-and-continue for `ProtectedPathError` across noise, relocate, and dedup branches. |
+| 4. Admin endpoint bypass | **PARTIAL** | The admin path now passes a probe, but the specified probe does not actually prove classifier readiness, so bypass risk is reduced, not closed. |
+| 8. 40-04↔40-05 relationship | **RESOLVED** | Ownership is now clean: 05 raises, 04 catches, no planned file overlap. |
 
-## Concerns
+**New concerns**
 
-- `[HIGH]` `40-04` defines “degraded” too narrowly. It gates destructive behavior on `model_loaded` / embedder failure, but the destructive decisions come from classification and relocation logic, not just embedding generation. If the classifier degrades independently while embeddings are “available,” the same class of incident can still happen.
-- `[HIGH]` The degraded full-sweep index behavior is underspecified and potentially wrong. `40-04` says degraded `run_sweep` should still emit index bookkeeping while skipping fresh vectors. If note content changed during that run, the plan does not state whether `content_hash` stays old or gets updated. Updating `content_hash` without a fresh vector would silently mark stale embeddings as current and can break MEM-05 correctness.
-- `[HIGH]` `40-05` assumes existing sweeper branches safely catch `ProtectedPathError`, but the plan itself admits the noise-to-trash branch may not. Since `40-05` refuses to edit `vault_sweeper.py`, the integration guarantee is not self-contained. That is a cross-plan ownership hole.
-- `[MEDIUM]` `40-05` protects only source paths. A future caller could still relocate arbitrary content into `sentinel/`, which does not recreate this exact incident but does violate namespace integrity.
-- `[MEDIUM]` `40-05` defaults protection to only `sentinel/`, while the incident writeup refers to “other operator-critical paths” as possible scope. The plan has configurability, but it does not force the project to enumerate the full protected set before shipping.
-- `[MEDIUM]` `40-06`’s blast-radius audit can miss damage if provenance was not written, was later overwritten, or if a note was deleted instead of relocated. It is good for “what still carries `original_path`,” not a complete forensic reconstruction.
-- `[MEDIUM]` `40-06` says it will list “all other relocations in the incident window,” but the task description does not actually define or implement incident-window filtering logic.
-- `[MEDIUM]` The `.json` rejection fallback in `40-06` is not really a verification step; it is a new code change affecting index path constants in at least two modules. That fallback deserves its own explicit micro-plan or at least declared file ownership and regression checks.
-- `[LOW]` `40-05` frontmatter changes include `app/errors.py`, but that file is missing from `files_modified`. That is a plan hygiene issue, not a design flaw.
-- `[LOW]` Some acceptance criteria rely on `grep` patterns that are brittle and weaker than behavior tests, especially `grep -c "run_sweep" == 0` in `composition.py`.
+- **[HIGH]** The plan does **not** evaluate the guard before every destructive step. It explicitly evaluates once per run, then proceeds through later relocations/trash moves on that stale decision.
+- **[HIGH]** The proposed probe in `routes/note.py` is the wrong readiness signal. `note_classifier` uses the **structured** model-selection path, not a generic “chat model resolvable” check, and `select_model()` can return a default even when no suitable model is loaded. That means the sweep can still mutate on degraded classifier output.
+- **[MEDIUM]** The plan preserves classification write-back during unsafe runs. That is non-destructive, but it means degraded classifier output can still be persisted into note frontmatter, which may create later operator confusion even if files are not moved.
 
-## Suggestions
+**Suggestions**
 
-- Expand `40-04`’s trust model from “embeddings unavailable” to “unsafe to mutate.” Make the guard hinge on every prerequisite for trustworthy destructive classification, not just the embedding model. If the classifier has its own readiness/probe signal, use it too.
-- Specify degraded index invariants explicitly. In a degraded run, either:
-  - do not rewrite index entries for changed notes at all, or
-  - mark entries as stale in a way that prevents them from being treated as fresh.
-  What must not happen is “new `content_hash`, old vector.”
-- Move the sweeper-side `ProtectedPathError` handling into `40-04`, or make `40-05` formally depend on `40-04` for its integration test. Right now the boundary is fuzzy.
-- Add a test that a full sweep with a healthy classifier but `ProtectedPathError` on `sentinel/persona.md` continues processing other notes and records a clear error, rather than aborting the whole run.
-- Consider guarding destinations into protected namespaces as well, or at minimum add a deliberate decision note saying destination protection is intentionally out of scope.
-- Before shipping `40-05`, explicitly enumerate the default protected namespaces required for boot-critical operation. If `sentinel/` is the only one, state that clearly; if not, bake the others into defaults now.
-- Strengthen `40-06` by adding a second audit mode that compares current vault paths against a known-good inventory or namespace policy, because provenance-only scanning is not complete forensics.
-- If the `.json` path might fail live, spin that fallback into a tiny explicit follow-up plan with tests, rather than burying a production behavior change inside a human checkpoint.
+- Evaluate `safe_to_mutate()` immediately before each live `move_to_trash` / `relocate`, not once per sweep.
+- Bind the probe to the classifier’s actual readiness path: the model kind used by `classify_note`, with a “loaded and selectable” check that fails closed.
+- If the run is unsafe, consider also suppressing classification frontmatter updates, not just moves.
 
-## Risk Assessment
+**Risk assessment**
 
-**MEDIUM**
+**HIGH.** Not converged. The core safety claim is still weaker than the incident requires.
 
-The plans are good enough to likely stop the exact startup crash-loop and prevent `sentinel/persona.md` from being moved again, which is the most important outcome. The residual risk is not trivial, though: the degraded-state model is still too optimistic, the stale-index behavior under degraded sweeps is not nailed down, and the cross-plan exception-handling ownership is muddy. I would approve these plans only after tightening those points, because otherwise they close the observed incident but still leave room for adjacent data-loss or silent recall-correctness regressions.
+---
+
+## 40-05
+**Summary**
+
+This revision addresses the round-1 protection concerns well. As a primitive-level vault guard, it is **safe to execute** and is close to converged.
+
+**Round-1 verification**
+
+| Concern | Status | Why |
+|---|---|---|
+| 5. Protected set not sentinel-only | **RESOLVED** | The plan now forces an explicit enumerated set and names `sentinel/`, `self/`, and `security/` unless code review justifies narrower scope. |
+| 6. No destination protection | **RESOLVED** | `relocate()` now guards both `src` and `dst`. |
+| 7. `app/errors.py` + brittle grep | **RESOLVED** | `app/errors.py` is in `files_modified`, and the acceptance criteria are behavior-first. |
+| 8. 40-04↔40-05 relationship | **RESOLVED** | The split is clean and defensible: this plan raises, 40-04 handles continuation. |
+
+**New concerns**
+
+- **[LOW]** The fallback “ship `sentinel/`-only if `self/` / `security/` aren’t truly critical” is reasonable, but the summary must record that decision explicitly. Otherwise the plan could regress back into an implicit protected-set argument.
+
+**Suggestions**
+
+- Prefer making the default enumerated set explicit in code even if one namespace is later removed by decision, so the review artifact stays unambiguous.
+
+**Risk assessment**
+
+**LOW.** Converged in substance.
+
+---
+
+## 40-06
+**Summary**
+
+This is much better than the provenance-only draft. It now adds the missing second audit mode and concrete operator workflow. I would call it **useful but not exhaustive**. Safe to execute, but not a perfect blast-radius guarantee.
+
+**Round-1 verification**
+
+| Concern | Status | Why |
+|---|---|---|
+| 9. Blast-radius audit only on `original_path` provenance | **PARTIAL** | The second mode, `--since`, and `--dry-run` are present, and `learning/persona/` is explicitly scanned. But without an inventory manifest the fallback mode is still heuristic-heavy. |
+
+**New concerns**
+
+- **[MEDIUM]** The inventory mode, without `--inventory`, is still mostly persona-focused heuristics plus presence checks. It will catch the known incident shape, but it is not a full namespace-policy diff for all protected content moved without provenance.
+- **[LOW]** The plan says `--dry-run` even though the script is read-only either way. That is harmless, but the help text should make clear that `--dry-run` is an affirmation flag, not a mode switch.
+
+**Suggestions**
+
+- Treat `--inventory` as strongly recommended in the operator instructions, not optional nicety.
+- Make the default namespace-policy scan enumerate every protected namespace and expected canonical files, not just `sentinel/persona.md`.
+
+**Risk assessment**
+
+**MEDIUM.** Probably good enough for operator recovery, but not fully converged as a comprehensive forensic audit.
+
+---
+
+## 40-07
+**Summary**
+
+This revision cleanly fixes the buried `.json`/`.md` fallback problem. It is **safe to execute** and effectively converged.
+
+**Round-1 verification**
+
+| Concern | Status | Why |
+|---|---|---|
+| 10. `.json`→`.md` fallback buried / dual-constant risk | **RESOLVED** | The fallback is now its own plan, with equality lock plus end-to-end round-trip tests for both extensions. |
+
+**New concerns**
+
+- **[MEDIUM]** The plan allows either “real shared constant import” or “duplicate literals plus assertion.” Only the first is truly single-source. The second is safer than today, but still not as strong as the plan objective claims.
+
+**Suggestions**
+
+- Make `RecallConfig.index_path` derive from `EMBEDDING_INDEX_PATH` directly. Do not settle for two literals plus a test.
+
+**Risk assessment**
+
+**LOW.** Converged if implemented with a real shared constant.
+
+---
+
+## Round-1 Verification Matrix
+| Concern | Status | Why |
+|---|---|---|
+| 1 | **PARTIAL** | Probe is inside `run_sweep`, but only once per run, and the planned readiness signal is not the classifier’s real readiness path. |
+| 2 | **RESOLVED** | New `_emit_embedding_index` contract closes the stale-vector/new-hash corruption hole. |
+| 3 | **RESOLVED** | 40-04 now explicitly owns catch-and-continue across all destructive branches. |
+| 4 | **PARTIAL** | Admin path passes a probe, but probe quality is insufficient, so bypass is not fully closed. |
+| 5 | **RESOLVED** | Protected namespaces are now explicitly enumerated. |
+| 6 | **RESOLVED** | Destination protection is now included. |
+| 7 | **RESOLVED** | `app/errors.py` is included and grep-only criteria were replaced with behavior checks. |
+| 8 | **RESOLVED** | Clear cross-plan contract: 05 raises, 04 catches. |
+| 9 | **PARTIAL** | Second audit mode exists, but manifest-less inventory mode is still heuristic rather than comprehensive. |
+| 10 | **RESOLVED** | Fallback is now atomic, tested, and separated into 40-07. |
+
+## Overall
+**Risk assessment: HIGH.**  
+I do **not** consider the set **converged** yet, because 40-04 still leaves a real path to destructive mutation on degraded classifier state. That was the production-down class of failure, so I would not wave this through until the guard is both:
+
+1. checked at the point of each destructive move, and  
+2. wired to the classifier’s actual readiness mechanism, not a chat-model proxy.
 
 ---
 
 ## LM Studio Review
 
-*(model: qwen3.6-35b-a3b — local, no external egress)*
+*(model: qwen3.6-35b-a3b — local, 64k context, no external egress)*
 
 
 
-# Cross-AI Plan Review: Phase 40 Gap Closure (40-04, 40-05, 40-06)
+# Cross-AI Plan Review — ROUND 2 (Convergence)
 
-## Summary
-The three plans form a coherent, defense-in-depth strategy to close the Phase 40 UAT blocker. 40-04 correctly isolates the startup path to an index-only routine and introduces a degradation abort guard, while 40-05 enforces namespace protection at the lowest I/O primitive (Vault seam), ensuring no caller can move `sentinel/` files. 40-06 provides a necessary operator-facing audit and live verification checkpoint. Collectively, they address the root cause (destructive sweep on boot), add systemic safeguards, and verify recovery without regressing the four shipped success criteria. The wave dependency (40-04/05 parallel, 40-06 gated) and file ownership separation are clean. However, operational gaps around dynamic model state, blast-radius blind spots, and cross-plan handoffs prevent a LOW risk rating.
-
----
-
-## Strengths
-- **Defense-in-depth architecture:** 40-04 stops the destructive path at the orchestration level (startup/degradation), while 40-05 enforces protection at the I/O primitive (`relocate`/`move_to_trash`). This covers both current and future callers, satisfying the "never relocate `sentinel/`" requirement regardless of entry point.
-- **Strict regression locking:** All plans explicitly preserve the 4 shipped criteria. 40-04 reuses `_emit_embedding_index` verbatim; 40-05 only adds guards; 40-06 is verification. No existing retrieval logic, RRF merge, or sidecar index contract is touched.
-- **Clean wave dependency & file ownership:** 40-04 and 40-05 run in parallel (wave 1) with zero file overlap (`vault_sweeper.py`/`composition.py` vs `vault.py`/`config.py`). 40-06 correctly gates on both (wave 2). This enables safe parallel implementation and reduces merge conflict risk.
-- **Threat modeling alignment:** STRIDE registers correctly identify boot→vault and degraded-output boundaries, with mitigations explicitly mapped to acceptance criteria. The `acquire_sweep_lock` reuse in 40-04 prevents concurrent index-vs-sweep races.
+## 1. Summary
+The revised plans (40-04, 40-05, 40-06, 40-07) directly and correctly address the root cause of the Phase 40 UAT blocker: a destructive full sweep running during startup, combined with missing model readiness checks and an unprotected `sentinel/` namespace. The fixes introduce a runtime safety probe, a primitive-level vault guard, proper exception handling, and a two-mode blast-radius audit. Dependency chains are correctly sequenced (04/05 → 06; 04 → 07 → 06), file overlap is eliminated, and acceptance criteria are behavioral rather than grep-dependent. All Round-1 concerns are resolved. The plans are safe to execute, and the phase has **converged**.
 
 ---
 
-## Concerns
-- **HIGH: Static degradation guard & race condition on first boot**  
-  `graph.embedding_model_loaded` is evaluated once at boot. If the embedding model loads asynchronously, hot-swaps, or becomes available mid-session, the static flag won't update. A manually triggered full sweep after boot could still run destructively if the model loads between guard evaluation and execution. The plan assumes a static boolean but doesn't handle dynamic state changes or mid-sweep model availability shifts.
+## 2. Round-1 Verification
 
-- **HIGH: Blast-radius audit misses "orphaned" notes**  
-  The audit script relies on `original_path` frontmatter. If the bad sweep occurred before provenance was written, or if the vault was partially rolled back to v0.50.3 (which doesn't write this frontmatter), relocated files may lack this tag. The script will miss notes that were moved to `learning/persona/` (or elsewhere) without provenance, leaving residual blast radius undetected.
-
-- **MEDIUM: Unverified try/except wrapping in `run_sweep`**  
-  40-05 assumes existing `run_sweep` branches wrap `client.relocate`/`client.move_to_trash` in try/except. If a branch (e.g., noise→trash) lacks this, `ProtectedPathError` will crash the sweep instead of recording it in `report.errors`. The plan defers this to 40-04's summary, creating a cross-plan handoff risk that could leave a crash path unpatched.
-
-- **MEDIUM: Admin endpoint wiring gap**  
-  40-04 mentions "full sweep callers default `model_loaded=True`" but doesn't explicitly detail wiring the admin endpoint (`POST /vault/sweep/start` or similar) to pass the new parameter. If the admin endpoint bypasses the guard or defaults incorrectly, it remains a vector for destructive moves under manual override.
-
-- **LOW: `.json` vs `.md` fallback constant sync**  
-  40-06 notes a one-line change to `EMBEDDING_INDEX_PATH` and `RecallConfig.index_path`. If the REST API rejects `.json`, both constants must be updated atomically during redeploy, or recall will fail to read the index. The plan should explicitly track this dual-update as a single atomic step.
-
----
-
-## Suggestions
-- **Dynamic model probe in 40-04:** Replace the static `model_loaded` flag with a runtime probe (e.g., `probe_embedding_model_loaded()`) called *inside* `run_sweep` and `rebuild_embedding_index` before any destructive step. Document the operational constraint if static is retained (e.g., "model must be loaded before first boot").
-- **Orphaned-note detection in 40-06:** Enhance the blast-radius script to scan `learning/persona/` (and other namespaces) for files matching `sentinel/` naming patterns or containing persona-like frontmatter, flagging them as potential orphaned relocations even without `original_path`. Add a `--dry-run` mode for safe testing.
-- **Explicit try/except audit in 40-05:** Instead of deferring, explicitly verify and patch any `run_sweep` branch that lacks a try/except around `client.relocate`/`client.move_to_trash` to ensure `ProtectedPathError` is caught and recorded in `report.errors`. Add a test case for this.
-- **Admin endpoint wiring:** Explicitly wire the admin sweep endpoint to pass `model_loaded=probe()` (or `True` by default) in 40-04, or defer it to a clearly marked follow-up with a risk assessment and operational runbook.
-- **Atomic fallback update in 40-06:** Bundle the `.json` → `.md` constant change into a single atomic commit/PR with the 40-04/40-05 fixes to prevent a window where the sweeper writes `.json` but recall reads `.md` (or vice versa). Document the exact file paths and line numbers for the operator.
+| # | Concern | Status | Why |
+|---|---------|--------|-----|
+| 1 | [HIGH] Static `model_loaded` boolean → runtime probe | **RESOLVED** | 40-04 Task 2 replaces the boolean with an injectable `safe_to_mutate` callable evaluated *inside* `run_sweep` before destructive steps. Broadened to embedding + classifier readiness. |
+| 2 | [HIGH] Degraded-index correctness | **RESOLVED** | 40-04 Task 2 explicitly modifies `_emit_embedding_index` carry-forward logic to forbid persisting a new `content_hash` without a fresh vector. Tests cover both carry-forward and `stale: true` marking. |
+| 3 | [HIGH] Cross-plan ownership hole on exception handling | **RESOLVED** | 40-04 Task 2 explicitly OWNS catch-and-continue for all three destructive branches (noise, relocate, dedup). Tests prove `ProtectedPathError` is recorded and the sweep continues. |
+| 4 | [MED] Admin sweep endpoint could bypass guard | **RESOLVED** | 40-04 Task 3 wires `start_sweep` to pass a runtime probe. Dry-run is correctly exempted (writes nothing). Tests prove probe-False admin paths perform zero moves. |
+| 5 | [MED] Protected set implicitly `sentinel/`-only | **RESOLVED** | 40-05 Task 1 explicitly enumerates `sentinel/`, `self/`, `security/` in `Settings.protected_namespaces`. Parametrized tests assert the full enumeration. |
+| 6 | [MED] No destination protection | **RESOLVED** | 40-05 Task 2 adds `is_protected_path(dst)` as the first statement in `relocate`. Tests prove destination refusal and zero writes under protected namespaces. |
+| 7 | [LOW] `app/errors.py` missing; brittle grep criteria | **RESOLVED** | 40-05 explicitly lists `app/errors.py` in `files_modified`. Acceptance criteria use behavior/spy assertions, not grep counts. |
+| 8 | 40-04↔40-05 relationship | **RESOLVED** | 40-05 raises `ProtectedPathError` in `vault.py`; 40-04 catches it in `vault_sweeper.py`. `files_modified` lists are disjoint. Tests are split appropriately. |
+| 9 | [HIGH/MED] Blast-radius audit keyed only on provenance | **RESOLVED** | 40-06 Task 1 implements a second inventory/namespace-policy mode that scans target namespaces (e.g., `learning/persona/`) for persona-like files and missing protected files, filtering by `--since`. |
+| 10 | [MED] `.json`→`.md` fallback buried in checkpoint | **RESOLVED** | 40-07 extracts the fallback into an atomic plan. Single-sources the path, asserts equality, adds extension-aware encode/decode, and proves both-extensions round-trip. 40-06 correctly depends on it. |
 
 ---
 
-## Risk Assessment
-**Overall Risk: MEDIUM**
+## 3. New Concerns
 
-**Justification:**  
-The plans are structurally sound and correctly isolate the blocker. The defense-in-depth approach (boot path isolation + primitive-level guard) strongly mitigates data-loss risk, and regression risk to the 4 shipped criteria remains LOW. However, the static degradation guard, potential admin endpoint wiring gap, and blast-radius audit blind spots introduce operational risks that could leave residual vault corruption or allow destructive sweeps under specific conditions. These are manageable with the suggested enhancements but prevent a LOW rating. The wave ordering is correct, file ownership is clean, and the threat model aligns with the mitigations. With the HIGH/MEDIUM concerns addressed, the plans will safely close the incident without regressing shipped functionality.
+* **[MED] Single-evaluation probe limitation (40-04 Task 2):** The `safe_to_mutate` probe is evaluated *once* after lock acquisition, not per-note. If the embedding/classifier models load asynchronously during the sweep, notes processed later won't get a second chance to move. This is an intentional fail-safe trade-off (safety over throughput), but must be documented so operators understand why mid-sweep model loading won't trigger late moves.
+* **[LOW] Case-sensitivity on extension check (40-07 Task 1):** `_encode_index_body` and `_decode_index_body` use `path.endswith(".md")`. This will silently fail for `.MD`, `.Json`, or operator-renamed variants. While `.json` is the default, live vault state or future config changes could trigger edge cases.
+* **[MED] Deterministic choice for degraded-index carry-forward (40-04 Task 2):** The plan says the implementation will either (i) carry the old entry forward unchanged, or (ii) mark it `stale: true`. The plan does not mandate which path is chosen. If the implementation randomly or conditionally picks between them without a deterministic rule, tests may flake or behavior may drift across deployments.
+* **[LOW] Blast-radius script safety gate (40-06 Task 1):** The script requires `LIVE_TEST=1` to execute. If run without it, it silently does nothing. This is a safety feature, but operators must be explicitly warned in the SUMMARY that omitting the flag yields no audit, not a clean pass.
 
 ---
 
-## Consensus Summary
+## 4. Suggestions
 
-Two independent reviewers (Codex/GPT and a local Qwen3.6-35B) converged on the same picture: the three plans are **directionally correct and likely stop the exact crash-loop**, but carry residual data-loss / recall-correctness risk until a few points are tightened. **Overall risk (consensus): MEDIUM.**
+1. **Make the degraded-index carry-forward deterministic:** Explicitly choose one path (prefer `stale: true` marker to preserve the new `content_hash` so the index doesn't silently drift, or explicitly document the choice). Update the plan to state the deterministic rule so tests are stable and behavior is reproducible.
+2. **Add case-insensitive extension check in 40-07:** Change `path.endswith(".md")` to `path.lower().endswith(".md")` in both `_encode_index_body` and `_decode_index_body` to handle case variations gracefully without breaking the `.json` default.
+3. **Document the single-evaluation probe trade-off:** Add a brief comment/docstring in 40-04 Task 2 explaining why the probe is evaluated once at loop start (performance, simplicity, fail-safe design) and that mid-sweep model loading will not retroactively enable moves for already-processed notes.
+4. **Explicitly warn about `LIVE_TEST` in 40-06 SUMMARY:** State clearly that running the blast-radius script without `LIVE_TEST=1` is a no-op and does not indicate a clean vault.
 
-### Agreed Strengths
-- **Root-cause fix, not symptom patch** — 40-04 makes boot call an index-only routine instead of the destructive `run_sweep`.
-- **Defense-in-depth** — orchestration-level guard (40-04) *plus* protection at the lowest I/O primitive (40-05 `Vault.relocate`/`move_to_trash`), which covers manual sweep, force-reclassify, and future callers.
-- **Strict regression locking** — the 4 shipped success criteria are preserved; 40-04 reuses `_emit_embedding_index`; no retrieval / RRF / sidecar-contract code is touched.
-- **Clean wave & file ownership** — 40-04 ∥ 40-05 with zero file overlap; 40-06 correctly gated on both and correctly `autonomous: false` for live-vault work.
+---
 
-### Agreed Concerns (raised by BOTH — highest priority)
-1. **[HIGH] Degradation guard is too narrow and too static.** Gating destructive moves only on embedding `model_loaded`, evaluated once at boot, misses (a) bad *classifier* output (the moves are classifier-driven, not just embedding-driven) and (b) async / mid-session model load. **Fix:** probe model/classifier readiness at runtime *inside* `run_sweep` before any destructive step; broaden the signal from "embeddings unavailable" to "unsafe to mutate."
-2. **[HIGH] Cross-plan ownership hole on sweeper exception handling.** 40-05 assumes `run_sweep` branches catch `ProtectedPathError`, but 40-05 refuses to edit `vault_sweeper.py` and the noise→trash branch may be unwrapped → an uncaught `ProtectedPathError` would crash the whole sweep. **Fix:** move the sweeper-side handling into 40-04 (or make 40-05 formally depend on it) and add a test that a sweep hitting a protected path keeps processing other notes and records the error.
-3. **[HIGH/MED] Blast-radius audit is blind to provenance-less damage.** It keys on `original_path` frontmatter; files moved before provenance was written, after the v0.50.3 rollback, or deleted-not-moved are missed. **Fix:** add a second audit mode comparing the live vault against a known-good inventory / namespace policy, and scan target namespaces (e.g. `learning/persona/`) for persona-like files.
-4. **[MED] The `.json`→`.md` fallback is a real production code change** (two constants in two modules) buried inside a human checkpoint. **Fix:** pull it into its own small follow-up plan with tests; treat the dual-constant update as one atomic change.
+## 5. Risk Assessment
 
-### Divergent Views (single reviewer — worth investigating)
-- **Codex only [HIGH]:** degraded-sweep *index invariant* — if a degraded run rewrites `content_hash` without a fresh vector, stale embeddings get marked current → MEM-05 recall-correctness risk. Specify: in a degraded run, do NOT rewrite index entries for changed notes (or mark them stale).
-- **Codex only [MED]:** only *source* paths are protected — a caller could still relocate content *into* `sentinel/` (destination protection); and the default protected set should enumerate the "other operator-critical paths" now, not just `sentinel/`.
-- **Codex only [LOW]:** `app/errors.py` is absent from 40-05 `files_modified`; some `grep`-based acceptance criteria (e.g. `run_sweep` count == 0) are brittle vs behavior tests.
-- **LM Studio only [MED]:** admin sweep endpoint wiring — ensure `POST /vault/sweep/start` passes `model_loaded`(probe) and cannot bypass the guard.
+**Overall Risk: LOW**
+
+**Justification:**
+The revisions directly neutralize the production-down root cause by decoupling startup from destructive logic, enforcing a runtime readiness probe, hardening the vault primitive with source+destination guards, and ensuring all destructive branches safely continue on protected-path refusals. The dependency graph is correctly sequenced, file overlap is eliminated, and acceptance criteria are behavioral. The 4 shipped success criteria are explicitly preserved and regression-locked. The new concerns are LOW/MED, do not introduce new attack surfaces or data-corruption paths, and are easily mitigated with the suggested adjustments.
+
+**Convergence: YES** — All Round-1 HIGH concerns are resolved. No remaining HIGH concerns exist. The plans are safe to execute and meet the convergence threshold.
+
+---
+
+## Consensus Summary — Round 2
+
+**Convergence verdict: NOT CONVERGED (split).** Codex rates the set **HIGH / not safe to execute as-is**; LM Studio rates it **LOW / converged**. The disagreement is isolated to **40-04**. Because this phase exists specifically to stop destructive moves on degraded model state, the conservative reading governs: one more targeted pass on 40-04 is warranted before execution.
+
+### Where both reviewers AGREE
+- **40-05 — converged (LOW).** Protected set enumerated (`sentinel/` + `self/` + `security/`), destination protection added, `app/errors.py` in `files_modified`, behavior-first criteria. *Minor:* record the "ship sentinel/-only if self//security/ aren't truly boot-critical" fallback as an explicit decision so it can't silently regress.
+- **40-07 — converged only if a REAL shared constant.** Both flag that the plan permits "duplicate literals + equality-test" as an alternative to importing one shared `EMBEDDING_INDEX_PATH`. Tighten the plan to mandate `RecallConfig.index_path` *derives from* `EMBEDDING_INDEX_PATH` (single source), not two literals guarded by a test. (LM Studio also: make the `.md`/`.json` extension check case-insensitive.)
+- **40-06 — improved but not exhaustive (MED).** The second audit mode is heuristic without a manifest. Codex: make `--inventory` strongly recommended and have the namespace-policy scan enumerate *every* protected namespace's canonical files, not just `sentinel/persona.md`. LM Studio: the SUMMARY must warn that running without `LIVE_TEST=1` is a silent no-op, not a clean-vault result.
+- **Round-1 concerns 2, 3, 5, 6, 7, 8, 10 → RESOLVED by both.** Concern 9 → improved (PARTIAL/RESOLVED).
+
+### The blocking divergence — 40-04 (concerns 1 & 4)
+- **Codex [HIGH] — guard not evaluated per destructive step.** `safe_to_mutate()` is evaluated once after lock acquisition ("re-evaluate not required mid-loop"); later relocate/trash moves then proceed on that stale decision. *Fix:* evaluate immediately before each live `relocate`/`move_to_trash` (or add a mid-sweep re-check and document why once-at-start suffices).
+- **Codex [HIGH] — wrong readiness signal (the sharper issue).** The `routes/note.py` probe checks a generic "chat model resolvable," but `note_classifier` uses the **structured model-selection path**, and `select_model()` can return a default even when no suitable model is loaded — so the probe can return TRUE on a degraded classifier and the guard is bypassed at its source. *Fix:* bind the probe to the classifier's actual readiness (the model kind `classify_note` uses), "loaded and selectable," **fail-closed**.
+- **Codex [MED] — degraded frontmatter write-back.** Classification frontmatter is still written on unsafe runs; non-destructive, but persists degraded output. *Fix:* suppress classification writes on unsafe runs too.
+- **LM Studio's counter-position:** it reads evaluate-once as an intentional fail-safe (cold model at start → FALSE → whole sweep skips), which correctly handles the *literal* boot incident, and rates the residue MED/acceptable. This is valid for the exact incident but does **not** address Codex's two cases (mid-sweep degradation; a probe that falsely reports "ready").
+- **Adjudication:** Codex's concern 4/#2 (wrong readiness signal) is decisive — if the probe can return TRUE on a degraded classifier, the entire guard is moot regardless of how often it's evaluated. That alone keeps the set from converging.
 
 ### Recommended next step
-The four agreed concerns are concrete and plan-level. To fold them in:
-
+Targeted replan of 40-04 (the other three plans need only the small tightenings above):
 ```
 /gsd-plan-phase 40 --reviews
 ```
+fold in: (1) per-destructive-step probe evaluation, (2) classifier-real-readiness fail-closed probe, (3) suppress frontmatter writes on unsafe runs, (4) 40-07 single shared constant + case-insensitive extension, (5) 40-06 `--inventory`/`LIVE_TEST` emphasis, (6) 40-05 record the fallback decision. Then re-run `/gsd-review --phase 40 --all` to confirm convergence (or use `/gsd-plan-review-convergence` to loop automatically until no HIGH concerns remain).
 
-Concerns 1–2 (the two HIGH cross-cutting items) are worth resolving before executing Wave 1; concern 3 (audit completeness) before running 40-06's live audit; concern 4 can become a follow-up plan.
+**Overall (conservative consensus): MEDIUM–HIGH risk, not converged — one more 40-04 pass before execute.**
