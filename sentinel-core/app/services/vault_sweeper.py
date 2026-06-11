@@ -12,6 +12,8 @@ Lockfile sentinel ``ops/sweeps/_in-progress.md`` prevents overlapping sweeps
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from typing import AsyncIterator, Awaitable, Callable
 
@@ -72,6 +74,26 @@ def _active_skip_prefixes() -> tuple[str, ...]:
 LOCKFILE_PATH = "ops/sweeps/_in-progress.md"
 STALE_LOCK_SECONDS = 3600  # 1 hour
 
+EMBEDDING_INDEX_PATH = "ops/sweeps/embedding-index.json"
+"""Canonical vault-relative path for the sweeper-maintained embedding sidecar.
+
+Must equal ``RecallConfig.index_path`` in Plan 02 so both sides reference
+the same REST path. Persisted via ``vault.write_note()`` — the vault is
+REST-only (D-08 REVISED / A6), so there is NO tempfile/os.replace write.
+"""
+
+NOMIC_DOCUMENT_PREFIX = "search_document: "
+"""Instruction prefix for nomic-embed-text-v1.5 document embeddings.
+
+Adding this prefix requires a one-time full re-embed because
+``hash("search_document: " + body) != hash(body)``. The content-hash
+incremental rebuild handles this naturally: every existing entry's hash
+diverges from the new prefixed hash on the first post-upgrade sweep,
+triggering re-embedding of the whole vault. This is the intended behaviour.
+
+See also: ``SemanticRecall.NOMIC_QUERY_PREFIX = "search_query: "`` (Plan 02).
+"""
+
 
 def _embedding_model_id() -> str:
     """Return the configured embedding model id for frontmatter recording.
@@ -86,6 +108,20 @@ def _embedding_model_id() -> str:
         return settings.embedding_model
     except Exception:
         return "text-embedding-nomic-embed-text-v1.5"
+
+
+def _content_hash(text: str) -> str:
+    """Return the first 16 hex chars of the SHA-256 of *text*.
+
+    Used to detect body changes for incremental index rebuild (D-05).
+    The hash is of the frontmatter-stripped note body — the same ``rest``
+    variable passed to the embedder — so a frontmatter-only edit does NOT
+    trigger an unnecessary re-embed.
+
+    16 hex chars (64 bits) is sufficient to detect accidental collisions at
+    personal-vault scale (~10K notes).
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
 class SweepReport(BaseModel):
@@ -217,6 +253,84 @@ def propose_topic_move(
 
 
 # --- Lockfile (migrated to ObsidianVault.acquire_sweep_lock / release_sweep_lock) ---
+
+
+# --- Embedding index emission ---
+
+
+async def _emit_embedding_index(
+    client,
+    survivors: list[tuple[str, dict, str, "object"]],
+    embeddings: "list[list[float]] | None",
+    active_paths: set[str],
+    report: "SweepReport",
+) -> None:
+    """Build and persist the embedding index sidecar via the Vault seam.
+
+    Reads the existing index from ``EMBEDDING_INDEX_PATH`` via
+    ``client.read_note()`` (returns ``{}`` on any failure / absence /
+    unparseable content — a corrupt index self-heals on the next sweep,
+    satisfying T-40-01).
+
+    Incremental rebuild (D-05):
+    - Entries in ``active_paths`` whose ``content_hash`` AND ``embedding_model``
+      match the current values are carried forward without re-embedding.
+    - Entries NOT in ``active_paths`` are pruned (trashed / deleted notes).
+    - New or changed entries receive fresh ``embedding_b64``, ``embedding_model``,
+      and ``content_hash``.
+
+    Persistence is THROUGH the Vault seam via ``client.write_note()`` — a
+    single REST PUT that is atomic at the API level, matching the existing
+    sweep-log pattern (lines 426-445). NO tempfile / os.replace / local
+    filesystem write (D-08 REVISED / A6 REST_ONLY).
+
+    Failures are logged as warnings and appended to ``report.errors`` (same
+    graceful pattern as the sweep-log write).
+    """
+    # Load existing index — {} on any parse failure (T-40-01: self-healing)
+    try:
+        raw = await client.read_note(EMBEDDING_INDEX_PATH)
+        existing_index: dict = json.loads(raw) if raw and raw.strip() else {}
+    except Exception:
+        existing_index = {}
+
+    new_index: dict = {}
+
+    # Carry forward entries for paths still active (D-05 incremental)
+    for path, entry in existing_index.items():
+        if path in active_paths:
+            new_index[path] = entry
+        # else: pruned (path is trashed or no longer in the vault)
+
+    # Update / insert entries for survivors that have embeddings
+    if embeddings:
+        for idx, (path, _fm, rest, _cls) in enumerate(survivors):
+            if idx >= len(embeddings):
+                break
+            content_hash = _content_hash(rest)
+            active_model = _embedding_model_id()
+            existing_entry = existing_index.get(path, {})
+
+            if (
+                existing_entry.get("content_hash") == content_hash
+                and existing_entry.get("embedding_model") == active_model
+            ):
+                # Hash + model match — carry forward unchanged (D-05)
+                new_index[path] = existing_entry
+            else:
+                # Body changed, or model changed (triggers re-embed) — write fresh entry
+                new_index[path] = {
+                    "embedding_b64": encode_embedding(embeddings[idx]),
+                    "embedding_model": active_model,
+                    "content_hash": content_hash,
+                }
+
+    # Persist via vault seam — single REST PUT (D-08 REVISED)
+    try:
+        await client.write_note(EMBEDDING_INDEX_PATH, json.dumps(new_index, ensure_ascii=False))
+    except Exception as exc:
+        logger.warning("sweep: embedding index write failed: %s", exc)
+        report.errors.append(f"index_emit: {exc}")
 
 
 # --- Sweep orchestrator ---
@@ -359,8 +473,13 @@ async def run_sweep(
                 logger.warning("sweep error: %s", msg)
                 report.errors.append(msg)
 
-        # 2. Embed all surviving bodies — degrade gracefully on failure
-        bodies = [s[2] for s in survivors]
+        # 2. Embed all surviving bodies — degrade gracefully on failure.
+        # Prepend NOMIC_DOCUMENT_PREFIX before calling the embedder so that
+        # document and query embeddings share the same nomic instruction space
+        # (RESEARCH Pattern 6). Note: adding this prefix changes the content-hash
+        # of every existing note, triggering a one-time full re-embed on the
+        # first post-upgrade sweep (intended — see NOMIC_DOCUMENT_PREFIX docstring).
+        bodies = [NOMIC_DOCUMENT_PREFIX + s[2] for s in survivors]
         embeddings: list[list[float]] | None = None
         if bodies:
             try:
@@ -381,6 +500,14 @@ async def run_sweep(
                     await client.write_note(path, new_body)
                 except Exception as exc:
                     report.errors.append(f"write_back {path}: {exc}")
+
+        # 3b. Emit embedding index sidecar (D-04 / D-05 / D-07 / D-08).
+        # Called immediately after the step-3 write-back loop so the index
+        # reflects the same embeddings just written into note frontmatter.
+        # Guarded by ``not dry_run`` — index emission is a vault write.
+        if not dry_run:
+            active_paths: set[str] = {s[0] for s in survivors}
+            await _emit_embedding_index(client, survivors, embeddings, active_paths, report)
 
         # 4. De-dup
         moves: list[tuple[str, str, str]] = []  # (src, dst, reason)

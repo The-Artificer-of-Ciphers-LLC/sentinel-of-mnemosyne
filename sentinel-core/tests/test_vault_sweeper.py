@@ -584,16 +584,36 @@ import json as _json  # local alias to avoid shadowing the module-level `json`
 
 
 class _CallCountingEmbedder:
-    """Fake embedder that records which texts it was called with and returns
-    deterministic unit vectors so cosine math is valid in any downstream use."""
+    """Fake embedder that records which texts it was called with.
 
-    def __init__(self, vec: list[float] | None = None):
+    Returns DISTINCT unit vectors per position so notes never appear as
+    duplicates to the de-dup logic (cosine between distinct axis vectors = 0).
+    This keeps the embedding-index tests independent of de-dup behaviour.
+    """
+
+    # Pool of orthogonal unit vectors; enough for any test vault (<=8 notes)
+    _VECS: list[list[float]] = [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+        [1.0, 1.0, 0.0, 0.0],
+        [1.0, 0.0, 1.0, 0.0],
+        [0.0, 1.0, 1.0, 0.0],
+        [1.0, 0.0, 0.0, 1.0],
+    ]
+
+    def __init__(self):
         self.calls: list[list[str]] = []
-        self._vec = vec or [1.0, 0.0, 0.0]
+        self._counter: int = 0
 
     async def __call__(self, texts: list[str]) -> list[list[float]]:
         self.calls.append(list(texts))
-        return [self._vec for _ in texts]
+        vecs = []
+        for _ in texts:
+            vecs.append(self._VECS[self._counter % len(self._VECS)])
+            self._counter += 1
+        return vecs
 
     @property
     def all_texts(self) -> list[str]:
@@ -604,7 +624,13 @@ def _make_classifiable_note_vault(
     paths: list[str],
     body: str = "A classifiable note body.",
 ) -> FakeObsidian:
-    """Return a FakeVault pre-populated with notes at *paths* and a dir tree."""
+    """Return a FakeVault pre-populated with notes at *paths* and a dir tree.
+
+    Notes are placed INSIDE their topic-canonical directory (``references/``)
+    so ``is_in_topic_dir`` returns True and the sweeper does NOT attempt to
+    relocate them. This keeps the post-sweep paths predictable for the index
+    emission tests.
+    """
     fake = FakeObsidian()
     # Populate root directory listing
     top_dirs: set[str] = set()
@@ -633,7 +659,8 @@ async def test_sweep_emits_embedding_index():
     surviving note paths."""
     from app.services.vault_sweeper import EMBEDDING_INDEX_PATH  # must exist (RED: will NameError)
 
-    note_paths = ["notes/alpha.md", "notes/beta.md"]
+    # Use references/ path so classifier topic="reference" keeps notes in-place
+    note_paths = ["references/alpha.md", "references/beta.md"]
     fake = _make_classifiable_note_vault(note_paths)
 
     classifier = AsyncMock(
@@ -662,7 +689,8 @@ async def test_sweep_writes_embedding_model_to_index():
     no-prefix model id from _embedding_model_id()), and content_hash."""
     from app.services.vault_sweeper import EMBEDDING_INDEX_PATH  # RED: NameError
 
-    note_paths = ["notes/alpha.md"]
+    # Use references/ path so classifier topic="reference" keeps note in-place
+    note_paths = ["references/alpha.md"]
     fake = _make_classifiable_note_vault(note_paths)
 
     classifier = AsyncMock(
@@ -676,7 +704,7 @@ async def test_sweep_writes_embedding_model_to_index():
 
     raw = fake.notes[EMBEDDING_INDEX_PATH]
     index = _json.loads(raw)
-    entry = index["notes/alpha.md"]
+    entry = index["references/alpha.md"]
 
     # Must carry all three required fields
     assert "embedding_b64" in entry, f"missing embedding_b64 in entry: {entry}"
@@ -702,7 +730,8 @@ async def test_sweep_index_incremental_carry_forward():
     A note whose body changed must get a new content_hash + fresh embedding."""
     from app.services.vault_sweeper import EMBEDDING_INDEX_PATH  # RED: NameError
 
-    note_paths = ["notes/stable.md", "notes/changing.md"]
+    # Use references/ paths so classifier topic="reference" keeps notes in-place
+    note_paths = ["references/stable.md", "references/changing.md"]
     fake = _make_classifiable_note_vault(note_paths, body="original body")
     classifier = AsyncMock(
         return_value=ClassificationResult(
@@ -717,14 +746,14 @@ async def test_sweep_index_incremental_carry_forward():
 
     # Record the content_hash of the stable note from the first index
     index_after_first = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
-    stable_hash_first = index_after_first["notes/stable.md"]["content_hash"]
-    stable_b64_first = index_after_first["notes/stable.md"]["embedding_b64"]
+    stable_hash_first = index_after_first["references/stable.md"]["content_hash"]
+    stable_b64_first = index_after_first["references/stable.md"]["embedding_b64"]
 
     # Mutate the body of the changing note so it will need re-embedding
     # We need to write it directly to the vault (bypass frontmatter)
     # After the first sweep, the note has frontmatter — we must update the body part
     # For simplicity just set a fresh body without frontmatter
-    fake.notes["notes/changing.md"] = "completely new body content"
+    fake.notes["references/changing.md"] = "completely new body content"
 
     # Second sweep
     embedder.calls.clear()
@@ -734,7 +763,7 @@ async def test_sweep_index_incremental_carry_forward():
     index_after_second = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
 
     # The stable note's entry must be carried forward unchanged (same hash + b64)
-    stable_entry = index_after_second["notes/stable.md"]
+    stable_entry = index_after_second["references/stable.md"]
     assert stable_entry["content_hash"] == stable_hash_first, (
         "stable note content_hash must not change between sweeps when body is unchanged"
     )
@@ -755,8 +784,8 @@ async def test_sweep_index_incremental_carry_forward():
     )
 
     # And the changing note must have a DIFFERENT content_hash than in the first index
-    changing_hash_first = index_after_first["notes/changing.md"]["content_hash"]
-    changing_hash_second = index_after_second["notes/changing.md"]["content_hash"]
+    changing_hash_first = index_after_first["references/changing.md"]["content_hash"]
+    changing_hash_second = index_after_second["references/changing.md"]["content_hash"]
     assert changing_hash_second != changing_hash_first, (
         "changed note must have a new content_hash in the second index"
     )
@@ -768,7 +797,8 @@ async def test_sweep_index_prunes_trashed():
     must be removed (pruned) from the new index."""
     from app.services.vault_sweeper import EMBEDDING_INDEX_PATH  # RED: NameError
 
-    note_paths = ["notes/keeper.md", "notes/goner.md"]
+    # Use references/ paths so classifier topic="reference" keeps notes in-place
+    note_paths = ["references/keeper.md", "references/goner.md"]
     fake = _make_classifiable_note_vault(note_paths, body="some body")
     classifier = AsyncMock(
         return_value=ClassificationResult(
@@ -780,12 +810,14 @@ async def test_sweep_index_prunes_trashed():
     # First sweep — both notes indexed
     await run_sweep(fake, classifier, embedder, force_reclassify=True)
     index_first = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
-    assert "notes/keeper.md" in index_first
-    assert "notes/goner.md" in index_first
+    assert "references/keeper.md" in index_first
+    assert "references/goner.md" in index_first
 
-    # Remove "notes/goner.md" from the vault entirely (simulate trash/delete)
-    del fake.notes["notes/goner.md"]
-    fake.dirs.get("notes", []).remove("goner.md") if "goner.md" in fake.dirs.get("notes", []) else None
+    # Remove "references/goner.md" from the vault entirely (simulate trash/delete)
+    del fake.notes["references/goner.md"]
+    refs_dir = fake.dirs.get("references", [])
+    if "goner.md" in refs_dir:
+        refs_dir.remove("goner.md")
 
     # Second sweep
     embedder.calls.clear()
@@ -793,8 +825,8 @@ async def test_sweep_index_prunes_trashed():
     await run_sweep(fake, classifier, embedder, force_reclassify=True)
 
     index_second = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
-    assert "notes/keeper.md" in index_second, "keeper note must remain in index after second sweep"
-    assert "notes/goner.md" not in index_second, (
+    assert "references/keeper.md" in index_second, "keeper note must remain in index after second sweep"
+    assert "references/goner.md" not in index_second, (
         "goner note must be pruned from index because it no longer exists in the vault"
     )
 
@@ -805,7 +837,8 @@ async def test_sweep_embeds_with_document_prefix():
     NOMIC_DOCUMENT_PREFIX ('search_document: ')."""
     from app.services.vault_sweeper import NOMIC_DOCUMENT_PREFIX  # RED: NameError
 
-    note_paths = ["notes/alpha.md", "notes/beta.md"]
+    # Use references/ paths so classifier topic="reference" keeps notes in-place
+    note_paths = ["references/alpha.md", "references/beta.md"]
     fake = _make_classifiable_note_vault(note_paths, body="note body text")
     classifier = AsyncMock(
         return_value=ClassificationResult(
