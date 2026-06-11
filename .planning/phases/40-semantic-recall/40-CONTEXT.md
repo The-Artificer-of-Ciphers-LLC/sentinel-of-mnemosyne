@@ -43,14 +43,23 @@ future / out of scope per ADR-0004).
   *Exact on-demand trigger mechanism (startup vs endpoint vs both) finalized in planning.*
 
 ### Index format, write, and load
-- **D-07:** On-disk format is a **JSON object keyed by note path**:
+- **D-07:** Format is a **JSON object keyed by note path**:
   `{ "path/to/note.md": { embedding_b64, embedding_model, content_hash }, ... }`. Human-inspectable,
-  git/Obsidian-diff friendly, fine at personal-vault scale. (Binary/JSONL deferred — the seam allows a
-  swap later without touching `Recall`.)
-- **D-08:** Writes are **atomic**: write to a temp file then `os.replace()`, so `SemanticRecall` never
-  reads a half-written index mid-sweep (works alongside the existing sweep lockfile).
-- **D-09:** `SemanticRecall` **loads the index once into memory and reloads only when the file mtime
-  changes** (not re-read per query).
+  fine at personal-vault scale. (Binary/JSONL deferred — the seam allows a swap later without touching
+  `Recall`.) *Planner must verify the Obsidian Local REST API can serve a non-markdown `.json` vault
+  path; if it cannot, store the index as a `.md` file (fenced JSON / frontmatter) at the same path.*
+- **D-08 (REVISED — A6 / REST_ONLY):** Research confirmed the vault is **REST-only** — no Docker
+  volume mount; ALL I/O goes through the `Vault` Protocol over Obsidian's REST API
+  (`vault_sweeper.py` writes via `write_note()`; `compose.yml` has no mounts). So there is no local
+  filesystem path and **no `tempfile`/`os.replace`**. The index is **persisted through the Vault**:
+  the sweeper writes `ops/sweeps/embedding-index.json` via `vault.write_note()` — a single REST PUT,
+  atomic-replace at the API level (same mechanism as the existing `ops/sweeps/_in-progress.md`
+  lockfile). Honors the "all persistence through the Vault seam" principle (ADR-0002).
+- **D-09 (REVISED — A6 / REST_ONLY):** `SemanticRecall` reads the index **once via `vault.read_note()`
+  and caches it in memory**. Freshness is a **cheap version/TTL check** (planner's discretion — e.g. a
+  small `ops/sweeps/embedding-index.version` note holding a hash/timestamp, or a short TTL) rather
+  than local-file `mtime`, since REST has no `stat`. Still satisfies MEM-05: at most **one** index
+  read at query time (cached across messages), never a per-note read.
 
 ### Merge / ranking (MEM-04)
 - **D-10:** Merge algorithm is **Reciprocal Rank Fusion, k≈60** (locked by ROADMAP). Each strategy
