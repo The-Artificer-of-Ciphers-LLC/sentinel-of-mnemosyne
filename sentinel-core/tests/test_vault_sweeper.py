@@ -856,3 +856,57 @@ async def test_sweep_embeds_with_document_prefix():
             f"embedder received text without NOMIC_DOCUMENT_PREFIX; "
             f"prefix={NOMIC_DOCUMENT_PREFIX!r}, text={text!r}"
         )
+
+
+# --- Task 3: .json-over-REST vault seam round-trip ---
+
+
+def test_index_path_roundtrips_through_vault_seam():
+    """A JSON body written to EMBEDDING_INDEX_PATH via FakeVault.write_note()
+    must read back byte-faithfully via FakeVault.read_note(), and
+    json.loads of the round-tripped value must equal the original dict.
+
+    This proves the _emit_embedding_index read/write contract is
+    path/extension-agnostic at the seam — a .json path works the same
+    as any .md path. No production logic depends on the file extension.
+
+    Decision recorded: production keeps ops/sweeps/embedding-index.json.
+    Documented fallback: if a live Obsidian REST instance rejects the .json
+    path during UAT, switch EMBEDDING_INDEX_PATH (and RecallConfig.index_path
+    in Plan 02) to 'ops/sweeps/embedding-index.md' storing the same JSON as
+    a fenced code block — a one-line constant change requiring no logic change
+    because both sides use vault.read_note / vault.write_note.
+    """
+    import asyncio
+    import json as _json_rt
+
+    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH
+    from tests.fakes.vault import FakeVault
+
+    original = {
+        "notes/alpha.md": {
+            "embedding_b64": "AACAPwAAAAAAAAAAAA==",
+            "embedding_model": "text-embedding-nomic-embed-text-v1.5",
+            "content_hash": "deadbeef00000000",
+        },
+        "notes/beta.md": {
+            "embedding_b64": "AAAAAACAP wAAAAAAAA==",
+            "embedding_model": "text-embedding-nomic-embed-text-v1.5",
+            "content_hash": "cafebabe00000000",
+        },
+    }
+    serialized = _json_rt.dumps(original, ensure_ascii=False)
+
+    async def _round_trip() -> str:
+        vault = FakeVault()
+        await vault.write_note(EMBEDDING_INDEX_PATH, serialized)
+        return await vault.read_note(EMBEDDING_INDEX_PATH)
+
+    round_tripped = asyncio.run(_round_trip())
+    assert round_tripped == serialized, (
+        "read_note must return the exact string written by write_note"
+    )
+    parsed = _json_rt.loads(round_tripped)
+    assert parsed == original, (
+        "json.loads of round-tripped value must equal the original dict"
+    )
