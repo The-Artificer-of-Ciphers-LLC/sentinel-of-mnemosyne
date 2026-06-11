@@ -77,6 +77,12 @@ def setup_app_state():
         output_scanner=mock_scanner,
     )
 
+    async def _noop_classify(text, user_topic=None):
+        from app.services.note_classifier import ClassificationResult
+        return ClassificationResult(topic="noise", confidence=1.0, title_slug="noise", reasoning="test noop")
+
+    app.state.classify = _noop_classify
+
     class _LazyRouteCtx:
         @property
         def vault(self):
@@ -97,6 +103,10 @@ def setup_app_state():
         @property
         def lmstudio_stop_sequences(self):
             return getattr(app.state, "lmstudio_stop_sequences", [])
+
+        @property
+        def classify(self):
+            return getattr(app.state, "classify", None)
 
     app.state.route_ctx = _LazyRouteCtx()
 

@@ -44,6 +44,14 @@ def default_app_state(mock_ai_provider):
     app.state.context_window = 8192
     app.state.settings = settings
 
+    # Default no-op classifier for background chat-note filing; tests that care
+    # about note-filing behaviour supply their own via app.state.classify.
+    async def _noop_classify(text, user_topic=None):
+        from app.services.note_classifier import ClassificationResult
+        return ClassificationResult(topic="noise", confidence=1.0, title_slug="noise", reasoning="test noop")
+
+    app.state.classify = _noop_classify
+
     # Security services — pass-through mocks (SEC-01, SEC-02)
     default_injection_filter = MagicMock()
     default_injection_filter.filter_input.side_effect = lambda text: (text, False)
@@ -97,6 +105,10 @@ def default_app_state(mock_ai_provider):
         @property
         def lmstudio_stop_sequences(self):
             return getattr(app.state, "lmstudio_stop_sequences", [])
+
+        @property
+        def classify(self):
+            return getattr(app.state, "classify", None)
 
     app.state.route_ctx = _LazyRouteCtx()
 
@@ -1081,3 +1093,190 @@ async def test_session_write_uses_ops_sessions_path():
     assert "ops/sessions" in path_arg, (
         f"Expected session write path to contain 'ops/sessions', got: {path_arg!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Wave 7 tests — MEM-FIX: substantive chat content filed as searchable Vault notes
+# Root cause: user content was only persisted under ops/sessions/ (warm-tier
+# excluded) so it became unreachable after the hot-tier 3-turn window.
+# Fix: NoteIntake.classify_and_apply() is now called as a BackgroundTask so
+# chat content lands in topic-organised paths (journal/, learning/, etc.)
+# that ARE inside the warm-tier search scope.
+# ---------------------------------------------------------------------------
+
+
+class _CapturingFakeVault:
+    """Minimal in-memory vault that records write_note calls for assertions."""
+
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+        self.write_calls: list[tuple[str, str]] = []
+        # mirrors the AsyncMock methods the existing tests rely on
+        self.get_user_context_value = None
+        self.get_recent_sessions_value: list = []
+
+    async def read_note(self, path: str) -> str:
+        return self.store.get(path, "")
+
+    async def write_note(self, path: str, body: str) -> None:
+        self.write_calls.append((path, body))
+        self.store[path] = body
+
+    async def write_session_summary(self, path: str, body: str) -> None:
+        pass  # not under test in this wave
+
+    async def get_user_context(self, user_id: str) -> str | None:
+        return self.get_user_context_value
+
+    async def get_recent_sessions(self, user_id: str, limit: int = 3) -> list:
+        return self.get_recent_sessions_value
+
+    async def read_self_context(self, path: str) -> str:
+        return ""
+
+    async def find(self, query: str) -> list:
+        return []
+
+
+def _make_filing_classifier(topic: str = "journal", slug: str = "test-note"):
+    """Return an async classify function that returns a real-topic result."""
+    from app.services.note_classifier import ClassificationResult
+
+    async def _classify(text, user_topic=None):
+        return ClassificationResult(
+            topic=topic,
+            confidence=0.9,
+            title_slug=slug,
+            reasoning="test classifier",
+        )
+
+    return _classify
+
+
+async def test_substantive_chat_content_filed_as_vault_note(mock_ai_provider):
+    """Substantive user content (>=20 chars) is filed as a searchable Vault note.
+
+    The written note must:
+    - land at a non-ops/ path (so warm-tier search can reach it), and
+    - contain the verbatim user content in its body.
+    """
+    fake_vault = _CapturingFakeVault()
+    classify_fn = _make_filing_classifier(topic="journal", slug="my-chat-note")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.vault = fake_vault
+        app.state.classify = classify_fn
+
+        resp = await client.post(
+            "/message",
+            json={"content": "Today I finished the new song I have been working on.", "user_id": "trekkie"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+
+    # A note write must have been attempted
+    assert len(fake_vault.write_calls) >= 1, "Expected at least one vault note write"
+
+    # The written path must NOT be under any warm-tier excluded prefix
+    excluded = ("ops/", "_trash/", "self/")
+    for path, body in fake_vault.write_calls:
+        assert not any(path.startswith(p) for p in excluded), (
+            f"Chat note was written to excluded path: {path!r}"
+        )
+        # The verbatim user content must be in the body
+        assert "Today I finished the new song" in body, (
+            f"Verbatim user content not found in note body at {path!r}"
+        )
+
+
+async def test_trivial_content_not_filed(mock_ai_provider):
+    """Content shorter than _CHAT_NOTE_MIN_LENGTH is NOT filed as a Vault note.
+
+    Greetings like 'hi' and 'thanks' are below the 20-char gate and must not
+    flood the vault with meaningless notes.
+    """
+    from app.routes.message import _CHAT_NOTE_MIN_LENGTH
+
+    fake_vault = _CapturingFakeVault()
+    classify_fn = _make_filing_classifier(topic="noise")
+
+    for trivial in ("hi", "thanks", "ok", "yes please"):
+        fake_vault.write_calls.clear()
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            app.state.vault = fake_vault
+            app.state.classify = classify_fn
+
+            resp = await client.post(
+                "/message",
+                json={"content": trivial, "user_id": "trekkie"},
+                headers=AUTH_HEADER,
+            )
+
+        assert resp.status_code == 200
+        assert len(trivial.strip()) < _CHAT_NOTE_MIN_LENGTH, (
+            f"Test input {trivial!r} is not actually below the min-length gate"
+        )
+        assert len(fake_vault.write_calls) == 0, (
+            f"Expected no vault writes for trivial content {trivial!r}, "
+            f"got writes to: {[p for p, _ in fake_vault.write_calls]}"
+        )
+
+
+async def test_note_intake_exception_does_not_fail_response(mock_ai_provider):
+    """If NoteIntake.classify_and_apply() raises, the /message response is still 200.
+
+    This guards the best-effort contract: vault filing must never propagate
+    exceptions into the request/response cycle.
+    """
+    fake_vault = _CapturingFakeVault()
+
+    async def _exploding_classify(text, user_topic=None):
+        raise RuntimeError("LM Studio is down")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.vault = fake_vault
+        app.state.classify = _exploding_classify
+
+        resp = await client.post(
+            "/message",
+            json={"content": "I just finished writing my first full song from scratch.", "user_id": "trekkie"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["content"] == "Test AI response"
+
+
+async def test_chat_note_path_passes_warm_tier_exclusion_filter(mock_ai_provider):
+    """The path written by chat-note filing is not excluded by _WARM_TIER_EXCLUDE_PREFIXES.
+
+    Integration-style assertion: confirms the note path written during chat
+    would NOT be filtered out by the warm-tier exclusion logic in
+    message_processing._append_warm_tier(), i.e. the memory fix actually works.
+    """
+    from app.services.message_processing import _WARM_TIER_EXCLUDE_PREFIXES
+
+    fake_vault = _CapturingFakeVault()
+    classify_fn = _make_filing_classifier(topic="learning", slug="song-progress")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.vault = fake_vault
+        app.state.classify = classify_fn
+
+        resp = await client.post(
+            "/message",
+            json={"content": "I completed the advanced mixing course today and learned compression.", "user_id": "trekkie"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+    assert len(fake_vault.write_calls) >= 1, "Expected a vault note write"
+
+    for path, _body in fake_vault.write_calls:
+        excluded = any(path.startswith(p) for p in _WARM_TIER_EXCLUDE_PREFIXES)
+        assert not excluded, (
+            f"Chat note path {path!r} starts with an excluded prefix "
+            f"({_WARM_TIER_EXCLUDE_PREFIXES}) — it would be invisible to warm-tier search"
+        )
