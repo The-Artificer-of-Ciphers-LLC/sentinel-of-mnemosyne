@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from app.errors import (
     ContextLengthError,
@@ -14,85 +14,10 @@ from app.errors import (
 )
 from app.services.token_budget import TokenBudget, TokenLimitError
 
+if TYPE_CHECKING:
+    from app.services.recall import Recall, RecalledContext, SearchResult
 
 logger = logging.getLogger(__name__)
-
-# Obsidian /search/simple/ returns BM25-variant scores that are negative for most queries.
-# Calibrated against real data: relevant content notes land around -120, irrelevant ops/sweep
-# noise lands around -202. A floor of -200 correctly admits the former and rejects the latter.
-SEARCH_SCORE_THRESHOLD = -200.0
-
-# Paths excluded from warm-tier injection: session summaries are already in the hot tier,
-# and sweep reports are operational noise with no user-knowledge value.
-# All ops/ content is operational Sentinel state (sessions, sweeps, observations, reminders).
-# self/ is already injected by the hot tier. _trash/ is archived files.
-# None of these belong in warm-tier knowledge retrieval.
-_WARM_TIER_EXCLUDE_PREFIXES = ("ops/", "_trash/", "self/")
-
-# Common English function words stripped before keyword-mode vault search.
-# Obsidian /search/simple/ is conjunctive: every term must appear in the document.
-# For long conversational queries (>5 words) this kills recall — session summaries
-# (which contain the verbatim question) score higher than the actual knowledge notes.
-# We instead search with each content keyword in parallel, then merge by filename.
-_SEARCH_STOPWORDS = frozenset(
-    "a about all also an and any are as at be been by can could "
-    "did do does for from get go had has have he her here his how "
-    "i if in is it its just let may me might more my no not of or "
-    "our out see she should so some than that the their then there "
-    "they this to up us was we were what when where which who will "
-    "with would you your".split()
-)
-
-# Queries longer than this many words switch to per-keyword parallel search.
-_KEYWORD_SEARCH_THRESHOLD = 5
-
-
-def _extract_keywords(content: str) -> list[str]:
-    """Return deduplicated non-stopword tokens from content, preserving order."""
-    seen: set[str] = set()
-    result: list[str] = []
-    for word in content.lower().split():
-        token = word.strip(".,!?;:\"'")
-        if token and token not in _SEARCH_STOPWORDS and token not in seen:
-            seen.add(token)
-            result.append(token)
-    return result
-
-
-def _best_search_query(content: str) -> str:
-    """Extract the longest run of consecutive non-stopword words from content.
-
-    Obsidian /search/simple/ is conjunctive: every term must appear in the result.
-    A run of adjacent content words (e.g. "omie wise synthwave" from "what do you
-    know about the omie wise synthwave") forms a specific AND-query that matches the
-    target note without admitting generic matches from single function words.
-    Falls back to the full content string if no run is found.
-    """
-    words = content.lower().split()
-    tokens = [w.strip(".,!?;:\"'") for w in words]
-    indexed = [(i, t) for i, t in enumerate(tokens) if t and t not in _SEARCH_STOPWORDS]
-    if not indexed:
-        return content
-    runs: list[list[tuple[int, str]]] = []
-    current: list[tuple[int, str]] = [indexed[0]]
-    for prev, curr in zip(indexed, indexed[1:]):
-        if curr[0] == prev[0] + 1:
-            current.append(curr)
-        else:
-            runs.append(current)
-            current = [curr]
-    runs.append(current)
-    best = max(runs, key=len)
-    return " ".join(t for _, t in best)
-
-
-@dataclass(frozen=True)
-class _ContextBudget:
-    sessions_budget: int
-    search_budget: int
-
-
-
 
 
 @dataclass(frozen=True)
@@ -130,29 +55,74 @@ class MessageProcessor:
         "Do not describe internal tools, system internals, or implementation details."
     )
 
-    _SESSIONS_RATIO: float = 0.15
-    _SEARCH_RATIO: float = 0.10
-
-    def __init__(self, vault, ai_provider, injection_filter, output_scanner) -> None:
+    def __init__(
+        self,
+        vault,
+        ai_provider,
+        injection_filter,
+        output_scanner,
+        *,
+        recall: "Recall | None" = None,
+    ) -> None:
         self._vault = vault
         self._ai_provider = ai_provider
         self._injection_filter = injection_filter
         self._output_scanner = output_scanner
         self._budget = TokenBudget()
-
-    @classmethod
-    def _allocate_budgets(cls, context_window: int) -> _ContextBudget:
-        return _ContextBudget(
-            sessions_budget=int(context_window * cls._SESSIONS_RATIO),
-            search_budget=int(context_window * cls._SEARCH_RATIO),
-        )
+        if recall is not None:
+            self._recall = recall
+        else:
+            # Late import to avoid circular import at module load time.
+            # (recall.py imports MessageRequest from this module at module level.)
+            from app.services.recall import Recall  # noqa: PLC0415
+            self._recall = Recall(vault=vault)
 
     async def process(self, req: MessageRequest) -> MessageResult:
-        budgets = self._allocate_budgets(req.context_window)
-        messages = [{"role": "system", "content": self._FALLBACK_PERSONA}]
+        # Delegate hot+warm assembly to Recall (MEM-01).
+        recalled = await self._recall.assemble(req, req.context_window)
 
-        await self._append_hot_tier(messages, req, budgets.sessions_budget)
-        await self._append_warm_tier(messages, req, budgets.search_budget)
+        # Per-tier budgets — sourced from Recall's allocator so the ratio
+        # constants live only in RecallConfig (MEM-02).
+        budgets = self._recall._allocate(req.context_window)
+        sessions_budget = budgets.sessions_budget
+        search_budget = budgets.search_budget
+
+        # Start with fallback persona as messages[0]; swap if vault persona is non-empty.
+        messages: list[dict] = [{"role": "system", "content": self._FALLBACK_PERSONA}]
+
+        # Persona swap (D-04, Pitfall 1) — stays in MessageProcessor.
+        persona_result = await self._vault.read_self_context("sentinel/persona.md")
+        if isinstance(persona_result, str) and persona_result.strip():
+            messages[0] = {"role": "system", "content": persona_result}
+        else:
+            logger.warning(
+                "Sentinel persona vault read returned empty; using fallback"
+            )
+
+        # Hot-tier injection (presentation, D-04).
+        context_parts: list[str] = []
+        if recalled.self_context:
+            context_parts.append(
+                "Personal context:\n" + "\n\n---\n\n".join(recalled.self_context)
+            )
+        if recalled.sessions:
+            context_parts.append(
+                "Recent session history:\n" + "\n---\n".join(recalled.sessions)
+            )
+        if context_parts:
+            raw_context = "\n\n".join(context_parts)
+            safe_context = self._budget.truncate(raw_context, sessions_budget)
+            filtered_context = self._injection_filter.wrap_context(safe_context)
+            messages.append({"role": "user", "content": filtered_context})
+            messages.append({"role": "assistant", "content": "Understood."})
+
+        # Warm-tier injection (presentation, D-04).
+        if recalled.warm:
+            vault_block = self._format_search_results(recalled.warm)
+            safe_vault = self._budget.truncate(vault_block, search_budget)
+            filtered_vault = self._injection_filter.wrap_context(safe_vault)
+            messages.append({"role": "user", "content": filtered_vault})
+            messages.append({"role": "assistant", "content": "Understood."})
 
         safe_input, _ = self._injection_filter.filter_input(req.content)
         messages.append({"role": "user", "content": safe_input})
@@ -192,90 +162,20 @@ class MessageProcessor:
             summary_content=summary_content,
         )
 
-    async def _append_hot_tier(self, messages: list[dict], req: MessageRequest, budget: int) -> None:
-        self_paths = [
-            "self/identity.md",
-            "self/methodology.md",
-            "self/goals.md",
-            "self/relationships.md",
-            "ops/reminders.md",
-            "self/learning-areas.md",
-        ]
-        gather_results = await asyncio.gather(
-            *[self._vault.read_self_context(p) for p in self_paths],
-            self._vault.read_self_context("sentinel/persona.md"),
-            return_exceptions=True,
-        )
-        self_results = gather_results[: len(self_paths)]
-        persona_result = gather_results[-1]
-
-        if isinstance(persona_result, str) and persona_result.strip():
-            messages[0] = {"role": "system", "content": persona_result}
-        else:
-            logger.warning(
-                "Sentinel persona vault read returned empty; using fallback"
-            )
-
-        self_contents = [r for r in self_results if isinstance(r, str) and r.strip()]
-        recent_sessions = await self._vault.get_recent_sessions(req.user_id, limit=3)
-
-        context_parts: list[str] = []
-        if self_contents:
-            context_parts.append("Personal context:\n" + "\n\n---\n\n".join(self_contents))
-        if recent_sessions:
-            context_parts.append("Recent session history:\n" + "\n---\n".join(recent_sessions))
-        if not context_parts:
-            return
-
-        raw_context = "\n\n".join(context_parts)
-        safe_context = self._budget.truncate(raw_context, budget)
-        filtered_context = self._injection_filter.wrap_context(safe_context)
-        messages.append({"role": "user", "content": filtered_context})
-        messages.append({"role": "assistant", "content": "Understood."})
-
-    async def _append_warm_tier(self, messages: list[dict], req: MessageRequest, budget: int) -> None:
-        words = req.content.split()
-        if len(words) > _KEYWORD_SEARCH_THRESHOLD:
-            query = _best_search_query(req.content)
-            search_results = await self._vault.find(query)
-        else:
-            search_results = await self._vault.find(req.content)
-
-        relevant_results = [
-            r for r in search_results
-            if r.get("score", float("-inf")) >= SEARCH_SCORE_THRESHOLD
-            and not r.get("filename", "").startswith(_WARM_TIER_EXCLUDE_PREFIXES)
-        ]
-        if not relevant_results:
-            return
-
-        top_results = relevant_results[:3]
-        paths = [r.get("filename", "") for r in top_results]
-        raw_contents = await asyncio.gather(
-            *[self._vault.read_note(p) for p in paths],
-            return_exceptions=True,
-        )
-
-        vault_block = self._format_search_results(top_results, paths, raw_contents)
-        safe_vault = self._budget.truncate(vault_block, budget)
-        filtered_vault = self._injection_filter.wrap_context(safe_vault)
-        messages.append({"role": "user", "content": filtered_vault})
-        messages.append({"role": "assistant", "content": "Understood."})
-
     @staticmethod
-    def _format_search_results(
-        results: list[dict], paths: list[str], contents: list
-    ) -> str:
+    def _format_search_results(warm: "list[SearchResult]") -> str:
+        """Format warm-tier ``SearchResult`` objects into the vault-notes block.
+
+        Presentation stays in MessageProcessor per D-04 / Pitfall 6.
+        """
         lines = ["Relevant vault notes:"]
-        for r, path, content in zip(results, paths, contents):
-            filename = r.get("filename", path or "unknown")
-            if isinstance(content, str) and content.strip():
-                lines.append(f"### {filename}\n\n{content.strip()}")
+        for r in warm:
+            filename = r.path
+            body = r.body
+            if isinstance(body, str) and body.strip():
+                lines.append(f"### {filename}\n\n{body.strip()}")
             else:
-                # full read failed — fall back to search snippet
-                matches = r.get("matches", [])
-                snippet = matches[0].get("context", "").strip() if matches else ""
-                lines.append(f"- **{filename}**: {snippet}" if snippet else f"- **{filename}**")
+                lines.append(f"- **{filename}**")
         return "\n\n".join(lines)
 
     @staticmethod
@@ -301,3 +201,14 @@ model: {model}
 {ai_msg}
 """
         return path, content
+
+
+# ---------------------------------------------------------------------------
+# Re-export: ``SEARCH_SCORE_THRESHOLD`` moved to recall.py (MEM-02).
+# Placed at the bottom to break the circular import:
+#   message_processing imports MessageRequest-dependent recall.py;
+#   recall.py imports MessageRequest from this module.
+# By the time Python reaches this line, MessageRequest is already defined.
+# ---------------------------------------------------------------------------
+from app.services.recall import SEARCH_SCORE_THRESHOLD as SEARCH_SCORE_THRESHOLD  # noqa: E402
+from app.services.recall import _WARM_TIER_EXCLUDE_PREFIXES as _WARM_TIER_EXCLUDE_PREFIXES  # noqa: E402

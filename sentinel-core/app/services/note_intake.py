@@ -21,7 +21,7 @@ from app.services.inbox import (
     remove_entry,
 )
 from app.services.note_classifier import ClassificationResult, TOPIC_VAULT_PATH
-from app.services.message_processing import _WARM_TIER_EXCLUDE_PREFIXES
+from app.services.recall import _WARM_TIER_EXCLUDE_PREFIXES
 from app.time_utils import _iso_utc, _today_str
 
 
