@@ -281,6 +281,9 @@ class Recall:
                 # Full note read failed — fall back to search snippet
                 matches = r.get("matches", [])
                 note_body = matches[0].get("context", "").strip() if matches else ""
+            if not note_body.strip():
+                # Skip contentless notes — do not surface empty-body SearchResults
+                continue
             results.append(
                 SearchResult(
                     path=r["filename"],

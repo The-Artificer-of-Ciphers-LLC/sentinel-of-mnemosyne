@@ -237,3 +237,50 @@ async def test_assemble_degrades_gracefully_when_sessions_tier_raises():
     assert any(r.path == "notes/topic.md" for r in result.warm), (
         "warm tier should still be populated when only the sessions tier fails"
     )
+
+
+# ---------------------------------------------------------------------------
+# WR-01: skip empty-body warm SearchResult (FIX B)
+# ---------------------------------------------------------------------------
+
+
+async def test_warm_skips_empty_body_result_but_keeps_sibling_with_body():
+    """WR-01: a warm hit whose note read fails AND has no snippet is omitted;
+    a sibling hit WITH a body is still included.
+    """
+    vault = FakeVault(
+        notes={
+            "notes/has-body.md": "warm search test fixture body content",
+        }
+    )
+
+    # Override find() to return two hits: one resolvable, one whose note body
+    # will be empty and has no snippet fallback.
+    async def fake_find(query: str) -> list[dict]:
+        return [
+            {
+                "filename": "notes/has-body.md",
+                "score": 1.0,
+                "matches": [],
+            },
+            {
+                "filename": "notes/no-body.md",
+                "score": 1.0,
+                "matches": [],  # no snippet fallback
+            },
+        ]
+
+    vault.find = fake_find  # type: ignore[method-assign]
+
+    recall = Recall(vault=vault)
+    result = await recall.assemble(
+        make_request(content="warm search test fixture"), budget=8192
+    )
+
+    paths = [r.path for r in result.warm]
+    assert "notes/has-body.md" in paths, (
+        "notes/has-body.md should be included — it has content"
+    )
+    assert "notes/no-body.md" not in paths, (
+        "notes/no-body.md should be skipped — body is empty and no snippet"
+    )
