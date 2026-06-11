@@ -1280,3 +1280,52 @@ async def test_chat_note_path_passes_warm_tier_exclusion_filter(mock_ai_provider
             f"Chat note path {path!r} starts with an excluded prefix "
             f"({_WARM_TIER_EXCLUDE_PREFIXES}) — it would be invisible to warm-tier search"
         )
+
+
+async def test_observation_topic_chat_note_redirected_to_searchable_path(mock_ai_provider):
+    """Chat notes classified as 'observation' (→ ops/observations/) are redirected to a searchable path.
+
+    Regression guard for the ops/observations/ gap: a classifier verdict of
+    'observation' would previously land the note under ops/, which is excluded
+    from warm-tier retrieval by _WARM_TIER_EXCLUDE_PREFIXES.  The searchable_only
+    guard in _safe_file_chat_note must redirect such notes to a journal path so
+    the verbatim user content remains findable.
+    """
+    from app.services.message_processing import _WARM_TIER_EXCLUDE_PREFIXES
+    from app.services.note_classifier import TOPIC_VAULT_PATH
+
+    # Confirm the test precondition: observation maps to an excluded prefix
+    obs_path = TOPIC_VAULT_PATH["observation"]
+    assert any(obs_path.startswith(p.rstrip("/")) for p in _WARM_TIER_EXCLUDE_PREFIXES), (
+        f"Test precondition failed: TOPIC_VAULT_PATH['observation']={obs_path!r} "
+        f"does not start with any excluded prefix {_WARM_TIER_EXCLUDE_PREFIXES}"
+    )
+
+    fake_vault = _CapturingFakeVault()
+    classify_fn = _make_filing_classifier(topic="observation", slug="my-observation")
+
+    user_content = "I notice I work best in the morning when I have no meetings scheduled."
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.vault = fake_vault
+        app.state.classify = classify_fn
+
+        resp = await client.post(
+            "/message",
+            json={"content": user_content, "user_id": "trekkie"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+    assert len(fake_vault.write_calls) >= 1, "Expected at least one vault note write"
+
+    for path, body in fake_vault.write_calls:
+        # The written path must NOT start with any warm-tier excluded prefix
+        assert not path.startswith(_WARM_TIER_EXCLUDE_PREFIXES), (
+            f"Observation chat note was written to excluded path {path!r}; "
+            "it would be invisible to warm-tier search"
+        )
+        # The verbatim user content must be preserved in the note body
+        assert user_content in body, (
+            f"Verbatim user content not found in note body at {path!r}"
+        )

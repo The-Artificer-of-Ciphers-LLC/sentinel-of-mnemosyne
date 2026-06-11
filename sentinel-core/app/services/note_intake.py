@@ -21,6 +21,7 @@ from app.services.inbox import (
     remove_entry,
 )
 from app.services.note_classifier import ClassificationResult, TOPIC_VAULT_PATH
+from app.services.message_processing import _WARM_TIER_EXCLUDE_PREFIXES
 from app.time_utils import _iso_utc, _today_str
 
 
@@ -33,7 +34,12 @@ class NoteIntake:
         self._vault = vault
         self._classify_note = classify_note_fn
 
-    async def classify_and_apply(self, content: str, topic: str | None = None) -> dict:
+    async def classify_and_apply(
+        self,
+        content: str,
+        topic: str | None = None,
+        searchable_only: bool = False,
+    ) -> dict:
         result = await self._classify_note(content, user_topic=topic)
 
         if result.topic == "noise":
@@ -65,6 +71,16 @@ class NoteIntake:
         target = await self._resolve_target_with_collision_suffix(
             result.topic, result.title_slug or "untitled"
         )
+
+        # For the chat-sourced filing path, guarantee the note lands on a
+        # warm-tier-searchable path.  If the resolved destination starts with
+        # any excluded prefix (e.g. "observation" → "ops/observations/…"),
+        # redirect to a journal entry for today so the content stays findable.
+        if searchable_only and target.startswith(_WARM_TIER_EXCLUDE_PREFIXES):
+            target = await self._resolve_target_with_collision_suffix(
+                "journal", result.title_slug or "untitled"
+            )
+
         body = self._build_filed_note_markdown(content, result)
         await self._vault.write_note(target, body)
         return {

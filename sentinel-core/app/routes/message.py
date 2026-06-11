@@ -80,8 +80,14 @@ def _schedule_chat_note(
 
 
 async def _safe_file_chat_note(intake: NoteIntake, content: str) -> None:
-    """Invoke NoteIntake.classify_and_apply(); swallow and log any exception."""
+    """Invoke NoteIntake.classify_and_apply(); swallow and log any exception.
+
+    Passes searchable_only=True so that notes whose classifier-chosen topic
+    maps to a warm-tier-excluded prefix (e.g. observation → ops/observations/)
+    are silently redirected to a searchable journal path instead.  The note
+    content is always preserved; only the destination changes.
+    """
     try:
-        await intake.classify_and_apply(content)
+        await intake.classify_and_apply(content, searchable_only=True)
     except Exception as exc:
         logger.warning("chat note filing failed (best-effort): %s", exc)
