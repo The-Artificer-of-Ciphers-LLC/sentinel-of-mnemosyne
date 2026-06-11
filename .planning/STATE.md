@@ -4,13 +4,13 @@ milestone: v0.5.1
 milestone_name: — The Second Brain
 status: executing
 stopped_at: Phase 40 context gathered
-last_updated: "2026-06-11T17:25:00.118Z"
+last_updated: "2026-06-11T17:36:21.901Z"
 last_activity: 2026-06-11 -- Phase 40 execution started
 progress:
   total_phases: 3
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 33
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 40 (Semantic Recall) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-06-11 -- Phase 40 execution started
 
@@ -111,6 +111,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 38 P08 | 8min | 2 tasks | 1 files |
 | Phase 38-pf2e-multi-step-onboarding-dialog P09 | 18min | 3 tasks | 2 files |
 | Phase 40-semantic-recall P01 | 466 | 3 tasks | 2 files |
+| Phase 40-semantic-recall P02 | 25m | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -166,6 +167,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Phase 38 closeout: dialog-first UX shipped with pipe-syntax as one-shot alternative; criterion 10 RED-before-production verified by git-log timestamp comparison
 - [Phase ?]: .json-over-REST confirmed at Vault seam
 - [Phase ?]: NOMIC_DOCUMENT_PREFIX triggers one-time full re-embed
+- [Phase 40-02]: SemanticRecall reads embedding index via vault.read_note() + 60s TTL cache (REST-only, no mtime); sidecar index at ops/sweeps/embedding-index.json matching EMBEDDING_INDEX_PATH
+- [Phase 40-02]: cosine_floor=0.50 default (UAT-tunable); body-read deferred to Recall post-RRF trim (A5: warm_top_n reads not semantic_top_k reads)
+- [Phase 40-02]: ADR-0004 accepted: sidecar-index supersedes frontmatter-read approach; supersession note records D-01/D-02/D-08/D-09 REVISED decisions
 
 ### Pending Todos
 
@@ -199,7 +203,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-06-11T17:24:54.902Z
+Last session: 2026-06-11T17:36:21.893Z
 Stopped at: Phase 40 context gathered
 Resume file: 
 
