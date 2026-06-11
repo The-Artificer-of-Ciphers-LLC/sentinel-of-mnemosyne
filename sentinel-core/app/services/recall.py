@@ -186,7 +186,6 @@ __all__ = [
     "RecalledContext",
     "SearchResult",
     "SEARCH_SCORE_THRESHOLD",
-    "_ContextBudget",
 ]
 
 
