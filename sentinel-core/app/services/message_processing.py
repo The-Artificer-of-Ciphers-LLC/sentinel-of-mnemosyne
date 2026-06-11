@@ -83,7 +83,7 @@ class MessageProcessor:
 
         # Per-tier budgets — sourced from Recall's allocator so the ratio
         # constants live only in RecallConfig (MEM-02).
-        budgets = self._recall._allocate(req.context_window)
+        budgets = self._recall.allocate(req.context_window)
         sessions_budget = budgets.sessions_budget
         search_budget = budgets.search_budget
 

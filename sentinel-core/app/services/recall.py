@@ -213,7 +213,7 @@ class Recall:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _allocate(self, budget: int) -> _ContextBudget:
+    def allocate(self, budget: int) -> _ContextBudget:
         """Compute per-tier context budgets using int() truncation (Pitfall 3)."""
         return _ContextBudget(
             sessions_budget=int(budget * self._config.sessions_ratio),
