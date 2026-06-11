@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Awaitable, Callable, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from app.vault import Vault
@@ -179,14 +179,132 @@ class RecallConfig:
     warm_top_n: int = 3
     """Maximum number of warm-tier results to read and return."""
 
+    semantic_cosine_floor: float = 0.50
+    """Minimum cosine similarity for a semantic candidate to enter the RRF pool.
+    Conservative 0.50 default per RESEARCH Pattern 7 — UAT-tunable."""
+
+    semantic_top_k: int = 20
+    """Number of top semantic candidates sent into RRF per D-10."""
+
+    keyword_top_k: int = 20
+    """Number of top keyword candidates sent into RRF per D-10."""
+
+    rrf_k: int = 60
+    """RRF k constant (smoothing factor). k=60 is the empirically validated default."""
+
+    semantic_lru_size: int = 128
+    """Max number of query embeddings cached in-process (keyed on query+model)."""
+
+    index_path: str = "ops/sweeps/embedding-index.json"
+    """Relative path (vault-seam key) for the sweeper-maintained embedding index sidecar.
+    Must equal EMBEDDING_INDEX_PATH in vault_sweeper.py."""
+
+    index_ttl_seconds: float = 60.0
+    """TTL for the in-memory index cache (seconds). After expiry, SemanticRecall
+    reloads the index via vault.read_note() on the next search call."""
+
 
 __all__ = [
     "Recall",
     "RecallConfig",
     "RecalledContext",
+    "RetrievalStrategy",
+    "KeywordRecall",
+    "SemanticRecall",
     "SearchResult",
     "SEARCH_SCORE_THRESHOLD",
+    "NOMIC_QUERY_PREFIX",
 ]
+
+# Nomic-embed-text-v1.5 instruction prefix for query embeddings.
+# Mirrors NOMIC_DOCUMENT_PREFIX in vault_sweeper.py (which prefixes note bodies).
+NOMIC_QUERY_PREFIX = "search_query: "
+
+
+# ---------------------------------------------------------------------------
+# RetrievalStrategy Protocol
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class RetrievalStrategy(Protocol):
+    """Strategy seam for warm-tier retrieval (ADR-0004).
+
+    Both adapters (KeywordRecall, SemanticRecall) satisfy this Protocol.
+    async search(query, *, budget) -> list[SearchResult]
+
+    ``budget`` is the maximum number of candidates the strategy should return
+    before RRF merging. Strategies apply their own relevance thresholds first;
+    the budget is an additional hard cap on the returned list length.
+    """
+
+    async def search(self, query: str, *, budget: int) -> list[SearchResult]: ...
+
+
+# ---------------------------------------------------------------------------
+# KeywordRecall adapter — verbatim lift of _warm_search keyword logic
+# ---------------------------------------------------------------------------
+
+
+class KeywordRecall:
+    """Keyword retrieval adapter wrapping vault.find() (Obsidian BM25).
+
+    Provides the same behavior as the original Recall._warm_search keyword
+    path: _best_search_query extraction, relevance_threshold filter,
+    exclude_prefixes filter, WR-01 empty-body skip, SearchResult construction.
+
+    The only behavioral difference from the original _warm_search:
+    - ``budget`` (from the RetrievalStrategy interface) replaces ``warm_top_n``
+      for the candidate slice — callers (Recall._warm_search RRF orchestrator)
+      pass ``keyword_top_k`` as budget.
+    """
+
+    def __init__(self, vault: "Vault", config: RecallConfig) -> None:
+        self._vault = vault
+        self._config = config
+
+    async def search(self, query: str, *, budget: int) -> list[SearchResult]:
+        """Keyword search via vault.find() — today's _warm_search behavior, verbatim.
+
+        Returns [] when query is blank (WR-01 guard moved to _warm_search orchestrator).
+        Slices to ``budget`` instead of ``warm_top_n`` so the RRF pool size is
+        controlled by the caller.
+        """
+        words = query.split()
+        if len(words) > _KEYWORD_SEARCH_THRESHOLD:
+            search_q = _best_search_query(query)
+        else:
+            search_q = query
+
+        search_results = await self._vault.find(search_q)
+
+        relevant = [
+            r for r in search_results
+            if r.get("score", float("-inf")) >= self._config.relevance_threshold
+            and not r.get("filename", "").startswith(self._config.exclude_prefixes)
+        ]
+        if not relevant:
+            return []
+
+        top = relevant[:budget]
+        paths = [r.get("filename", "") for r in top]
+        raw_contents = await asyncio.gather(
+            *[self._vault.read_note(p) for p in paths],
+            return_exceptions=True,
+        )
+
+        results: list[SearchResult] = []
+        for r, path, body in zip(top, paths, raw_contents):
+            if isinstance(body, str) and body.strip():
+                note_body = body
+            else:
+                matches = r.get("matches", [])
+                note_body = matches[0].get("context", "").strip() if matches else ""
+            if not note_body.strip():
+                # WR-01: skip contentless notes
+                continue
+            results.append(SearchResult(path=r["filename"], score=r["score"], body=note_body))
+        return results
 
 
 # ---------------------------------------------------------------------------
