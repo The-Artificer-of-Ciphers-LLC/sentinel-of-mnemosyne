@@ -8,6 +8,7 @@ from httpx import ASGITransport, AsyncClient
 from unittest.mock import AsyncMock, MagicMock
 
 from app.main import app
+from app.services.recall import Recall
 from app.state import RouteContext
 
 AUTH_HEADERS = {"X-Sentinel-Key": "test-key-for-pytest"}
@@ -42,6 +43,7 @@ def setup_app_state(mock_obsidian, mock_http_client):
         settings=app.state.settings,
         http_client=app.state.http_client,
         ai_provider_name=app.state.ai_provider_name,
+        recall=Recall(vault=app.state.vault),
     )
 
 

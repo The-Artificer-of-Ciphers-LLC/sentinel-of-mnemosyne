@@ -11,6 +11,7 @@ from app.main import app
 from app.config import settings
 from app.services.message_processing import MessageProcessor
 from app.services.provider_router import ProviderUnavailableError
+from app.services.recall import Recall
 
 # Auth header required by APIKeyMiddleware for all POST /message requests
 AUTH_HEADER = {"X-Sentinel-Key": "test-key-for-pytest"}
@@ -80,6 +81,7 @@ def default_app_state(mock_ai_provider):
                 ai_provider=app.state.ai_provider,
                 injection_filter=app.state.injection_filter,
                 output_scanner=app.state.output_scanner,
+                recall=Recall(vault=app.state.vault),
             )
             return await current.process(req)
 
@@ -109,6 +111,10 @@ def default_app_state(mock_ai_provider):
         @property
         def classify(self):
             return getattr(app.state, "classify", None)
+
+        @property
+        def recall(self):
+            return Recall(vault=app.state.vault)
 
     app.state.route_ctx = _LazyRouteCtx()
 
