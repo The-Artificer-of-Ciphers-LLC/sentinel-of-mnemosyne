@@ -4,7 +4,7 @@ from fastapi import APIRouter, Path, Request
 from starlette.responses import JSONResponse
 
 from app.runtime_config import runtime_config_from_settings
-from app.services.recall import MessageRequest
+from app.services.message_processing import MessageRequest
 from app.services.runtime_probe import probe_runtime
 from app.state import get_route_context
 

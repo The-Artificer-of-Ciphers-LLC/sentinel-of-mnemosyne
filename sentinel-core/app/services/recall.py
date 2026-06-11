@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.vault import Vault
+    from app.services.message_processing import MessageRequest
 
 logger = logging.getLogger(__name__)
 
@@ -179,20 +180,11 @@ class RecallConfig:
     """Maximum number of warm-tier results to read and return."""
 
 
-# ---------------------------------------------------------------------------
-# Re-export MessageRequest so callers can do
-#   from app.services.recall import MessageRequest
-# without going through message_processing directly.
-# ---------------------------------------------------------------------------
-
-from app.services.message_processing import MessageRequest  # noqa: E402
-
 __all__ = [
     "Recall",
     "RecallConfig",
     "RecalledContext",
     "SearchResult",
-    "MessageRequest",
     "SEARCH_SCORE_THRESHOLD",
     "_ContextBudget",
 ]

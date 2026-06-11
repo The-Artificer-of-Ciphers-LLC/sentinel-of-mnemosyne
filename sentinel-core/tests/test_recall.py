@@ -12,7 +12,8 @@ from __future__ import annotations
 import pytest
 
 from tests.fakes.vault import FakeVault
-from app.services.recall import Recall, RecallConfig, RecalledContext, SearchResult, MessageRequest
+from app.services.recall import Recall, RecallConfig, RecalledContext, SearchResult
+from app.services.message_processing import MessageRequest
 
 
 # ---------------------------------------------------------------------------
