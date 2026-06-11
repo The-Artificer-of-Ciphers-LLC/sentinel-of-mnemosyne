@@ -4,13 +4,13 @@ milestone: v0.5.1
 milestone_name: — The Second Brain
 status: executing
 stopped_at: Phase 40 context gathered
-last_updated: "2026-06-11T17:10:08.788Z"
-last_activity: 2026-06-11 -- Phase 40 planning complete
+last_updated: "2026-06-11T17:25:00.118Z"
+last_activity: 2026-06-11 -- Phase 40 execution started
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 6
+  completed_plans: 4
   percent: 33
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 39 — Extract the Recall Module
+**Current focus:** Phase 40 — Semantic Recall
 
 ## Current Position
 
-Phase: 40
-Plan: Not started
+Phase: 40 (Semantic Recall) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-06-11 -- Phase 40 planning complete
+Last activity: 2026-06-11 -- Phase 40 execution started
 
 ## Milestone Progress
 
@@ -110,6 +110,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 38 P06 | 599 | 2 tasks | 8 files |
 | Phase 38 P08 | 8min | 2 tasks | 1 files |
 | Phase 38-pf2e-multi-step-onboarding-dialog P09 | 18min | 3 tasks | 2 files |
+| Phase 40-semantic-recall P01 | 466 | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -163,6 +164,8 @@ Recent decisions affecting current work:
 - [Phase ?]: D-17: PlayerCancel multi-draft archive-all symmetry (38-06)
 - [Phase ?]: author_display_name plumbed end-to-end (38-06)
 - [Phase ?]: Phase 38 closeout: dialog-first UX shipped with pipe-syntax as one-shot alternative; criterion 10 RED-before-production verified by git-log timestamp comparison
+- [Phase ?]: .json-over-REST confirmed at Vault seam
+- [Phase ?]: NOMIC_DOCUMENT_PREFIX triggers one-time full re-embed
 
 ### Pending Todos
 
@@ -196,10 +199,10 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-06-11T16:26:03.811Z
+Last session: 2026-06-11T17:24:54.902Z
 Stopped at: Phase 40 context gathered
 Resume file: 
 
-.planning/phases/40-semantic-recall/40-CONTEXT.md
+None
 
 **Next Plan:** 36 Plan 01 — Wave 0 RED TDD stubs for test_npcs.py (7 test functions)
