@@ -79,6 +79,17 @@
 - [ ] **MOD-01**: PF2e module is delivered as a Docker Compose `include` (Path B reference implementation)
 - [ ] **MOD-02**: CORS middleware is added to Sentinel Core to allow Foundry browser `fetch()` calls with `X-Sentinel-Key`
 
+## Memory & Recall (v0.5.1 — The Second Brain)
+
+- [x] **MEM-01**: The Sentinel assembles recalled memory for every message through a single Recall module, and the `/context/{user_id}` endpoint uses that same module (no duplicated assembly logic)
+- [x] **MEM-02**: Recall policy — relevance threshold, namespace exclusions (including `ops/`), and per-tier context budgets — is consolidated as explicit configuration rather than inline constants
+- [ ] **MEM-03**: The Sentinel recalls relevant vault content by meaning (semantic/vector search over note embeddings), not only exact keyword matches
+- [ ] **MEM-04**: Keyword and semantic recall results are merged into one ranked recall set (hybrid retrieval)
+- [ ] **MEM-05**: Semantic recall reads embeddings from a sweeper-maintained index (no per-note HTTP read at query time) and skips notes whose embedding model no longer matches the active model
+- [ ] **MEM-06**: The recent-session window is a tunable retention policy rather than a fixed 3-turn / two-day limit
+- [ ] **MEM-07**: Sessions older than the hot window are recalled via the index instead of being dropped
+- [ ] **MEM-08**: Session data crosses the Recall interface as typed values, enabling recency-aware merging
+
 ---
 
 ## Future Requirements (deferred)
@@ -88,6 +99,8 @@
 - NPC combat tracker integration — out of scope for v0.5; belongs in a later combat module
 - Encounter builder (balanced encounter by party level) — deferred to future module milestone
 - Loot generator (non-harvest) — deferred; harvesting covers monster-specific loot
+- Persistent ANN vector index when the vault grows past ~10k notes (RetrievalStrategy adapter swap)
+- Recency-weighting formula activated on the Session summary merge (post-v0.5.1; v0.5.1 ships the typed data that enables it)
 
 ## Out of Scope
 
@@ -95,6 +108,11 @@
 - **Automated Midjourney DM** — Discord API blocks bot-to-bot DMs; prompt text output is the correct implementation
 - **Vector database** — start with Obsidian full-text search; add vectors when quality demands it (from PROJECT.md)
 - **Multi-user / multi-campaign** — personal tool; single DM campaign only
+- **Re-injecting the Sentinel's own past replies as recalled context** — the `ops/` exclusion stays; feeding the assistant's own output back creates a self-echo/hallucination loop
+- **Recency decay on stable vault notes (Self namespace, authored knowledge)** — recency weighting applies only to episodic Session summaries, never to deliberately-authored notes
+- **Persistent ANN vector index (hnswlib/faiss/sqlite-vec/chroma)** — an in-memory numpy cosine scan is sufficient at personal-vault scale; the RetrievalStrategy seam allows a later swap without architectural change
+- **Operator-tunable RecallConfig via a vault file** — v0.5.1 keeps recall config as code; vault-file tuning is deferred
+- **Cross-encoder reranking of recall results** — deferred; RRF hybrid merge is sufficient for v0.5.1
 
 ---
 
@@ -147,3 +165,11 @@ _Filled by roadmapper. Maps each REQ-ID to its implementing phase._
 | FCM-03 | 37 | PF2E Per-Player Memory |
 | FCM-04 | 37 | PF2E Per-Player Memory |
 | FCM-05 | 37 | PF2E Per-Player Memory |
+| MEM-01 | 39 | Extract the Recall Module |
+| MEM-02 | 39 | Extract the Recall Module |
+| MEM-03 | 40 | Semantic Recall |
+| MEM-04 | 40 | Semantic Recall |
+| MEM-05 | 40 | Semantic Recall |
+| MEM-06 | 41 | Typed SessionSummary + Retention |
+| MEM-07 | 41 | Typed SessionSummary + Retention |
+| MEM-08 | 41 | Typed SessionSummary + Retention |
