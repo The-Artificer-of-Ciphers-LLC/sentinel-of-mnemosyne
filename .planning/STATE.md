@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.5
-milestone_name: — The Dungeon
-status: verifying
+milestone: v0.5.1
+milestone_name: — The Second Brain
+status: planning
 stopped_at: Phase 38 UAT complete (10/10 PASS, 6 mid-UAT fixes G-01..G-06)
-last_updated: "2026-05-10T03:03:25.758Z"
-last_activity: 2026-05-09
+last_updated: "2026-06-11T13:19:54.597Z"
+last_activity: 2026-06-11 — v0.5.1 roadmap created (phases 39–41)
 progress:
-  total_phases: 11
-  completed_phases: 10
-  total_plans: 63
-  completed_plans: 63
-  percent: 100
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,17 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 38 — pf2e-multi-step-onboarding-dialog (shipped)
+**Current focus:** Phase 39 — Extract the Recall Module (v0.5.1 roadmap defined)
 
 ## Current Position
 
-Phase: 38 (pf2e-multi-step-onboarding-dialog) — ✅ COMPLETE (2026-05-10) — 10/10 UAT PASS, pushed to origin/main
-Plan: 9 of 9 ✅ — Wave 0 RED tests, Wave 1-4 implementation, Wave 5 E2E acceptance, Wave 6 closeout. 6 mid-UAT fixes (G-01..G-06): pyyaml dep, thread-on-thread, dup sends, archive ordering, trailing punctuation, numbered-list UX.
-Next: v0.6 milestone planning, OR Phase 39 (TBD)
-Prior Phase: 37 (PF2E Per-Player Memory) — ✅ COMPLETE (2026-05-07)
-Milestone: v0.5 The Dungeon — ✅ COMPLETE (10/10 phases including Phase 38)
-Status: Phase shipped — ready for next phase or milestone close
-Last activity: 2026-05-10
+Phase: 39 — Extract the Recall Module
+Plan: —
+Status: Roadmap defined; ready to plan
+Last activity: 2026-06-11 — v0.5.1 roadmap created (phases 39–41)
 
 ## Milestone Progress
 
@@ -43,6 +40,7 @@ Last activity: 2026-05-10
 | v0.4 | Functional Alpha | 04–10 | ✅ COMPLETE |
 | v0.40 | Pre-Beta Refactoring | 21–26 | ✅ COMPLETE |
 | v0.5 | The Dungeon | 28–36 | 🔜 IN PROGRESS |
+| v0.5.1 | The Second Brain | 39–41 | 🔜 IN PROGRESS |
 | v0.6 | The Practice Room | TBD | — |
 | v0.7 | The Workshop | TBD | — |
 | v0.8 | The Ledger | TBD | — |
@@ -65,6 +63,14 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | 34 | Session Notes | SES-01..03 | Phase 29 | ✅ COMPLETE (2026-04-25) |
 | 35 | Foundry VTT Event Ingest | FVT-01..03 | Phase 28 | ✅ COMPLETE (2026-04-25) |
 | 36 | Foundry NPC Pull Import | FVT-04 | Phase 30, Phase 35 | ○ Ready to execute (3 plans) |
+
+## v0.5.1 Phase Map
+
+| Phase | Name | Requirements | Depends on | Status |
+|-------|------|--------------|------------|--------|
+| 39 | Extract the Recall Module | MEM-01, MEM-02 | Phase 38 | ○ Not started |
+| 40 | Semantic Recall | MEM-03, MEM-04, MEM-05 | Phase 39 | ○ Not started |
+| 41 | Typed SessionSummary + Retention | MEM-06, MEM-07, MEM-08 | Phase 39, Phase 40 | ○ Not started |
 
 ## Performance Metrics
 
@@ -110,6 +116,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 
 - Phase 25 added: V0.40 pre-beta refactoring — eliminate duplicates (DUP-01–05), complete stubs (STUB-01–08), fix architecture contradictions (CONTRA-01–04), implement RD-01 through RD-10
 - v0.5 Phases 28–36 added: 9-phase Pathfinder 2e module roadmap (31 requirements)
+- v0.5.1 Phases 39–41 added: 3-phase Second Brain roadmap (8 requirements: MEM-01..08; ADRs 0003/0004/0005)
 
 ### Decisions
 
@@ -188,10 +195,10 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-05-10T03:03:25.752Z
+Last session: 2026-06-11T12:40:11.778Z
 Stopped at: Phase 38 UAT complete (10/10 PASS, 6 mid-UAT fixes G-01..G-06)
 Resume file: 
 
-.planning/phases/38-pf2e-multi-step-onboarding-dialog/38-UAT.md
+None
 
 **Next Plan:** 36 Plan 01 — Wave 0 RED TDD stubs for test_npcs.py (7 test functions)

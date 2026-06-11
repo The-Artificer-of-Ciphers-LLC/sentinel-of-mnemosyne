@@ -522,7 +522,7 @@ No new packages are installed in this phase. The extraction creates a new Python
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Persona path separation from hot-tier gather**
    - What we know: `"sentinel/persona.md"` is currently gathered inside `_append_hot_tier` alongside the 6 self_paths, but persona must NOT go into `RecalledContext.self_context`.
