@@ -45,6 +45,8 @@ async def debug_context(
         context_window=ctx.context_window,
         stop_sequences=None,
     )
+    if ctx.recall is None:
+        raise RuntimeError("RouteContext.recall is not configured")
     recalled = await ctx.recall.assemble(fake_req, budget=ctx.context_window)
     return JSONResponse(
         {

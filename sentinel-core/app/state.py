@@ -57,6 +57,9 @@ class RouteContext:
     embedder: Callable[[list[str]], Awaitable[list[float]]] = _missing_embedder
     module_registry: dict[str, Any] = field(default_factory=dict)
     ai_provider_name: str | None = None
+    # Always populated by build_application / initialize_startup via Recall(vault=vault).
+    # None only in test fixtures that don't exercise recall-dependent routes.
+    # Code that calls ctx.recall.assemble() must guard with _require_recall() below.
     recall: "Recall | None" = None
 
 
