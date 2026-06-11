@@ -737,11 +737,11 @@ Plans:
   3. Relevance threshold, namespace exclusion list (including `ops/`), and per-tier budget ratios are readable from `RecallConfig` rather than scattered inline constants
   4. `tests/test_recall.py` against `FakeVault` passes without going through `MessageProcessor` or the AI provider
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 Plans:
 **Wave 1**
 
-- [ ] 39-01-PLAN.md — Wave 1: create app/services/recall.py (SearchResult, RecalledContext, RecallConfig, Recall) + tests/test_recall.py against FakeVault (MEM-02, success criterion #4)
+- [x] 39-01-PLAN.md — Wave 1: create app/services/recall.py (SearchResult, RecalledContext, RecallConfig, Recall) + tests/test_recall.py against FakeVault (MEM-02, success criterion #4)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
