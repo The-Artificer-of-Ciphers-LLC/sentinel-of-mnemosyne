@@ -49,11 +49,23 @@ message processing.
 _Avoid_: deleted/, archive/.
 
 **Hot tier**:
-Context loaded into every message: **Sentinel persona** (system role), **Self namespace** files
-(user role), recent **Session summaries**. Read in parallel via `asyncio.gather`.
+Context loaded into every message: the **Sentinel persona** (system role) plus the **recalled memory** —
+**Self namespace** files (user role) and recent **Session summaries**. The persona is operator-curated
+identity assembled during prompt construction, *not* recalled memory; the **Recall** module owns only the
+memory part (Self namespace + Session summaries). Read in parallel via `asyncio.gather`.
 
 **Warm tier**:
-Context loaded conditionally: vault search results scored above a relevance threshold.
+Context loaded conditionally: **Vault** search results scored above a relevance threshold. Owned by the
+**Recall** module.
+
+**Recall**:
+The module that assembles the Sentinel's **recalled memory** for a single message — the **Hot tier** memory
+(**Self namespace** + recent **Session summaries**) and the **Warm tier** (**Vault** search) — and returns it
+as a `RecalledContext` value. Owns the retrieval policy: relevance thresholds, namespace exclusions, the
+recent-session window, and the per-tier context budgets. Does *not* own prompt presentation — the **Sentinel
+persona**, the prompt-injection wrapping, and the final token-ceiling check stay in message-prompt assembly.
+Interface: `Recall.assemble(request, budget) -> RecalledContext`.
+_Avoid_: retriever, context manager, memory service.
 
 **Session**:
 One user message + one Sentinel response. Bounded by a single `POST /message` request.
