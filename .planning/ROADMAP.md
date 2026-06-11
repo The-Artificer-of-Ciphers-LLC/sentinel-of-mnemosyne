@@ -737,7 +737,7 @@ Plans:
   3. Relevance threshold, namespace exclusion list (including `ops/`), and per-tier budget ratios are readable from `RecallConfig` rather than scattered inline constants
   4. `tests/test_recall.py` against `FakeVault` passes without going through `MessageProcessor` or the AI provider
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 Plans:
 **Wave 1**
 
@@ -745,7 +745,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 39-02-PLAN.md — Wave 2: trim MessageProcessor to delegate to Recall.assemble() (persona/injection/format/budget retained per D-04) + DI wiring (AppGraph, build_application, RouteContext) (MEM-01, MEM-02)
+- [x] 39-02-PLAN.md — Wave 2: trim MessageProcessor to delegate to Recall.assemble() (persona/injection/format/budget retained per D-04) + DI wiring (AppGraph, build_application, RouteContext) (MEM-01, MEM-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
