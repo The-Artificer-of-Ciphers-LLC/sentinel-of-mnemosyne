@@ -14,7 +14,7 @@ import json
 import pytest
 
 from tests.fakes.vault import FakeVault
-from app.services.recall import Recall, RecallConfig, RecalledContext, SearchResult
+from app.services.recall import Recall, RecallConfig, RecalledContext, SearchResult, SessionSummary, RetentionPolicy, recency_weight
 from app.services.message_processing import MessageRequest
 
 # ---------------------------------------------------------------------------
@@ -1262,3 +1262,87 @@ async def test_semantic_all_stale_entries_returns_empty_list():
     assert results == [], (
         f"all-stale index must return [] cleanly (no exception); got {results}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 41 Plan 01 — Task 1 RED: recency_weight curve + value-type construction
+# ---------------------------------------------------------------------------
+
+
+def test_recency_weight_curve():
+    """recency_weight: today=1.0, 7d=0.5, 14d=0.25, future clamped to 1.0.
+
+    Pins the exponential decay curve with explicit half_life_days=7.0 so
+    the constant is captured in the test, not assumed from the default.
+    Uses pytest.approx with tight abs tolerance for float comparisons.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime(2026, 6, 12, 12, 0, 0, tzinfo=timezone.utc)
+
+    # Same-day date → weight = 1.0
+    assert recency_weight("2026-06-12", now=now, half_life_days=7.0) == pytest.approx(1.0, abs=1e-9)
+
+    # Exactly 7 days old → weight = 0.5 ** (7/7) = 0.5
+    assert recency_weight("2026-06-05", now=now, half_life_days=7.0) == pytest.approx(0.5, abs=1e-9)
+
+    # Exactly 14 days old → weight = 0.5 ** (14/7) = 0.25
+    assert recency_weight("2026-05-29", now=now, half_life_days=7.0) == pytest.approx(0.25, abs=1e-9)
+
+    # Future date (1 day ahead) → age floored at 0 → weight = 1.0 (clamped)
+    assert recency_weight("2026-06-13", now=now, half_life_days=7.0) == pytest.approx(1.0, abs=1e-9)
+
+
+def test_recency_weight_failopen_on_bad_date():
+    """recency_weight: unparseable string and None both return 1.0 (fail-open).
+
+    A hostile or malformed date from vault content must never raise — it
+    must silently return 1.0 so the recall path is uninterrupted (T-41-01).
+    """
+    from datetime import datetime, timezone
+
+    now = datetime(2026, 6, 12, 12, 0, 0, tzinfo=timezone.utc)
+
+    # Unparseable date string → 1.0
+    assert recency_weight("not-a-date", now=now, half_life_days=7.0) == pytest.approx(1.0, abs=1e-9)
+
+    # None date (non-string) → 1.0
+    assert recency_weight(None, now=now, half_life_days=7.0) == pytest.approx(1.0, abs=1e-9)
+
+
+def test_session_summary_is_frozen_value():
+    """SessionSummary: constructs with all 7 fields; field reassignment raises FrozenInstanceError."""
+    import dataclasses
+
+    summary = SessionSummary(
+        date="2026-06-12",
+        user_id="trekkie",
+        time="12-00-00",
+        user_msg="Hello Sentinel",
+        sentinel_msg="Hello user",
+        path="ops/sessions/2026-06-12/trekkie-12-00-00.md",
+        body="# Session\n## User\nHello Sentinel\n## Sentinel\nHello user\n",
+    )
+
+    assert summary.date == "2026-06-12"
+    assert summary.user_id == "trekkie"
+    assert summary.time == "12-00-00"
+    assert summary.user_msg == "Hello Sentinel"
+    assert summary.sentinel_msg == "Hello user"
+    assert summary.path == "ops/sessions/2026-06-12/trekkie-12-00-00.md"
+    assert "Hello Sentinel" in summary.body
+
+    # Must be frozen — field assignment must raise
+    with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
+        summary.date = "2099-01-01"  # type: ignore[misc]
+
+
+def test_retention_policy_defaults():
+    """RetentionPolicy(): defaults hot_limit=3, hot_window_days=2; explicit values override."""
+    policy = RetentionPolicy()
+    assert policy.hot_limit == 3
+    assert policy.hot_window_days == 2
+
+    custom = RetentionPolicy(hot_limit=5, hot_window_days=7)
+    assert custom.hot_limit == 5
+    assert custom.hot_window_days == 7
