@@ -265,6 +265,99 @@ async def discover_active_model(
     return _prefixed(chosen)
 
 
+async def probe_classifier_model_ready(
+    http_client: httpx.AsyncClient,
+    lmstudio_base_url: str,
+    *,
+    model_name: str,
+    model_preferred: str | None = None,
+) -> bool:
+    """Return True iff a genuinely-loaded model SCORES for the 'structured' task kind.
+
+    This probe mirrors the EXACT model-selection path that ``classify_note`` uses via
+    ``_resolve_model_for_classification``:
+    - It discovers loaded models from the same ``/v1/models`` endpoint.
+    - It builds the same ``preferences`` dict (``{"structured": model_preferred or model_name}``).
+    - It calls ``select_model("structured", loaded, preferences=..., default=None)`` with
+      ``default=None`` so that rule 3 (``default in loaded``) and rule 5 (bare default
+      even when nothing is loaded) CANNOT fire — a defaulted fallback selection is treated
+      as NOT ready (fail-closed).
+
+    WHY a defaulted/non-scored selection is treated as NOT ready:
+    ``select_model`` can return a model via rule 4 (``loaded[0]`` last-resort) even when no
+    model genuinely scores for the ``"structured"`` task kind (i.e. ``_score("structured",
+    id) == 0``). ``classify_note`` would still run on such a model and emit degraded
+    classifications. This probe gates destructive sweeps on the ACTUAL classifier readiness —
+    not on whether a model string can be resolved. A degraded classifier must never drive
+    vault mutations. (Round-2 review concern 4.)
+
+    Fail-closed contract:
+    - Empty ``loaded`` → False (rule-5 default is NOT ready).
+    - ``loaded`` but no model scores for ``"structured"`` → False (rule-4 last-resort is NOT ready).
+    - Any HTTP, JSON, or unexpected exception → False (never raises).
+
+    260502: placed next to ``probe_embedding_model_loaded`` so both readiness probes
+    live in one module.
+    """
+    try:
+        # Discover loaded models via /v1/models (same endpoint _resolve_model_for_classification uses)
+        # Use the provided http_client directly (like probe_embedding_model_loaded does) so
+        # that test fakes and production clients are honored, and avoid the module-level cache.
+        api_base_v1 = lmstudio_base_url.rstrip("/")
+        if not api_base_v1.endswith("/v1"):
+            api_base_v1 = f"{api_base_v1}/v1"
+        url = f"{api_base_v1}/models"
+
+        try:
+            resp = await http_client.get(url, timeout=5.0)
+            resp.raise_for_status()
+            data = resp.json()
+            loaded: list[str] = [
+                entry.get("id")
+                for entry in data.get("data", [])
+                if isinstance(entry, dict) and isinstance(entry.get("id"), str) and entry.get("id")
+            ]
+        except Exception as exc:
+            logger.debug("Classifier probe model discovery failed (%s): %s", url, exc)
+            loaded = []
+
+        if not loaded:
+            # No models loaded — rule-5 defaulted selection is NOT ready (fail-closed)
+            return False
+
+        # Build preferences exactly as _resolve_model_for_classification does
+        preferences: dict[str, str] = {}
+        preferred = model_preferred or model_name
+        if preferred:
+            preferences["structured"] = preferred
+
+        # Call select_model with default=None so rules 3/5 (defaulted fallbacks) CANNOT fire.
+        # If nothing scores via rules 1/2 and there's no default, ModelSelectorError is raised.
+        try:
+            selected_id = select_model(
+                "structured",
+                loaded,
+                preferences=preferences,
+                default=None,
+            )
+        except ModelSelectorError:
+            # Nothing loaded and no default → not ready
+            return False
+
+        # Guard against rule-4 last-resort: the returned model is only "ready" if it
+        # genuinely scores for the structured kind. A model returned via rule 4
+        # (loaded[0] fallback) may have _score("structured", id) == 0 — that means
+        # no function calling support, and classify_note would emit degraded output.
+        if _score("structured", selected_id) <= 0:
+            return False
+
+        return True
+
+    except Exception:
+        # Fail closed — a readiness probe must never crash the caller
+        return False
+
+
 async def probe_embedding_model_loaded(
     http_client: httpx.AsyncClient,
     lmstudio_base_url: str,
