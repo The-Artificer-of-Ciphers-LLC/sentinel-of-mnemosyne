@@ -16,6 +16,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Awaitable, Callable, Protocol, runtime_checkable
 
 import numpy as np
@@ -130,6 +131,40 @@ class SearchResult:
 
 
 @dataclass(frozen=True)
+class SessionSummary:
+    """Typed value representing one persisted session note (MEM-08).
+
+    ``date`` is YYYY-MM-DD; ``time`` is HH-MM-SS (matching the vault path slug).
+    ``body`` is the full raw markdown of the session note — the back-compat carrier
+    for Plans 02–04 which reparse it into structured fields.
+    """
+
+    date: str
+    user_id: str
+    time: str
+    user_msg: str
+    sentinel_msg: str
+    path: str
+    body: str
+
+
+@dataclass(frozen=True)
+class RetentionPolicy:
+    """Typed injection value for hot-tier session retention (MEM-06, OQ2, OQ3).
+
+    Replaces ``RecallConfig.recent_session_limit`` (its removal is staged to Plan 04
+    where its consumer ``_hot_sessions`` is rewired in lockstep).  Also replaces the
+    inline today+yesterday window hardcoded at ``vault.py:288-291`` (Plan 02 wiring).
+    """
+
+    hot_limit: int = 3
+    """Maximum number of recent sessions to inject into the hot tier."""
+
+    hot_window_days: int = 2
+    """Session age window in days (today + N-1 prior days qualify as 'hot')."""
+
+
+@dataclass(frozen=True)
 class RecalledContext:
     """Pure value type returned by ``Recall.assemble()``.
 
@@ -230,6 +265,9 @@ __all__ = [
     "KeywordRecall",
     "SemanticRecall",
     "SearchResult",
+    "SessionSummary",
+    "RetentionPolicy",
+    "recency_weight",
     "SEARCH_SCORE_THRESHOLD",
     "NOMIC_QUERY_PREFIX",
 ]
@@ -556,6 +594,41 @@ class SemanticRecall:
 
         # Return stub SearchResults with body="" — Recall reads bodies post-RRF (A5)
         return [SearchResult(path=path, score=sim, body="") for sim, path in top]
+
+
+# ---------------------------------------------------------------------------
+# recency_weight helper — exponential decay on session date (MEM-09)
+# ---------------------------------------------------------------------------
+
+
+def recency_weight(
+    date_str: str,
+    *,
+    now: datetime,
+    half_life_days: float = 7.0,
+) -> float:
+    """Return an exponential recency weight in (0.0, 1.0] for a YYYY-MM-DD date string.
+
+    Curve: ``0.5 ** (age_days / half_life_days)`` (halves at each half-life).
+    Recency is a blend multiplier — it does NOT hard-override relevance (D-01).
+
+    Fail-open contract (T-41-01): any unparseable or non-string ``date_str``
+    returns 1.0 so a hostile or malformed vault date cannot raise into the
+    recall path.
+
+    Future dates (``date_str`` > ``now``) are clamped to weight 1.0 (age floored
+    at 0 prevents weights above 1.0, T-41-02).
+    """
+    try:
+        d = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return 1.0
+    # Normalise `now` to midnight UTC so date-equality always yields age_days=0.
+    # Session dates are YYYY-MM-DD (day granularity); comparing raw datetimes would
+    # give a fractional-day offset depending on the time of the `now` argument.
+    now_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+    age_days = max(0.0, (now_midnight - d).total_seconds() / 86400.0)
+    return 0.5 ** (age_days / half_life_days)
 
 
 # ---------------------------------------------------------------------------
