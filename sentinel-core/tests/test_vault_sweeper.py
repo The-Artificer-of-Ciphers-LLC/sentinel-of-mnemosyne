@@ -1400,3 +1400,152 @@ async def test_run_sweep_protected_path_error_continues_and_processes_others():
         f"other misplaced note must still be relocated; topic_moves={report.topic_moves}"
     )
     assert report.status == "complete", f"sweep must return 'complete' after ProtectedPathError; got {report.status}"
+
+
+# ---------------------------------------------------------------------------
+# Phase 40 Plan 07 — Task 1: case-insensitive extension-aware index body
+# encode/decode + single-source-of-truth constant tests (RED phase)
+# ---------------------------------------------------------------------------
+
+
+def test_encode_index_body_json_extension_returns_raw_json():
+    """_encode_index_body with a .json path returns the raw JSON string (no fence)."""
+    from app.services.vault_sweeper import _encode_index_body
+
+    idx = {"notes/a.md": {"embedding_b64": "abc", "embedding_model": "m", "content_hash": "h"}}
+    body = _encode_index_body(idx, "ops/sweeps/embedding-index.json")
+    parsed = _json.loads(body)
+    assert parsed == idx, "raw JSON body must round-trip for .json extension"
+    # Must NOT contain a fenced code block
+    assert "```" not in body, ".json body must not contain a fenced code block"
+
+
+def test_encode_index_body_md_extension_returns_fenced_json():
+    """_encode_index_body with a .md path wraps the JSON in a fenced code block."""
+    from app.services.vault_sweeper import _encode_index_body
+
+    idx = {"notes/b.md": {"embedding_b64": "xyz", "embedding_model": "m", "content_hash": "h2"}}
+    body = _encode_index_body(idx, "ops/sweeps/embedding-index.md")
+    # Body must contain a fenced code block
+    assert "```" in body, ".md body must contain a fenced code block"
+    # Must NOT be directly parseable as JSON (it's wrapped)
+    try:
+        _json.loads(body)
+        assert False, ".md body must NOT be raw JSON (it should be fenced)"
+    except _json.JSONDecodeError:
+        pass  # expected
+
+
+def test_encode_index_body_md_uppercase_extension_still_fences():
+    """Case-insensitivity: _encode_index_body with .MD still produces a fenced block."""
+    from app.services.vault_sweeper import _encode_index_body
+
+    idx = {"notes/c.md": {"embedding_b64": "q", "embedding_model": "m", "content_hash": "h3"}}
+    body = _encode_index_body(idx, "ops/sweeps/embedding-index.MD")
+    assert "```" in body, ".MD (uppercase) must still produce a fenced code block"
+
+
+def test_encode_index_body_json_uppercase_extension_returns_raw():
+    """Case-insensitivity: _encode_index_body with .JSON returns raw JSON."""
+    from app.services.vault_sweeper import _encode_index_body
+
+    idx = {"notes/d.md": {"embedding_b64": "r", "embedding_model": "m", "content_hash": "h4"}}
+    body = _encode_index_body(idx, "ops/sweeps/embedding-index.JSON")
+    parsed = _json.loads(body)
+    assert parsed == idx, "raw JSON must round-trip for .JSON (uppercase) extension"
+    assert "```" not in body, ".JSON body must not contain a fenced code block"
+
+
+def test_decode_index_body_json_extension_parses_raw_json():
+    """_decode_index_body with .json path parses raw JSON."""
+    from app.services.vault_sweeper import _decode_index_body
+
+    idx = {"notes/a.md": {"embedding_b64": "abc", "embedding_model": "m", "content_hash": "h"}}
+    raw = _json.dumps(idx, ensure_ascii=False)
+    result = _decode_index_body(raw, "ops/sweeps/embedding-index.json")
+    assert result == idx, "decoded .json body must equal original dict"
+
+
+def test_decode_index_body_md_extension_strips_fence_and_parses():
+    """_decode_index_body with .md path extracts the fenced JSON and parses it."""
+    from app.services.vault_sweeper import _decode_index_body
+
+    idx = {"notes/b.md": {"embedding_b64": "xyz", "embedding_model": "m", "content_hash": "h2"}}
+    inner = _json.dumps(idx, ensure_ascii=False)
+    fenced = f"```json\n{inner}\n```\n"
+    result = _decode_index_body(fenced, "ops/sweeps/embedding-index.md")
+    assert result == idx, "decoded .md fenced body must equal original dict"
+
+
+def test_decode_index_body_md_uppercase_extension_strips_fence():
+    """Case-insensitivity: _decode_index_body with .MD still strips the fence."""
+    from app.services.vault_sweeper import _decode_index_body
+
+    idx = {"notes/c.md": {"embedding_b64": "q", "embedding_model": "m", "content_hash": "h3"}}
+    inner = _json.dumps(idx, ensure_ascii=False)
+    fenced = f"```json\n{inner}\n```\n"
+    result = _decode_index_body(fenced, "ops/sweeps/embedding-index.MD")
+    assert result == idx, "decoded .MD (uppercase) fenced body must equal original dict"
+
+
+def test_decode_index_body_md_no_fence_returns_empty():
+    """_decode_index_body with .md path and no parseable fenced JSON returns {} (self-healing)."""
+    from app.services.vault_sweeper import _decode_index_body
+
+    result = _decode_index_body("# This is a note\n\nSome content here.\n", "notes/no-json.md")
+    assert result == {}, "no parseable fenced JSON in .md body must yield {} (self-healing)"
+
+
+def test_decode_index_body_md_no_fence_no_crash():
+    """_decode_index_body with .md path and malformed content does not crash."""
+    from app.services.vault_sweeper import _decode_index_body
+
+    result = _decode_index_body("```\nnot json at all\n```\n", "ops/sweeps/embedding-index.md")
+    assert result == {}, "malformed fenced .md body must yield {} (self-healing), not crash"
+
+
+def test_json_extension_round_trip_write_read():
+    """Full round-trip: _encode_index_body → _decode_index_body for .json path."""
+    from app.services.vault_sweeper import _encode_index_body, _decode_index_body
+
+    idx = {
+        "notes/alpha.md": {"embedding_b64": "AACAPw==", "embedding_model": "m", "content_hash": "c1"},
+        "notes/beta.md": {"embedding_b64": "AAAAQD8=", "embedding_model": "m", "content_hash": "c2"},
+    }
+    path = "ops/sweeps/embedding-index.json"
+    body = _encode_index_body(idx, path)
+    result = _decode_index_body(body, path)
+    assert result == idx, ".json round-trip must yield identical dict"
+
+
+def test_md_extension_round_trip_write_read():
+    """Full round-trip: _encode_index_body → _decode_index_body for .md path.
+
+    The written body must contain a fenced code block, and the reader must
+    parse it back to the original dict.
+    """
+    from app.services.vault_sweeper import _encode_index_body, _decode_index_body
+
+    idx = {
+        "notes/alpha.md": {"embedding_b64": "AACAPw==", "embedding_model": "m", "content_hash": "c1"},
+        "notes/beta.md": {"embedding_b64": "AAAAQD8=", "embedding_model": "m", "content_hash": "c2"},
+    }
+    path = "ops/sweeps/embedding-index.md"
+    body = _encode_index_body(idx, path)
+    # Written body must contain a fenced block
+    assert "```" in body, ".md body must contain a fenced code block"
+    # Round-trip
+    result = _decode_index_body(body, path)
+    assert result == idx, ".md round-trip must yield identical dict"
+
+
+def test_md_uppercase_extension_round_trip():
+    """Case-insensitive round-trip: .MD extension produces fenced body that round-trips."""
+    from app.services.vault_sweeper import _encode_index_body, _decode_index_body
+
+    idx = {"notes/g.md": {"embedding_b64": "q", "embedding_model": "m", "content_hash": "h"}}
+    path = "ops/sweeps/embedding-index.MD"
+    body = _encode_index_body(idx, path)
+    assert "```" in body, ".MD (uppercase) body must contain a fenced code block"
+    result = _decode_index_body(body, path)
+    assert result == idx, ".MD round-trip must yield identical dict"

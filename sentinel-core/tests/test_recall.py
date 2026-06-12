@@ -949,3 +949,316 @@ async def test_semantic_resilient_to_corrupt_and_wrong_dim_entries():
     assert "notes/wrongdim.md" not in paths, (
         "Wrong-dimension entry must be skipped, not raise"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 40 Plan 07 — Task 1 RED: single-source-of-truth constant + recall
+# round-trip tests
+# ---------------------------------------------------------------------------
+
+
+def test_index_path_single_source_constant_equality():
+    """EMBEDDING_INDEX_PATH (vault_sweeper) == RecallConfig().index_path.
+
+    RecallConfig.index_path must DERIVE FROM (import) EMBEDDING_INDEX_PATH.
+    This test guards the derivation: if a future edit reintroduces a literal
+    in recall.py, this fails CI immediately.
+    """
+    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH
+    from app.services.recall import RecallConfig
+
+    assert EMBEDDING_INDEX_PATH == RecallConfig().index_path, (
+        "RecallConfig.index_path must equal EMBEDDING_INDEX_PATH (single physical source); "
+        f"vault_sweeper={EMBEDDING_INDEX_PATH!r}, recall={RecallConfig().index_path!r}"
+    )
+
+
+def test_recall_index_path_no_duplicate_literal():
+    """recall.py must NOT re-state the literal path string.
+
+    The literal 'ops/sweeps/embedding-index' must appear in EXACTLY one
+    module — vault_sweeper.py (or, if a leaf module was created, that module).
+    It must NOT appear in recall.py itself.
+    """
+    import pathlib
+
+    recall_src = pathlib.Path(__file__).parent.parent / "app" / "services" / "recall.py"
+    text = recall_src.read_text(encoding="utf-8")
+    # The literal path fragment used in EMBEDDING_INDEX_PATH
+    assert "ops/sweeps/embedding-index" not in text, (
+        "recall.py must NOT contain the literal index path — it must import "
+        "EMBEDDING_INDEX_PATH from vault_sweeper (single physical source of truth)"
+    )
+
+
+def test_recall_imports_embedding_index_path():
+    """recall.py must import EMBEDDING_INDEX_PATH from vault_sweeper (or a leaf module).
+
+    The field default must be the imported constant, not a re-stated literal.
+    """
+    import pathlib
+
+    recall_src = pathlib.Path(__file__).parent.parent / "app" / "services" / "recall.py"
+    text = recall_src.read_text(encoding="utf-8")
+    assert "EMBEDDING_INDEX_PATH" in text, (
+        "recall.py must reference EMBEDDING_INDEX_PATH (imported from vault_sweeper)"
+    )
+
+
+async def test_recall_json_extension_round_trip():
+    """Recall round-trip for .json path: sweeper writes raw JSON, recall loader parses it.
+
+    Seeds a RecallConfig with index_path ending in .json, seeds the index in
+    FakeVault as raw JSON (what _emit_embedding_index writes for .json), and
+    verifies SemanticRecall loads it into a dict equal to the original.
+    """
+    import time
+    from app.services.recall import SemanticRecall
+
+    model = "test-model-v1"
+    note_a_vec = [1.0, 0.0, 0.0]
+    index_path = "ops/sweeps/test-index.json"
+
+    config = RecallConfig(
+        index_path=index_path,
+        index_ttl_seconds=0.0,  # always reload
+    )
+    idx = make_fixture_index(["notes/a.md"], [note_a_vec], model)
+    raw_body = json.dumps(idx, ensure_ascii=False)  # what writer emits for .json
+
+    vault = FakeVault()
+    vault.notes[index_path] = raw_body
+
+    semantic = SemanticRecall(
+        vault=vault, embed_fn=fake_embedder, active_model=model, config=config
+    )
+    await semantic._load_index_if_stale()
+
+    assert semantic._index == idx, (
+        f".json round-trip failed: expected {idx!r}, got {semantic._index!r}"
+    )
+
+
+async def test_recall_md_extension_round_trip():
+    """Recall round-trip for .md path: sweeper writes fenced JSON, recall loader parses it.
+
+    Seeds a RecallConfig with index_path ending in .md, seeds the index in
+    FakeVault as a markdown fenced-JSON body (what _encode_index_body writes for .md),
+    and verifies SemanticRecall loads it via _decode_index_body into a dict equal
+    to the original.
+    """
+    from app.services.recall import SemanticRecall
+    from app.services.vault_sweeper import _encode_index_body
+
+    model = "test-model-v1"
+    note_a_vec = [1.0, 0.0, 0.0]
+    index_path = "ops/sweeps/test-index.md"
+
+    config = RecallConfig(
+        index_path=index_path,
+        index_ttl_seconds=0.0,
+    )
+    idx = make_fixture_index(["notes/a.md"], [note_a_vec], model)
+    fenced_body = _encode_index_body(idx, index_path)
+
+    vault = FakeVault()
+    vault.notes[index_path] = fenced_body
+
+    semantic = SemanticRecall(
+        vault=vault, embed_fn=fake_embedder, active_model=model, config=config
+    )
+    await semantic._load_index_if_stale()
+
+    assert semantic._index == idx, (
+        f".md round-trip failed: expected {idx!r}, got {semantic._index!r}"
+    )
+
+
+async def test_recall_md_extension_body_contains_fenced_block():
+    """The .md body written by _encode_index_body contains a fenced code block.
+
+    Verifies that the writer actually fences the JSON (not writes raw JSON)
+    when the path ends in .md, so the Obsidian REST API accepts it as a note.
+    """
+    from app.services.vault_sweeper import _encode_index_body
+
+    idx = make_fixture_index(["notes/a.md"], [[1.0, 0.0, 0.0]], "test-model-v1")
+    body = _encode_index_body(idx, "ops/sweeps/embedding-index.md")
+    assert "```" in body, (
+        ".md body must contain a fenced code block (Obsidian REST API requires note format)"
+    )
+    # Must not be directly parseable as JSON
+    try:
+        json.loads(body)
+        assert False, ".md body must NOT be raw JSON — it must be fenced markdown"
+    except json.JSONDecodeError:
+        pass
+
+
+async def test_recall_md_uppercase_extension_round_trip():
+    """Case-insensitive .MD round-trip: writer fences, recall loader parses."""
+    from app.services.recall import SemanticRecall
+    from app.services.vault_sweeper import _encode_index_body
+
+    model = "test-model-v1"
+    note_a_vec = [1.0, 0.0, 0.0]
+    index_path = "ops/sweeps/test-index.MD"
+
+    config = RecallConfig(
+        index_path=index_path,
+        index_ttl_seconds=0.0,
+    )
+    idx = make_fixture_index(["notes/a.md"], [note_a_vec], model)
+    fenced_body = _encode_index_body(idx, index_path)
+
+    assert "```" in fenced_body, ".MD (uppercase) body must contain a fenced code block"
+
+    vault = FakeVault()
+    vault.notes[index_path] = fenced_body
+
+    semantic = SemanticRecall(
+        vault=vault, embed_fn=fake_embedder, active_model=model, config=config
+    )
+    await semantic._load_index_if_stale()
+
+    assert semantic._index == idx, (
+        f".MD (uppercase) round-trip failed: expected {idx!r}, got {semantic._index!r}"
+    )
+
+
+async def test_recall_md_body_no_fenced_json_yields_empty():
+    """_load_index_if_stale with .md path and no parseable fenced JSON returns {} (self-healing)."""
+    from app.services.recall import SemanticRecall
+
+    index_path = "ops/sweeps/test-index.md"
+    config = RecallConfig(index_path=index_path, index_ttl_seconds=0.0)
+
+    vault = FakeVault()
+    vault.notes[index_path] = "# This is a note\n\nSome content with no fenced JSON.\n"
+
+    semantic = SemanticRecall(
+        vault=vault, embed_fn=fake_embedder, active_model="m", config=config
+    )
+    await semantic._load_index_if_stale()
+
+    assert semantic._index == {}, (
+        "no parseable fenced JSON in .md body must yield {} (self-healing)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 40 Plan 07 — Task 2 RED: SemanticRecall stale-skip tests
+# ---------------------------------------------------------------------------
+
+
+async def test_semantic_stale_entry_skipped_non_stale_returned():
+    """Stale-skip (round-3 / MEM-05): one stale=True entry + one non-stale entry.
+
+    Both match the active model and would score above the cosine floor.
+    SemanticRecall.search must return ONLY the non-stale entry's path.
+    """
+    from app.services.recall import SemanticRecall
+
+    model = "test-model-v1"
+    # Both vectors are close to the query vector from fake_embedder [0.9, 0.436, 0.0]
+    good_vec = [1.0, 0.0, 0.0]   # cosine ≈ 0.90
+    stale_vec = [0.95, 0.31, 0.0]  # cosine ≈ 0.96 — would score HIGHER if not skipped
+
+    index = {
+        "notes/good.md": {
+            "embedding_b64": encode_embedding(good_vec),
+            "embedding_model": model,
+            "content_hash": "c1",
+            # No stale key — non-stale
+        },
+        "notes/stale.md": {
+            "embedding_b64": encode_embedding(stale_vec),
+            "embedding_model": model,
+            "content_hash": "c2",
+            "stale": True,  # 40-04 degraded-index invariant
+        },
+    }
+    config = RecallConfig(semantic_cosine_floor=0.50)
+    vault = FakeVault()
+    vault.notes[config.index_path] = json.dumps(index)
+
+    semantic = SemanticRecall(vault=vault, embed_fn=fake_embedder, active_model=model, config=config)
+    results = await semantic.search("test query", budget=10)
+    paths = [r.path for r in results]
+
+    assert "notes/good.md" in paths, (
+        f"non-stale entry must be returned; got paths={paths}"
+    )
+    assert "notes/stale.md" not in paths, (
+        "stale=True entry must be SKIPPED even though its vector would score above the floor"
+    )
+
+
+async def test_semantic_stale_false_entry_participates_normally():
+    """Non-stale entries (stale: False or missing stale key) participate in scoring normally."""
+    from app.services.recall import SemanticRecall
+
+    model = "test-model-v1"
+    good_vec = [1.0, 0.0, 0.0]
+
+    index = {
+        "notes/no-stale-key.md": {
+            "embedding_b64": encode_embedding(good_vec),
+            "embedding_model": model,
+            "content_hash": "c1",
+            # No stale key at all
+        },
+        "notes/stale-false.md": {
+            "embedding_b64": encode_embedding(good_vec),
+            "embedding_model": model,
+            "content_hash": "c2",
+            "stale": False,  # explicitly non-stale
+        },
+    }
+    config = RecallConfig(semantic_cosine_floor=0.50)
+    vault = FakeVault()
+    vault.notes[config.index_path] = json.dumps(index)
+
+    semantic = SemanticRecall(vault=vault, embed_fn=fake_embedder, active_model=model, config=config)
+    results = await semantic.search("test query", budget=10)
+    paths = [r.path for r in results]
+
+    assert "notes/no-stale-key.md" in paths, (
+        "entry with no stale key must be treated as non-stale and returned"
+    )
+    assert "notes/stale-false.md" in paths, (
+        "entry with stale=False must be treated as non-stale and returned"
+    )
+
+
+async def test_semantic_all_stale_entries_returns_empty_list():
+    """All-stale index degrades to [] cleanly — no exception, empty result."""
+    from app.services.recall import SemanticRecall
+
+    model = "test-model-v1"
+    stale_vec = [1.0, 0.0, 0.0]
+
+    index = {
+        "notes/stale-a.md": {
+            "embedding_b64": encode_embedding(stale_vec),
+            "embedding_model": model,
+            "content_hash": "c1",
+            "stale": True,
+        },
+        "notes/stale-b.md": {
+            "embedding_b64": encode_embedding(stale_vec),
+            "embedding_model": model,
+            "content_hash": "c2",
+            "stale": True,
+        },
+    }
+    config = RecallConfig(semantic_cosine_floor=0.50)
+    vault = FakeVault()
+    vault.notes[config.index_path] = json.dumps(index)
+
+    semantic = SemanticRecall(vault=vault, embed_fn=fake_embedder, active_model=model, config=config)
+    results = await semantic.search("test query", budget=10)
+
+    assert results == [], (
+        f"all-stale index must return [] cleanly (no exception); got {results}"
+    )
