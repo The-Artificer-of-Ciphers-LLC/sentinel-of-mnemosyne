@@ -807,7 +807,7 @@ Plans:
   4. The `ops/` exclusion in `RecallConfig` is not relaxed — older sessions are reached via conversation notes filed outside `ops/`, not by widening the exclusion list
   5. Recalled sessions are ordered/weighted by recency — a more recent session ranks above an older one for the same relevance — via a recency weighting applied to `SessionSummary.date` in the merge; the weighting affects only episodic sessions, never Self-namespace notes
 
-**Plans:** 2/5 plans executed
+**Plans:** 3/5 plans executed
 Plans:
 **Wave 1**
 
@@ -816,7 +816,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 41-02-PLAN.md — Bounded Vault reopen: retype get_recent_sessions -> list[SessionSummary] with policy, adapter-edge parser, FakeVault lockstep
-- [ ] 41-03-PLAN.md — Env-overridable RetentionPolicy Settings + composition-root wiring (RETENTION_HOT_LIMIT / RETENTION_HOT_WINDOW_DAYS)
+- [x] 41-03-PLAN.md — Env-overridable RetentionPolicy Settings + composition-root wiring (RETENTION_HOT_LIMIT / RETENTION_HOT_WINDOW_DAYS)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
