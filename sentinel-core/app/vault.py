@@ -236,9 +236,11 @@ def _parse_session_summary(path: str, raw: str) -> SessionSummary | None:
     user_msg = ""
     sentinel_msg = ""
     try:
-        # Body is everything after the closing frontmatter "---"
-        body_start = raw.find("\n---\n", raw.find("---"))
-        body_text = raw[body_start + 5:].lstrip("\n") if body_start != -1 else raw
+        # Use the canonical split_frontmatter helper (already imported above)
+        # to locate the body — avoids the fragile find("---") chain that
+        # misfires when a frontmatter field value contains "---".
+        _fm, body_text = split_frontmatter(raw)
+        body_text = body_text.lstrip("\n") if body_text else ""
 
         user_section = re.search(
             r"## User\s*\n+(.*?)(?=\n## |\Z)", body_text, re.DOTALL
