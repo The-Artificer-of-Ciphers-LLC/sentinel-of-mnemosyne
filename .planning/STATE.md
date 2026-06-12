@@ -4,13 +4,13 @@ milestone: v0.5.1
 milestone_name: — The Second Brain
 status: executing
 stopped_at: Phase 41 context gathered
-last_updated: "2026-06-12T13:13:24.335Z"
+last_updated: "2026-06-12T13:23:57.283Z"
 last_activity: 2026-06-12 -- Phase 41 execution started
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 15
-  completed_plans: 11
+  completed_plans: 12
   percent: 67
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 41 (typed-sessionsummary-retention) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-06-12 -- Phase 41 execution started
 
@@ -115,6 +115,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 40-semantic-recall P02 | 25m | 3 tasks | 3 files |
 | Phase 40-semantic-recall P03 | 900 | 3 tasks | 3 files |
 | Phase 41-typed-sessionsummary-retention P01 | 3min | 3 tasks | 2 files |
+| Phase 41-typed-sessionsummary-retention P02 | 6 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -173,6 +174,8 @@ Recent decisions affecting current work:
 - [Phase 40-02]: SemanticRecall reads embedding index via vault.read_note() + 60s TTL cache (REST-only, no mtime); sidecar index at ops/sweeps/embedding-index.json matching EMBEDDING_INDEX_PATH
 - [Phase 40-02]: cosine_floor=0.50 default (UAT-tunable); body-read deferred to Recall post-RRF trim (A5: warm_top_n reads not semantic_top_k reads)
 - [Phase 40-02]: ADR-0004 accepted: sidecar-index supersedes frontmatter-read approach; supersession note records D-01/D-02/D-08/D-09 REVISED decisions
+- [Phase ?]: _hot_sessions bridged to RetentionPolicy from RecallConfig.recent_session_limit until Plan 04 lockstep removal (D-07)
+- [Phase ?]: _parse_session_summary deferred runtime import avoids circular import at vault.py edge
 
 ### Pending Todos
 
@@ -206,7 +209,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-06-12T13:13:24.328Z
+Last session: 2026-06-12T13:23:49.317Z
 Stopped at: Phase 41 context gathered
 Resume file: 
 
