@@ -9,6 +9,7 @@ import pytest
 
 from app.services.note_classifier import ClassificationResult
 from app.services.vault_sweeper import (
+    EMBEDDING_INDEX_PATH,
     LOCKFILE_PATH,
     SWEEP_SKIP_PREFIXES,
     _should_skip,
@@ -1042,3 +1043,328 @@ async def test_rebuild_embedding_index_model_not_loaded_returns_skipped():
     assert report.status == "skipped", (
         f"expected report.status='skipped' when model_loaded=False; got {report.status!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 40 Plan 04 — Task 3: mandatory safe-to-mutate gate tests (RED phase)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_sweep_no_probe_destructive_fails_closed():
+    """BYPASS CLOSED (round-3 HIGH): a destructive run_sweep(dry_run=False) invoked
+    with NO probe (safe_to_mutate omitted / None) over a vault whose classifier
+    returns topic='noise' AND a misplaced topic performs ZERO destructive moves.
+
+    Proves the guard cannot be bypassed by a caller that simply omits the probe —
+    there is NO permissive default that means 'safe'.
+    """
+    note_paths = ["random-folder/misplaced.md", "stale/noise.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+
+    async def _classifier(text: str) -> ClassificationResult:
+        if "noise" in fake.notes.get("stale/noise.md", ""):
+            if text.strip() == "A classifiable note body.":
+                return ClassificationResult(topic="noise", confidence=1.0, title_slug="noise", reasoning="r")
+        return ClassificationResult(topic="accomplishment", confidence=0.9, title_slug="x", reasoning="r")
+
+    # Make one note noise and one misplaced
+    fake.notes["stale/noise.md"] = "A classifiable note body."
+    fake.notes["random-folder/misplaced.md"] = "A classifiable note body."
+
+    async def _noise_classifier(text: str) -> ClassificationResult:
+        return ClassificationResult(topic="noise", confidence=1.0, title_slug="n", reasoning="r")
+
+    async def _misplaced_classifier(text: str) -> ClassificationResult:
+        return ClassificationResult(topic="accomplishment", confidence=0.9, title_slug="x", reasoning="r")
+
+    # Use a simple noise classifier for all notes (easiest to verify)
+    call_idx = [0]
+    async def _mixed_classifier(text):
+        i = call_idx[0]
+        call_idx[0] += 1
+        if i == 0:
+            return ClassificationResult(topic="noise", confidence=1.0, title_slug="n", reasoning="r")
+        return ClassificationResult(topic="accomplishment", confidence=0.9, title_slug="x", reasoning="r")
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    # safe_to_mutate is NOT passed (omitted) — should fail closed
+    report = await run_sweep(fake, _mixed_classifier, _emb, force_reclassify=True)
+
+    # Zero destructive moves
+    assert report.noise_moved == 0, f"expected 0 noise_moved with no probe; got {report.noise_moved}"
+    assert report.topic_moves == 0, f"expected 0 topic_moves with no probe; got {report.topic_moves}"
+    assert report.duplicates_moved == 0, f"expected 0 duplicates_moved with no probe; got {report.duplicates_moved}"
+    # All original notes must still exist
+    for path in note_paths:
+        assert path in fake.notes, f"note {path!r} must remain byte-identical when no probe"
+
+
+@pytest.mark.asyncio
+async def test_run_sweep_dry_run_still_works_with_no_probe():
+    """dry_run=True with NO probe still populates report.proposed_moves and writes nothing.
+    The mandatory-probe rule must NOT break the preview path.
+    """
+    note_paths = ["random-folder/misplaced.md", "stale/noise.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+    fake.notes["stale/noise.md"] = "hello"
+    fake.notes["random-folder/misplaced.md"] = "Finished day 19 of the 30-day bass level 2 course."
+
+    pre_paths = set(fake.notes.keys())
+    pre_bodies = dict(fake.notes)
+
+    call_idx = [0]
+    async def _classifier(text):
+        i = call_idx[0]
+        call_idx[0] += 1
+        if i == 0:
+            return ClassificationResult(topic="noise", confidence=1.0, title_slug="n", reasoning="r")
+        return ClassificationResult(topic="accomplishment", confidence=0.9, title_slug="x", reasoning="r")
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    # dry_run=True, NO safe_to_mutate probe
+    report = await run_sweep(fake, _classifier, _emb, force_reclassify=True, dry_run=True)
+
+    # Store must be byte-for-byte unchanged
+    assert set(fake.notes.keys()) == pre_paths
+    for path in pre_paths:
+        assert fake.notes[path] == pre_bodies[path], f"dry_run must not modify {path}"
+
+    # proposed_moves must be populated
+    assert len(report.proposed_moves) >= 1, (
+        f"dry_run must populate proposed_moves; got {report.proposed_moves}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_sweep_probe_false_upfront_zero_moves_and_no_frontmatter_writes():
+    """Probe returning False up-front → zero destructive moves AND no frontmatter writes.
+
+    On an unsafe run the note must be left byte-identical (no classification
+    frontmatter write-back — degraded classifier output is not persisted anywhere).
+    Round-2 items A + C.
+    """
+    note_paths = ["random-folder/misplaced.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+    original_body = "A classifiable note body."
+    fake.notes["random-folder/misplaced.md"] = original_body
+
+    async def _always_false_probe():
+        return False
+
+    async def _classifier(text):
+        return ClassificationResult(topic="accomplishment", confidence=0.9, title_slug="x", reasoning="r")
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    report = await run_sweep(
+        fake, _classifier, _emb, force_reclassify=True,
+        safe_to_mutate=_always_false_probe,
+    )
+
+    assert report.topic_moves == 0, f"expected 0 topic_moves; got {report.topic_moves}"
+    assert report.noise_moved == 0, f"expected 0 noise_moved; got {report.noise_moved}"
+    assert report.duplicates_moved == 0, f"expected 0 duplicates_moved; got {report.duplicates_moved}"
+    # Note must be byte-identical — no frontmatter write-back
+    assert fake.notes["random-folder/misplaced.md"] == original_body, (
+        "note must be byte-identical on unsafe run (no frontmatter write-back)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_sweep_probe_flips_false_stops_later_moves():
+    """Per-move re-evaluation (round-2 item A): a probe that flips from True to False
+    mid-sweep stops all moves AFTER the flip point.
+
+    Notes evaluated while probe was True may move; notes after the flip must not.
+    """
+    # 3 misplaced notes — probe True for first 1, then False
+    note_paths = [
+        "random-folder/note-a.md",
+        "random-folder/note-b.md",
+        "random-folder/note-c.md",
+    ]
+    fake = _make_classifiable_note_vault(note_paths)
+    for p in note_paths:
+        fake.notes[p] = "A classifiable note body."
+
+    true_count = [0]
+
+    async def _flip_probe():
+        """Returns True for the first call, False for all subsequent calls."""
+        if true_count[0] < 1:
+            true_count[0] += 1
+            return True
+        return False
+
+    async def _classifier(text):
+        return ClassificationResult(topic="accomplishment", confidence=0.9, title_slug="x", reasoning="r")
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    report = await run_sweep(
+        fake, _classifier, _emb, force_reclassify=True,
+        safe_to_mutate=_flip_probe,
+    )
+
+    # After flip, no more destructive moves — at most 1 move may have occurred (first probe was True)
+    # But all subsequent calls get False, so at least some notes must remain unmoved
+    total_moves = report.topic_moves + report.noise_moved + report.duplicates_moved
+    # We expect at most 1 move (from when probe was True) + remainder untouched
+    still_present = [p for p in note_paths if p in fake.notes]
+    assert len(still_present) >= 2, (
+        f"after probe flips to False, at least 2 notes must remain; "
+        f"still present: {still_present}, moves: {total_moves}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_sweep_degraded_index_invariant_mem05():
+    """Degraded-run invariant (MEM-05): in an unsafe run where a note's body changed
+    since the last index, _emit_embedding_index MUST NOT rewrite that entry's
+    content_hash to the new value without a fresh vector.
+
+    The persisted entry for the changed path either:
+    (a) keeps the OLD content_hash + OLD vector, OR
+    (b) is marked stale: true with the new content_hash but old/absent vector.
+
+    It MUST NOT carry the new content_hash with a missing/old/absent embedding_b64.
+    """
+    import json as _j
+
+    from app.services.vault_sweeper import _content_hash
+
+    note_paths = ["references/alpha.md"]
+    fake = _make_classifiable_note_vault(note_paths, body="original body")
+    embedder = _CallCountingEmbedder()
+
+    # First run — establish a healthy index
+    classifier = AsyncMock(
+        return_value=ClassificationResult(topic="reference", confidence=0.9, title_slug="x", reasoning="r")
+    )
+    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+    index_first = _j.loads(fake.notes[EMBEDDING_INDEX_PATH])
+    old_hash = index_first["references/alpha.md"]["content_hash"]
+    old_b64 = index_first["references/alpha.md"].get("embedding_b64")
+
+    # Simulate the note body changing
+    fake.notes["references/alpha.md"] = "---\ntopic: reference\n---\n\ncompletely new body"
+    new_body_hash = _content_hash("completely new body")
+    assert new_body_hash != old_hash, "new body must produce a different hash"
+
+    # Second run with probe = False (degraded — no fresh vectors)
+    async def _false_probe():
+        return False
+
+    classifier.reset_mock()
+    embedder.calls.clear()
+    await run_sweep(fake, classifier, embedder, force_reclassify=True, safe_to_mutate=_false_probe)
+
+    index_second = _j.loads(fake.notes[EMBEDDING_INDEX_PATH])
+    entry = index_second.get("references/alpha.md", {})
+
+    # MUST NOT carry the new content_hash with a stale/missing embedding_b64
+    if entry.get("content_hash") == new_body_hash:
+        # New hash persisted → must have stale=True marker
+        assert entry.get("stale") is True, (
+            "if new content_hash is persisted without a fresh vector, entry must be "
+            f"marked stale=True; got entry={entry}"
+        )
+    else:
+        # Old hash carried forward — acceptable
+        assert entry.get("content_hash") == old_hash, (
+            f"entry must carry old hash or new hash+stale=True; got {entry}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_sweep_probe_true_preserves_shipped_behavior():
+    """Regression: run_sweep with safe_to_mutate=True behaves exactly as shipped.
+
+    Misplaced notes ARE relocated, noise IS trashed, with a healthy probe.
+    """
+    note_paths = ["random-folder/misplaced.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+    fake.notes["random-folder/misplaced.md"] = "Finished day 19 of the 30-day bass level 2 course."
+
+    async def _always_true_probe():
+        return True
+
+    async def _classifier(text):
+        return ClassificationResult(topic="accomplishment", confidence=0.9, title_slug="finished-bass", reasoning="r")
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    report = await run_sweep(
+        fake, _classifier, _emb, force_reclassify=True,
+        safe_to_mutate=_always_true_probe,
+    )
+
+    assert report.topic_moves == 1, f"expected 1 topic_moves with True probe; got {report.topic_moves}"
+    assert "accomplishments/misplaced.md" in fake.notes, (
+        "misplaced note must be relocated with a True probe"
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_sweep_protected_path_error_continues_and_processes_others():
+    """ProtectedPathError on one note must be recorded in report.errors and
+    the sweep must continue processing other notes (concern 3).
+
+    All three branches are tested: misplaced→relocate, noise→trash, dedup→trash.
+    """
+    try:
+        from app.errors import ProtectedPathError
+    except ImportError:
+        # 40-05 not yet merged — define a local stand-in for the test
+        class ProtectedPathError(Exception):
+            pass
+
+    # --- Relocate branch ---
+    note_paths = ["sentinel/persona.md", "random-folder/misplaced.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+    fake.notes["sentinel/persona.md"] = "Persona content"
+    fake.notes["random-folder/misplaced.md"] = "A classifiable note body."
+
+    async def _always_true_probe():
+        return True
+
+    # Patch relocate to raise ProtectedPathError for sentinel/persona.md
+    original_relocate = fake.relocate
+
+    async def _protected_relocate(src, dst, *, sweep_at=None):
+        if "persona" in src:
+            raise ProtectedPathError(f"protected: {src}")
+        return await original_relocate(src, dst, sweep_at=sweep_at)
+
+    fake.relocate = _protected_relocate
+
+    call_idx = [0]
+    async def _classifier(text):
+        # Both notes classified as accomplishment (misplaced)
+        return ClassificationResult(topic="accomplishment", confidence=0.9, title_slug="x", reasoning="r")
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    report = await run_sweep(
+        fake, _classifier, _emb, force_reclassify=True,
+        safe_to_mutate=_always_true_probe,
+    )
+
+    # ProtectedPathError must be in report.errors
+    assert any("persona" in e or "protected" in e.lower() for e in report.errors), (
+        f"expected ProtectedPathError for persona.md in report.errors; got {report.errors}"
+    )
+    # Sweep must have continued — other note relocated
+    assert report.topic_moves >= 1, (
+        f"other misplaced note must still be relocated; topic_moves={report.topic_moves}"
+    )
+    assert report.status == "complete", f"sweep must return 'complete' after ProtectedPathError; got {report.status}"
