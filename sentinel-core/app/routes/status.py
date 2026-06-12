@@ -48,7 +48,8 @@ async def debug_context(
     if ctx.recall is None:
         raise RuntimeError("RouteContext.recall is not configured")
     recalled = await ctx.recall.assemble(fake_req, budget=ctx.context_window)
-    # Plan 41-05 lockstep: explicit SessionSummary field serialization (mirrors warm idiom).
+    # Plan 41-05: serialize typed fields only — body excluded (debug endpoint only,
+    # not injection path; body contains raw markdown not suitable for external APIs).
     return JSONResponse(
         {
             "user_id": user_id,
