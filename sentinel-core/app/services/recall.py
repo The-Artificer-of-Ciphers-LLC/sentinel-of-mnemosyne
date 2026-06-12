@@ -796,7 +796,9 @@ class Recall:
         ``RecallConfig.recent_session_limit`` has been removed (OQ2); hot_limit lives
         exclusively on the injected RetentionPolicy.
         """
-        # D-03 place (a): recency-sorted hot tier (most-recent first)
+        # D-03 place (a), D-02 episodic-only, OQ3 injected policy:
+        # sort by recency_weight(s.date) descending — most-recent session first.
+        # Recency is a BLEND: no session is dropped, only reordered.
         summaries = await self._vault.get_recent_sessions(user_id, self._policy)
         now = datetime.now(timezone.utc)
         return sorted(
@@ -849,13 +851,17 @@ class Recall:
         if not merged:
             return []
 
-        # MEM-09 place (b) — warm-tier recency weighting (D-03, OQ1: carrier = full set).
-        # Multiply the RRF score of any survivor in _CARRIER_NAMESPACE_PREFIXES by
-        # recency_weight(_path_date(path)).  Non-carrier results (self/, ops/, notes/, ...)
-        # are untouched — this gate is a POSITIVE allowlist, NOT a negation of the
-        # exclude list (T-41-08 mitigation: future namespaces are never silently weighted).
+        # MEM-09 place (b), D-03, D-02, OQ1 — warm-tier recency weighting (episodic-only).
+        # OQ1 resolution: carrier = the FULL conversation-carrier set
+        #   ("journal/", "learning/", "accomplishments/", "references/") — all non-ops/,
+        #   non-inbox/ TOPIC_VAULT_PATH values NoteIntake files conversation turns into.
+        # D-02 episodic-only: NEVER weight self/ or ops/ results.
+        # D-03 blend: recency multiplies score, never hard-filters results.
+        # Gate is a POSITIVE allowlist (_CARRIER_NAMESPACE_PREFIXES), NOT a negation of
+        # _WARM_TIER_EXCLUDE_PREFIXES — T-41-08 mitigation: future namespaces are never
+        # silently weighted by omission.
         # Fail-open: unparseable date → _path_date() returns None → recency_weight(None)
-        # returns 1.0 → score unchanged (T-41-10).
+        # returns 1.0 → no-op multiplier (T-41-10).
         now = datetime.now(timezone.utc)
         reweighted: list[SearchResult] = []
         for r in merged:
