@@ -4,8 +4,8 @@ milestone: v0.5.1
 milestone_name: — The Second Brain
 status: verifying
 stopped_at: Completed 41-04-PLAN.md — typed sessions, recency wiring, carrier weighting
-last_updated: "2026-06-12T13:56:41.011Z"
-last_activity: 2026-06-12 -- Phase 41 execution started
+last_updated: "2026-06-12T14:23:33.965Z"
+last_activity: 2026-06-12
 progress:
   total_phases: 3
   completed_phases: 3
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 41 (typed-sessionsummary-retention) — EXECUTING
-Plan: 5 of 5
+Phase: 41
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-06-12 -- Phase 41 execution started
+Last activity: 2026-06-12
 
 ## Milestone Progress
 
@@ -76,7 +76,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 
 **Velocity:**
 
-- Total plans completed: 13
+- Total plans completed: 18
 - Average duration: ~5 min
 - Total execution time: 0.2 hours
 
@@ -88,6 +88,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | 27 | 5 | - | - |
 | 39 | 3 | - | - |
 | 40 | 3 | - | - |
+| 41 | 5 | - | - |
 
 **Recent Trend:**
 
