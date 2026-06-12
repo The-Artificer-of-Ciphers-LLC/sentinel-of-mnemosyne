@@ -8,7 +8,7 @@ from httpx import ASGITransport, AsyncClient
 from unittest.mock import AsyncMock, MagicMock
 
 from app.main import app
-from app.services.recall import Recall
+from app.services.recall import Recall, SessionSummary
 from app.state import RouteContext
 
 AUTH_HEADERS = {"X-Sentinel-Key": "test-key-for-pytest"}
@@ -18,7 +18,19 @@ AUTH_HEADERS = {"X-Sentinel-Key": "test-key-for-pytest"}
 def mock_obsidian():
     m = MagicMock()
     m.check_health = AsyncMock(return_value=True)
-    m.get_recent_sessions = AsyncMock(return_value=["session1"])
+    m.get_recent_sessions = AsyncMock(
+        return_value=[
+            SessionSummary(
+                date="2026-06-12",
+                user_id="testuser",
+                time="10-00-00",
+                user_msg="What is my goal?",
+                sentinel_msg="Build the Sentinel.",
+                path="ops/sessions/2026-06-12/testuser-10-00-00.md",
+                body="session1",
+            )
+        ]
+    )
     m.read_self_context = AsyncMock(return_value="context content")
     return m
 
@@ -113,6 +125,25 @@ async def test_context_includes_recent_sessions_count():
     data = resp.json()
     assert "recent_sessions_count" in data
     assert isinstance(data["recent_sessions_count"], int)
+
+
+async def test_context_sessions_serializes_typed_fields():
+    """GET /context/testuser serializes SessionSummary as explicit dict with typed fields."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/context/testuser", headers=AUTH_HEADERS)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "sessions" in data
+    assert isinstance(data["sessions"], list)
+    assert len(data["sessions"]) == 1
+    session_dict = data["sessions"][0]
+    assert session_dict["date"] == "2026-06-12"
+    assert session_dict["user_id"] == "testuser"
+    assert session_dict["time"] == "10-00-00"
+    assert session_dict["user_msg"] == "What is my goal?"
+    assert session_dict["sentinel_msg"] == "Build the Sentinel."
+    assert session_dict["path"] == "ops/sessions/2026-06-12/testuser-10-00-00.md"
 
 
 async def test_context_requires_auth():
