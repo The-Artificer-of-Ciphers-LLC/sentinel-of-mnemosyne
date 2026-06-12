@@ -426,24 +426,32 @@ async def initialize_startup(
             )
         logger.info("Persona loaded from vault (%d chars)", len(persona))
 
-    # D-06: non-blocking startup index rebuild so a cold start (no prior
+    # D-06: non-blocking startup INDEX REBUILD so a cold start (no prior
     # embedding-index.json) becomes semantically searchable without operator
-    # action.  Fires run_sweep() in a background task — failure logs a WARNING
-    # and never crashes startup (T-40-12 mitigated, reusing the lifespan's
-    # Obsidian-unavailable graceful path).
+    # action.  Fires rebuild_embedding_index() — an INDEX-ONLY routine that
+    # walks the vault, (re)embeds bodies, and writes ops/sweeps/embedding-index.json
+    # WITHOUT ever classifying, relocating, or trashing a note.
+    #
+    # *** UAT INCIDENT POST-MORTEM ***
+    # The original implementation called the FULL destructive run_sweep() here.
+    # On first boot, models were not yet loaded, so classifications were degraded,
+    # and the sweeper RELOCATED sentinel/persona.md → learning/persona/, crash-looping
+    # every subsequent boot at composition.py:424 (persona missing).
+    # This is fixed by using rebuild_embedding_index() which can NEVER relocate or
+    # trash any vault file — it uses ONLY read/write/list primitives (T-40-13).
     #
     # On-demand rebuild trigger (D-06): the EXISTING admin-gated
-    # POST /vault/sweep/start route (note.py) also runs run_sweep() via
-    # start_sweep() and therefore re-emits the embedding index — no new
-    # unauthenticated surface is introduced (T-40-09).
-    from app.services.vault_sweeper import run_sweep as _run_sweep
+    # POST /vault/sweep/start route (note.py) runs run_sweep() via start_sweep()
+    # and therefore re-emits the embedding index with a mandatory fail-closed probe.
+    # No new unauthenticated surface is introduced (T-40-09).
+    from app.services.vault_sweeper import rebuild_embedding_index as _rebuild_embedding_index
 
     async def _startup_rebuild() -> None:
         try:
-            await _run_sweep(
+            await _rebuild_embedding_index(
                 graph.vault,
-                graph.note_classifier_fn,
                 graph.embeddings.embed,
+                model_loaded=graph.embedding_model_loaded,
             )
             logger.info("Startup embedding-index rebuild complete")
         except Exception as exc:

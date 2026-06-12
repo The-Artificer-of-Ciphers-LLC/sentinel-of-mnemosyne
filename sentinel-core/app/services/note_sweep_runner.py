@@ -39,7 +39,26 @@ async def start_sweep(
     dry_run: bool,
     source_folder: str = "",
     task_runner: TaskRunner | None = None,
+    safe_to_mutate: "Callable[[], Awaitable[bool]] | None" = None,
 ) -> dict:
+    """Orchestrate a vault sweep as a background task.
+
+    Args:
+        vault: The Vault adapter.
+        classifier: async fn(text) → ClassificationResult.
+        embedder: async fn(list[str]) → list[list[float]].
+        force_reclassify: Re-classify already-marked notes.
+        dry_run: Preview mode — no vault mutations.
+        source_folder: Restrict sweep to a specific vault folder.
+        task_runner: Injectible task runner (for tests).
+        safe_to_mutate: MANDATORY for the live (non-dry-run) path.
+            Forwarded directly to run_sweep as the per-move fail-closed
+            readiness probe. The dry-run path does NOT forward a probe
+            (it performs no vault mutations regardless).
+            Because run_sweep fails closed when no probe is supplied, the
+            live path MUST supply this — a live admin sweep without a probe
+            would result in zero moves (which is safe but unhelpful).
+    """
     sweep_id = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     runner = task_runner or AsyncioTaskRunner()
 
@@ -119,6 +138,7 @@ async def start_sweep(
                 force_reclassify=force_reclassify,
                 status_callback=_set_status,
                 source_folder=source_folder,
+                safe_to_mutate=safe_to_mutate,  # forwarded: fail-closed if None
             )
             _set_status(report)
         except SweepInProgressError:

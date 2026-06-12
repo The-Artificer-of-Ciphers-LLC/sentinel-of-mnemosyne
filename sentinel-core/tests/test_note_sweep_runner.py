@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.services.note_sweep_runner import start_sweep
+from app.services.task_runner import TaskRunner
 from tests.fakes.vault import FakeVault
 
 
@@ -35,6 +36,26 @@ async def _embedder(texts):
     return [[1.0, 0.0, 0.0]] * len(texts)
 
 
+class _ImmediateTaskRunner:
+    """Synchronous task runner that awaits the coroutine immediately in a captured list.
+
+    Used to avoid timing-dependent asyncio.sleep(0.05) waits in tests.
+    """
+
+    def __init__(self):
+        self._scheduled: list = []
+
+    def schedule(self, coro):
+        """Record the coroutine; caller must await self.run_all() to execute."""
+        self._scheduled.append(coro)
+
+    async def run_all(self):
+        import asyncio
+        for coro in self._scheduled:
+            await coro
+        self._scheduled.clear()
+
+
 # --- Tests ---
 
 
@@ -54,6 +75,7 @@ async def test_start_sweep_live_path_passes_safe_to_mutate_probe():
         return SweepReport(sweep_id=_iso_utc(), status="complete")
 
     vault = _make_vault()
+    runner = _ImmediateTaskRunner()
 
     with patch("app.services.note_sweep_runner.run_sweep", side_effect=_fake_run_sweep):
         result = await start_sweep(
@@ -63,11 +85,9 @@ async def test_start_sweep_live_path_passes_safe_to_mutate_probe():
             force_reclassify=False,
             dry_run=False,
             safe_to_mutate=AsyncMock(return_value=True),
+            task_runner=runner,
         )
-
-    # Allow the background task to complete
-    import asyncio
-    await asyncio.sleep(0.05)
+        await runner.run_all()
 
     assert len(captured_kwargs) == 1, f"run_sweep should be called once; called {len(captured_kwargs)} times"
     assert "safe_to_mutate" in captured_kwargs[0], (
@@ -111,6 +131,8 @@ async def test_start_sweep_live_path_probe_false_means_zero_moves():
         report_holder.append(report)
         return report
 
+    runner = _ImmediateTaskRunner()
+
     with patch("app.services.note_sweep_runner.run_sweep", side_effect=_capturing_run_sweep):
         await start_sweep(
             vault=vault,
@@ -119,10 +141,9 @@ async def test_start_sweep_live_path_probe_false_means_zero_moves():
             force_reclassify=True,
             dry_run=False,
             safe_to_mutate=_always_false,
+            task_runner=runner,
         )
-
-    import asyncio
-    await asyncio.sleep(0.05)
+        await runner.run_all()
 
     assert len(report_holder) == 1
     report = report_holder[0]
@@ -151,6 +172,7 @@ async def test_start_sweep_live_path_non_none_probe_required():
         return SweepReport(sweep_id=_iso_utc(), status="complete")
 
     vault = _make_vault()
+    runner = _ImmediateTaskRunner()
 
     with patch("app.services.note_sweep_runner.run_sweep", side_effect=_fake_run_sweep):
         await start_sweep(
@@ -160,10 +182,9 @@ async def test_start_sweep_live_path_non_none_probe_required():
             force_reclassify=False,
             dry_run=False,
             safe_to_mutate=AsyncMock(return_value=True),
+            task_runner=runner,
         )
-
-    import asyncio
-    await asyncio.sleep(0.05)
+        await runner.run_all()
 
     assert len(captured_kwargs) == 1
     probe = captured_kwargs[0].get("safe_to_mutate")
@@ -187,6 +208,7 @@ async def test_start_sweep_dry_run_does_not_forward_probe():
         return SweepReport(sweep_id=_iso_utc(), status="complete")
 
     vault = _make_vault()
+    runner = _ImmediateTaskRunner()
 
     with patch("app.services.note_sweep_runner.run_sweep", side_effect=_fake_run_sweep):
         await start_sweep(
@@ -195,10 +217,9 @@ async def test_start_sweep_dry_run_does_not_forward_probe():
             embedder=_embedder,
             force_reclassify=False,
             dry_run=True,
+            task_runner=runner,
         )
-
-    import asyncio
-    await asyncio.sleep(0.05)
+        await runner.run_all()
 
     assert len(captured_kwargs) == 1
     # dry_run should NOT pass a safe_to_mutate probe

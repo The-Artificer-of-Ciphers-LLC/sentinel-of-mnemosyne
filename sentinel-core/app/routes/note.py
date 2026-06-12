@@ -108,6 +108,10 @@ async def inbox_discard(req: InboxDiscardRequest, request: Request):
 # --- 260427-vl1 Task 7: vault sweeper routes ---
 
 
+from app.services.model_selector import (
+    probe_classifier_model_ready,
+    probe_embedding_model_loaded,
+)
 from app.services.note_sweep_runner import start_sweep
 from app.services.vault_sweeper import get_status, reset_status_for_tests  # noqa: F401
 
@@ -138,6 +142,43 @@ async def vault_sweep_start(req: SweepStartRequest, request: Request):
     classifier = ctx.classify
     embedder = ctx.embedder
 
+    # Build the fail-closed runtime safety probe for the live (non-dry-run) path.
+    # The probe is a closure that returns True ONLY when BOTH:
+    #   (i)  probe_embedding_model_loaded reports the embedding model is loaded, AND
+    #   (ii) probe_classifier_model_ready reports a genuinely-loaded model SCORES
+    #        for the structured task kind that classify_note uses.
+    # A defaulted/last-resort select_model result is NOT reported ready (round-2 item B,
+    # T-40-24). This closure is passed into start_sweep and forwarded to run_sweep where
+    # it is re-evaluated IMMEDIATELY BEFORE EACH destructive move — not once per run.
+    #
+    # The admin endpoint CANNOT bypass the guard:
+    # - run_sweep evaluates the injected probe at runtime before each move.
+    # - The probe fails closed on a degraded classifier.
+    # - An absent probe is itself treated as unsafe (run_sweep fails closed without one).
+    if not req.dry_run:
+        async def _safe_to_mutate_probe() -> bool:
+            if ctx.http_client is None or ctx.settings is None:
+                return False
+            embedding_ready = await probe_embedding_model_loaded(
+                ctx.http_client,
+                ctx.settings.lmstudio_base_url,
+                ctx.settings.embedding_model,
+            )
+            if not embedding_ready:
+                return False
+            classifier_ready = await probe_classifier_model_ready(
+                ctx.http_client,
+                ctx.settings.lmstudio_base_url,
+                model_name=ctx.settings.model_name,
+                model_preferred=ctx.settings.model_preferred,
+            )
+            return classifier_ready
+
+        safe_to_mutate = _safe_to_mutate_probe
+    else:
+        # Dry-run: no probe needed (preview performs no vault mutations regardless)
+        safe_to_mutate = None
+
     return await start_sweep(
         vault=vault,
         classifier=classifier,
@@ -145,6 +186,7 @@ async def vault_sweep_start(req: SweepStartRequest, request: Request):
         force_reclassify=req.force_reclassify,
         dry_run=req.dry_run,
         source_folder=req.source_folder,
+        safe_to_mutate=safe_to_mutate,
     )
 
 
