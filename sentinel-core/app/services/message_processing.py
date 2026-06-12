@@ -107,9 +107,14 @@ class MessageProcessor:
             )
         if recalled.sessions:
             # Plan 41-05 lockstep: recalled.sessions is list[SessionSummary]; join s.body.
-            context_parts.append(
-                "Recent session history:\n" + "\n---\n".join(s.body for s in recalled.sessions)
-            )
+            # Guard against empty-body sessions (e.g. note read returned ""):
+            # mirroring the warm-tier empty-body skip to avoid stray "---" separators.
+            non_empty_sessions = [s for s in recalled.sessions if s.body.strip()]
+            if non_empty_sessions:
+                context_parts.append(
+                    "Recent session history:\n"
+                    + "\n---\n".join(s.body for s in non_empty_sessions)
+                )
         if context_parts:
             raw_context = "\n\n".join(context_parts)
             safe_context = self._budget.truncate(raw_context, sessions_budget)
