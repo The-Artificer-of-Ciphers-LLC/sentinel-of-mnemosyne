@@ -2,7 +2,7 @@
 
 Current status: **Pre-v0.1 — Architecture and documentation phase.**
 
-The full milestone details, module specifications, and design decisions live in the [PRD](docs/PRD-Sentinel-of-Mnemosyne.md) and [Architecture Doc](docs/ARCHITECTURE-Core.md). This file is the quick-reference version.
+The full milestone details, module specifications, and design decisions live in the [PRD](docs/PRD-Sentinel-of-Mnemosyne.md) and [Architecture Doc](docs/explanation/architecture.md). This file is the quick-reference version.
 
 ---
 

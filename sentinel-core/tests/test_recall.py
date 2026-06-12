@@ -14,7 +14,7 @@ import json
 import pytest
 
 from tests.fakes.vault import FakeVault
-from app.services.recall import Recall, RecallConfig, RecalledContext, SearchResult
+from app.services.recall import Recall, RecallConfig, RecalledContext, SearchResult, SessionSummary, RetentionPolicy, recency_weight
 from app.services.message_processing import MessageRequest
 
 # ---------------------------------------------------------------------------
@@ -116,7 +116,12 @@ async def test_assemble_returns_self_context():
 
 
 async def test_assemble_returns_sessions():
-    """assemble() populates sessions from ops/sessions notes matching user_id."""
+    """assemble() populates sessions from ops/sessions notes matching user_id.
+
+    STRENGTHENED (Plan 41-04): sessions is list[SessionSummary]; assert on typed fields.
+    The seeded note must parse to a SessionSummary with .body containing the seeded text
+    and .user_id == "trekkie".
+    """
     notes = {
         "ops/sessions/2026-06-11/trekkie-12-00-00.md": "session body here",
     }
@@ -124,7 +129,17 @@ async def test_assemble_returns_sessions():
     result = await recall.assemble(make_request(), budget=8192)
 
     assert len(result.sessions) >= 1
-    assert any("session body here" in s for s in result.sessions)
+    # Plan 41-04 strengthening: sessions must be list[SessionSummary], not list[str]
+    assert all(isinstance(s, SessionSummary) for s in result.sessions), (
+        f"sessions must be list[SessionSummary]; got types: "
+        f"{[type(s).__name__ for s in result.sessions]}"
+    )
+    assert result.sessions[0].user_id == "trekkie", (
+        f"SessionSummary.user_id must be 'trekkie'; got {result.sessions[0].user_id!r}"
+    )
+    assert "session body here" in result.sessions[0].body, (
+        f"SessionSummary.body must contain seeded text; got {result.sessions[0].body!r}"
+    )
 
 
 async def test_warm_includes_above_threshold_non_excluded():
@@ -258,7 +273,7 @@ async def test_assemble_degrades_gracefully_when_sessions_tier_raises():
         }
     )
 
-    async def raising_sessions(user_id: str, limit: int = 3) -> list[str]:
+    async def raising_sessions(user_id: str, policy: RetentionPolicy) -> list[SessionSummary]:
         raise RuntimeError("simulated session tier failure")
 
     vault.get_recent_sessions = raising_sessions  # type: ignore[method-assign]
@@ -973,35 +988,59 @@ def test_index_path_single_source_constant_equality():
     )
 
 
-def test_recall_index_path_no_duplicate_literal():
-    """recall.py must NOT re-state the literal path string.
+async def test_recall_no_duplicate_index_literal_behavioral():
+    """RecallConfig().index_path must equal EMBEDDING_INDEX_PATH at runtime.
 
-    The literal 'ops/sweeps/embedding-index' must appear in EXACTLY one
-    module — vault_sweeper.py (or, if a leaf module was created, that module).
-    It must NOT appear in recall.py itself.
+    Replaces the source-grep test (banned by Behavioral-Test-Only Rule):
+    if recall.py introduced its own literal that diverged from the vault_sweeper
+    constant, this assertion would fail with the actual vs expected values.
+
+    The existing test_index_path_single_source_constant_equality already covers
+    this invariant; this test adds a SemanticRecall-instantiation sanity check
+    to confirm the config propagates to the live object.
     """
-    import pathlib
+    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH
+    from app.services.recall import RecallConfig, SemanticRecall
 
-    recall_src = pathlib.Path(__file__).parent.parent / "app" / "services" / "recall.py"
-    text = recall_src.read_text(encoding="utf-8")
-    # The literal path fragment used in EMBEDDING_INDEX_PATH
-    assert "ops/sweeps/embedding-index" not in text, (
-        "recall.py must NOT contain the literal index path — it must import "
-        "EMBEDDING_INDEX_PATH from vault_sweeper (single physical source of truth)"
+    config = RecallConfig()
+    assert config.index_path == EMBEDDING_INDEX_PATH, (
+        "RecallConfig.index_path must equal EMBEDDING_INDEX_PATH (single source); "
+        f"RecallConfig={config.index_path!r}, EMBEDDING_INDEX_PATH={EMBEDDING_INDEX_PATH!r}"
+    )
+    # Confirm that a SemanticRecall instance reads from the same path (i.e. it is
+    # actually used — not silently overridden by instance construction).
+    vault = FakeVault()
+    semantic = SemanticRecall(vault=vault, embed_fn=fake_embedder, active_model="m", config=config)
+    assert semantic._config.index_path == EMBEDDING_INDEX_PATH, (
+        "SemanticRecall._config.index_path must equal EMBEDDING_INDEX_PATH at runtime"
     )
 
 
-def test_recall_imports_embedding_index_path():
-    """recall.py must import EMBEDDING_INDEX_PATH from vault_sweeper (or a leaf module).
+async def test_recall_embedding_index_path_is_actually_read():
+    """SemanticRecall reads from config.index_path, not a hardcoded path.
 
-    The field default must be the imported constant, not a re-stated literal.
+    Replaces the source-grep test (banned by Behavioral-Test-Only Rule):
+    seeds the vault with an index at a custom path and verifies SemanticRecall
+    loads it, proving the path is taken from config rather than a baked-in literal.
     """
-    import pathlib
+    from app.services.recall import RecallConfig, SemanticRecall
 
-    recall_src = pathlib.Path(__file__).parent.parent / "app" / "services" / "recall.py"
-    text = recall_src.read_text(encoding="utf-8")
-    assert "EMBEDDING_INDEX_PATH" in text, (
-        "recall.py must reference EMBEDDING_INDEX_PATH (imported from vault_sweeper)"
+    custom_path = "ops/sweeps/test-custom-index.json"
+    model = "test-model-v1"
+    note_vec = [1.0, 0.0, 0.0]
+    idx = make_fixture_index(["notes/custom.md"], [note_vec], model)
+
+    config = RecallConfig(index_path=custom_path, index_ttl_seconds=0.0)
+    vault = FakeVault()
+    import json as _json
+    vault.notes[custom_path] = _json.dumps(idx)
+
+    semantic = SemanticRecall(vault=vault, embed_fn=fake_embedder, active_model=model, config=config)
+    await semantic._load_index_if_stale()
+
+    assert semantic._index == idx, (
+        "SemanticRecall must load the index from config.index_path; "
+        f"expected {idx!r}, got {semantic._index!r}"
     )
 
 
@@ -1261,4 +1300,501 @@ async def test_semantic_all_stale_entries_returns_empty_list():
 
     assert results == [], (
         f"all-stale index must return [] cleanly (no exception); got {results}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 41 Plan 01 — Task 1 RED: recency_weight curve + value-type construction
+# ---------------------------------------------------------------------------
+
+
+def test_recency_weight_curve():
+    """recency_weight: today=1.0, 7d=0.5, 14d=0.25, future clamped to 1.0.
+
+    Pins the exponential decay curve with explicit half_life_days=7.0 so
+    the constant is captured in the test, not assumed from the default.
+    Uses pytest.approx with tight abs tolerance for float comparisons.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime(2026, 6, 12, 12, 0, 0, tzinfo=timezone.utc)
+
+    # Same-day date → weight = 1.0
+    assert recency_weight("2026-06-12", now=now, half_life_days=7.0) == pytest.approx(1.0, abs=1e-9)
+
+    # Exactly 7 days old → weight = 0.5 ** (7/7) = 0.5
+    assert recency_weight("2026-06-05", now=now, half_life_days=7.0) == pytest.approx(0.5, abs=1e-9)
+
+    # Exactly 14 days old → weight = 0.5 ** (14/7) = 0.25
+    assert recency_weight("2026-05-29", now=now, half_life_days=7.0) == pytest.approx(0.25, abs=1e-9)
+
+    # Future date (1 day ahead) → age floored at 0 → weight = 1.0 (clamped)
+    assert recency_weight("2026-06-13", now=now, half_life_days=7.0) == pytest.approx(1.0, abs=1e-9)
+
+
+def test_recency_weight_failopen_on_bad_date():
+    """recency_weight: unparseable string and None both return 1.0 (fail-open).
+
+    A hostile or malformed date from vault content must never raise — it
+    must silently return 1.0 so the recall path is uninterrupted (T-41-01).
+    """
+    from datetime import datetime, timezone
+
+    now = datetime(2026, 6, 12, 12, 0, 0, tzinfo=timezone.utc)
+
+    # Unparseable date string → 1.0
+    assert recency_weight("not-a-date", now=now, half_life_days=7.0) == pytest.approx(1.0, abs=1e-9)
+
+    # None date (non-string) → 1.0
+    assert recency_weight(None, now=now, half_life_days=7.0) == pytest.approx(1.0, abs=1e-9)
+
+
+def test_session_summary_is_frozen_value():
+    """SessionSummary: constructs with all 7 fields; field reassignment raises FrozenInstanceError."""
+    import dataclasses
+
+    summary = SessionSummary(
+        date="2026-06-12",
+        user_id="trekkie",
+        time="12-00-00",
+        user_msg="Hello Sentinel",
+        sentinel_msg="Hello user",
+        path="ops/sessions/2026-06-12/trekkie-12-00-00.md",
+        body="# Session\n## User\nHello Sentinel\n## Sentinel\nHello user\n",
+    )
+
+    assert summary.date == "2026-06-12"
+    assert summary.user_id == "trekkie"
+    assert summary.time == "12-00-00"
+    assert summary.user_msg == "Hello Sentinel"
+    assert summary.sentinel_msg == "Hello user"
+    assert summary.path == "ops/sessions/2026-06-12/trekkie-12-00-00.md"
+    assert "Hello Sentinel" in summary.body
+
+    # Must be frozen — field assignment must raise
+    with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
+        summary.date = "2099-01-01"  # type: ignore[misc]
+
+
+def test_retention_policy_defaults():
+    """RetentionPolicy(): defaults hot_limit=3, hot_window_days=2; explicit values override."""
+    policy = RetentionPolicy()
+    assert policy.hot_limit == 3
+    assert policy.hot_window_days == 2
+
+    custom = RetentionPolicy(hot_limit=5, hot_window_days=7)
+    assert custom.hot_limit == 5
+    assert custom.hot_window_days == 7
+
+
+# ---------------------------------------------------------------------------
+# Phase 41 Plan 04 — Task 1 RED: typed sessions, recency hot-order, warm
+# carrier weighting (full carrier set), self-exclusion, old-session-warm,
+# retention window, inbox gap characterization
+# ---------------------------------------------------------------------------
+
+
+async def test_recency_order_hot():
+    """_hot_sessions (via assemble) returns a more-recent session BEFORE an older one.
+
+    MEM-09 place (a): recency reorders, most-recent first.  Blend — neither session
+    is dropped.
+    """
+    today = "2026-06-12"
+    old_date = "2026-06-02"  # 10 days older
+    notes = {
+        f"ops/sessions/{old_date}/trekkie-10-00-00.md": f"---\ndate: {old_date}\nuser_id: trekkie\ntime: 10-00-00\n---\n## User\nOld message\n## Sentinel\nOld reply\n",
+        f"ops/sessions/{today}/trekkie-10-00-00.md": f"---\ndate: {today}\nuser_id: trekkie\ntime: 10-00-00\n---\n## User\nNew message\n## Sentinel\nNew reply\n",
+    }
+    policy = RetentionPolicy(hot_limit=10, hot_window_days=30)
+    vault = FakeVault(notes=notes)
+    recall = Recall(vault=vault, config=RecallConfig(), policy=policy)
+    result = await recall.assemble(make_request(), budget=8192)
+
+    assert len(result.sessions) >= 2, (
+        f"Expected at least 2 sessions, got {len(result.sessions)}"
+    )
+    assert all(isinstance(s, SessionSummary) for s in result.sessions), (
+        "sessions must be list[SessionSummary]"
+    )
+    # Most-recent session must come first
+    assert result.sessions[0].date == today, (
+        f"Most-recent session (today={today!r}) must be first; "
+        f"got {result.sessions[0].date!r}"
+    )
+
+
+async def test_recency_order_is_blend_not_filter():
+    """Recency reorders — it does NOT drop older sessions.
+
+    MEM-09: a blend, not a hard override. An older session must still appear
+    in the list even though it ranks after a more-recent one.
+    """
+    today = "2026-06-12"
+    old_date = "2026-06-02"
+    notes = {
+        f"ops/sessions/{old_date}/trekkie-10-00-00.md": f"---\ndate: {old_date}\nuser_id: trekkie\ntime: 10-00-00\n---\n## User\nOld message\n## Sentinel\nOld reply\n",
+        f"ops/sessions/{today}/trekkie-10-00-00.md": f"---\ndate: {today}\nuser_id: trekkie\ntime: 10-00-00\n---\n## User\nNew message\n## Sentinel\nNew reply\n",
+    }
+    policy = RetentionPolicy(hot_limit=10, hot_window_days=30)
+    vault = FakeVault(notes=notes)
+    recall = Recall(vault=vault, config=RecallConfig(), policy=policy)
+    result = await recall.assemble(make_request(), budget=8192)
+
+    dates = [s.date for s in result.sessions]
+    assert old_date in dates, (
+        f"Older session ({old_date!r}) must still be present (blend, not filter); "
+        f"session dates: {dates}"
+    )
+
+
+async def test_recency_warm_carrier_journal():
+    """Warm carrier weighting (place b): a journal/ note dated today ranks above one from 10 days ago.
+
+    MEM-09 place (b): RRF score of journal/ carrier notes is multiplied by recency_weight.
+    Both notes have equal keyword relevance (same query term appears in both).
+    Both notes MUST appear in warm (warm_top_n=2, only 2 candidates) and the
+    today one must rank first (recency-boosted above the older one).
+
+    RED failure mechanism: FakeVault.find() is overridden to return the OLD note first
+    at a higher RRF rank than the new note. Without recency weighting, the old note
+    ranks first. With recency weighting, today's note has a higher adjusted score.
+    """
+    today = "2026-06-12"
+    old_date = "2026-06-02"
+
+    # journal/ path shape: journal/{YYYY-MM-DD}/{slug}.md
+    new_path = f"journal/{today}/topic-note.md"
+    old_path = f"journal/{old_date}/topic-note.md"
+
+    notes = {
+        new_path: "carrier note topic warm recency journal test",
+        old_path: "carrier note topic warm recency journal test",
+    }
+    vault = FakeVault(notes=notes)
+
+    # Override find() to return the OLD note first (higher keyword rank) — this is the
+    # adversarial case: without recency weighting, the old note wins by keyword rank.
+    async def ordered_find(query: str) -> list[dict]:
+        return [
+            {"filename": old_path, "score": 1.0},   # rank 0 (better keyword rank)
+            {"filename": new_path, "score": 1.0},   # rank 1
+        ]
+
+    vault.find = ordered_find  # type: ignore[method-assign]
+
+    recall = Recall(vault=vault, config=RecallConfig(warm_top_n=2))
+    result = await recall.assemble(
+        make_request(content="carrier note topic warm recency journal test"), budget=8192
+    )
+
+    warm_paths = [r.path for r in result.warm]
+    assert new_path in warm_paths, (
+        f"Today's journal/ carrier ({new_path!r}) should be in warm; got {warm_paths}"
+    )
+    assert old_path in warm_paths, (
+        f"Old journal/ carrier ({old_path!r}) should be in warm (warm_top_n=2, 2 candidates); "
+        f"got {warm_paths}"
+    )
+    # Today's journal/ carrier must rank above the older one after recency weighting.
+    # Without recency: old_path at rank 0 → higher RRF → old_path first.
+    # With recency: new_path score multiplied by weight≈1.0 > old_path × weight≈0.36 → new_path first.
+    assert warm_paths.index(new_path) < warm_paths.index(old_path), (
+        f"Today's journal/ carrier must rank above the 10-day-old one (recency weighting place b); "
+        f"order: {warm_paths}"
+    )
+
+
+async def test_recency_warm_carrier_topic_dir():
+    """Warm carrier weighting (place b): weighting applies to NON-journal carrier dirs too.
+
+    Proves the full carrier set (not journal-only): a learning/ note dated today ranks
+    above an accomplishments/ note dated 10 days ago when the old note is returned first
+    by keyword search (higher keyword rank). Both MUST appear in warm (warm_top_n=2, 2 candidates).
+
+    RED failure mechanism: FakeVault.find() overridden to return OLD note first.
+    Without recency weighting, the old accomplishments/ note ranks first.
+    With recency weighting, the today learning/ note is boosted above it.
+    """
+    today = "2026-06-12"
+    old_date = "2026-06-02"
+
+    # topic-dir path shape: {base}/{slug}-{YYYY-MM-DD}.md
+    new_path = f"learning/carrier-topic-warm-{today}.md"
+    old_path = f"accomplishments/carrier-topic-warm-{old_date}.md"
+
+    notes = {
+        new_path: "carrier topic warm full set recency non journal test",
+        old_path: "carrier topic warm full set recency non journal test",
+    }
+    vault = FakeVault(notes=notes)
+
+    # Override find() to return OLD note first (adversarial for recency test)
+    async def ordered_find(query: str) -> list[dict]:
+        return [
+            {"filename": old_path, "score": 1.0},   # rank 0 (better keyword rank)
+            {"filename": new_path, "score": 1.0},   # rank 1
+        ]
+
+    vault.find = ordered_find  # type: ignore[method-assign]
+
+    recall = Recall(vault=vault, config=RecallConfig(warm_top_n=2))
+    result = await recall.assemble(
+        make_request(content="carrier topic warm full set recency non journal test"), budget=8192
+    )
+
+    warm_paths = [r.path for r in result.warm]
+    assert new_path in warm_paths, (
+        f"Today's learning/ carrier ({new_path!r}) should be in warm; got {warm_paths}"
+    )
+    assert old_path in warm_paths, (
+        f"Old accomplishments/ carrier ({old_path!r}) should be in warm (warm_top_n=2); "
+        f"got {warm_paths}"
+    )
+    # Today's topic-dir carrier must rank above the older one (full carrier set, not journal-only).
+    # Without recency: old_path at rank 0 → higher RRF → old_path first.
+    # With recency: new_path score × ~1.0 > old_path × ~0.36 → new_path first.
+    assert warm_paths.index(new_path) < warm_paths.index(old_path), (
+        f"Today's learning/ carrier must rank above the 10-day-old accomplishments/ carrier "
+        f"(full carrier set, not journal-only); order: {warm_paths}"
+    )
+
+
+async def test_recency_excludes_self():
+    """Never-weight-self (D-02): non-carrier notes (notes/) are NOT multiplied by recency_weight.
+
+    A non-carrier note dated today should rank ABOVE an old carrier note after
+    recency weighting (the carrier's score is multiplied by a low weight; the
+    non-carrier's score is unchanged, so the non-carrier wins).
+
+    RED failure mechanism: find() overridden to return the OLD carrier note first.
+    Without recency weighting, the old carrier note keeps its rank-0 advantage and
+    ranks first. With correct implementation, the old carrier's score is multiplied
+    by recency_weight("2026-06-02") ≈ 0.36, while the today non-carrier's score stays
+    unchanged — the non-carrier wins.
+
+    Also asserts self/ notes never appear in warm (fundamental criterion 4 guard).
+    """
+    today = "2026-06-12"
+    old_date = "2026-06-02"
+
+    # Old carrier note (10 days ago) — journal/ prefix
+    old_carrier_path = f"journal/{old_date}/old-topic.md"
+    # Today non-carrier note — notes/ prefix (NOT in _CARRIER_NAMESPACE_PREFIXES)
+    today_non_carrier_path = f"notes/today-topic-{today}.md"
+
+    notes = {
+        old_carrier_path: "recency excludes non carrier test warm content",
+        today_non_carrier_path: "recency excludes non carrier test warm content",
+        f"self/identity-{today}.md": "recency excludes non carrier test warm content",
+    }
+    vault = FakeVault(notes=notes)
+
+    # Override find() to return OLD carrier first (adversarial for recency test)
+    async def ordered_find(query: str) -> list[dict]:
+        return [
+            {"filename": old_carrier_path, "score": 1.0},     # rank 0 (higher keyword rank)
+            {"filename": today_non_carrier_path, "score": 1.0},  # rank 1
+            {"filename": f"self/identity-{today}.md", "score": 1.0},  # excluded by exclude_prefixes
+        ]
+
+    vault.find = ordered_find  # type: ignore[method-assign]
+
+    recall = Recall(vault=vault, config=RecallConfig(warm_top_n=2))
+    result = await recall.assemble(
+        make_request(content="recency excludes non carrier test warm content"), budget=8192
+    )
+
+    warm_paths = [r.path for r in result.warm]
+
+    # self/ must never appear in warm (criterion 4 — always, regardless of recency)
+    for path in warm_paths:
+        assert not path.startswith("self/"), (
+            f"self/ note must never appear in warm (D-02); found {path!r}"
+        )
+
+    # Both non-self notes must be in warm (warm_top_n=2)
+    assert old_carrier_path in warm_paths, (
+        f"Old carrier ({old_carrier_path!r}) must be in warm; got {warm_paths}"
+    )
+    assert today_non_carrier_path in warm_paths, (
+        f"Today's non-carrier ({today_non_carrier_path!r}) must be in warm; got {warm_paths}"
+    )
+    # The today non-carrier must rank above the old carrier:
+    # carrier is recency-weighted DOWN (× ≈ 0.36); non-carrier unchanged (D-02 positive allowlist).
+    assert warm_paths.index(today_non_carrier_path) < warm_paths.index(old_carrier_path), (
+        f"Today's non-carrier note must rank above the 10-day-old carrier note "
+        f"(carrier is recency-weighted DOWN, non-carrier is unchanged per D-02); "
+        f"order: {warm_paths}"
+    )
+
+
+async def test_old_session_warm_reachable_journal():
+    """MEM-07: a session older than hot_window_days is reachable via warm through a journal/ carrier.
+
+    A journal/ note that references the same topic as the session is returned
+    in warm; ops/ exclusion is NOT relaxed.
+    """
+    today = "2026-06-12"
+    old_date = "2026-05-01"  # well outside hot_window_days=2
+    carrier_path = f"journal/{old_date}/session-carrier-old.md"
+
+    notes = {
+        # carrier note in journal/ — embeds the session content
+        carrier_path: "old session carrier content journal warm reachable test",
+        # ops/sessions note — must NOT appear in warm (criterion 4)
+        f"ops/sessions/{old_date}/trekkie-09-00-00.md": "old session carrier content journal warm reachable test",
+    }
+    policy = RetentionPolicy(hot_limit=3, hot_window_days=2)  # old session excluded from hot
+    recall = Recall(vault=FakeVault(notes=notes), config=RecallConfig(), policy=policy)
+    result = await recall.assemble(
+        make_request(content="old session carrier content journal warm reachable test"), budget=8192
+    )
+
+    warm_paths = [r.path for r in result.warm]
+    assert carrier_path in warm_paths, (
+        f"Old journal/ carrier ({carrier_path!r}) must appear in warm (MEM-07); "
+        f"got {warm_paths}"
+    )
+    # ops/ must never appear in warm
+    for path in warm_paths:
+        assert not path.startswith("ops/"), (
+            f"ops/ note must never appear in warm (criterion 4); found {path!r}"
+        )
+
+
+async def test_old_session_warm_reachable_topic_dir():
+    """MEM-07: a session older than hot_window_days is reachable via warm through a topic-dir carrier.
+
+    Uses a references/ carrier note (not journal/) to prove the full carrier set,
+    not journal-only reachability.  ops/ exclusion is NOT relaxed.
+    """
+    today = "2026-06-12"
+    old_date = "2026-05-01"
+    carrier_path = f"references/old-session-ref-{old_date}.md"
+
+    notes = {
+        carrier_path: "old session topic dir carrier references warm reachable",
+        f"ops/sessions/{old_date}/trekkie-08-00-00.md": "old session topic dir carrier references warm reachable",
+    }
+    policy = RetentionPolicy(hot_limit=3, hot_window_days=2)
+    recall = Recall(vault=FakeVault(notes=notes), config=RecallConfig(), policy=policy)
+    result = await recall.assemble(
+        make_request(content="old session topic dir carrier references warm reachable"), budget=8192
+    )
+
+    warm_paths = [r.path for r in result.warm]
+    assert carrier_path in warm_paths, (
+        f"Old references/ carrier ({carrier_path!r}) must appear in warm (MEM-07); "
+        f"got {warm_paths}"
+    )
+    for path in warm_paths:
+        assert not path.startswith("ops/"), (
+            f"ops/ must never appear in warm (criterion 4); found {path!r}"
+        )
+
+
+async def test_retention_window_tunable():
+    """MEM-06: RetentionPolicy(hot_limit=1) returns at most 1 session; hot_limit=5 returns more.
+
+    Proves hot_limit lives on RetentionPolicy (OQ2), not RecallConfig.recent_session_limit.
+    """
+    today = "2026-06-12"
+    notes = {}
+    # Seed 3 distinct session notes for the user
+    for i in range(3):
+        path = f"ops/sessions/{today}/trekkie-0{i}-00-00.md"
+        notes[path] = f"---\ndate: {today}\nuser_id: trekkie\ntime: 0{i}-00-00\n---\n## User\nMsg {i}\n## Sentinel\nReply {i}\n"
+
+    # hot_limit=1 → at most 1 session returned
+    policy_1 = RetentionPolicy(hot_limit=1, hot_window_days=30)
+    recall_1 = Recall(vault=FakeVault(notes=notes), config=RecallConfig(), policy=policy_1)
+    result_1 = await recall_1.assemble(make_request(), budget=8192)
+    assert len(result_1.sessions) <= 1, (
+        f"hot_limit=1 should return at most 1 session; got {len(result_1.sessions)}"
+    )
+
+    # hot_limit=5 → up to all 3 seeded sessions returned
+    policy_5 = RetentionPolicy(hot_limit=5, hot_window_days=30)
+    recall_5 = Recall(vault=FakeVault(notes=notes), config=RecallConfig(), policy=policy_5)
+    result_5 = await recall_5.assemble(make_request(), budget=8192)
+    assert len(result_5.sessions) > len(result_1.sessions), (
+        f"hot_limit=5 should return more sessions than hot_limit=1; "
+        f"got {len(result_5.sessions)} vs {len(result_1.sessions)}"
+    )
+
+
+async def test_retention_window_excludes_out_of_window_sessions():
+    """CR-02: FakeVault.get_recent_sessions excludes sessions older than hot_window_days.
+
+    Seeds one session within the window and one clearly outside it (91 days ago).
+    With hot_window_days=30, only the recent session must be returned; the old one
+    must be excluded — the same filtering production ObsidianVault applies.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    old_date = (now - timedelta(days=91)).strftime("%Y-%m-%d")
+
+    notes = {
+        f"ops/sessions/{today}/trekkie-10-00-00.md": (
+            f"---\ndate: {today}\nuser_id: trekkie\ntime: 10-00-00\n---\n"
+            "## User\nRecent message\n## Sentinel\nRecent reply\n"
+        ),
+        f"ops/sessions/{old_date}/trekkie-10-00-00.md": (
+            f"---\ndate: {old_date}\nuser_id: trekkie\ntime: 10-00-00\n---\n"
+            "## User\nOld message\n## Sentinel\nOld reply\n"
+        ),
+    }
+    policy = RetentionPolicy(hot_limit=10, hot_window_days=30)
+    recall = Recall(vault=FakeVault(notes=notes), config=RecallConfig(), policy=policy)
+    result = await recall.assemble(make_request(), budget=8192)
+
+    session_dates = [s.date for s in result.sessions]
+    assert today in session_dates, (
+        f"Recent session (date={today!r}) must be included within hot_window_days=30; "
+        f"got {session_dates!r}"
+    )
+    assert old_date not in session_dates, (
+        f"Old session (date={old_date!r}, 91 days ago) must be excluded by hot_window_days=30; "
+        f"got {session_dates!r}"
+    )
+
+
+async def test_inbox_gap_not_recalled():
+    """Inbox/ MEM-07 gap characterization (D-06, Pitfall 1): inbox/ content is not warm-recalled.
+
+    In production, inbox/ is in sweep_skip_prefixes so notes there are never embedded
+    and never surface via SemanticRecall. Via keyword search they WOULD appear unless
+    also excluded from RecallConfig.exclude_prefixes.
+
+    This test documents-and-accepts the gap (D-06 mandate): inbox/ content is
+    deliberately noise-quarantined. We explicitly add "inbox/" to the warm-tier
+    exclude_prefixes so the boundary is a tested, recorded contract rather than a
+    silent omission. "Don't force-close" means we document it, not that we allow
+    inbox content to leak into warm recall.
+
+    The test FAILS in RED because RecallConfig() default does NOT include "inbox/" in
+    exclude_prefixes, so FakeVault.find() returns the inbox note. It PASSES in GREEN
+    when the implementation adds "inbox/" to the default exclude_prefixes tuple.
+    """
+    inbox_path = "inbox/_inbox.md"
+    notes = {
+        inbox_path: "inbox gap characterization warm test content low confidence unsure",
+    }
+    # Use default RecallConfig() — the implementation must add "inbox/" to exclude_prefixes
+    recall = Recall(vault=FakeVault(notes=notes), config=RecallConfig())
+    result = await recall.assemble(
+        make_request(content="inbox gap characterization warm test content low confidence unsure"),
+        budget=8192,
+    )
+
+    warm_paths = [r.path for r in result.warm]
+    # inbox/ content must NOT appear in warm recall
+    # In GREEN: RecallConfig.exclude_prefixes includes "inbox/" (document-and-accept)
+    assert inbox_path not in warm_paths, (
+        f"inbox/ content must not appear in warm recall (MEM-07 documented-and-accepted gap); "
+        f"found {inbox_path!r} in warm paths: {warm_paths}. "
+        f"Fix: ensure 'inbox/' is in RecallConfig.exclude_prefixes default."
     )

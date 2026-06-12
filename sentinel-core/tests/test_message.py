@@ -1140,7 +1140,7 @@ class _CapturingFakeVault:
     async def get_user_context(self, user_id: str) -> str | None:
         return self.get_user_context_value
 
-    async def get_recent_sessions(self, user_id: str, limit: int = 3) -> list:
+    async def get_recent_sessions(self, user_id: str, policy=None) -> list:
         return self.get_recent_sessions_value
 
     async def read_self_context(self, path: str) -> str:

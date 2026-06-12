@@ -1,0 +1,13 @@
+{
+  "sentinel/": [
+    "sentinel/persona.md"
+  ],
+  "self/": [
+    "self/goals.md",
+    "self/identity.md",
+    "self/learning-areas.md",
+    "self/methodology.md",
+    "self/relationships.md"
+  ],
+  "security/": []
+}

@@ -10,10 +10,11 @@ call paths stay identical.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from app.vault import VaultUnreachableError
+from app.services.recall import RetentionPolicy, SessionSummary
+from app.vault import VaultUnreachableError, _parse_session_summary
 
 # Re-use the canonical sweep method bodies from ObsidianVault — they only
 # touch read_note / write_note / delete_note, so they work against any
@@ -87,18 +88,42 @@ class FakeVault:
     async def read_self_context(self, path: str) -> str:
         return self.notes.get(path, "")
 
-    async def get_recent_sessions(self, user_id: str, limit: int = 3) -> list[str]:
+    async def get_recent_sessions(
+        self, user_id: str, policy: RetentionPolicy
+    ) -> list[SessionSummary]:
         # Return any pre-populated session bodies whose key matches the
         # user_id substring rule from production (``f"{user_id}-" in name``).
+        # Parse each matching note into a SessionSummary via the shared
+        # production helper so FakeVault behaviour is byte-identical.
+        #
+        # Mirror the production date-window filter: only include sessions
+        # whose date falls within the last policy.hot_window_days days.
+        now = datetime.now(timezone.utc)
+        window_dates = {
+            (now - timedelta(days=i)).strftime("%Y-%m-%d")
+            for i in range(policy.hot_window_days)
+        }
         candidates: list[tuple[str, str]] = []
         for path, body in self.notes.items():
             if not path.startswith("ops/sessions/"):
+                continue
+            # Extract date from path shape ops/sessions/{date}/...
+            parts = path.split("/")
+            if len(parts) < 4:
+                continue
+            note_date = parts[2]
+            if note_date not in window_dates:
                 continue
             filename = path.rsplit("/", 1)[-1]
             if f"{user_id}-" in filename and filename.endswith(".md"):
                 candidates.append((path, body))
         candidates.sort(key=lambda t: t[0], reverse=True)
-        return [b for _, b in candidates[:limit]]
+        summaries: list[SessionSummary] = []
+        for path, body in candidates[: policy.hot_limit]:
+            parsed = _parse_session_summary(path, body)
+            if parsed is not None:
+                summaries.append(parsed)
+        return summaries
 
     # Domain-language alias — production exposes both names so callers can
     # use whichever reads best at the call site.

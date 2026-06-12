@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.5.1
 milestone_name: — The Second Brain
-status: executing
-stopped_at: Phase 40 context gathered
-last_updated: "2026-06-12T01:42:51.606Z"
-last_activity: 2026-06-12 -- Phase 40 execution started
+status: verifying
+stopped_at: Completed 41-04-PLAN.md — typed sessions, recency wiring, carrier weighting
+last_updated: "2026-06-12T14:23:33.965Z"
+last_activity: 2026-06-12
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 10
-  completed_plans: 9
-  percent: 33
+  completed_phases: 3
+  total_plans: 15
+  completed_plans: 15
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 40 — semantic-recall
+**Current focus:** Phase 41 — typed-sessionsummary-retention
 
 ## Current Position
 
-Phase: 40 (semantic-recall) — EXECUTING
-Plan: 3 of 7
-Status: Ready to execute
-Last activity: 2026-06-12 -- Phase 40 execution started
+Phase: 41
+Plan: Not started
+Status: Phase complete — ready for verification
+Last activity: 2026-06-12
 
 ## Milestone Progress
 
@@ -76,7 +76,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 
 **Velocity:**
 
-- Total plans completed: 13
+- Total plans completed: 18
 - Average duration: ~5 min
 - Total execution time: 0.2 hours
 
@@ -88,6 +88,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | 27 | 5 | - | - |
 | 39 | 3 | - | - |
 | 40 | 3 | - | - |
+| 41 | 5 | - | - |
 
 **Recent Trend:**
 
@@ -114,6 +115,11 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 40-semantic-recall P01 | 466 | 3 tasks | 2 files |
 | Phase 40-semantic-recall P02 | 25m | 3 tasks | 3 files |
 | Phase 40-semantic-recall P03 | 900 | 3 tasks | 3 files |
+| Phase 41-typed-sessionsummary-retention P01 | 3min | 3 tasks | 2 files |
+| Phase 41-typed-sessionsummary-retention P02 | 6 | 2 tasks | 5 files |
+| Phase 41-typed-sessionsummary-retention P03 | 102s | 2 tasks | 3 files |
+| Phase 41-typed-sessionsummary-retention PP04 | 25min | 3 tasks | 4 files |
+| Phase 41-typed-sessionsummary-retention P05 | 2min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -172,6 +178,12 @@ Recent decisions affecting current work:
 - [Phase 40-02]: SemanticRecall reads embedding index via vault.read_note() + 60s TTL cache (REST-only, no mtime); sidecar index at ops/sweeps/embedding-index.json matching EMBEDDING_INDEX_PATH
 - [Phase 40-02]: cosine_floor=0.50 default (UAT-tunable); body-read deferred to Recall post-RRF trim (A5: warm_top_n reads not semantic_top_k reads)
 - [Phase 40-02]: ADR-0004 accepted: sidecar-index supersedes frontmatter-read approach; supersession note records D-01/D-02/D-08/D-09 REVISED decisions
+- [Phase ?]: _hot_sessions bridged to RetentionPolicy from RecallConfig.recent_session_limit until Plan 04 lockstep removal (D-07)
+- [Phase ?]: _parse_session_summary deferred runtime import avoids circular import at vault.py edge
+- [Phase ?]: OQ1 RESOLVED: carrier namespace = (journal/, learning/, accomplishments/, references/) — positive allowlist for warm recency weighting (not journal-only)
+- [Phase ?]: OQ2 RESOLVED: RecallConfig.recent_session_limit REMOVED; hot_limit lives only on RetentionPolicy — single source of truth
+- [Phase ?]: OQ3 RESOLVED: RetentionPolicy injected as policy= kwarg into Recall.__init__, stored as self._policy; NOT threaded through RecallConfig
+- [Phase ?]: D-06 inbox/ gap DOCUMENT-AND-ACCEPT: low-confidence turns quarantined in inbox/ (sweep_skip_prefixes) are excluded from warm recall; inbox/ added to RecallConfig.exclude_prefixes default; characterized by test_inbox_gap_not_recalled
 
 ### Pending Todos
 
@@ -205,10 +217,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-06-12T01:42:51.597Z
-Stopped at: Phase 40 context gathered
+Last session: 2026-06-12T13:56:41.004Z
+Stopped at: Completed 41-04-PLAN.md — typed sessions, recency wiring, carrier weighting
 Resume file: 
 
 None
-
-**Next Plan:** 36 Plan 01 — Wave 0 RED TDD stubs for test_npcs.py (7 test functions)

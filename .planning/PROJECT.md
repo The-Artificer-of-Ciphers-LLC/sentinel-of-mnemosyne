@@ -31,6 +31,10 @@ context on every message — so conversations are always informed by history, ne
 - ✓ MEM-03: Recall by meaning via semantic vector search (`SemanticRecall` strategy backed by vault sweeper embeddings) — Validated in Phase 40: Semantic Recall
 - ✓ MEM-04: Hybrid keyword+semantic retrieval merged via Reciprocal Rank Fusion (RRF); `KeywordRecall` and `SemanticRecall` coexist behind the `RetrievalStrategy` seam — Validated in Phase 40: Semantic Recall
 - ✓ MEM-05: Sweeper-maintained embedding index; no per-note HTTP call at query time; model-mismatch notes skipped gracefully — Validated in Phase 40: Semantic Recall
+- ✓ MEM-06: `RetentionPolicy` is operator-tunable via env (`retention_hot_limit`, `retention_hot_window_days`) — Validated in Phase 41: Typed SessionSummary + Retention
+- ✓ MEM-07: Sessions older than the hot window are recalled via the index (warm tier) instead of dropped — Validated in Phase 41: Typed SessionSummary + Retention
+- ✓ MEM-08: Typed `SessionSummary` value flows end-to-end (vault → Recall → `RecalledContext.sessions` → consumers) — Validated in Phase 41: Typed SessionSummary + Retention
+- ✓ MEM-09: Recency weighting applied to episodic/carrier namespaces only — Validated in Phase 41: Typed SessionSummary + Retention
 
 See `.planning/REQUIREMENTS.md` for the full validated requirement history across phases 1–38.
 
@@ -61,8 +65,7 @@ Phase 39 complete — retrieval extracted into a first-class `Recall` module (`R
 
 Phase 40 complete — semantic recall implemented (ADR-0004); `SemanticRecall` strategy activates the vault sweeper's `embedding_b64` frontmatter as live retrieval data; hybrid BM25+vector merge via RRF; sweeper maintains the embedding index at index time with no per-note HTTP calls at query time; model-mismatch notes skipped gracefully. MEM-03, MEM-04, and MEM-05 validated.
 
-Session summaries exist but are dropped from context after 3 turns / today+yesterday — meaning
-conversations longer than a day routinely lose history. This is the remaining gap for v0.5.1.
+Phase 41 complete — typed `SessionSummary` and `RetentionPolicy` implemented (ADR-0005); older sessions recalled via the index (warm tier) instead of dropped past the hot window; `RetentionPolicy` is operator-tunable via env; recency weighting applied to episodic/carrier namespaces. MEM-06, MEM-07, MEM-08, and MEM-09 validated. v0.5.1 "The Second Brain" milestone complete (all 3 phases). 20/20 must-haves, full suite 404 passed / 12 skipped.
 
 **Domain vocabulary** (canonical terms — see `CONTEXT.md` for full glossary):
 - **Vault**: the Obsidian vault; the `Vault` Protocol in `app/vault.py` is the sole persistence seam
@@ -93,7 +96,7 @@ conversations longer than a day routinely lose history. This is the remaining ga
 | Vault seam at `app/vault.py`, not under `app/clients/` (ADR-0002) | Single Protocol interface prevents scattered Obsidian client calls; `FakeVault` enables full unit-test isolation | ✓ Good |
 | Recall is a module above the Vault seam, not inline in the message processor (ADR-0003) | Retrieval policy (thresholds, budgets, namespace exclusions) is domain logic that does not belong in the adapter | ✓ Good |
 | `RetrievalStrategy` seam inside Recall: `KeywordRecall` + `SemanticRecall` (ADR-0004) | Makes sweeper embeddings live retrieval data; allows BM25 and vector search to coexist behind one interface | ✓ Good |
-| Typed `SessionSummary` + `RetentionPolicy` (ADR-0005) | Stops hard-dropping context after 3 turns; older sessions recalled via index instead of silently lost | — Pending |
+| Typed `SessionSummary` + `RetentionPolicy` + recency-weighted merge (ADR-0005) | Stops hard-dropping context after 3 turns; older sessions recalled via index instead of silently lost; recalled sessions ranked by recency | ✓ Good |
 | LiteLLM-direct as the AI layer; Pi harness is optional (`--pi` flag) | Removes an unnecessary process boundary for standard chat; Pi harness reserved for advanced coding use at v0.7 | ✓ Good |
 | Docker Compose override fragments per module/interface | Modules never touch the base compose file; zero central registry sprawl | ✓ Good |
 
@@ -104,7 +107,7 @@ conversations longer than a day routinely lose history. This is the remaining ga
 **Goal:** Make recalled memory real — retrieval becomes a first-class module that actually surfaces
 past content across conversations, instead of "write to Obsidian, never look again after three."
 
-**Progress: 2 of 3 phases complete (Phase 39 + Phase 40 done; Phase 41 remaining).**
+**Progress: 3 of 3 phases complete (Phase 39 + Phase 40 + Phase 41 done). Milestone complete.**
 
 **Target features:**
 - ✓ Extract the Recall module (ADR-0003) — retrieval becomes a deep module above the Vault seam,
@@ -112,8 +115,8 @@ past content across conversations, instead of "write to Obsidian, never look aga
 - ✓ Semantic recall (ADR-0004) — a `RetrievalStrategy` seam inside Recall (`KeywordRecall` +
   `SemanticRecall`); the vault sweeper's per-note embeddings (`embedding_b64`) become live retrieval
   data instead of dead frontmatter. — Phase 40 complete
-- Typed `SessionSummary` + retention (ADR-0005) — typed sessions and a `RetentionPolicy`; older
-  turns are recalled via the index instead of dropped past the 3-turn / today+yesterday hot window.
+- ✓ Typed `SessionSummary` + retention (ADR-0005) — typed sessions and a `RetentionPolicy`; older
+  turns are recalled via the index instead of dropped past the 3-turn / today+yesterday hot window. Recalled sessions are recency-weighted so recent sessions rank above older ones. — Phase 41 complete
 
 ---
 
@@ -136,4 +139,4 @@ PROJECT.md evolves throughout the project lifecycle.
 
 ---
 
-*Last updated: 2026-06-11*
+*Last updated: 2026-06-12*

@@ -48,11 +48,23 @@ async def debug_context(
     if ctx.recall is None:
         raise RuntimeError("RouteContext.recall is not configured")
     recalled = await ctx.recall.assemble(fake_req, budget=ctx.context_window)
+    # Plan 41-05: serialize typed fields only — body excluded (debug endpoint only,
+    # not injection path; body contains raw markdown not suitable for external APIs).
     return JSONResponse(
         {
             "user_id": user_id,
             "self_context": recalled.self_context,
-            "sessions": recalled.sessions,
+            "sessions": [
+                {
+                    "date": s.date,
+                    "user_id": s.user_id,
+                    "time": s.time,
+                    "user_msg": s.user_msg,
+                    "sentinel_msg": s.sentinel_msg,
+                    "path": s.path,
+                }
+                for s in recalled.sessions
+            ],
             "warm": [{"path": r.path, "score": r.score} for r in recalled.warm],
             "recent_sessions_count": len(recalled.sessions),
         }

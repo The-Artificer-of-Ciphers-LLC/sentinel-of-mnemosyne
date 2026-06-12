@@ -116,6 +116,15 @@ class Settings(BaseSettings):
         ".obsidian/",
     )
 
+    # MEM-06 hot-window retention knobs (D-04).
+    # These two fields make RetentionPolicy operator-tunable without a redeploy.
+    # Defaults (3 / 2) preserve the "today+yesterday, top-3 sessions" behavior
+    # shipped in plan 41-01.  A wider window surfaces more of the operator's own
+    # session history; see T-41-06 in the threat model for the negative-value
+    # degradation note (empty-slice, never unbounded read).
+    retention_hot_limit: int = 3          # env: RETENTION_HOT_LIMIT
+    retention_hot_window_days: int = 2    # env: RETENTION_HOT_WINDOW_DAYS
+
     # Protected-namespace allowlist (40-05 gap closure, MEM-05).
     # Operator-critical paths that the Vault seam REFUSES to relocate or trash.
     # These are NOT the same as sweep_skip_prefixes (which governs PROCESSING):

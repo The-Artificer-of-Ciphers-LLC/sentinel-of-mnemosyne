@@ -21,15 +21,20 @@ not one HTTP adapter among many.
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 import typing
 from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 import httpx
 
 from app.errors import ProtectedPathError, VaultUnreachableError
 from app.markdown_frontmatter import join_frontmatter, split_frontmatter
 from app.time_utils import _iso_utc, _parse_iso, _today_str
+
+if TYPE_CHECKING:
+    from app.services.recall import RetentionPolicy, SessionSummary
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +130,7 @@ class Vault(typing.Protocol):
 
     async def read_self_context(self, path: str) -> str: ...
 
-    async def get_recent_sessions(self, user_id: str, limit: int = 3) -> list[str]: ...
+    async def get_recent_sessions(self, user_id: str, policy: RetentionPolicy) -> list[SessionSummary]: ...
 
     async def write_session_summary(self, path: str, content: str) -> None: ...
 
@@ -154,6 +159,111 @@ class Vault(typing.Protocol):
     async def acquire_sweep_lock(self, now: datetime | None = None) -> bool: ...
 
     async def release_sweep_lock(self) -> None: ...
+
+
+# ---------------------------------------------------------------------------
+# Adapter-edge session-note parser (MEM-08)
+#
+# Module-private helper used by ObsidianVault.get_recent_sessions and mirrored
+# by FakeVault so both produce equivalent SessionSummary values.
+#
+# Security V5: parse defensively — a malformed/hostile note (missing
+# frontmatter, odd path, no "## User" heading) must yield either a
+# SessionSummary with empty-string fallbacks per missing field, or None
+# (skip-the-note) if the path itself is so malformed that even the
+# date/user_id/time triplet cannot be derived.  The function MUST NOT raise.
+# ---------------------------------------------------------------------------
+
+_FM_FIELD_RE = re.compile(r"^(\w+):\s*(.+)$", re.MULTILINE)
+
+
+def _parse_session_summary(path: str, raw: str) -> SessionSummary | None:
+    """Parse a raw session-note markdown string into a :class:`SessionSummary`.
+
+    ``path`` is the vault-relative path, e.g.
+    ``ops/sessions/2026-06-12/trekkie-14-30-00.md``.
+
+    Returns ``None`` if the path shape is too malformed to extract the
+    ``date``/``user_id``/``time`` triplet (caller should skip the note).
+    Returns a ``SessionSummary`` with empty-string fallbacks for any field
+    that cannot be parsed from frontmatter/body — never raises.
+
+    Import is deferred to runtime inside this function so the module-level
+    ``TYPE_CHECKING``-only import of ``SessionSummary`` is sufficient for
+    the Protocol and ObsidianVault annotations (``from __future__ import
+    annotations`` makes those lazy strings).
+    """
+    from app.services.recall import SessionSummary  # noqa: PLC0415 — runtime import
+
+    try:
+        # --- derive date / user_id / time from path ---
+        # Expected: ops/sessions/{date}/{user_id}-{time}.md
+        parts = path.split("/")
+        if len(parts) < 4:
+            return None
+        date = parts[2]
+        stem = parts[3].removesuffix(".md") if parts[3].endswith(".md") else parts[3]
+        # stem looks like "trekkie-14-30-00"; user_id is everything before the
+        # first "-\d\d-" pattern (HH-MM-SS timestamp is always digits).
+        m = re.search(r"-(\d{2}-\d{2}-\d{2})$", stem)
+        if m:
+            time_part = m.group(1)
+            user_id = stem[: m.start()]
+        else:
+            # fallback: no recognisable timestamp — can still return partial
+            time_part = ""
+            user_id = stem
+        if not date or not user_id:
+            return None
+    except Exception:
+        return None
+
+    # --- parse frontmatter fields (best-effort) ---
+    try:
+        fm_fields: dict[str, str] = {}
+        # Strip leading/trailing "---" blocks
+        fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", raw, re.DOTALL)
+        if fm_match:
+            for fm_m in _FM_FIELD_RE.finditer(fm_match.group(1)):
+                fm_fields[fm_m.group(1).strip()] = fm_m.group(2).strip()
+        # Override user_id from frontmatter if present (authoritative)
+        if fm_fields.get("user_id"):
+            user_id = fm_fields["user_id"]
+    except Exception:
+        pass
+
+    # --- parse body sections ---
+    user_msg = ""
+    sentinel_msg = ""
+    try:
+        # Use the canonical split_frontmatter helper (already imported above)
+        # to locate the body — avoids the fragile find("---") chain that
+        # misfires when a frontmatter field value contains "---".
+        _fm, body_text = split_frontmatter(raw)
+        body_text = body_text.lstrip("\n") if body_text else ""
+
+        user_section = re.search(
+            r"## User\s*\n+(.*?)(?=\n## |\Z)", body_text, re.DOTALL
+        )
+        sentinel_section = re.search(
+            r"## Sentinel\s*\n+(.*?)(?=\n## |\Z)", body_text, re.DOTALL
+        )
+        if user_section:
+            user_msg = user_section.group(1).strip()
+        if sentinel_section:
+            sentinel_msg = sentinel_section.group(1).strip()
+    except Exception:
+        pass
+
+    return SessionSummary(
+        date=date,
+        user_id=user_id,
+        time=time_part,
+        user_msg=user_msg,
+        sentinel_msg=sentinel_msg,
+        path=path,
+        body=raw,
+    )
 
 
 class ObsidianVault:
@@ -275,20 +385,25 @@ class ObsidianVault:
 
         return await self._safe_request(_inner(), "", "read_self_context")
 
-    async def get_recent_sessions(self, user_id: str, limit: int = 3) -> list[str]:
+    async def get_recent_sessions(  # type: ignore[override]
+        self, user_id: str, policy: RetentionPolicy
+    ) -> list[SessionSummary]:
         """
-        Hot tier: return content of last `limit` session files for this user_id.
-        Strategy: list today's and yesterday's ops/sessions/ directories by filename,
-        filter to files matching user_id, sort descending, fetch content for top N.
+        Hot tier: return typed SessionSummary objects for the last ``policy.hot_limit``
+        session files for this user_id within the last ``policy.hot_window_days`` days.
+        Strategy: list ops/sessions/ directories for each day in the policy window,
+        filter to files matching user_id, sort descending, fetch content for top N,
+        parse each note into a SessionSummary at the adapter edge.
         Returns [] on any error (graceful degrade per D-3).
-        MEM-05: hot-tier implementation.
+        MEM-05/MEM-06/MEM-08: typed, policy-driven hot-tier implementation.
         """
 
         async def _inner():
             now = datetime.now(timezone.utc)
-            dates = [now.strftime("%Y-%m-%d")]
-            yesterday = now - timedelta(days=1)
-            dates.append(yesterday.strftime("%Y-%m-%d"))
+            dates = [
+                (now - timedelta(days=i)).strftime("%Y-%m-%d")
+                for i in range(policy.hot_window_days)
+            ]
 
             candidates: list[tuple[str, str]] = []  # (sort_key, path)
             for date in dates:
@@ -312,9 +427,9 @@ class ObsidianVault:
                     continue
 
             candidates.sort(key=lambda x: x[0], reverse=True)
-            top = candidates[:limit]
+            top = candidates[: policy.hot_limit]
 
-            contents: list[str] = []
+            summaries: list[SessionSummary] = []
             for _, path in top:
                 try:
                     resp = await self._client.get(
@@ -323,10 +438,12 @@ class ObsidianVault:
                         timeout=5.0,
                     )
                     if resp.status_code == 200:
-                        contents.append(resp.text)
+                        parsed = _parse_session_summary(path, resp.text)
+                        if parsed is not None:
+                            summaries.append(parsed)
                 except Exception:
                     continue
-            return contents
+            return summaries
 
         return await self._safe_request(_inner(), [], "get_recent_sessions")
 

@@ -63,7 +63,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 38: PF2E Multi-Step Onboarding Dialog** — Stateful conversational onboarding flow for `:pf player start` (completed 2026-05-10)
 - [x] **Phase 39: Extract the Recall Module** — Retrieval becomes a first-class `Recall` module returning `RecalledContext`; `MessageProcessor` and `GET /context/{user_id}` both delegate to it (completed 2026-06-11)
 - [x] **Phase 40: Semantic Recall** — `RetrievalStrategy` seam with `KeywordRecall` + `SemanticRecall`; sweeper embeddings become live retrieval data via RRF hybrid merge (completed 2026-06-11)
-- [ ] **Phase 41: Typed SessionSummary + Retention** — Typed `SessionSummary` + tunable `RetentionPolicy`; sessions older than the hot window recalled via index instead of dropped
+- [x] **Phase 41: Typed SessionSummary + Retention** — Typed `SessionSummary` + tunable `RetentionPolicy`; sessions older than the hot window recalled via index instead of dropped (completed 2026-06-12)
 
 ## Phase Details
 
@@ -797,7 +797,7 @@ Plans:
 
 **Goal:** Typed `SessionSummary` dataclass and a tunable `RetentionPolicy`; sessions older than the hot window are recalled via the semantic index instead of being dropped at the 3-turn/two-day cliff. Changes `get_recent_sessions` return type (bounded ADR-0002 Vault-method reopen touching `ObsidianVault`, `FakeVault`, and adapter tests).
 **Depends on:** Phase 39, Phase 40
-**Requirements:** MEM-06, MEM-07, MEM-08
+**Requirements:** MEM-06, MEM-07, MEM-08, MEM-09
 **Canonical ref:** docs/adr/0005-typed-session-summary.md
 **Success Criteria** (what must be TRUE):
 
@@ -805,5 +805,23 @@ Plans:
   2. A session that is older than the hot window (more than `hot_window_days` days ago) is retrievable via `RecalledContext.warm` through the semantic index rather than being silently dropped
   3. Session data crosses the Recall interface as `list[SessionSummary]` typed values (not raw markdown strings), enabling callers to access `date`, `user_id`, and message fields without string-parsing frontmatter
   4. The `ops/` exclusion in `RecallConfig` is not relaxed — older sessions are reached via conversation notes filed outside `ops/`, not by widening the exclusion list
+  5. Recalled sessions are ordered/weighted by recency — a more recent session ranks above an older one for the same relevance — via a recency weighting applied to `SessionSummary.date` in the merge; the weighting affects only episodic sessions, never Self-namespace notes
 
-**Plans:** TBD
+**Plans:** 5/5 plans complete
+Plans:
+**Wave 1**
+
+- [x] 41-01-PLAN.md — Typed value contracts: SessionSummary + RetentionPolicy dataclasses + pure recency_weight helper (TDD)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 41-02-PLAN.md — Bounded Vault reopen: retype get_recent_sessions -> list[SessionSummary] with policy, adapter-edge parser, FakeVault lockstep
+- [x] 41-03-PLAN.md — Env-overridable RetentionPolicy Settings + composition-root wiring (RETENTION_HOT_LIMIT / RETENTION_HOT_WINDOW_DAYS)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 41-04-PLAN.md — Recall integration: typed RecalledContext.sessions, recency hot-ordering + warm carrier weighting (episodic-only), old-session-warm, remove recent_session_limit, record OQ1/OQ2/OQ3 + inbox gap (TDD)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 41-05-PLAN.md — Consumer lockstep: retype message_processing/status consumers + ~19 test mock sites; full-suite integration gate

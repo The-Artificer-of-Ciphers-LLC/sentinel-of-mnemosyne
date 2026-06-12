@@ -5,7 +5,7 @@ NPC management, dialogue, monster harvesting, rules lookups, session
 notes, Foundry VTT event ingest, and per-player memory — all backed by
 your Obsidian vault.
 
-> **For Discord users:** see [`docs/USER-GUIDE.md`](../../docs/USER-GUIDE.md)
+> **For Discord users:** see [`docs/reference/discord-commands.md`](../../docs/reference/discord-commands.md)
 > for end-user command reference. This README documents the module
 > internals: routes, persistence layout, deployment, and developer hooks.
 
@@ -263,11 +263,11 @@ The module's contract with the rest of Sentinel:
 
 ## See Also
 
-- [`docs/USER-GUIDE.md`](../../docs/USER-GUIDE.md) — Discord command
+- [`docs/reference/discord-commands.md`](../../docs/reference/discord-commands.md) — Discord command
   reference for end users.
-- [`docs/foundry-setup.md`](../../docs/foundry-setup.md) — Foundry VTT
+- [`docs/tutorial/foundry-first-setup.md`](../../docs/tutorial/foundry-first-setup.md) — Foundry VTT
   module installation + Forge/Tailscale connectivity options.
-- [`docs/ARCHITECTURE-Core.md`](../../docs/ARCHITECTURE-Core.md) —
+- [`docs/explanation/architecture.md`](../../docs/explanation/architecture.md) —
   Sentinel Core architecture (module gateway pattern, Path B).
 - [`CONTEXT.md`](../../CONTEXT.md) — domain glossary and known
   session-issues log (`session_issues` section).

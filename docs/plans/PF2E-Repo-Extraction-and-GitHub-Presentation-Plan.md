@@ -27,7 +27,7 @@ Deliverable: `docs/contracts/module-runtime-contract.md` + passing contract test
 1. Create new repo: `sentinel-module-pathfinder`.
 2. Move code:
    - `modules/pathfinder/**`
-   - relevant docs (`docs/foundry-setup.md` sections or split docs)
+   - relevant docs (`docs/tutorial/foundry-first-setup.md` sections or split docs)
 3. Preserve git history using subtree filter (recommended) or `git filter-repo`.
 4. Add standalone CI:
    - tests, lint, image build, release workflow

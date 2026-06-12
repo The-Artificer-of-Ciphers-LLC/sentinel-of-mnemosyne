@@ -23,7 +23,7 @@ from app.clients.embeddings import DEFAULT_LMSTUDIO_BASE_URL, Embeddings
 from app.clients.litellm_provider import LiteLLMProvider
 from app.services.injection_filter import InjectionFilter
 from app.services.message_processing import MessageProcessor
-from app.services.recall import Recall, RecallConfig, SemanticRecall
+from app.services.recall import Recall, RecallConfig, RetentionPolicy, SemanticRecall
 from app.services.model_registry import build_model_registry
 from app.services.model_selector import (
     _ORIGINAL_PREFIXES,
@@ -326,13 +326,17 @@ async def build_application(
         # written by vault_sweeper.py.  Do NOT use embeddings._model — it has
         # the "openai/" prefix and would make every model-match fail.
         _config = RecallConfig()
+        _policy = RetentionPolicy(
+            hot_limit=settings.retention_hot_limit,
+            hot_window_days=settings.retention_hot_window_days,
+        )
         _semantic = SemanticRecall(
             vault,
             embed_fn=embeddings.embed,
             active_model=settings.embedding_model,
             config=_config,
         )
-        recall = Recall(vault=vault, config=_config, semantic_strategy=_semantic)
+        recall = Recall(vault=vault, config=_config, semantic_strategy=_semantic, policy=_policy)
 
     if message_processor is None:
         message_processor = MessageProcessor(
