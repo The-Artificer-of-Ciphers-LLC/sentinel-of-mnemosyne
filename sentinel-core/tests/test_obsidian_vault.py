@@ -731,3 +731,157 @@ def test_protected_path_error_is_importable_from_errors():
     from app.errors import ProtectedPathError
     err = ProtectedPathError("test message")
     assert "test message" in str(err)
+
+
+# ---------------------------------------------------------------------------
+# Plan 40-05 — Task 2: Guard enforcement in relocate and move_to_trash
+#
+# Tests use FakeVault (backed by _make_store_transport / in-memory store)
+# because FakeVault.relocate/move_to_trash delegate to ObsidianVault method
+# bodies — so the guard wired into ObsidianVault is exercised through both.
+# ---------------------------------------------------------------------------
+
+
+# Task 2 helpers — FakeVault-backed store for in-memory tests
+
+
+def _make_fake_vault_with_notes(notes: dict[str, str]):
+    """Return a FakeVault pre-loaded with the given notes dict."""
+    from tests.fakes.vault import FakeVault
+    vault = FakeVault()
+    vault.notes = dict(notes)
+    return vault
+
+
+async def test_relocate_protected_source_raises_protected_path_error():
+    """relocate(sentinel/persona.md, ...) raises ProtectedPathError — source guard.
+
+    Source note must be untouched and no destination note created.
+    """
+    from app.errors import ProtectedPathError
+    vault = _make_fake_vault_with_notes({"sentinel/persona.md": "# Persona\nbody"})
+    with pytest.raises(ProtectedPathError):
+        await vault.relocate("sentinel/persona.md", "learning/persona/persona.md")
+    # Source is still there
+    assert vault.notes.get("sentinel/persona.md") == "# Persona\nbody"
+    # No destination created
+    assert "learning/persona/persona.md" not in vault.notes
+
+
+async def test_relocate_protected_source_delete_not_called(monkeypatch):
+    """relocate raises BEFORE any delete_note — delete_note is never called (spy assert)."""
+    from app.errors import ProtectedPathError
+    vault = _make_fake_vault_with_notes({"sentinel/persona.md": "# Persona\nbody"})
+    delete_calls = []
+    original_delete = vault.delete_note
+
+    async def spy_delete(path: str) -> None:
+        delete_calls.append(path)
+        return await original_delete(path)
+
+    vault.delete_note = spy_delete  # type: ignore[method-assign]
+    with pytest.raises(ProtectedPathError):
+        await vault.relocate("sentinel/persona.md", "learning/persona/persona.md")
+    assert delete_calls == [], f"delete_note must not be called; got: {delete_calls}"
+
+
+async def test_relocate_protected_destination_raises_protected_path_error():
+    """relocate('references/note.md', 'sentinel/note.md') raises ProtectedPathError.
+
+    Destination protection (concern 6): nothing written under sentinel/.
+    """
+    from app.errors import ProtectedPathError
+    vault = _make_fake_vault_with_notes({"references/note.md": "# Ref\nbody"})
+    with pytest.raises(ProtectedPathError):
+        await vault.relocate("references/note.md", "sentinel/note.md")
+    # Source is untouched
+    assert vault.notes.get("references/note.md") == "# Ref\nbody"
+    # Nothing written under sentinel/
+    sentinel_keys = [k for k in vault.notes if k.startswith("sentinel/")]
+    assert not sentinel_keys, f"No notes should be under sentinel/; found: {sentinel_keys}"
+
+
+async def test_relocate_protected_destination_self_namespace():
+    """relocate into self/ namespace also raises ProtectedPathError."""
+    from app.errors import ProtectedPathError
+    vault = _make_fake_vault_with_notes({"references/note.md": "body"})
+    with pytest.raises(ProtectedPathError):
+        await vault.relocate("references/note.md", "self/note.md")
+
+
+async def test_move_to_trash_protected_path_raises():
+    """move_to_trash('sentinel/persona.md', ...) raises ProtectedPathError."""
+    from app.errors import ProtectedPathError
+    vault = _make_fake_vault_with_notes({"sentinel/persona.md": "# Persona\nbody"})
+    with pytest.raises(ProtectedPathError):
+        await vault.move_to_trash("sentinel/persona.md", reason="sweep")
+    # Source is untouched
+    assert vault.notes.get("sentinel/persona.md") == "# Persona\nbody"
+
+
+async def test_move_to_trash_protected_path_delete_not_called(monkeypatch):
+    """move_to_trash raises BEFORE any delete_note — spy confirms zero calls."""
+    from app.errors import ProtectedPathError
+    vault = _make_fake_vault_with_notes({"sentinel/persona.md": "# Persona\nbody"})
+    delete_calls = []
+    original_delete = vault.delete_note
+
+    async def spy_delete(path: str) -> None:
+        delete_calls.append(path)
+        return await original_delete(path)
+
+    vault.delete_note = spy_delete  # type: ignore[method-assign]
+    with pytest.raises(ProtectedPathError):
+        await vault.move_to_trash("sentinel/persona.md", reason="sweep")
+    assert delete_calls == [], f"delete_note must not be called; got: {delete_calls}"
+
+
+async def test_write_note_into_protected_namespace_succeeds():
+    """write_note('sentinel/persona.md', body) SUCCEEDS — the guard is only on
+    relocate/move_to_trash, NOT write_note. This proves the documented write-based
+    restore path (round-3 item 4) is not blocked by the destination guard.
+    """
+    vault = _make_fake_vault_with_notes({})
+    body = "# Persona\nRestored content."
+    await vault.write_note("sentinel/persona.md", body)
+    assert vault.notes.get("sentinel/persona.md") == body
+
+
+async def test_incident_reproduced_at_primitive_and_blocked():
+    """Reproduce the original incident: sweep relocates sentinel/persona.md.
+
+    Before the fix: the persona would be relocated to learning/persona/persona.md.
+    After the fix: ProtectedPathError is raised and the persona body is byte-identical.
+    """
+    from app.errors import ProtectedPathError
+    original_body = "# Persona\n\nYou are the Sentinel. You remember everything."
+    vault = _make_fake_vault_with_notes({"sentinel/persona.md": original_body})
+
+    with pytest.raises(ProtectedPathError):
+        await vault.relocate("sentinel/persona.md", "learning/persona/persona.md")
+
+    # Source is byte-identical
+    assert vault.notes.get("sentinel/persona.md") == original_body
+    # No destination note
+    assert "learning/persona/persona.md" not in vault.notes
+
+
+async def test_relocate_non_protected_path_still_works():
+    """Regression lock: relocate of a non-protected path behaves exactly as before."""
+    vault = _make_fake_vault_with_notes({"references/alpha.md": "# Alpha\nbody"})
+    actual_dst = await vault.relocate("references/alpha.md", "topics/x/alpha.md")
+    assert actual_dst == "topics/x/alpha.md"
+    assert vault.notes.get("references/alpha.md", "") == ""
+    moved = vault.notes.get("topics/x/alpha.md", "")
+    assert "# Alpha" in moved
+    assert "original_path: references/alpha.md" in moved
+
+
+async def test_move_to_trash_non_protected_path_still_works():
+    """Regression lock: move_to_trash of a non-protected path behaves exactly as before."""
+    vault = _make_fake_vault_with_notes({"references/beta.md": "# Beta\nbody"})
+    dst = await vault.move_to_trash("references/beta.md", reason="dup")
+    assert dst.startswith("_trash/")
+    assert vault.notes.get("references/beta.md", "") == ""
+    moved = vault.notes.get(dst, "")
+    assert "# Beta" in moved
