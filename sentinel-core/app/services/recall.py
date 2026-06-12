@@ -53,6 +53,58 @@ SEARCH_SCORE_THRESHOLD = -200.0
 # None of these belong in warm-tier knowledge retrieval.
 _WARM_TIER_EXCLUDE_PREFIXES = ("ops/", "_trash/", "self/")
 
+# Positive allowlist for warm-tier recency weighting (MEM-09 place b, D-02, OQ1).
+# These are the FULL conversation-carrier directories that NoteIntake.classify_and_apply
+# files conversation turns into — every non-ops/, non-empty, non-inbox/ value in
+# TOPIC_VAULT_PATH (note_classifier.py:57-65):
+#   journal      → journal/    (per-day subdirs)
+#   learning     → learning/
+#   accomplishment → accomplishments/
+#   reference    → references/
+# EXCLUDED on purpose (never weighted, D-02 episodic-only):
+#   observation  → ops/observations (under ops/ exclusion)
+#   noise        → "" (never filed)
+#   unsure       → inbox/ (sweep_skip_prefixes; documented MEM-07 gap, D-06)
+# This is a POSITIVE allowlist — NOT derived by negating _WARM_TIER_EXCLUDE_PREFIXES.
+# A future non-carrier namespace is never silently weighted (T-41-08).
+_CARRIER_NAMESPACE_PREFIXES: tuple[str, ...] = (
+    "journal/",
+    "learning/",
+    "accomplishments/",
+    "references/",
+)
+
+
+def _path_date(path: str) -> str | None:
+    """Extract the YYYY-MM-DD date from a carrier note's vault path.
+
+    Two shapes from note_intake.py:_topic_target_path:
+    - journal/{YYYY-MM-DD}/{slug}.md  → the path segment at position 1
+    - {base}/{slug}-{YYYY-MM-DD}.md   → the trailing YYYY-MM-DD in the filename stem
+
+    Returns None (→ recency_weight fail-open returns 1.0) when the date
+    cannot be parsed, so a malformed path never raises into the recall path (T-41-10).
+    """
+    import re as _re
+
+    # journal/ shape: second segment is the date
+    if path.startswith("journal/"):
+        parts = path.split("/")
+        if len(parts) >= 2:
+            candidate = parts[1]
+            if _re.fullmatch(r"\d{4}-\d{2}-\d{2}", candidate):
+                return candidate
+        return None
+
+    # topic-dir shape: filename stem ends in -{YYYY-MM-DD}
+    filename = path.rsplit("/", 1)[-1]
+    stem = filename[:-3] if filename.endswith(".md") else filename
+    m = _re.search(r"(\d{4}-\d{2}-\d{2})$", stem)
+    if m:
+        return m.group(1)
+    return None
+
+
 # Common English function words stripped before keyword-mode vault search.
 # Obsidian /search/simple/ is conjunctive: every term must appear in the document.
 # For long conversational queries (>5 words) this kills recall — session summaries
@@ -176,8 +228,8 @@ class RecalledContext:
     self_context: list[str]
     """Raw markdown strings from the self-paths allowlist (non-empty only)."""
 
-    sessions: list[str]
-    """Raw markdown strings from ``get_recent_sessions`` (most-recent first)."""
+    sessions: list[SessionSummary]
+    """Typed session summaries from ``get_recent_sessions`` (most-recent first, MEM-08)."""
 
     warm: list[SearchResult]
     """Warm-tier search results filtered by threshold and namespace exclusions."""
@@ -195,17 +247,20 @@ class RecallConfig:
     relevance_threshold: float = -200.0
     """BM25 score floor; results below this are excluded from warm tier."""
 
-    exclude_prefixes: tuple[str, ...] = ("ops/", "_trash/", "self/")
-    """Warm-tier namespace exclusion list. Passed directly to ``str.startswith``."""
+    exclude_prefixes: tuple[str, ...] = ("ops/", "_trash/", "self/", "inbox/")
+    """Warm-tier namespace exclusion list. Passed directly to ``str.startswith``.
+
+    ``inbox/`` is included here (document-and-accept, D-06, Pitfall 1): low-confidence
+    content quarantined in ``inbox/`` is also in ``sweep_skip_prefixes`` and is never
+    embedded; excluding it from warm recall aligns keyword search with semantic behavior
+    and preserves the noise-quarantine intent.
+    """
 
     sessions_ratio: float = 0.15
     """Fraction of the total context budget reserved for session summaries."""
 
     search_ratio: float = 0.10
     """Fraction of the total context budget reserved for warm-tier results."""
-
-    recent_session_limit: int = 3
-    """Maximum number of recent session notes to fetch via ``get_recent_sessions``."""
 
     self_paths: list[str] = field(
         default_factory=lambda: [
@@ -692,6 +747,7 @@ class Recall:
         config: RecallConfig | None = None,
         keyword_strategy: "RetrievalStrategy | None" = None,
         semantic_strategy: "RetrievalStrategy | None" = None,
+        policy: "RetentionPolicy | None" = None,
     ) -> None:
         self._vault = vault
         self._config = config or RecallConfig()
@@ -701,6 +757,8 @@ class Recall:
         )
         # semantic_strategy=None means keyword-only graceful mode (D-14 / D-17)
         self._semantic_strategy: RetrievalStrategy | None = semantic_strategy
+        # MEM-06 / OQ3: RetentionPolicy injected; defaults to RetentionPolicy() when None.
+        self._policy: RetentionPolicy = policy or RetentionPolicy()
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -726,16 +784,26 @@ class Recall:
         )
         return [r for r in self_results if isinstance(r, str) and r.strip()]
 
-    async def _hot_sessions(self, user_id: str) -> list[str]:
-        """Fetch recent session summaries for the given user.
+    async def _hot_sessions(self, user_id: str) -> list[SessionSummary]:
+        """Fetch and recency-sort recent session summaries for the given user.
 
-        Bridges the typed Vault seam (MEM-08): constructs a RetentionPolicy from the
-        existing RecallConfig.recent_session_limit until Plan 04 rewires this
-        consumer in lockstep (D-07 / stage-removal of recent_session_limit).
+        MEM-08: returns ``list[SessionSummary]`` (typed, not raw strings).
+        MEM-09 place (a): sessions are sorted by ``recency_weight(s.date)`` descending
+        so the most-recent session comes first. Recency is a BLEND multiplier — it
+        reorders sessions but never drops them (D-03).
+
+        Uses ``self._policy`` (injected RetentionPolicy) for hot_limit/hot_window_days.
+        ``RecallConfig.recent_session_limit`` has been removed (OQ2); hot_limit lives
+        exclusively on the injected RetentionPolicy.
         """
-        policy = RetentionPolicy(hot_limit=self._config.recent_session_limit)
-        summaries = await self._vault.get_recent_sessions(user_id, policy)
-        return [s.body for s in summaries]
+        # D-03 place (a): recency-sorted hot tier (most-recent first)
+        summaries = await self._vault.get_recent_sessions(user_id, self._policy)
+        now = datetime.now(timezone.utc)
+        return sorted(
+            summaries,
+            key=lambda s: recency_weight(s.date, now=now),
+            reverse=True,  # most-recent (highest weight) first
+        )
 
     async def _warm_search(self, content: str) -> list[SearchResult]:
         """RRF orchestrator: gather keyword + semantic results, merge, read bodies.
@@ -781,15 +849,37 @@ class Recall:
         if not merged:
             return []
 
+        # MEM-09 place (b) — warm-tier recency weighting (D-03, OQ1: carrier = full set).
+        # Multiply the RRF score of any survivor in _CARRIER_NAMESPACE_PREFIXES by
+        # recency_weight(_path_date(path)).  Non-carrier results (self/, ops/, notes/, ...)
+        # are untouched — this gate is a POSITIVE allowlist, NOT a negation of the
+        # exclude list (T-41-08 mitigation: future namespaces are never silently weighted).
+        # Fail-open: unparseable date → _path_date() returns None → recency_weight(None)
+        # returns 1.0 → score unchanged (T-41-10).
+        now = datetime.now(timezone.utc)
+        reweighted: list[SearchResult] = []
+        for r in merged:
+            if r.path.startswith(_CARRIER_NAMESPACE_PREFIXES):
+                # place (b): episodic-only; carrier-namespace note gets recency multiplier
+                date_str = _path_date(r.path)
+                w = recency_weight(date_str if date_str is not None else "", now=now)
+                reweighted.append(SearchResult(path=r.path, score=r.score * w, body=r.body))
+            else:
+                # Not a carrier — score unchanged (D-02, positive allowlist guard)
+                reweighted.append(r)
+
+        # Re-sort by adjusted score descending; tie-break on path for determinism
+        reweighted.sort(key=lambda r: (-r.score, r.path))
+
         # Read real bodies for the post-RRF survivors (A5: ≤ warm_top_n reads)
-        survivor_paths = [r.path for r in merged]
+        survivor_paths = [r.path for r in reweighted]
         raw_bodies = await asyncio.gather(
             *[self._vault.read_note(p) for p in survivor_paths],
             return_exceptions=True,
         )
 
         results: list[SearchResult] = []
-        for survivor, path, body in zip(merged, survivor_paths, raw_bodies):
+        for survivor, path, body in zip(reweighted, survivor_paths, raw_bodies):
             if isinstance(body, str) and body.strip():
                 note_body = body
             else:
@@ -831,7 +921,7 @@ class Recall:
 
         if isinstance(_sessions_raw, BaseException):
             logger.warning("recall tier failed: %r", _sessions_raw)
-            sessions: list[str] = []
+            sessions: list[SessionSummary] = []
         else:
             sessions = _sessions_raw
 
