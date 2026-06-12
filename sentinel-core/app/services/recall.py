@@ -484,6 +484,14 @@ class SemanticRecall:
             if path.startswith(self._config.exclude_prefixes):
                 continue
 
+            # Round-3 / MEM-05 reader-side completion (plan 40-07):
+            # 40-04's degraded-index invariant marks a changed-but-unembedded entry
+            # stale: true (old/absent vector, new content_hash).  Returning such a
+            # stale embedding at query time would surface a vector that no longer
+            # matches the note body.  Skip before decode/score so cost is minimal.
+            if entry.get("stale"):
+                continue
+
             em = entry.get("embedding_model", "")
             if not em or em != self._active_model:
                 # D-12/D-13: exact-string mismatch or missing → skip
