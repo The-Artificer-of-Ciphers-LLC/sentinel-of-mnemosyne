@@ -291,3 +291,126 @@ async def test_build_application_wires_semantic_recall_with_no_prefix_active_mod
 
 # Suppress unused-import warning when running with json available
 _ = json
+
+
+# ---------------------------------------------------------------------------
+# Phase 40 Plan 04 — Task 4: startup rewire + admin probe wiring tests (RED)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_initialize_startup_calls_rebuild_embedding_index_not_run_sweep(
+    monkeypatch,
+):
+    """initialize_startup must schedule rebuild_embedding_index (NOT run_sweep).
+
+    Monkeypatches BOTH:
+    - vault_sweeper.run_sweep → assert never awaited
+    - vault_sweeper.rebuild_embedding_index → assert awaited once with
+      model_loaded=graph.embedding_model_loaded
+    """
+    import asyncio as _asyncio
+
+    run_sweep_called = []
+    rebuild_called = []
+
+    async def _fake_run_sweep(*args, **kwargs):
+        run_sweep_called.append((args, kwargs))
+
+    async def _fake_rebuild(vault, embedder, *, model_loaded=True, source_folder=""):
+        rebuild_called.append({"vault": vault, "embedder": embedder, "model_loaded": model_loaded})
+
+    monkeypatch.setattr("app.services.vault_sweeper.run_sweep", _fake_run_sweep)
+    monkeypatch.setattr("app.services.vault_sweeper.rebuild_embedding_index", _fake_rebuild)
+
+    fake_vault = AsyncMock()
+    fake_vault.read_persona = AsyncMock(return_value="persona")
+    fake_embedder = AsyncMock(return_value=[])
+    fake_graph = SimpleNamespace(
+        vault=fake_vault,
+        message_processor=object(),
+        settings=SimpleNamespace(model_name="test-model"),
+        http_client=object(),
+        context_window=8192,
+        lmstudio_stop_sequences=[],
+        note_classifier_fn=AsyncMock(),
+        embeddings=SimpleNamespace(embed=fake_embedder),
+        module_registry={},
+        ai_provider_name="lmstudio",
+        recall=None,
+        embedding_model_loaded=True,
+    )
+
+    async def _fake_build_application(_settings, _http_client):
+        return fake_graph
+
+    monkeypatch.setattr("app.composition.build_application", _fake_build_application)
+
+    app = SimpleNamespace(state=SimpleNamespace())
+    await initialize_startup(app, SimpleNamespace(), object())
+
+    # Allow background tasks to run
+    await _asyncio.sleep(0)
+
+    assert len(run_sweep_called) == 0, (
+        f"run_sweep must NEVER be called by initialize_startup; was called {len(run_sweep_called)} times"
+    )
+    assert len(rebuild_called) == 1, (
+        f"rebuild_embedding_index must be awaited once; was called {len(rebuild_called)} times"
+    )
+    assert rebuild_called[0]["model_loaded"] == fake_graph.embedding_model_loaded, (
+        f"rebuild must be called with model_loaded=graph.embedding_model_loaded; "
+        f"got model_loaded={rebuild_called[0]['model_loaded']!r}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_initialize_startup_passes_embedding_model_loaded_from_graph(
+    monkeypatch,
+):
+    """When embedding_model_loaded is False on the graph, rebuild_embedding_index
+    must be called with model_loaded=False — so the index rebuild skips embedding
+    and no crash occurs (boot with model not loaded remains safe).
+    """
+    import asyncio as _asyncio
+
+    rebuild_called = []
+
+    async def _fake_rebuild(vault, embedder, *, model_loaded=True, source_folder=""):
+        rebuild_called.append(model_loaded)
+
+    monkeypatch.setattr("app.services.vault_sweeper.run_sweep", AsyncMock())
+    monkeypatch.setattr("app.services.vault_sweeper.rebuild_embedding_index", _fake_rebuild)
+
+    fake_vault = AsyncMock()
+    fake_vault.read_persona = AsyncMock(return_value="persona")
+    fake_graph = SimpleNamespace(
+        vault=fake_vault,
+        message_processor=object(),
+        settings=SimpleNamespace(model_name="test-model"),
+        http_client=object(),
+        context_window=8192,
+        lmstudio_stop_sequences=[],
+        note_classifier_fn=AsyncMock(),
+        embeddings=SimpleNamespace(embed=AsyncMock(return_value=[])),
+        module_registry={},
+        ai_provider_name="lmstudio",
+        recall=None,
+        embedding_model_loaded=False,  # model NOT loaded
+    )
+
+    async def _fake_build_application(_settings, _http_client):
+        return fake_graph
+
+    monkeypatch.setattr("app.composition.build_application", _fake_build_application)
+
+    app = SimpleNamespace(state=SimpleNamespace())
+    await initialize_startup(app, SimpleNamespace(), object())
+
+    await _asyncio.sleep(0)
+
+    assert len(rebuild_called) == 1
+    assert rebuild_called[0] is False, (
+        f"rebuild must be called with model_loaded=False when graph.embedding_model_loaded=False; "
+        f"got {rebuild_called[0]!r}"
+    )
