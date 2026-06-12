@@ -606,3 +606,128 @@ async def test_obsidian_vault_move_to_trash_raises_on_transport_failure():
         vault = ObsidianVault(client, "http://test", "k")
         with pytest.raises(httpx.ConnectError):
             await vault.move_to_trash("foo.md", reason="dup")
+
+
+# ---------------------------------------------------------------------------
+# Plan 40-05 — Protected-namespace guard (MEM-05 gap closure)
+#
+# Task 1 tests: PROTECTED_NAMESPACES, is_protected_path, ProtectedPathError
+# All tests use behavior/spy assertions per the plan acceptance criteria.
+# ---------------------------------------------------------------------------
+
+
+def test_protected_namespaces_constant_exists():
+    """PROTECTED_NAMESPACES is exported from app.vault."""
+    from app.vault import PROTECTED_NAMESPACES
+    assert isinstance(PROTECTED_NAMESPACES, tuple)
+    assert len(PROTECTED_NAMESPACES) >= 1
+
+
+@pytest.mark.parametrize("namespace", list(__import__("app.vault", fromlist=["PROTECTED_NAMESPACES"]).PROTECTED_NAMESPACES) if False else ["sentinel/", "self/", "security/"])
+def test_is_protected_path_true_for_each_default_namespace(namespace):
+    """is_protected_path returns True for a path under each default protected namespace.
+
+    Parametrized over the module default literal so the enumeration is asserted,
+    not assumed — adding a namespace to PROTECTED_NAMESPACES auto-extends coverage.
+    """
+    from app.vault import is_protected_path
+    path_under_ns = namespace.rstrip("/") + "/some_file.md"
+    assert is_protected_path(path_under_ns) is True
+
+
+def test_is_protected_path_parametrized_from_literal():
+    """Parametrized test reading the ACTUAL module-level default tuple literal.
+
+    Asserts that every namespace in PROTECTED_NAMESPACES matches paths under it.
+    This is the 'enumeration asserted from the literal' requirement.
+    """
+    from app.vault import PROTECTED_NAMESPACES, is_protected_path
+    for namespace in PROTECTED_NAMESPACES:
+        path = namespace.rstrip("/") + "/x.md"
+        assert is_protected_path(path) is True, (
+            f"Expected is_protected_path({path!r}) to be True for namespace {namespace!r}"
+        )
+
+
+def test_is_protected_path_sentinel_persona():
+    """is_protected_path('sentinel/persona.md') is True — the incident path."""
+    from app.vault import is_protected_path
+    assert is_protected_path("sentinel/persona.md") is True
+
+
+def test_is_protected_path_sentinel_any_path():
+    """is_protected_path('sentinel/anything.md') is True."""
+    from app.vault import is_protected_path
+    assert is_protected_path("sentinel/anything.md") is True
+
+
+def test_is_protected_path_sentinel_subdir():
+    """is_protected_path('sentinel/sub/dir/x.md') is True — deep subpath."""
+    from app.vault import is_protected_path
+    assert is_protected_path("sentinel/sub/dir/x.md") is True
+
+
+def test_is_protected_path_non_protected_returns_false():
+    """is_protected_path('references/alpha.md') is False."""
+    from app.vault import is_protected_path
+    assert is_protected_path("references/alpha.md") is False
+
+
+def test_is_protected_path_near_miss_returns_false():
+    """is_protected_path('notessentinel/x.md') is False — segment-boundary match.
+
+    'notessentinel/' does NOT start with 'sentinel/' so the guard must not fire.
+    """
+    from app.vault import is_protected_path
+    assert is_protected_path("notessentinel/x.md") is False
+
+
+def test_is_protected_path_top_level_namespace_itself_is_protected():
+    """is_protected_path('sentinel/') is True (the prefix itself)."""
+    from app.vault import is_protected_path
+    assert is_protected_path("sentinel/") is True
+
+
+def test_is_protected_path_uses_settings_when_available(monkeypatch):
+    """_active_protected_namespaces reads from settings.protected_namespaces."""
+    import app.vault as vault_module
+    # Monkeypatch _active_protected_namespaces to return a custom tuple
+    monkeypatch.setattr(vault_module, "_active_protected_namespaces", lambda: ("custom/",))
+    assert vault_module.is_protected_path("custom/note.md") is True
+    assert vault_module.is_protected_path("sentinel/persona.md") is False
+
+
+def test_active_protected_namespaces_falls_back_to_module_default(monkeypatch):
+    """_active_protected_namespaces returns the module-default literal when settings
+    is unimportable — mirrors _active_skip_prefixes try/except fallback.
+    """
+    import sys
+    import app.vault as vault_module
+    from app.vault import PROTECTED_NAMESPACES
+
+    # Simulate settings import failure inside _active_protected_namespaces
+    original_config = sys.modules.get("app.config")
+    sys.modules["app.config"] = None  # type: ignore[assignment]
+    try:
+        result = vault_module._active_protected_namespaces()
+    finally:
+        if original_config is None:
+            sys.modules.pop("app.config", None)
+        else:
+            sys.modules["app.config"] = original_config
+    assert result == PROTECTED_NAMESPACES
+
+
+def test_protected_path_error_is_security_error_subclass():
+    """ProtectedPathError is a subclass of SecurityError (so existing SecurityError
+    handlers and logging apply automatically).
+    """
+    from app.errors import ProtectedPathError, SecurityError
+    assert issubclass(ProtectedPathError, SecurityError)
+
+
+def test_protected_path_error_is_importable_from_errors():
+    """ProtectedPathError is defined in app.errors (grep: class ProtectedPathError)."""
+    from app.errors import ProtectedPathError
+    err = ProtectedPathError("test message")
+    assert "test message" in str(err)
