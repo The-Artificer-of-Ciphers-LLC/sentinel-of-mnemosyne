@@ -1,6 +1,6 @@
 [project]
 name = "sentinel-core"
-version = "0.50.3"
+version = "0.51.0"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.135.0",
