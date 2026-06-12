@@ -82,6 +82,61 @@ the same REST path. Persisted via ``vault.write_note()`` — the vault is
 REST-only (D-08 REVISED / A6), so there is NO tempfile/os.replace write.
 """
 
+def _encode_index_body(index: dict, path: str) -> str:
+    """Encode an embedding index dict to a string body for vault storage.
+
+    Case-insensitively extension-aware (plan 40-07, round-2 item D):
+    - If ``path.lower().endswith(".md")``: wrap the JSON in a markdown fenced
+      code block tagged with a ``json`` info-string so the Obsidian REST API
+      accepts it as a note body.  Example::
+
+          ```json
+          {"notes/a.md": {...}}
+          ```
+
+    - Otherwise (e.g. ``.json``): return the raw JSON string (existing behaviour).
+
+    Both branches are lossless: ``_decode_index_body`` is the symmetric reader.
+    """
+    raw_json = json.dumps(index, ensure_ascii=False)
+    if path.lower().endswith(".md"):
+        return f"```json\n{raw_json}\n```\n"
+    return raw_json
+
+
+def _decode_index_body(raw: str, path: str) -> dict:
+    """Decode an index body string back to a dict; case-insensitively extension-aware.
+
+    Symmetric to ``_encode_index_body`` (plan 40-07):
+    - If ``path.lower().endswith(".md")``: extract the contents of the first
+      fenced code block and ``json.loads`` them.  Falls back to ``{}`` if there
+      is no parseable fenced JSON (self-healing — preserves T-40-01 / T-40-30).
+    - Otherwise: ``json.loads(raw)`` directly (existing behaviour).
+
+    Any parse failure degrades to ``{}`` for both branches (same graceful
+    behaviour that ``_emit_embedding_index`` already applies to the existing-
+    index read).
+    """
+    import re as _re
+
+    if path.lower().endswith(".md"):
+        # Extract the first fenced code block (``` … ```)
+        match = _re.search(r"```(?:\w*)\n(.*?)\n```", raw, _re.DOTALL)
+        if not match:
+            return {}
+        try:
+            parsed = json.loads(match.group(1))
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    else:
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+
+
 NOMIC_DOCUMENT_PREFIX = "search_document: "
 """Instruction prefix for nomic-embed-text-v1.5 document embeddings.
 
@@ -288,9 +343,10 @@ async def _emit_embedding_index(
     graceful pattern as the sweep-log write).
     """
     # Load existing index — {} on any parse failure (T-40-01: self-healing)
+    # _decode_index_body is extension-aware (fenced JSON for .md, raw JSON for .json)
     try:
         raw = await client.read_note(EMBEDDING_INDEX_PATH)
-        existing_index: dict = json.loads(raw) if raw and raw.strip() else {}
+        existing_index: dict = _decode_index_body(raw, EMBEDDING_INDEX_PATH) if raw and raw.strip() else {}
     except Exception:
         existing_index = {}
 
@@ -383,8 +439,9 @@ async def _emit_embedding_index(
                 }
 
     # Persist via vault seam — single REST PUT (D-08 REVISED)
+    # _encode_index_body is extension-aware: fenced JSON for .md, raw JSON for .json
     try:
-        await client.write_note(EMBEDDING_INDEX_PATH, json.dumps(new_index, ensure_ascii=False))
+        await client.write_note(EMBEDDING_INDEX_PATH, _encode_index_body(new_index, EMBEDDING_INDEX_PATH))
     except Exception as exc:
         logger.warning("sweep: embedding index write failed: %s", exc)
         report.errors.append(f"index_emit: {exc}")

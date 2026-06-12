@@ -23,6 +23,13 @@ import numpy as np
 from sentinel_shared.embedding_codec import decode_embedding
 from sentinel_shared.similarity import cosine_similarity
 
+# Single physical source of truth for the index path (plan 40-07, round-2 item D).
+# RecallConfig.index_path derives from this constant — no duplicate literal in this
+# module.  vault_sweeper.py owns the canonical definition; recall.py imports it so
+# the writer and reader cannot diverge by construction.
+from app.services.vault_sweeper import EMBEDDING_INDEX_PATH as _EMBEDDING_INDEX_PATH
+from app.services.vault_sweeper import _decode_index_body as _decode_index_body_from_sweeper
+
 if TYPE_CHECKING:
     from app.vault import Vault
     from app.services.message_processing import MessageRequest
@@ -202,9 +209,13 @@ class RecallConfig:
     semantic_lru_size: int = 128
     """Max number of query embeddings cached in-process (keyed on query+model)."""
 
-    index_path: str = "ops/sweeps/embedding-index.json"
+    index_path: str = _EMBEDDING_INDEX_PATH
     """Relative path (vault-seam key) for the sweeper-maintained embedding index sidecar.
-    Must equal EMBEDDING_INDEX_PATH in vault_sweeper.py."""
+
+    DERIVED FROM (imports) ``EMBEDDING_INDEX_PATH`` in ``vault_sweeper.py`` — the
+    literal lives in exactly one module (vault_sweeper).  Changing the single
+    constant in vault_sweeper atomically updates both writer and reader.
+    (plan 40-07, round-2 item D — no duplicate-literal alternative)."""
 
     index_ttl_seconds: float = 60.0
     """TTL for the in-memory index cache (seconds). After expiry, SemanticRecall
@@ -312,9 +323,10 @@ class KeywordRecall:
 class SemanticRecall:
     """Semantic retrieval adapter over the sweeper-maintained embedding sidecar.
 
-    Reads ``ops/sweeps/embedding-index.json`` once via vault.read_note() and
-    caches it in memory for ``config.index_ttl_seconds``. Never calls vault.find()
-    or performs per-note REST reads at query time (MEM-05, D-09 REVISED, D-01).
+    Reads the index at ``config.index_path`` (derived from EMBEDDING_INDEX_PATH —
+    single source of truth) once via vault.read_note() and caches it in memory for
+    ``config.index_ttl_seconds``. Never calls vault.find() or performs per-note
+    REST reads at query time (MEM-05, D-09 REVISED, D-01).
 
     Model-mismatch entries (embedding_model != active_model) are skipped per
     D-12/D-13. All-mismatch degrades to [] with a WARNING (D-14). Blank query
@@ -377,11 +389,15 @@ class SemanticRecall:
             self._index = {}
             return
 
+        # Use _decode_index_body for extension-aware parsing (plan 40-07):
+        # - .md path: strips the fenced code block wrapper before json.loads
+        # - .json (or other) path: json.loads directly
+        # Falls back to {} on any parse failure (T-40-01 / T-40-30 self-healing).
         try:
-            parsed = json.loads(raw)
+            parsed = _decode_index_body_from_sweeper(raw, self._config.index_path)
         except Exception as exc:
             logger.warning(
-                "SemanticRecall: index JSON parse error at %r: %r — treating as empty",
+                "SemanticRecall: index parse error at %r: %r — treating as empty",
                 self._config.index_path, exc,
             )
             self._index = {}
