@@ -144,6 +144,10 @@ async def test_context_sessions_serializes_typed_fields():
     assert session_dict["user_msg"] == "What is my goal?"
     assert session_dict["sentinel_msg"] == "Build the Sentinel."
     assert session_dict["path"] == "ops/sessions/2026-06-12/testuser-10-00-00.md"
+    assert "body" not in session_dict, (
+        "SessionSummary.body must NOT be serialized in the /context endpoint "
+        "(contains raw markdown including conversation history)"
+    )
 
 
 async def test_context_requires_auth():
