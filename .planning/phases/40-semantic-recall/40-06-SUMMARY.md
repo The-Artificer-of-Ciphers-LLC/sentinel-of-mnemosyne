@@ -64,14 +64,14 @@ completed: "2026-06-12"
 
 6. **UAT Test 3 (index round-trip) PASSED.** Byte-identical PUT→GET of a known JSON body (incl. unicode) at the active `.json` index path via the Obsidian REST API; the live sweep's own `embedding-index.json` write also round-trips and parses cleanly. **53 recall tests** pass, incl. `test_recall_json_extension_round_trip` / `_md_extension_round_trip`.
 
-7. **Paraphrase recall mechanism verified + live smoke test.** 53 recall tests pass incl. `test_semantic_paraphrase_returns_correct_note`, `test_end_to_end_paraphrase_recall`, `test_semantic_stale_entry_skipped_non_stale_returned`. Live `POST /message` paraphrase returned a clean, in-character persona response (model `google/gemma-4-e4b`), confirming the redeployed end-to-end pipeline serves messages with the **clean** persona.
+7. **Paraphrase recall verified LIVE through the real recall code (UAT Test 2).** Ran `Recall._warm_search` and `SemanticRecall.search` inside the deployed container against the live index with the paraphrase query *"who acts as my external memory and recalls my history so chats are not starting from scratch"* — which shares **no keywords** with the persona text. Result: `sentinel/persona.md` surfaced via `SemanticRecall.search` at **cosine 0.6869** (floor 0.50) and entered the warm tier via `Recall._warm_search` (rrf_score 0.016393, real body). A BM25/keyword search shares zero terms, so the hit is purely semantic — MEM-03/MEM-04 confirmed live, read-only, zero vault mutation. Also backed by 53 recall tests (incl. `test_semantic_paraphrase_returns_correct_note`, `test_end_to_end_paraphrase_recall`, `test_semantic_stale_entry_skipped_non_stale_returned`) and a live `POST /message` smoke test that returned a clean, in-character persona reply (`google/gemma-4-e4b`).
 
 ## Resume-Signal Data (per 40-06-PLAN checkpoint)
 
 - **Audit exit code:** 0 (CLEAN) after persona remediation; ran with **`--inventory` (authoritative)**, not the drift-prone fallback.
 - **Findings/restored:** 1 CRITICAL — `sentinel/persona.md` stale relocation provenance + 4 KB embedding frontmatter. Restored via REST PUT to body-only. 2 INFO (`Welcome.md → _trash`, expected).
 - **Index round-trip path in effect:** `ops/sweeps/embedding-index.json` (`.json`, matches 40-07's `EMBEDDING_INDEX_PATH`). Round-trip preserved.
-- **Paraphrase recall:** mechanism unit-verified (end-to-end + stale-skip); live pipeline smoke test in-character. Live single-note observation limited by sparse embeddable corpus (only `sentinel/persona.md`; `mnemosyne/` is excluded `pf2e/` module data, `self/` excluded from warm recall).
+- **Paraphrase recall:** verified LIVE — a zero-keyword-overlap paraphrase query surfaced `sentinel/persona.md` at cosine 0.6869 via `SemanticRecall.search` and into the warm tier via `Recall._warm_search`, proving semantic (not keyword) recall on the deployed image. (Observation: persona.md is currently the only embeddable note — `mnemosyne/` is excluded `pf2e/` data, `self/` excluded from warm recall — and it is BOTH in the embedding index AND warm-recall-eligible, so it can be injected both as the system prompt and as warm context. Flagged as a recall-config namespace question, not a 40-06 blocker.)
 - **Persona survival:** confirmed after boot AND after a real sweep (40-05 guard held).
 
 ## Decisions Made
