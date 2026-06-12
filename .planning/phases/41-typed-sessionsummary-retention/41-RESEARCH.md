@@ -105,9 +105,9 @@ POST /message
    │       │       │           └─ ORDER by recency_weight(SessionSummary.date)  ← MEM-09 place (a), D-03
    │       │       └─ _warm_search(content)  → list[SearchResult]
    │       │             ├─ KeywordRecall.search ─┐
-   │       │             ├─ SemanticRecall.search ─┼─► _rrf_merge ─► [recency-weight session-derived results] ─► top_n
+   │       │             ├─ SemanticRecall.search ─┼─► _rrf_merge ─► [recency-weight carrier-derived results] ─► top_n
    │       │             │     (reads ops/sweeps/  │                  ← MEM-09 place (b), D-03, episodic-only
-   │       │             │      embedding-index)   │
+   │       │             │      embedding-index)   │                     carrier set = journal/ + learning/ + accomplishments/ + references/
    │       │             └─ read bodies for survivors
    │       │
    │       └─ inject recalled.sessions (now SessionSummary → presentation) + recalled.warm
@@ -121,7 +121,7 @@ POST /message
 ### Component Responsibilities
 | File | Implementation role this phase |
 |------|--------------------------------|
-| `app/services/recall.py` | Add `SessionSummary`, `RetentionPolicy`, `recency_weight()`. Change `_hot_sessions` to return typed + recency-ordered. Apply recency inside `_warm_search` for session-derived results. `RecalledContext.sessions: list[SessionSummary]`. |
+| `app/services/recall.py` | Add `SessionSummary`, `RetentionPolicy`, `recency_weight()`. Change `_hot_sessions` to return typed + recency-ordered. Apply recency inside `_warm_search` for carrier-derived results (journal/ + topic dirs). `RecalledContext.sessions: list[SessionSummary]`. |
 | `app/vault.py` | `Vault` Protocol + `ObsidianVault.get_recent_sessions`: signature → `(user_id, policy)` returning `list[SessionSummary]`; parse frontmatter/body at the adapter edge; window from `policy.hot_window_days` (replaces `vault.py:288-291`). |
 | `tests/fakes/vault.py` | `FakeVault.get_recent_sessions` (+ `read_recent_sessions` alias, line 105) → matching typed signature/return. |
 | `app/config.py` | Add env-overridable `RetentionPolicy` fields to `Settings` (mirror `sweep_skip_prefixes`). |
@@ -174,7 +174,7 @@ def recency_weight(date_str: str, *, now: datetime, half_life_days: float = 7.0)
     age_days = max(0.0, (now - d).total_seconds() / 86400.0)
     return 0.5 ** (age_days / half_life_days)
 ```
-**Composition with RRF (place (b), D-03):** in `_warm_search`, after `_rrf_merge`, for **session-derived** results only, multiply the RRF score by `recency_weight(...)` before the final `top_n` sort. The blend keeps a high-RRF old session competitive while letting a same-day session of equal RRF rank above it. **Non-session warm results (topic/journal notes, Self-namespace) are untouched (D-02).** This requires `_warm_search` to know which survivors are session-derived — see Open Question 1.
+**Composition with RRF (place (b), D-03):** in `_warm_search`, after `_rrf_merge`, for **carrier-derived** results only, multiply the RRF score by `recency_weight(...)` before the final `top_n` sort. The blend keeps a high-RRF old session competitive while letting a same-day session of equal RRF rank above it. **Non-carrier warm results (Self-namespace, ops/) are untouched (D-02).** This requires `_warm_search` to know which survivors are carrier-derived — see Open Question 1 (RESOLVED: the full conversation-carrier set `journal/` + topic dirs).
 
 ### Pattern 4: Env-overridable RetentionPolicy (MEM-06, D-04)
 **What:** Add fields to `Settings` exactly like `sweep_skip_prefixes` (`config.py:102-117`), then build `RetentionPolicy` from them in `composition.py`.
@@ -189,7 +189,9 @@ _policy = RetentionPolicy(hot_limit=settings.retention_hot_limit,
 
 ### Anti-Patterns to Avoid
 - **Relaxing `exclude_prefixes`/`ops/` to reach old sessions.** Explicitly rejected (D-05, ADR-0005, success criterion 4). The carrier note outside `ops/` is the path. Do not touch `_WARM_TIER_EXCLUDE_PREFIXES` (`recall.py:53`) or `RecallConfig.exclude_prefixes`.
-- **Applying recency weight to Self-namespace or authored notes.** Banned by D-02 / MEM-09 / validated boundary. The weight must be gated to episodic session-derived results only.
+- **Applying recency weight to Self-namespace or authored notes.** Banned by D-02 / MEM-09 / validated boundary. The weight must be gated to episodic carrier-derived results only.
+- **Narrowing the carrier set to journal-only.** The conversation carrier is the FULL set of non-`ops/`, non-`inbox/` `TOPIC_VAULT_PATH` dirs (`journal/`, `learning/`, `accomplishments/`, `references/`). Restricting place (b) to `journal/` alone silently drops the topic-dir carriers from MEM-09 weighting and MEM-07 reachability — those notes are sweep-eligible and warm-recall-eligible. Use a POSITIVE allowlist of all four prefixes (see OQ1 RESOLVED).
+- **Deriving the carrier allowlist by negating the exclude list.** `not startswith(_WARM_TIER_EXCLUDE_PREFIXES)` would silently weight every future non-excluded namespace. Make `_CARRIER_NAMESPACE_PREFIXES` an explicit positive tuple.
 - **Hard-sorting purely by recency.** D-01 forbids a hard override; it must be a *blend* with relevance.
 - **Returning a Pydantic model for `SessionSummary`.** Use a frozen dataclass (CLAUDE.md, ADR-0003).
 - **Widening the `get_recent_sessions` reopen beyond its signature.** ADR-0005 + D-07: only this one method changes on the Vault surface. Do not retype `find()` or other Protocol methods.
@@ -201,6 +203,7 @@ _policy = RetentionPolicy(hot_limit=settings.retention_hot_limit,
 | Cosine / vector math for recency-relevance composition | A new similarity fn | `sentinel_shared.similarity.cosine_similarity` (already imported `recall.py:24`) | SPOT — one cosine impl across core + pathfinder. |
 | RRF merge | A new ranking fuser | existing `_rrf_merge` (`recall.py:566-597`) | Already validated; recency multiplies its output, does not replace it. |
 | Old-session reachability | A new index / new vault path / relaxed exclusion | existing `NoteIntake` carrier + sweeper embed-index + `SemanticRecall` | Whole chain already shipped & verified this session (D-06 gate passes). |
+| Carrier namespace set | A bespoke "which dir is a session" heuristic | the `TOPIC_VAULT_PATH` map (`note_classifier.py:57-65`) minus ops/empty/inbox | Single source of truth for where NoteIntake files conversation turns. |
 | Frontmatter parse | A regex frontmatter splitter | `yaml.safe_load` (already a dep) on the block, OR a tiny explicit 3-field parser | Fixed known shape; yaml is already present. |
 | Embedding index TTL cache | A new cache layer | `SemanticRecall`'s existing TTL cache (`recall.py:357-415`) | Already MEM-05-compliant (zero per-note REST at query time). |
 
@@ -213,13 +216,13 @@ _policy = RetentionPolicy(hot_limit=settings.retention_hot_limit,
 | Category | Items Found | Action Required |
 |----------|-------------|------------------|
 | Stored data | `ops/sessions/{date}/{user_id}-{time}.md` summary notes (written by `_build_session_summary`, `message_processing.py:189-203`). Frontmatter: `timestamp`, `user_id`, `model`; body: `## User` / `## Sentinel`. The new `SessionSummary` parser must read THIS exact shape. **No data migration** — existing summaries already match; the parser reads them as-is. | Code edit only (add parser at Vault edge). No record rewrite. |
-| Stored data (carrier) | Conversation notes filed by `NoteIntake` into `journal/{date}/{slug}.md` or topic dirs (`note_intake.py:144-152`) — **outside `ops/`**, and into `inbox/` for unsure/low-confidence content (`note_intake.py:53-69`). | None for journal/topic (embedded). **`inbox/` notes are NOT embedded** (`inbox/` is in `sweep_skip_prefixes`, `config.py:115`) → see Pitfall 1. |
+| Stored data (carrier) | Conversation notes filed by `NoteIntake` into `journal/{date}/{slug}.md` or topic dirs (`learning/`, `accomplishments/`, `references/`) (`note_intake.py:144-152`, `note_classifier.py:57-65`) — **outside `ops/`**, and into `inbox/` for unsure/low-confidence content (`note_intake.py:53-69`). | None for journal/topic dirs (embedded). **`inbox/` notes are NOT embedded** (`inbox/` is in `sweep_skip_prefixes`, `config.py:115`) → see Pitfall 1. |
 | Live service config | The embedding index `ops/sweeps/embedding-index.json` is regenerated by the sweeper on its own schedule; no manual config. `journal/` reachability depends on the sweeper having run since the carrier note was written. | None — but tests must account for the embed lag (Pitfall 1). |
 | OS-registered state | None — no Task Scheduler / launchd / pm2 names reference sessions or retention. Verified: no such registrations in this Python/Docker stack. | None. |
 | Secrets/env vars | New env vars `RETENTION_HOT_LIMIT` / `RETENTION_HOT_WINDOW_DAYS` (D-04). These are NEW additive optional vars with code defaults — no existing secret renamed. | Document in `.env` example; defaults preserve current behavior. |
 | Build artifacts | None — no egg-info / compiled binary carries a session type. Pure source change; `uv` editable install picks it up. | None. |
 
-**D-06 GATE RESULT — VERIFIED PASS:** carrier note is (a) written on every substantive message (`message.py:48` unconditional `_schedule_chat_note`, gated only by `_CHAT_NOTE_MIN_LENGTH`), (b) filed outside `ops/` with `searchable_only=True` redirecting ops-bound targets to `journal/` (`note_intake.py:79-82`), and (c) embedded because `journal/` and topic dirs are NOT in `sweep_skip_prefixes` (`config.py:102-117`). The one residual gap is `inbox/` (low-confidence content) — see Pitfall 1; per D-06 ("if any link is missing, that gap is in-scope to close") this must be surfaced, not deferred.
+**D-06 GATE RESULT — VERIFIED PASS:** carrier note is (a) written on every substantive message (`message.py:48` unconditional `_schedule_chat_note`, gated only by `_CHAT_NOTE_MIN_LENGTH`), (b) filed outside `ops/` with `searchable_only=True` redirecting ops-bound targets to `journal/` (`note_intake.py:79-82`), and (c) embedded because `journal/` and topic dirs (`learning/`, `accomplishments/`, `references/`) are NOT in `sweep_skip_prefixes` (`config.py:102-117`). The one residual gap is `inbox/` (low-confidence content) — see Pitfall 1; per D-06 ("if any link is missing, that gap is in-scope to close") this must be surfaced, not deferred.
 
 ## Common Pitfalls
 
@@ -243,9 +246,9 @@ _policy = RetentionPolicy(hot_limit=settings.retention_hot_limit,
 **What goes wrong:** `FakeVault.get_recent_sessions` (`tests/fakes/vault.py:90-101`) and its alias `read_recent_sessions = get_recent_sessions` (line 105) currently return `list[str]`. If only `ObsidianVault` is retyped, `FakeVault`-backed tests (`test_recall.py`) diverge from production-backed tests — exactly the parity the FakeVault docstring promises (lines 1-9).
 **How to avoid:** Retype both implementations and the alias together. The FakeVault must parse its in-memory `notes` bodies into `SessionSummary` the same way `ObsidianVault` parses REST responses — keep the user_id substring rule (`f"{user_id}-" in name`) intact.
 
-### Pitfall 5: Recency weight must read `SessionSummary.date`, but warm results are `SearchResult` (no date)
-**What goes wrong:** Place (b) of D-03 weights session-derived results inside `_warm_search`, but `_rrf_merge` emits `SearchResult` (path/score/body) with **no date field**. You cannot apply `recency_weight` without recovering the date. The session date is encoded in the path (`ops/sessions/{date}/...`) — but session summaries are `ops/`-excluded from warm search, so the warm-tier session-derived results are actually the **journal/topic carrier notes**, whose date is in their own frontmatter/path, not a `SessionSummary.date`.
-**How to avoid:** This is the crux of Open Question 1. The planner must define precisely what "session-derived warm result" means and where its date comes from. The cleanest reading of D-03 + D-05: in the warm tier, the session carrier is a `journal/`/topic note; derive its recency from the note's own date (path `journal/{date}/...` or frontmatter `created`), gated to that namespace, never to Self.
+### Pitfall 5: Recency weight must read a date, but warm results are `SearchResult` (no date)
+**What goes wrong:** Place (b) of D-03 weights carrier-derived results inside `_warm_search`, but `_rrf_merge` emits `SearchResult` (path/score/body) with **no date field**. You cannot apply `recency_weight` without recovering the date. The session date is encoded in the path (`ops/sessions/{date}/...`) — but session summaries are `ops/`-excluded from warm search, so the warm-tier carrier results are actually the **conversation carrier notes** (journal/ + topic dirs), whose date is in their own frontmatter/path, not a `SessionSummary.date`.
+**How to avoid:** This is the crux of Open Question 1 (RESOLVED). The carrier is the FULL conversation-carrier set — `journal/{date}/...` plus the topic dirs `learning/`, `accomplishments/`, `references/` (filename suffix `-{date}.md` per `note_intake.py:_topic_target_path`). Derive recency from the note's own date, gated to that allowlist, never to Self/ops.
 
 ## Code Examples
 
@@ -277,7 +280,7 @@ sorted(sessions, key=lambda s: recency_weight(s.date, now=datetime.now(timezone.
 |--------------|------------------|--------------|--------|
 | Sessions as raw `list[str]`, parsed at call sites | Typed `SessionSummary` value | This phase (ADR-0005) | Ends frontmatter string-parsing; enables recency merge. |
 | Inline `limit=3` + today+yesterday window | `RetentionPolicy(hot_limit, hot_window_days)`, env-overridable | This phase (MEM-06) | "Three" becomes a tunable knob. |
-| Sessions dropped at the hot-window cliff | Older sessions recalled via journal carrier + semantic index | Carrier shipped earlier (debug fix + Phase 40); this phase verifies/tests it | Closes "forgets after three." |
+| Sessions dropped at the hot-window cliff | Older sessions recalled via conversation carrier + semantic index | Carrier shipped earlier (debug fix + Phase 40); this phase verifies/tests it | Closes "forgets after three." |
 | RRF merge ranks by relevance only | RRF + episodic recency blend | This phase (MEM-09) | Recent sessions rank above equally-relevant older ones. |
 
 **Deprecated/outdated:** `RecallConfig.recent_session_limit` (`recall.py:172`) is superseded by `RetentionPolicy.hot_limit`. Planner decides whether to remove it or alias it during transition (prefer remove to avoid two sources of truth, but check no test pins it — `test_recall.py:355,381` construct `RecallConfig()` with other fields).
@@ -289,22 +292,27 @@ sorted(sessions, key=lambda s: recency_weight(s.date, now=datetime.now(timezone.
 | A1 | Exponential half-life = 7 days is the right default decay constant | Pattern 3 | Wrong curve → recency over/under-weights; LOW risk — D-01 hands this to the planner to lock, and it is UAT-tunable. |
 | A2 | A frozen dataclass (not Pydantic) is correct for `SessionSummary` | Pattern 1 | None — confirmed by CLAUDE.md + ADR-0003 (HIGH); listed as assumption only because it is a design choice. |
 | A3 | `inbox/` low-confidence content should be left unembedded (accept the MEM-07 gap) | Pitfall 1 | If operator wants total recall, this under-delivers MEM-07 for low-confidence turns. Planner MUST make this an explicit recorded decision (D-06). |
-| A4 | The "session-derived warm result" in place (b) is the journal/topic carrier note, dated from its own path/frontmatter | Pitfall 5 / OQ1 | If the intended carrier is something else, the warm-tier recency wiring is wrong. Planner must lock the definition. |
+| A4 | The "carrier-derived warm result" in place (b) is the FULL conversation-carrier set (journal/ + the topic dirs learning/accomplishments/references), dated from its own path/frontmatter | Pitfall 5 / OQ1 | If the carrier is narrowed to journal-only, the topic-dir carriers are dropped from MEM-09 weighting and MEM-07 reachability. Planner must lock the FULL set (see OQ1 RESOLVED). |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All three open questions were resolved during planning (Phase 41). Each carries an inline `RESOLVED:` line stating the locked outcome; the corresponding plan task implements it.
 
 1. **What exactly is a "session-derived warm result," and where does its date come from? (place (b) of D-03)**
    - What we know: `_rrf_merge` emits `SearchResult` (no date); `ops/sessions/` summaries are warm-excluded; the warm carrier for old sessions is the journal/topic note (D-05).
    - What's unclear: whether place (b) weights *only journal/topic carrier notes* (dated from their own path/frontmatter) or attempts to map warm results back to `SessionSummary.date`. The latter is impossible for carrier notes (they aren't `SessionSummary`s).
    - Recommendation: planner defines place (b) as "apply `recency_weight` to warm results whose path is in the conversation-carrier namespace (`journal/` + topic dirs), using the note's own date; never to Self." This honors D-02/D-03/D-05 consistently.
+   - **RESOLVED:** place (b) weights warm results whose path startswith ANY prefix in the FULL conversation-carrier set — `_CARRIER_NAMESPACE_PREFIXES = ("journal/", "learning/", "accomplishments/", "references/")`. This is every non-`ops/`, non-empty, non-`inbox/` value in `TOPIC_VAULT_PATH` (`note_classifier.py:57-65`) — i.e. every topic dir `NoteIntake.classify_and_apply` files conversation turns into. EXCLUDED on purpose: `ops/observations` (under `ops/`, also redirected to `journal/` by `searchable_only` at `note_intake.py:79`), `noise` (never filed), `unsure`→`inbox/` (sweep-skipped, the documented MEM-07 gap). The date comes from the note's own path: `journal/{YYYY-MM-DD}/...` segment, or the topic-dir filename suffix `-{YYYY-MM-DD}.md`. The gate is a POSITIVE allowlist (never `self/`, never `ops/`), NOT a negation of `_WARM_TIER_EXCLUDE_PREFIXES`. Implemented in Plan 41-04 Task 2. (Earlier-draft narrowing to `journal/` only was a scope reduction and is rejected.)
 
 2. **Keep or remove `RecallConfig.recent_session_limit`?**
    - What we know: it is the old name for `hot_limit`; constructed by `RecallConfig()` in tests (`test_recall.py:355,381`) but not by name there.
    - Recommendation: remove it and move the limit into `RetentionPolicy` to avoid two sources of truth; verify no test passes `recent_session_limit=` by name (grep shows none do).
+   - **RESOLVED:** REMOVE `RecallConfig.recent_session_limit`. `hot_limit` lives only on `RetentionPolicy` (one source of truth). The type is added in Plan 41-01; the removal + `_hot_sessions` rewire is the lockstep in Plan 41-04 Task 2.
 
 3. **Does the `RetentionPolicy` thread through `RecallConfig`, or sit beside it as a separate injected object?**
    - What we know: `RecallConfig` already holds `recent_session_limit`; ADR-0005 sketches `get_recent_sessions(user_id, policy)` taking the policy directly.
    - Recommendation: a separate `RetentionPolicy` injected into `Recall` (composition root), passed to `get_recent_sessions`, mirroring how `RecallConfig` is injected — keeps retention policy a distinct, testable value (ADR-0005 intent). Planner's discretion.
+   - **RESOLVED:** `RetentionPolicy` is a SEPARATE object injected into `Recall` (NOT threaded through `RecallConfig`). `Recall.__init__` gains a `policy=` parameter (Plan 41-04); `composition.py` builds it from the env-overridable settings and passes `policy=_policy` (Plan 41-03).
 
 ## Environment Availability
 
@@ -338,11 +346,12 @@ sorted(sessions, key=lambda s: recency_weight(s.date, now=datetime.now(timezone.
 | MEM-06 | Changing `RetentionPolicy.hot_window_days`/`hot_limit` changes the window | unit | `uv run pytest tests/test_recall.py -k retention -x` | ❌ Wave 0 |
 | MEM-06 | Env vars `RETENTION_HOT_*` override defaults | unit | `uv run pytest tests/test_config.py -k retention -x` | ❌ Wave 0 |
 | MEM-07 | A session older than the hot window is reachable via `RecalledContext.warm` (journal carrier) | integration | `uv run pytest tests/test_recall.py -k old_session_warm -x` | ❌ Wave 0 |
+| MEM-07 | A session older than the hot window is reachable via a topic-dir carrier (learning/accomplishments/references) | integration | `uv run pytest tests/test_recall.py -k old_session_warm_reachable_topic_dir -x` | ❌ Wave 0 |
 | MEM-07 | `ops/` exclusion NOT relaxed (criterion 4) | unit | `uv run pytest tests/test_recall.py::test_warm_excludes_self_and_ops_prefixes -x` | ✅ (exists, line 142 — keep green) |
 | MEM-08 | `get_recent_sessions` returns `list[SessionSummary]` with parsed fields | unit | `uv run pytest tests/test_obsidian_vault.py -k session_summary -x` | ❌ Wave 0 (existing line 119 must be updated, not skipped) |
 | MEM-08 | `RecalledContext.sessions` carries typed values; consumers read fields | unit | `uv run pytest tests/test_recall.py::test_assemble_returns_sessions -x` | ⚠️ exists (line 118) — STRENGTHEN to assert `SessionSummary` fields |
 | MEM-09 | More-recent session ranks above older of equal relevance (hot ordering) | unit | `uv run pytest tests/test_recall.py -k recency_order -x` | ❌ Wave 0 |
-| MEM-09 | Recency weight applied in warm RRF merge for carrier notes only | unit | `uv run pytest tests/test_recall.py -k recency_warm -x` | ❌ Wave 0 |
+| MEM-09 | Recency weight applied in warm RRF merge for the full carrier set (journal + topic dirs) | unit | `uv run pytest tests/test_recall.py -k recency_warm -x` | ❌ Wave 0 |
 | MEM-09 | Recency weight NEVER applied to Self-namespace / authored notes (D-02) | unit | `uv run pytest tests/test_recall.py -k recency_excludes_self -x` | ❌ Wave 0 |
 | MEM-09 | `recency_weight()` pure-function curve (today=1.0, 7d=0.5) | unit | `uv run pytest tests/test_recall.py -k recency_weight_curve -x` | ❌ Wave 0 |
 
@@ -352,7 +361,7 @@ sorted(sessions, key=lambda s: recency_weight(s.date, now=datetime.now(timezone.
 - **Phase gate:** `cd sentinel-core && uv run pytest -q` green before `/gsd-verify-work`.
 
 ### Wave 0 Gaps
-- [ ] `tests/test_recall.py` — new cases: retention window tunability, old-session-warm reachability, recency hot ordering, recency warm-merge (carrier-only), recency-excludes-self, `recency_weight` curve.
+- [ ] `tests/test_recall.py` — new cases: retention window tunability, old-session-warm reachability (journal + topic-dir), recency hot ordering, recency warm-merge (full carrier set), recency-excludes-self, `recency_weight` curve, inbox-gap characterization.
 - [ ] `tests/test_config.py` — `RETENTION_HOT_*` env-override cases (check whether a `test_config.py` exists; if not, add it).
 - [ ] `tests/test_obsidian_vault.py` — update `test_get_recent_sessions_returns_list` (line 119) to the typed contract; add a frontmatter-parse case.
 - [ ] Lockstep updates (NOT new files): `test_message.py` (~17 mock sites), `test_auth.py`, `test_integration_obsidian_llm.py` (lines 38, 166, 196), `test_status.py` (line 21), `tests/fakes/vault.py` typed return.
@@ -385,12 +394,14 @@ sorted(sessions, key=lambda s: recency_weight(s.date, now=datetime.now(timezone.
 - `docs/adr/0002-vault-seam-location.md` — Vault Protocol location; bounded-reopen authority.
 - `docs/adr/0003-recall-module.md` — Recall owns retention policy + value types; sessions deferred-typing note.
 - `docs/adr/0004-semantic-recall.md` — RRF merge, RetrievalStrategy seam, sidecar embedding index (MEM-05).
-- `sentinel-core/app/services/recall.py` (770 lines) — `SearchResult`/`RecallConfig`/`RecalledContext`, `_rrf_merge`, `_warm_search`, `_hot_sessions`, `SemanticRecall`.
+- `sentinel-core/app/services/recall.py` (770 lines) — `SearchResult`/`RecallConfig`/`RecalledContext`, `_rrf_merge`, `_warm_search`, `_hot_sessions`, `SemanticRecall`, `_WARM_TIER_EXCLUDE_PREFIXES` (line 53).
+- `sentinel-core/app/services/note_classifier.py:57-65` — `TOPIC_VAULT_PATH` (carrier-set source of truth).
+- `sentinel-core/app/services/note_intake.py:79` — `searchable_only` redirect (only `ops/`-prefixed targets) + `_topic_target_path` (date-suffix filename shape).
 - `sentinel-core/app/vault.py:115-156, 278-349` — Vault Protocol + `get_recent_sessions` + inline window.
 - `sentinel-core/tests/fakes/vault.py` — FakeVault parity contract.
 - `sentinel-core/app/services/message_processing.py:108-110, 165-203` — `recalled.sessions` consumer + `_build_session_summary` writer (parser contract).
 - `sentinel-core/app/routes/message.py:40-94` + `app/services/note_intake.py` — D-06 carrier chain.
-- `sentinel-core/app/config.py:95-140` — `sweep_skip_prefixes` / `protected_namespaces` env pattern; `journal/` NOT skipped.
+- `sentinel-core/app/config.py:95-140` — `sweep_skip_prefixes` / `protected_namespaces` env pattern; `journal/` + topic dirs NOT skipped; `inbox/` IS skipped.
 - `sentinel-core/app/services/vault_sweeper.py` (grepped) — skip prefixes, `EMBEDDING_INDEX_PATH`, embed scope.
 - `sentinel-core/app/routes/status.py:40-59` — second `recalled.sessions` consumer.
 - `shared/sentinel_shared/similarity.py` — `cosine_similarity` signature (don't-hand-roll).
@@ -409,4 +420,4 @@ sorted(sessions, key=lambda s: recency_weight(s.date, now=datetime.now(timezone.
 - Recency constant (A1): LOW — by design handed to the planner (D-01).
 
 **Research date:** 2026-06-12
-**Valid until:** 2026-07-12 (stable internal domain; re-verify only if `recall.py`/`vault.py`/`note_intake.py` or `sweep_skip_prefixes` change before planning).
+**Valid until:** 2026-07-12 (stable internal domain; re-verify only if `recall.py`/`vault.py`/`note_intake.py`/`note_classifier.py` or `sweep_skip_prefixes` change before planning).
