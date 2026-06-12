@@ -39,11 +39,14 @@ jobs:
             image: ghcr.io/the-artificer-of-ciphers-llc/sentinel-pathfinder
             build_contexts: |
               shared=./shared
-          - name: pi-harness
-            context: ./pi-harness
-            dockerfile: ./pi-harness/Dockerfile
-            image: ghcr.io/the-artificer-of-ciphers-llc/sentinel-pi-harness
-            build_contexts: ""
+          # pi-harness is planned but not yet implemented — no ./pi-harness/Dockerfile
+          # exists yet, so this build job fails every run. Re-enable this entry once
+          # the pi-harness component is built.
+          # - name: pi-harness
+          #   context: ./pi-harness
+          #   dockerfile: ./pi-harness/Dockerfile
+          #   image: ghcr.io/the-artificer-of-ciphers-llc/sentinel-pi-harness
+          #   build_contexts: ""
 
     steps:
       - name: Checkout
