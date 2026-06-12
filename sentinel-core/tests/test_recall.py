@@ -988,35 +988,59 @@ def test_index_path_single_source_constant_equality():
     )
 
 
-def test_recall_index_path_no_duplicate_literal():
-    """recall.py must NOT re-state the literal path string.
+async def test_recall_no_duplicate_index_literal_behavioral():
+    """RecallConfig().index_path must equal EMBEDDING_INDEX_PATH at runtime.
 
-    The literal 'ops/sweeps/embedding-index' must appear in EXACTLY one
-    module — vault_sweeper.py (or, if a leaf module was created, that module).
-    It must NOT appear in recall.py itself.
+    Replaces the source-grep test (banned by Behavioral-Test-Only Rule):
+    if recall.py introduced its own literal that diverged from the vault_sweeper
+    constant, this assertion would fail with the actual vs expected values.
+
+    The existing test_index_path_single_source_constant_equality already covers
+    this invariant; this test adds a SemanticRecall-instantiation sanity check
+    to confirm the config propagates to the live object.
     """
-    import pathlib
+    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH
+    from app.services.recall import RecallConfig, SemanticRecall
 
-    recall_src = pathlib.Path(__file__).parent.parent / "app" / "services" / "recall.py"
-    text = recall_src.read_text(encoding="utf-8")
-    # The literal path fragment used in EMBEDDING_INDEX_PATH
-    assert "ops/sweeps/embedding-index" not in text, (
-        "recall.py must NOT contain the literal index path — it must import "
-        "EMBEDDING_INDEX_PATH from vault_sweeper (single physical source of truth)"
+    config = RecallConfig()
+    assert config.index_path == EMBEDDING_INDEX_PATH, (
+        "RecallConfig.index_path must equal EMBEDDING_INDEX_PATH (single source); "
+        f"RecallConfig={config.index_path!r}, EMBEDDING_INDEX_PATH={EMBEDDING_INDEX_PATH!r}"
+    )
+    # Confirm that a SemanticRecall instance reads from the same path (i.e. it is
+    # actually used — not silently overridden by instance construction).
+    vault = FakeVault()
+    semantic = SemanticRecall(vault=vault, embed_fn=fake_embedder, active_model="m", config=config)
+    assert semantic._config.index_path == EMBEDDING_INDEX_PATH, (
+        "SemanticRecall._config.index_path must equal EMBEDDING_INDEX_PATH at runtime"
     )
 
 
-def test_recall_imports_embedding_index_path():
-    """recall.py must import EMBEDDING_INDEX_PATH from vault_sweeper (or a leaf module).
+async def test_recall_embedding_index_path_is_actually_read():
+    """SemanticRecall reads from config.index_path, not a hardcoded path.
 
-    The field default must be the imported constant, not a re-stated literal.
+    Replaces the source-grep test (banned by Behavioral-Test-Only Rule):
+    seeds the vault with an index at a custom path and verifies SemanticRecall
+    loads it, proving the path is taken from config rather than a baked-in literal.
     """
-    import pathlib
+    from app.services.recall import RecallConfig, SemanticRecall
 
-    recall_src = pathlib.Path(__file__).parent.parent / "app" / "services" / "recall.py"
-    text = recall_src.read_text(encoding="utf-8")
-    assert "EMBEDDING_INDEX_PATH" in text, (
-        "recall.py must reference EMBEDDING_INDEX_PATH (imported from vault_sweeper)"
+    custom_path = "ops/sweeps/test-custom-index.json"
+    model = "test-model-v1"
+    note_vec = [1.0, 0.0, 0.0]
+    idx = make_fixture_index(["notes/custom.md"], [note_vec], model)
+
+    config = RecallConfig(index_path=custom_path, index_ttl_seconds=0.0)
+    vault = FakeVault()
+    import json as _json
+    vault.notes[custom_path] = _json.dumps(idx)
+
+    semantic = SemanticRecall(vault=vault, embed_fn=fake_embedder, active_model=model, config=config)
+    await semantic._load_index_if_stale()
+
+    assert semantic._index == idx, (
+        "SemanticRecall must load the index from config.index_path; "
+        f"expected {idx!r}, got {semantic._index!r}"
     )
 
 
