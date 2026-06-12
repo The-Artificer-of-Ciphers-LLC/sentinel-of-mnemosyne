@@ -807,4 +807,11 @@ Plans:
   4. The `ops/` exclusion in `RecallConfig` is not relaxed — older sessions are reached via conversation notes filed outside `ops/`, not by widening the exclusion list
   5. Recalled sessions are ordered/weighted by recency — a more recent session ranks above an older one for the same relevance — via a recency weighting applied to `SessionSummary.date` in the merge; the weighting affects only episodic sessions, never Self-namespace notes
 
-**Plans:** TBD
+**Plans:** 5 plans
+
+Plans:
+- [ ] 41-01-PLAN.md — Typed value contracts: SessionSummary + RetentionPolicy dataclasses + pure recency_weight helper (TDD)
+- [ ] 41-02-PLAN.md — Bounded Vault reopen: retype get_recent_sessions -> list[SessionSummary] with policy, adapter-edge parser, FakeVault lockstep
+- [ ] 41-03-PLAN.md — Env-overridable RetentionPolicy Settings + composition-root wiring (RETENTION_HOT_LIMIT / RETENTION_HOT_WINDOW_DAYS)
+- [ ] 41-04-PLAN.md — Recall integration: typed RecalledContext.sessions, recency hot-ordering + warm carrier weighting (episodic-only), old-session-warm, remove recent_session_limit, record OQ1/OQ2/OQ3 + inbox gap (TDD)
+- [ ] 41-05-PLAN.md — Consumer lockstep: retype message_processing/status consumers + ~19 test mock sites; full-suite integration gate
