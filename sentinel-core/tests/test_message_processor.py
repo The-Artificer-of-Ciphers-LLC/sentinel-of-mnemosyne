@@ -239,6 +239,64 @@ async def test_litellm_context_length_string_mapped_to_context_overflow():
     assert excinfo.value.code == "context_overflow"
 
 
+async def test_empty_body_session_does_not_introduce_stray_separator():
+    """CR-03: a SessionSummary with empty body must not add a stray '---' separator.
+
+    Seeds a FakeVault with one real-body session and one empty-body session.
+    Verifies that the injected context block contains the real body and does NOT
+    contain a stray '\\n---\\n' left by the empty session.
+    """
+    from app.services.recall import Recall, RecallConfig, RetentionPolicy
+    from tests.fakes.vault import FakeVault
+    from datetime import datetime, timezone
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    notes = {
+        # Session with real body
+        f"ops/sessions/{today}/trekkie-10-00-00.md": (
+            f"---\ndate: {today}\nuser_id: trekkie\ntime: 10-00-00\n---\n"
+            "## User\nReal message\n## Sentinel\nReal reply\n"
+        ),
+        # Session with empty body — should be silently skipped, not add separator
+        f"ops/sessions/{today}/trekkie-09-00-00.md": "",
+    }
+    policy = RetentionPolicy(hot_limit=10, hot_window_days=30)
+    vault = FakeVault(notes=notes)
+    recall = Recall(vault=vault, config=RecallConfig(), policy=policy)
+
+    # FakeAIProvider captures the messages it receives
+    ai = FakeAIProvider(response="OK")
+    proc = MessageProcessor(
+        vault=vault,
+        ai_provider=ai,
+        injection_filter=FakeInjectionFilter(),
+        output_scanner=FakeOutputScanner(safe=True),
+        recall=recall,
+    )
+    req = make_request(content="test")
+    await proc.process(req)
+
+    # Extract the injected context message(s) — they appear before the user prompt
+    all_messages = ai.received_messages[-1]
+    context_messages = [m["content"] for m in all_messages if m.get("role") == "user"]
+
+    # There should be no "stray" separator: a leading "\n---\n" without preceding content
+    # or two consecutive separators, which is what an empty body produces.
+    context_text = "\n".join(context_messages)
+    # An empty-body session contributes "\n---\n" before actual content.
+    # After the fix, the empty session is simply skipped.
+    assert "\n---\n\n---\n" not in context_text, (
+        "Double separator detected — empty-body session was not skipped: "
+        f"{context_text!r}"
+    )
+    # The real session's content must still appear
+    assert "Real message" in context_text or "Real reply" in context_text, (
+        "Real session body must be present in context; "
+        f"context was: {context_text!r}"
+    )
+
+
 # Mark all tests in this module as async — pytest-asyncio is in auto mode per
 # pyproject.toml (asyncio_mode="auto"), but make the dependency explicit.
 pytestmark = pytest.mark.asyncio

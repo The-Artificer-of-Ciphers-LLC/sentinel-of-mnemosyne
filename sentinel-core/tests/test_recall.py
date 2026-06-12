@@ -1724,6 +1724,44 @@ async def test_retention_window_tunable():
     )
 
 
+async def test_retention_window_excludes_out_of_window_sessions():
+    """CR-02: FakeVault.get_recent_sessions excludes sessions older than hot_window_days.
+
+    Seeds one session within the window and one clearly outside it (91 days ago).
+    With hot_window_days=30, only the recent session must be returned; the old one
+    must be excluded — the same filtering production ObsidianVault applies.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    old_date = (now - timedelta(days=91)).strftime("%Y-%m-%d")
+
+    notes = {
+        f"ops/sessions/{today}/trekkie-10-00-00.md": (
+            f"---\ndate: {today}\nuser_id: trekkie\ntime: 10-00-00\n---\n"
+            "## User\nRecent message\n## Sentinel\nRecent reply\n"
+        ),
+        f"ops/sessions/{old_date}/trekkie-10-00-00.md": (
+            f"---\ndate: {old_date}\nuser_id: trekkie\ntime: 10-00-00\n---\n"
+            "## User\nOld message\n## Sentinel\nOld reply\n"
+        ),
+    }
+    policy = RetentionPolicy(hot_limit=10, hot_window_days=30)
+    recall = Recall(vault=FakeVault(notes=notes), config=RecallConfig(), policy=policy)
+    result = await recall.assemble(make_request(), budget=8192)
+
+    session_dates = [s.date for s in result.sessions]
+    assert today in session_dates, (
+        f"Recent session (date={today!r}) must be included within hot_window_days=30; "
+        f"got {session_dates!r}"
+    )
+    assert old_date not in session_dates, (
+        f"Old session (date={old_date!r}, 91 days ago) must be excluded by hot_window_days=30; "
+        f"got {session_dates!r}"
+    )
+
+
 async def test_inbox_gap_not_recalled():
     """Inbox/ MEM-07 gap characterization (D-06, Pitfall 1): inbox/ content is not warm-recalled.
 

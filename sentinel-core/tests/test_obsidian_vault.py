@@ -198,6 +198,41 @@ async def test_parse_session_summary_unparseable_path_returns_none():
     assert _parse_session_summary("bad/path.md", "some body") is None
 
 
+async def test_parse_session_summary_frontmatter_value_containing_dashes():
+    """CR-01: a frontmatter field value containing '---' does not corrupt user_msg/sentinel_msg.
+
+    Previously the fragile find("---") chain would pick up a "---" inside a
+    frontmatter value as the closing delimiter, causing the body extraction to start
+    at the wrong position and misparse User/Sentinel sections.
+    """
+    # A note whose 'model' field value contains three dashes to trigger the old
+    # off-by-one misfiring.  The body still has well-formed ## User / ## Sentinel.
+    note_with_dashes_in_fm = (
+        "---\n"
+        "timestamp: 2026-06-12T14:00:00+00:00\n"
+        "user_id: trekkie\n"
+        "model: some---value\n"
+        "---\n"
+        "\n"
+        "## User\n"
+        "\n"
+        "What is my goal?\n"
+        "\n"
+        "## Sentinel\n"
+        "\n"
+        "Build the Sentinel.\n"
+    )
+    path = "ops/sessions/2026-06-12/trekkie-14-00-00.md"
+    parsed = _parse_session_summary(path, note_with_dashes_in_fm)
+    assert parsed is not None, "Expected a valid SessionSummary, got None"
+    assert parsed.user_msg == "What is my goal?", (
+        f"user_msg corrupted by frontmatter '---' value; got {parsed.user_msg!r}"
+    )
+    assert parsed.sentinel_msg == "Build the Sentinel.", (
+        f"sentinel_msg corrupted by frontmatter '---' value; got {parsed.sentinel_msg!r}"
+    )
+
+
 async def test_write_session_summary_calls_put(obsidian_put_capture_mock):
     """write_session_summary() sends a PUT request to /vault/{path}."""
     async with AsyncClient(transport=obsidian_put_capture_mock, base_url="http://test") as client:
