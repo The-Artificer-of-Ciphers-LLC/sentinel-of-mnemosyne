@@ -106,15 +106,9 @@ class MessageProcessor:
                 "Personal context:\n" + "\n\n---\n\n".join(recalled.self_context)
             )
         if recalled.sessions:
-            # Plan 41-04 bridge: recalled.sessions is now list[SessionSummary]; extract .body
-            # until Plan 41-05 retypes this consumer in lockstep.
-            from app.services.recall import SessionSummary as _SessionSummary
-            session_bodies = [
-                s.body if isinstance(s, _SessionSummary) else str(s)
-                for s in recalled.sessions
-            ]
+            # Plan 41-05 lockstep: recalled.sessions is list[SessionSummary]; join s.body.
             context_parts.append(
-                "Recent session history:\n" + "\n---\n".join(session_bodies)
+                "Recent session history:\n" + "\n---\n".join(s.body for s in recalled.sessions)
             )
         if context_parts:
             raw_context = "\n\n".join(context_parts)

@@ -48,19 +48,22 @@ async def debug_context(
     if ctx.recall is None:
         raise RuntimeError("RouteContext.recall is not configured")
     recalled = await ctx.recall.assemble(fake_req, budget=ctx.context_window)
-    # Plan 41-04 bridge: recalled.sessions is now list[SessionSummary]; serialize to dict
-    # until Plan 41-05 retypes this consumer in lockstep.
-    from app.services.recall import SessionSummary as _SessionSummary
-    import dataclasses as _dc
-    sessions_serialized = [
-        _dc.asdict(s) if isinstance(s, _SessionSummary) else {"body": str(s)}
-        for s in recalled.sessions
-    ]
+    # Plan 41-05 lockstep: explicit SessionSummary field serialization (mirrors warm idiom).
     return JSONResponse(
         {
             "user_id": user_id,
             "self_context": recalled.self_context,
-            "sessions": sessions_serialized,
+            "sessions": [
+                {
+                    "date": s.date,
+                    "user_id": s.user_id,
+                    "time": s.time,
+                    "user_msg": s.user_msg,
+                    "sentinel_msg": s.sentinel_msg,
+                    "path": s.path,
+                }
+                for s in recalled.sessions
+            ],
             "warm": [{"path": r.path, "score": r.score} for r in recalled.warm],
             "recent_sessions_count": len(recalled.sessions),
         }
