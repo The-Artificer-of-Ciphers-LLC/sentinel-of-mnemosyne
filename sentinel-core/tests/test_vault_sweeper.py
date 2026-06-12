@@ -206,8 +206,12 @@ async def test_run_sweep_embedder_failure_continues_classification():
     async def _failing_embedder(texts):
         raise RuntimeError("LM Studio offline")
 
+    async def _true_probe():
+        return True
+
     report = await run_sweep(
-        fake, classifier, _failing_embedder, force_reclassify=True
+        fake, classifier, _failing_embedder, force_reclassify=True,
+        safe_to_mutate=_true_probe,
     )
     # Classification did write back
     body = fake.store["learning/x.md"]
@@ -235,7 +239,11 @@ async def test_run_sweep_dedup_moves_duplicate_to_trash():
     async def _same_embedder(texts):
         return [[1.0, 0.0, 0.0]] * len(texts)
 
-    report = await run_sweep(fake, classifier, _same_embedder, force_reclassify=True)
+    async def _true_probe():
+        return True
+
+    report = await run_sweep(fake, classifier, _same_embedder, force_reclassify=True,
+                             safe_to_mutate=_true_probe)
     assert report.duplicates_moved == 1
     # The shorter body's path should be gone (moved to trash); the longer kept.
     surviving = [p for p in ("references/a.md", "references/b.md") if p in fake.store]
@@ -262,8 +270,11 @@ async def test_run_sweep_idempotent_skips_marked():
     async def _emb(texts):
         return [[0.5, 0.5, 0.5]] * len(texts)
 
+    async def _true_probe():
+        return True
+
     fake.store["references/a.md"] = "content"
-    report1 = await run_sweep(fake, classifier, _emb, force_reclassify=True)
+    report1 = await run_sweep(fake, classifier, _emb, force_reclassify=True, safe_to_mutate=_true_probe)
     assert report1.files_processed == 1
     classifier.reset_mock()
 
@@ -332,7 +343,10 @@ async def test_sweep_moves_misplaced_note_to_topic_folder():
     async def _emb(texts):
         return [[1.0, 0.0, 0.0]] * len(texts)
 
-    report = await run_sweep(fake, classifier, _emb, force_reclassify=True)
+    async def _true_probe():
+        return True
+
+    report = await run_sweep(fake, classifier, _emb, force_reclassify=True, safe_to_mutate=_true_probe)
 
     # The misplaced original is gone
     assert "random-folder/finished-bass-day-19.md" not in fake.store, (
@@ -671,7 +685,10 @@ async def test_sweep_emits_embedding_index():
     )
     embedder = _CallCountingEmbedder()
 
-    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+    async def _true_probe():
+        return True
+
+    await run_sweep(fake, classifier, embedder, force_reclassify=True, safe_to_mutate=_true_probe)
 
     assert EMBEDDING_INDEX_PATH in fake.notes, (
         f"expected {EMBEDDING_INDEX_PATH!r} in vault after sweep; "
@@ -701,7 +718,10 @@ async def test_sweep_writes_embedding_model_to_index():
     )
     embedder = _CallCountingEmbedder()
 
-    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+    async def _true_probe():
+        return True
+
+    await run_sweep(fake, classifier, embedder, force_reclassify=True, safe_to_mutate=_true_probe)
 
     raw = fake.notes[EMBEDDING_INDEX_PATH]
     index = _json.loads(raw)
@@ -741,8 +761,11 @@ async def test_sweep_index_incremental_carry_forward():
     )
     embedder = _CallCountingEmbedder()
 
+    async def _true_probe():
+        return True
+
     # First sweep — embeds both notes
-    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+    await run_sweep(fake, classifier, embedder, force_reclassify=True, safe_to_mutate=_true_probe)
     calls_after_first = len(embedder.all_texts)
 
     # Record the content_hash of the stable note from the first index
@@ -759,7 +782,7 @@ async def test_sweep_index_incremental_carry_forward():
     # Second sweep
     embedder.calls.clear()
     classifier.reset_mock()
-    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+    await run_sweep(fake, classifier, embedder, force_reclassify=True, safe_to_mutate=_true_probe)
 
     index_after_second = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
 
@@ -808,8 +831,11 @@ async def test_sweep_index_prunes_trashed():
     )
     embedder = _CallCountingEmbedder()
 
+    async def _true_probe():
+        return True
+
     # First sweep — both notes indexed
-    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+    await run_sweep(fake, classifier, embedder, force_reclassify=True, safe_to_mutate=_true_probe)
     index_first = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
     assert "references/keeper.md" in index_first
     assert "references/goner.md" in index_first
@@ -823,7 +849,7 @@ async def test_sweep_index_prunes_trashed():
     # Second sweep
     embedder.calls.clear()
     classifier.reset_mock()
-    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+    await run_sweep(fake, classifier, embedder, force_reclassify=True, safe_to_mutate=_true_probe)
 
     index_second = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
     assert "references/keeper.md" in index_second, "keeper note must remain in index after second sweep"
@@ -848,7 +874,10 @@ async def test_sweep_embeds_with_document_prefix():
     )
     embedder = _CallCountingEmbedder()
 
-    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+    async def _true_probe():
+        return True
+
+    await run_sweep(fake, classifier, embedder, force_reclassify=True, safe_to_mutate=_true_probe)
 
     all_texts = embedder.all_texts
     assert len(all_texts) >= 2, f"expected at least 2 texts sent to embedder; got {all_texts}"
@@ -1244,11 +1273,14 @@ async def test_run_sweep_degraded_index_invariant_mem05():
     fake = _make_classifiable_note_vault(note_paths, body="original body")
     embedder = _CallCountingEmbedder()
 
-    # First run — establish a healthy index
+    # First run — establish a healthy index (probe=True so it actually writes)
+    async def _true_probe():
+        return True
+
     classifier = AsyncMock(
         return_value=ClassificationResult(topic="reference", confidence=0.9, title_slug="x", reasoning="r")
     )
-    await run_sweep(fake, classifier, embedder, force_reclassify=True)
+    await run_sweep(fake, classifier, embedder, force_reclassify=True, safe_to_mutate=_true_probe)
     index_first = _j.loads(fake.notes[EMBEDDING_INDEX_PATH])
     old_hash = index_first["references/alpha.md"]["content_hash"]
     old_b64 = index_first["references/alpha.md"].get("embedding_b64")

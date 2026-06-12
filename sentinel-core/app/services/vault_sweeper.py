@@ -302,7 +302,16 @@ async def _emit_embedding_index(
             new_index[path] = entry
         # else: pruned (path is trashed or no longer in the vault)
 
-    # Update / insert entries for survivors that have embeddings
+    # Update / insert entries for survivors that have embeddings.
+    #
+    # DEGRADED-INDEX INVARIANT (MEM-05 / T-40-23, deterministic rule):
+    # On a degraded run (embeddings=None or partial), a changed note's entry
+    # MUST NOT be persisted with the new content_hash and a stale/missing vector.
+    # Rule: if the body hash changed but no fresh vector is available, write the
+    # entry with the OLD vector and mark it ``stale: true``. This preserves the
+    # new content_hash (so SemanticRecall can detect stale entries — 40-07) while
+    # making it explicit that the vector does NOT match the new body.
+    # The reader-side skip of ``stale: true`` entries is owned by 40-07.
     if embeddings:
         # WR-06: if embedder returned fewer vectors than survivors, log and record
         # the mismatch instead of silently breaking mid-loop.
@@ -316,7 +325,24 @@ async def _emit_embedding_index(
 
         for idx, (path, _fm, rest, _cls) in enumerate(survivors):
             if idx >= len(embeddings):
-                break
+                # No fresh vector for this survivor — apply degraded-index rule
+                content_hash = _content_hash(rest)
+                active_model = _embedding_model_id()
+                existing_entry = existing_index.get(path, {})
+                if (
+                    existing_entry.get("content_hash") == content_hash
+                    and existing_entry.get("embedding_model") == active_model
+                ):
+                    new_index[path] = existing_entry
+                else:
+                    # Body changed but no fresh vector available — mark stale
+                    new_index[path] = {
+                        "embedding_b64": existing_entry.get("embedding_b64", ""),
+                        "embedding_model": existing_entry.get("embedding_model", _embedding_model_id()),
+                        "content_hash": content_hash,
+                        "stale": True,
+                    }
+                continue
             content_hash = _content_hash(rest)
             active_model = _embedding_model_id()
             existing_entry = existing_index.get(path, {})
@@ -333,6 +359,27 @@ async def _emit_embedding_index(
                     "embedding_b64": encode_embedding(embeddings[idx]),
                     "embedding_model": active_model,
                     "content_hash": content_hash,
+                }
+    else:
+        # No embeddings at all (degraded run) — apply degraded-index rule to all survivors
+        for path, _fm, rest, _cls in survivors:
+            content_hash = _content_hash(rest)
+            active_model = _embedding_model_id()
+            existing_entry = existing_index.get(path, {})
+            if (
+                existing_entry.get("content_hash") == content_hash
+                and existing_entry.get("embedding_model") == active_model
+            ):
+                # Unchanged — carry forward (may still have stale=True from a prior
+                # degraded run; preserving it is correct — the body still matches)
+                new_index[path] = existing_entry
+            else:
+                # Body changed but no fresh vector — mark stale (MEM-05 invariant)
+                new_index[path] = {
+                    "embedding_b64": existing_entry.get("embedding_b64", ""),
+                    "embedding_model": existing_entry.get("embedding_model", active_model),
+                    "content_hash": content_hash,
+                    "stale": True,
                 }
 
     # Persist via vault seam — single REST PUT (D-08 REVISED)
@@ -451,6 +498,7 @@ async def run_sweep(
     status_callback: Callable[[SweepReport], None] | None = None,
     dry_run: bool = False,
     source_folder: str = "",
+    safe_to_mutate: "Callable[[], Awaitable[bool]] | None" = None,
 ) -> SweepReport:
     """Walk vault, classify, embed, de-dup, relocate-misplaced, move-to-trash.
 
@@ -468,10 +516,46 @@ async def run_sweep(
             move the sweeper WOULD make and write nothing to the vault.
             Operator runs this first to preview before authorizing a real
             sweep. Lockfile is still acquired/released (one preview at a
-            time is correct semantics).
+            time is correct semantics). Dry-run performs no moves regardless
+            of ``safe_to_mutate`` — no probe needed for preview.
+        safe_to_mutate: MANDATORY for destructive (non-dry-run) runs.
+            An async callable () → bool that the sweeper re-evaluates
+            IMMEDIATELY BEFORE EACH live ``relocate`` / ``move_to_trash``
+            call in ALL THREE destructive branches. This ensures that if the
+            readiness signal flips to False partway through a sweep, no
+            destructive move occurs after that point.
+
+            FAIL-CLOSED BY CONSTRUCTION (round-3 HIGH): if ``safe_to_mutate``
+            is None (omitted), the per-move helper ``_is_safe()`` returns
+            False — a destructive run with no probe performs ZERO destructive
+            moves. There is NO permissive default that means "safe". The
+            bypass is closed by construction, not by callers remembering to
+            pass a probe.
+
+            The dry-run path (``dry_run=True``) does NOT require a probe:
+            it performs no vault mutations regardless.
     """
     sweep_id = _iso_utc()
     report = SweepReport(sweep_id=sweep_id, status="running")
+
+    # -----------------------------------------------------------------------
+    # MANDATORY FAIL-CLOSED PER-MOVE SAFETY HELPER (round-3 HIGH)
+    # Re-evaluated IMMEDIATELY BEFORE each live relocate/move_to_trash call.
+    # When safe_to_mutate is None (no probe supplied), returns False so that a
+    # destructive run without a probe performs ZERO moves by construction.
+    # -----------------------------------------------------------------------
+    async def _is_safe() -> bool:
+        if safe_to_mutate is not None:
+            return await safe_to_mutate()
+        return False  # fail-closed — no probe means unsafe
+
+    # Import ProtectedPathError lazily so this module doesn't hard-depend on
+    # 40-05 being merged. Falls back to catching the broad Exception that
+    # already wraps these branches.
+    try:
+        from app.errors import ProtectedPathError as _ProtectedPathError
+    except ImportError:
+        _ProtectedPathError = Exception  # type: ignore[misc,assignment]
 
     if not await client.acquire_sweep_lock():
         raise SweepInProgressError("a sweep is already running")
@@ -507,11 +591,19 @@ async def run_sweep(
                             "dst": f"_trash/{today}/{path.rsplit('/', 1)[-1]}",
                             "reason": "cheap-filter:noise",
                         })
+                        report.noise_moved += 1
                     else:
-                        await client.move_to_trash(
-                            path, reason="cheap-filter:noise", sweep_at=sweep_id
-                        )
-                    report.noise_moved += 1
+                        # MANDATORY per-move safety check (re-evaluated here, not once per run)
+                        if await _is_safe():
+                            try:
+                                await client.move_to_trash(
+                                    path, reason="cheap-filter:noise", sweep_at=sweep_id
+                                )
+                                report.noise_moved += 1
+                            except _ProtectedPathError as exc:
+                                report.errors.append(f"protected: refused to move {path}: {exc}")
+                        else:
+                            report.errors.append(f"degraded/unsafe: skipped noise-trash for {path}")
                     report.files_processed += 1
                     if status_callback:
                         status_callback(report)
@@ -543,6 +635,13 @@ async def run_sweep(
                             status_callback(report)
                         continue
                     else:
+                        # MANDATORY per-move safety check (re-evaluated before each relocate)
+                        if not await _is_safe():
+                            report.errors.append(f"degraded/unsafe: skipped topic-move for {path}")
+                            report.files_processed += 1
+                            if status_callback:
+                                status_callback(report)
+                            continue
                         try:
                             new_path = await client.relocate(
                                 path, proposed_dst, sweep_at=sweep_id
@@ -554,12 +653,32 @@ async def run_sweep(
                             # Re-read body from new location for survivors entry
                             body = await client.read_note(path)
                             fm, rest = split_frontmatter(body)
+                        except _ProtectedPathError as exc:
+                            report.errors.append(f"protected: refused to move {path}: {exc}")
+                            report.files_processed += 1
+                            if status_callback:
+                                status_callback(report)
+                            continue
                         except Exception as exc:
                             report.errors.append(f"topic_move {path}: {exc}")
                             report.files_processed += 1
                             if status_callback:
                                 status_callback(report)
                             continue
+
+                # (round-2 item C) SUPPRESS CLASSIFICATION FRONTMATTER WRITE-BACK on
+                # unsafe runs. On a degraded run, degraded classifier output must NOT be
+                # persisted anywhere — not just suppressed as a move. The note is left
+                # byte-identical.
+                # Guard: re-evaluate safety here (same per-note call as relocate guard;
+                # the embedder is separate — its failure doesn't decide safety alone).
+                if not dry_run and not await _is_safe():
+                    # Unsafe — skip frontmatter write-back, don't add to survivors
+                    # (no embedding index update with fresh hash either)
+                    report.files_processed += 1
+                    if status_callback:
+                        status_callback(report)
+                    continue
 
                 # Write back classification frontmatter (preserve extras)
                 new_fm = dict(fm)
@@ -591,7 +710,11 @@ async def run_sweep(
             try:
                 embeddings = await embedder(bodies)
             except Exception as exc:
-                logger.warning("sweep: embedding endpoint failed (%s); skipping de-dup", exc)
+                logger.warning(
+                    "sweep: embedding endpoint failed (%s); skipping de-dup. "
+                    "safe-to-mutate probe governs whether moves proceed",
+                    exc,
+                )
                 embeddings = None
 
         # 3. Write classification + (optional) embedding back to each note.
@@ -611,8 +734,18 @@ async def run_sweep(
         # Called immediately after the step-3 write-back loop so the index
         # reflects the same embeddings just written into note frontmatter.
         # Guarded by ``not dry_run`` — index emission is a vault write.
+        # On a degraded run (unsafe/no probe) embeddings=None is passed so that
+        # the degraded-index invariant governs carry-forward (see _emit_embedding_index).
+        #
+        # DEGRADED ACTIVE PATHS (MEM-05): on a degraded run, survivors may be
+        # empty because the safe-to-mutate gate skipped all notes. We must NOT
+        # prune existing index entries for paths that still exist in the vault —
+        # use the full ``paths`` list (all walked paths) as active_paths so that
+        # notes walked but not processed through survivors aren't evicted from the
+        # index. Actual stale/missing entries are governed by the degraded-index
+        # rule in _emit_embedding_index.
         if not dry_run:
-            active_paths: set[str] = {s[0] for s in survivors}
+            active_paths: set[str] = set(paths)  # all walked paths, not just survivors
             await _emit_embedding_index(client, survivors, embeddings, active_paths, report)
 
         # 4. De-dup
@@ -644,6 +777,10 @@ async def run_sweep(
                         })
                         report.duplicates_moved += 1
                         continue
+                    # MANDATORY per-move safety check (re-evaluated before each dedup-trash)
+                    if not await _is_safe():
+                        report.errors.append(f"degraded/unsafe: skipped dedup-trash for {src}")
+                        continue
                     try:
                         dst = await client.move_to_trash(
                             src,
@@ -652,6 +789,8 @@ async def run_sweep(
                         )
                         moves.append((src, dst, f"duplicate (cosine≥0.92, conf={conf:.1f})"))
                         report.duplicates_moved += 1
+                    except _ProtectedPathError as exc:
+                        report.errors.append(f"protected: refused to move {src}: {exc}")
                     except Exception as exc:
                         report.errors.append(f"trash {src}: {exc}")
 
