@@ -63,7 +63,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 38: PF2E Multi-Step Onboarding Dialog** — Stateful conversational onboarding flow for `:pf player start` (completed 2026-05-10)
 - [x] **Phase 39: Extract the Recall Module** — Retrieval becomes a first-class `Recall` module returning `RecalledContext`; `MessageProcessor` and `GET /context/{user_id}` both delegate to it (completed 2026-06-11)
 - [x] **Phase 40: Semantic Recall** — `RetrievalStrategy` seam with `KeywordRecall` + `SemanticRecall`; sweeper embeddings become live retrieval data via RRF hybrid merge (completed 2026-06-11)
-- [ ] **Phase 41: Typed SessionSummary + Retention** — Typed `SessionSummary` + tunable `RetentionPolicy`; sessions older than the hot window recalled via index instead of dropped
+- [x] **Phase 41: Typed SessionSummary + Retention** — Typed `SessionSummary` + tunable `RetentionPolicy`; sessions older than the hot window recalled via index instead of dropped (completed 2026-06-12)
 
 ## Phase Details
 
@@ -807,7 +807,7 @@ Plans:
   4. The `ops/` exclusion in `RecallConfig` is not relaxed — older sessions are reached via conversation notes filed outside `ops/`, not by widening the exclusion list
   5. Recalled sessions are ordered/weighted by recency — a more recent session ranks above an older one for the same relevance — via a recency weighting applied to `SessionSummary.date` in the merge; the weighting affects only episodic sessions, never Self-namespace notes
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 Plans:
 **Wave 1**
 
@@ -824,4 +824,4 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 41-05-PLAN.md — Consumer lockstep: retype message_processing/status consumers + ~19 test mock sites; full-suite integration gate
+- [x] 41-05-PLAN.md — Consumer lockstep: retype message_processing/status consumers + ~19 test mock sites; full-suite integration gate
