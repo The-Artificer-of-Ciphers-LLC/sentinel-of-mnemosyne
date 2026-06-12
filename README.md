@@ -95,63 +95,7 @@ Edit the file in Obsidian to change voice; `sentinel-core` picks up the change o
 
 ## Quick Start
 
-> This gets you a fully containerized running stack with Docker Compose (no manual `curl` required).
-
-**1. Create a deploy folder + download sample files**
-```bash
-mkdir -p sentinel-deploy/secrets
-cd sentinel-deploy
-
-curl -fsSLO https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/sentinel-of-mnemosyne/main/docs/deploy/docker-compose.ghcr.yml
-curl -fsSLo .env https://raw.githubusercontent.com/The-Artificer-of-Ciphers-LLC/sentinel-of-mnemosyne/main/docs/deploy/.env.sample
-```
-
-**2. Create your secret files**
-
-Secrets live in the `secrets/` directory as individual files — one file per secret. See [secrets/README.md](secrets/README.md) for the full list and why this is safer than `.env`.
-
-```bash
-# Required always
-echo -n "your-obsidian-api-key" > secrets/obsidian_api_key
-echo -n "$(openssl rand -hex 32)" > secrets/sentinel_api_key
-
-# Required for Discord interface
-echo -n "your-discord-bot-token" > secrets/discord_bot_token
-
-# Optional: Claude API fallback
-echo -n "your-anthropic-key" > secrets/anthropic_api_key
-```
-
-**3. Configure non-secret settings**
-```bash
-# Edit .env — set LMSTUDIO_BASE_URL, OBSIDIAN_API_URL, OBSIDIAN_VAULT_PATH, and model values
-```
-
-**4. Start LM Studio on your Mac Mini**
-- Open LM Studio → Local Server → Start server
-- Note the IP address and port (default: `1234`)
-- Make sure a model is loaded
-
-**5. Deploy with Docker Compose (GHCR images)**
-```bash
-docker compose -f docker-compose.ghcr.yml pull
-docker compose -f docker-compose.ghcr.yml up -d
-```
-
-For complete deployment details (env, validation, troubleshooting), see:
-- [Installation Guide (Sentinel Core v0.50 / Pathfinder module v1.1)](docs/INSTALLATION-v0.50.md)
-- [Core Architecture](docs/ARCHITECTURE-Core.md)
-
-**6. Verify containers are healthy**
-```bash
-docker compose -f docker-compose.ghcr.yml ps
-docker compose -f docker-compose.ghcr.yml logs -f sentinel-core
-```
-
-**7. Use it from Discord (recommended)**
-- Invite/configure your Discord bot
-- Send `/sen hello` in an allowed channel
-- You should receive a Sentinel response in Discord
+The stack runs entirely in Docker Compose — pull the sample files, populate your secrets, and `docker compose up -d`. For the full walkthrough including environment variables, secret file setup, and validation steps, see [docs/how-to/install.md](docs/how-to/install.md).
 
 ---
 
@@ -217,14 +161,14 @@ the conversation. Subcommands are prefixed with `:` inside the thread.
 | `/sen :capture <text>` | Capture an insight to `inbox/` for processing |
 | `/sen :next` | What should I work on next? |
 | `/sen :stats` | Vault metrics (note count, orphans, link density) |
-| `/sen :pf <noun> <verb> ...` | Pathfinder 2e module — see USER-GUIDE |
+| `/sen :pf <noun> <verb> ...` | Pathfinder 2e module — see Discord Commands reference |
 
 **Full reference** — every shipped verb, every example response,
 including the Pathfinder 2e module's eight noun namespaces (`npc`,
 `harvest`, `rule`, `session`, `ingest`, `cartosia`, `foundry`,
 `player`):
 
-→ [docs/USER-GUIDE.md](docs/USER-GUIDE.md)
+→ [docs/reference/discord-commands.md](docs/reference/discord-commands.md)
 
 Any reply in a Sentinel thread also triggers the AI — no slash command
 needed.
@@ -254,8 +198,13 @@ sentinel-of-mnemosyne/
 ├── shared/                     # Shared Python client libraries
 ├── mnemosyne/                  # Obsidian vault (gitignored — your data stays yours)
 └── docs/
-    ├── PRD-Sentinel-of-Mnemosyne.md
-    └── ARCHITECTURE-Core.md
+    ├── index.md                    # Documentation hub (start here)
+    ├── tutorial/                   # Learning-by-doing guides
+    ├── how-to/                     # Task-oriented guides
+    ├── reference/                  # Technical reference
+    ├── explanation/                # Background and architecture
+    ├── adr/                        # Architectural decision records
+    └── PRD-Sentinel-of-Mnemosyne.md
 ```
 
 ---
@@ -282,9 +231,14 @@ Non-secret configuration lives in `.env`. See `.env.example` for the full list w
 
 ## Documentation
 
-- [Installation Guide (Sentinel Core v0.50 / Pathfinder module v1.1)](docs/INSTALLATION-v0.50.md) — operator setup and validation
+Start here: [Documentation hub](docs/index.md)
+
+- [Documentation hub](docs/index.md) — Diataxis-organised entry point for all docs
+- [Installation Guide](docs/how-to/install.md) — operator setup and validation
+- [Discord Commands](docs/reference/discord-commands.md) — every `/sen` command with examples
+- [Obsidian Vault Layout](docs/reference/obsidian-vault.md) — vault structure and conventions
+- [Architecture](docs/explanation/architecture.md) — technical decisions, API specs, Docker layout
 - [Product Requirements Document](docs/PRD-Sentinel-of-Mnemosyne.md) — vision, modules, milestones
-- [Core Architecture](docs/ARCHITECTURE-Core.md) — technical decisions, API specs, Docker layout
 - [Contributing Guide](CONTRIBUTING.md) — how to build modules and interfaces
 - [Secrets Setup](secrets/README.md) — all secret files and how to create them
 

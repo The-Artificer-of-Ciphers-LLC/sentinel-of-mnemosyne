@@ -1,16 +1,14 @@
-# Obsidian Lifebook Design
+# Obsidian vault reference
 
 > **Version audit:** Reviewed for Sentinel v0.50 (2026-05-06).
 
-The Sentinel treats the user's Obsidian vault as a living knowledge system — a lifebook — not a
-simple session note store. This document describes what the Sentinel reads, what it writes, where
-it writes it, and how the Discord interface exposes vault operations as slash-command subcommands.
+Sentinel Core reads from and writes to the Obsidian vault via the Local REST API plugin. This document specifies the folder structure, context injection behaviour, and file formats.
 
 ---
 
 ## Vault Structure
 
-The vault lives at the path configured in `OBSIDIAN_BASE_URL` (default: `http://host.docker.internal:27123`).
+The vault lives at the path configured in `OBSIDIAN_API_URL` (default: `http://host.docker.internal:27123`).
 All paths below are relative to the vault root.
 
 ```
@@ -154,6 +152,8 @@ Answer conversationally. Use markdown only when asked.
 Subcommands are triggered by prefixing the message with `:`. Anything without a `:` prefix is
 sent directly to the AI as a plain message.
 
+> For the user-facing description of these verbs, see [Discord commands reference](discord-commands.md).
+
 | Subcommand | Action | Prompt sent to Core |
 |------------|--------|---------------------|
 | `:help` | Returns help text locally | — (no Core call) |
@@ -187,6 +187,4 @@ session files within `ops/sessions/`.
 
 ## Backward Compatibility
 
-`ObsidianClient.get_user_context(user_id)` and `get_recent_sessions(user_id)` remain intact.
-`get_user_context` reads `core/users/{user_id}.md` — the old per-user profile path. It is no
-longer called by `message.py` but is kept for any future multi-user interface that needs it.
+`get_user_context` reads `core/users/{user_id}.md`.
