@@ -910,3 +910,135 @@ def test_index_path_roundtrips_through_vault_seam():
     assert parsed == original, (
         "json.loads of round-tripped value must equal the original dict"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 40 Plan 04 — Task 1: rebuild_embedding_index tests (RED phase)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rebuild_embedding_index_writes_index_with_all_fields():
+    """rebuild_embedding_index over a FakeVault with N classifiable notes writes
+    EMBEDDING_INDEX_PATH whose JSON is an object keyed by every walked note path,
+    with embedding_b64 + embedding_model + content_hash per entry.
+    """
+    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH, rebuild_embedding_index
+
+    note_paths = ["references/alpha.md", "references/beta.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+    embedder = _CallCountingEmbedder()
+
+    report = await rebuild_embedding_index(fake, embedder, model_loaded=True)
+
+    assert EMBEDDING_INDEX_PATH in fake.notes, (
+        f"expected {EMBEDDING_INDEX_PATH!r} in vault after rebuild; "
+        f"present paths: {sorted(fake.notes.keys())}"
+    )
+    raw = fake.notes[EMBEDDING_INDEX_PATH]
+    index = _json.loads(raw)
+    assert isinstance(index, dict), f"index must be a JSON object; got {type(index)}"
+    for path in note_paths:
+        assert path in index, f"expected note path {path!r} as key in index; keys={list(index.keys())}"
+        entry = index[path]
+        assert "embedding_b64" in entry, f"missing embedding_b64 for {path}"
+        assert "embedding_model" in entry, f"missing embedding_model for {path}"
+        assert "content_hash" in entry, f"missing content_hash for {path}"
+
+    assert report.status == "complete"
+
+
+@pytest.mark.asyncio
+async def test_rebuild_embedding_index_never_calls_destructive_vault_methods():
+    """rebuild_embedding_index NEVER calls relocate, move_to_trash, or delete_note.
+    Monkeypatch them to raise AssertionError and confirm the call completes intact.
+    """
+    from app.services.vault_sweeper import rebuild_embedding_index
+
+    note_paths = ["sentinel/persona.md", "references/beta.md", "learning/note.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+    embedder = _CallCountingEmbedder()
+
+    # Patch destructive methods to raise
+    async def _raises_if_called(*args, **kwargs):
+        raise AssertionError("rebuild_embedding_index must NOT call destructive vault methods")
+
+    fake.relocate = _raises_if_called
+    fake.move_to_trash = _raises_if_called
+    fake.delete_note = _raises_if_called
+
+    # Must complete without triggering any of those
+    report = await rebuild_embedding_index(fake, embedder, model_loaded=True)
+
+    assert report.status == "complete"
+    # All original notes remain at their original paths
+    for path in note_paths:
+        assert path in fake.notes, f"note {path!r} must still exist after rebuild"
+
+
+@pytest.mark.asyncio
+async def test_rebuild_embedding_index_incremental_carry_forward():
+    """rebuild_embedding_index is incremental — unchanged body carries prior entry
+    forward; a changed body produces a fresh entry.
+    """
+    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH, rebuild_embedding_index
+
+    note_paths = ["references/stable.md", "references/changing.md"]
+    fake = _make_classifiable_note_vault(note_paths, body="original body")
+    embedder = _CallCountingEmbedder()
+
+    # First rebuild
+    await rebuild_embedding_index(fake, embedder, model_loaded=True)
+    index_first = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
+    stable_hash_first = index_first["references/stable.md"]["content_hash"]
+    stable_b64_first = index_first["references/stable.md"]["embedding_b64"]
+
+    # Mutate only the changing note
+    fake.notes["references/changing.md"] = "completely new body content"
+
+    # Second rebuild
+    embedder.calls.clear()
+    await rebuild_embedding_index(fake, embedder, model_loaded=True)
+    index_second = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
+
+    # Stable note carried forward unchanged
+    stable_entry = index_second["references/stable.md"]
+    assert stable_entry["content_hash"] == stable_hash_first, (
+        "stable note content_hash must not change when body is unchanged"
+    )
+    assert stable_entry["embedding_b64"] == stable_b64_first, (
+        "stable note embedding_b64 must be carried forward when body is unchanged"
+    )
+
+    # Changing note gets a new hash
+    changing_hash_first = index_first["references/changing.md"]["content_hash"]
+    changing_hash_second = index_second["references/changing.md"]["content_hash"]
+    assert changing_hash_second != changing_hash_first, (
+        "changed note must have a new content_hash in the second index"
+    )
+
+
+@pytest.mark.asyncio
+async def test_rebuild_embedding_index_model_not_loaded_returns_skipped():
+    """When model_loaded=False, rebuild_embedding_index does NOT call the embedder,
+    keeps the index unchanged, and returns a SweepReport with status 'skipped'.
+    """
+    from app.services.vault_sweeper import rebuild_embedding_index
+
+    note_paths = ["references/alpha.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+
+    # Embedder spy — should never be called
+    call_count = 0
+
+    async def _spy_embedder(texts):
+        nonlocal call_count
+        call_count += 1
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    report = await rebuild_embedding_index(fake, _spy_embedder, model_loaded=False)
+
+    assert call_count == 0, f"embedder must NOT be called when model_loaded=False; called {call_count} times"
+    assert report.status == "skipped", (
+        f"expected report.status='skipped' when model_loaded=False; got {report.status!r}"
+    )
