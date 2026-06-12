@@ -797,7 +797,7 @@ Plans:
 
 **Goal:** Typed `SessionSummary` dataclass and a tunable `RetentionPolicy`; sessions older than the hot window are recalled via the semantic index instead of being dropped at the 3-turn/two-day cliff. Changes `get_recent_sessions` return type (bounded ADR-0002 Vault-method reopen touching `ObsidianVault`, `FakeVault`, and adapter tests).
 **Depends on:** Phase 39, Phase 40
-**Requirements:** MEM-06, MEM-07, MEM-08
+**Requirements:** MEM-06, MEM-07, MEM-08, MEM-09
 **Canonical ref:** docs/adr/0005-typed-session-summary.md
 **Success Criteria** (what must be TRUE):
 
@@ -805,5 +805,6 @@ Plans:
   2. A session that is older than the hot window (more than `hot_window_days` days ago) is retrievable via `RecalledContext.warm` through the semantic index rather than being silently dropped
   3. Session data crosses the Recall interface as `list[SessionSummary]` typed values (not raw markdown strings), enabling callers to access `date`, `user_id`, and message fields without string-parsing frontmatter
   4. The `ops/` exclusion in `RecallConfig` is not relaxed — older sessions are reached via conversation notes filed outside `ops/`, not by widening the exclusion list
+  5. Recalled sessions are ordered/weighted by recency — a more recent session ranks above an older one for the same relevance — via a recency weighting applied to `SessionSummary.date` in the merge; the weighting affects only episodic sessions, never Self-namespace notes
 
 **Plans:** TBD

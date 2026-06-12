@@ -89,6 +89,7 @@
 - [ ] **MEM-06**: The recent-session window is a tunable retention policy rather than a fixed 3-turn / two-day limit
 - [ ] **MEM-07**: Sessions older than the hot window are recalled via the index instead of being dropped
 - [ ] **MEM-08**: Session data crosses the Recall interface as typed values, enabling recency-aware merging
+- [ ] **MEM-09**: Recalled session summaries are weighted by recency in the merge (more recent sessions rank above older ones) using the typed `SessionSummary.date`; recency weighting applies to episodic Session summaries only, never to Self-namespace or authored notes
 
 ---
 
@@ -100,7 +101,6 @@
 - Encounter builder (balanced encounter by party level) — deferred to future module milestone
 - Loot generator (non-harvest) — deferred; harvesting covers monster-specific loot
 - Persistent ANN vector index when the vault grows past ~10k notes (RetrievalStrategy adapter swap)
-- Recency-weighting formula activated on the Session summary merge (post-v0.5.1; v0.5.1 ships the typed data that enables it)
 
 ## Out of Scope
 
@@ -173,3 +173,4 @@ _Filled by roadmapper. Maps each REQ-ID to its implementing phase._
 | MEM-06 | 41 | Typed SessionSummary + Retention |
 | MEM-07 | 41 | Typed SessionSummary + Retention |
 | MEM-08 | 41 | Typed SessionSummary + Retention |
+| MEM-09 | 41 | Typed SessionSummary + Retention |

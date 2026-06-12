@@ -93,7 +93,7 @@ conversations longer than a day routinely lose history. This is the remaining ga
 | Vault seam at `app/vault.py`, not under `app/clients/` (ADR-0002) | Single Protocol interface prevents scattered Obsidian client calls; `FakeVault` enables full unit-test isolation | ✓ Good |
 | Recall is a module above the Vault seam, not inline in the message processor (ADR-0003) | Retrieval policy (thresholds, budgets, namespace exclusions) is domain logic that does not belong in the adapter | ✓ Good |
 | `RetrievalStrategy` seam inside Recall: `KeywordRecall` + `SemanticRecall` (ADR-0004) | Makes sweeper embeddings live retrieval data; allows BM25 and vector search to coexist behind one interface | ✓ Good |
-| Typed `SessionSummary` + `RetentionPolicy` (ADR-0005) | Stops hard-dropping context after 3 turns; older sessions recalled via index instead of silently lost | — Pending |
+| Typed `SessionSummary` + `RetentionPolicy` + recency-weighted merge (ADR-0005) | Stops hard-dropping context after 3 turns; older sessions recalled via index instead of silently lost; recalled sessions ranked by recency | — Pending |
 | LiteLLM-direct as the AI layer; Pi harness is optional (`--pi` flag) | Removes an unnecessary process boundary for standard chat; Pi harness reserved for advanced coding use at v0.7 | ✓ Good |
 | Docker Compose override fragments per module/interface | Modules never touch the base compose file; zero central registry sprawl | ✓ Good |
 
@@ -113,7 +113,7 @@ past content across conversations, instead of "write to Obsidian, never look aga
   `SemanticRecall`); the vault sweeper's per-note embeddings (`embedding_b64`) become live retrieval
   data instead of dead frontmatter. — Phase 40 complete
 - Typed `SessionSummary` + retention (ADR-0005) — typed sessions and a `RetentionPolicy`; older
-  turns are recalled via the index instead of dropped past the 3-turn / today+yesterday hot window.
+  turns are recalled via the index instead of dropped past the 3-turn / today+yesterday hot window. Recalled sessions are recency-weighted so recent sessions rank above older ones.
 
 ---
 
