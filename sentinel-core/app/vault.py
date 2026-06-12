@@ -466,6 +466,13 @@ class ObsidianVault:
         logged + swallowed (copy succeeded, duplicate is recoverable but
         lost data is not). Returns the destination path.
         """
+        # Protected-namespace guard (40-05): refuse to trash any operator-critical path.
+        # This must be the FIRST statement so no copy/delete can run before the check.
+        if is_protected_path(path):
+            raise ProtectedPathError(
+                f"refusing to trash protected path {path!r}"
+            )
+
         when = when or datetime.now(timezone.utc)
         today = _today_str(when)
         filename = path.rsplit("/", 1)[-1]
@@ -514,6 +521,22 @@ class ObsidianVault:
         and ``topic_moved_at``, delete failure is logged + swallowed.
         Returns the actual destination path (post collision-suffix).
         """
+        # Protected-namespace guards (40-05): refuse to move FROM or INTO a protected
+        # namespace. These must be the FIRST statements so no read/copy/delete can run.
+        # Source guard: prevents operator-critical files from being relocated out.
+        if is_protected_path(src):
+            raise ProtectedPathError(
+                f"refusing to relocate protected path {src!r}"
+            )
+        # Destination guard (concern 6): prevents arbitrary content being relocated
+        # INTO a protected namespace (namespace poisoning). A write-based restore
+        # (write_note / PUT) is the intended operator restore path — write_note is
+        # intentionally NOT guarded. See ProtectedPathError docstring for details.
+        if is_protected_path(dst):
+            raise ProtectedPathError(
+                f"refusing to relocate into protected namespace: {dst!r}"
+            )
+
         existing = await self.read_note(dst)
         if existing:
             filename = dst.rsplit("/", 1)[-1]
