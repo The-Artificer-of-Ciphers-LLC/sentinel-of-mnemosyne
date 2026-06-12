@@ -27,11 +27,69 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from app.errors import VaultUnreachableError
+from app.errors import ProtectedPathError, VaultUnreachableError
 from app.markdown_frontmatter import join_frontmatter, split_frontmatter
 from app.time_utils import _iso_utc, _parse_iso, _today_str
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Protected-namespace guard (40-05, MEM-05 gap closure)
+#
+# Operator-critical paths that the Vault seam refuses to relocate or trash.
+# This is DIFFERENT from sweep_skip_prefixes (which governs whether a note is
+# PROCESSED by the sweeper); PROTECTED_NAMESPACES governs whether a file may
+# EVER be physically moved, by ANY caller.
+#
+# Scope decision (round-2 item F — recorded explicitly per plan requirement):
+#   sentinel/ — non-negotiable; persona.md absence crash-loops boot.
+#   self/     — identity-critical; RecallConfig.self_paths depends on it.
+#   security/ — operator-curated security namespace; must never be swept.
+# ---------------------------------------------------------------------------
+
+PROTECTED_NAMESPACES: tuple[str, ...] = (
+    "sentinel/",   # boot-critical: persona.md absence crash-loops composition.py:424
+    "self/",       # identity-critical: self/identity.md is the operator identity context
+    "security/",   # operator-curated security namespace: never swept, never moved
+)
+"""Module-level fallback default for the protected-namespace set.
+
+The runtime set is read from ``settings.protected_namespaces`` via
+``_active_protected_namespaces()`` (env-overridable) and falls back to this
+literal tuple if the settings import fails. This constant is the EXPLICIT
+ENUMERATION required by plan 40-05 concern 5 / round-2 item F — it can never
+silently regress to an implicit default.
+"""
+
+
+def _active_protected_namespaces() -> tuple[str, ...]:
+    """Return the live protected-namespace tuple from settings, falling back to
+    the module-level default if settings is unimportable (e.g. during isolated
+    unit tests). Mirrors ``vault_sweeper._active_skip_prefixes`` exactly.
+    """
+    try:
+        from app.config import settings
+        return tuple(settings.protected_namespaces)
+    except Exception:
+        return PROTECTED_NAMESPACES
+
+
+def is_protected_path(path: str) -> bool:
+    """Return True iff ``path`` is under (or is) a protected namespace.
+
+    Uses segment-boundary matching: ``path`` must equal the prefix's bare name
+    OR start with the prefix string (which always ends with ``/``). This
+    prevents near-misses like ``notessentinel/x.md`` from matching ``sentinel/``.
+
+    Leading slashes on ``path`` are normalised away before comparison.
+    """
+    normalised = path.lstrip("/")
+    for prefix in _active_protected_namespaces():
+        bare = prefix.rstrip("/")
+        if normalised == bare or normalised.startswith(prefix):
+            return True
+    return False
 
 
 # --- Sweep lockfile constants (kept here because the lockfile lives in the vault) ---

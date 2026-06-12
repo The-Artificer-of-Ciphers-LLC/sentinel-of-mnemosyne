@@ -116,6 +116,24 @@ class Settings(BaseSettings):
         ".obsidian/",
     )
 
+    # Protected-namespace allowlist (40-05 gap closure, MEM-05).
+    # Operator-critical paths that the Vault seam REFUSES to relocate or trash.
+    # These are NOT the same as sweep_skip_prefixes (which governs PROCESSING):
+    # protected_namespaces governs whether a file may EVER be physically moved.
+    #
+    # Scope decision (round-2 item F, plan 40-05):
+    #   sentinel/ — non-negotiable: persona.md crash-loops boot if missing.
+    #   self/     — identity context; RecallConfig.self_paths depends on it;
+    #               identity-critical even if not boot-halting.
+    #   security/ — explicit operator security namespace; already skip-prefix;
+    #               protected so a sweep can never accidentally move it.
+    # Override via env PROTECTED_NAMESPACES (JSON list) to extend or narrow.
+    protected_namespaces: tuple[str, ...] = (
+        "sentinel/",   # boot-critical: persona.md absence crash-loops composition.py:424
+        "self/",       # identity-critical: self/identity.md is the operator identity context
+        "security/",   # operator-curated security namespace: never swept, never moved
+    )
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

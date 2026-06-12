@@ -55,6 +55,21 @@ class SecurityError(DomainError):
     """Response blocked by output scanner — potential secret leakage."""
 
 
+class ProtectedPathError(SecurityError):
+    """Raised when a sweep, relocate, or trash operation targets an
+    operator-critical protected path (source) or attempts to relocate
+    content INTO a protected namespace (destination).
+
+    Operator RESTORE corollary (round-3 item 4):
+    Because ``relocate`` INTO a protected namespace is refused by this guard,
+    restoring a protected file (e.g. ``sentinel/persona.md`` after a bad sweep)
+    must be done via WRITE/COPY — call ``vault.write_note("sentinel/persona.md",
+    body)`` or the Obsidian REST PUT — NOT via relocate. The ``write_note``
+    primitive is intentionally unguarded; a write-based restore succeeds where
+    a relocate-based restore would be blocked.
+    """
+
+
 class WorkflowError(SentinelError):
     """Workflow state violation (entry not found, inbox conflict, sweep in progress)."""
 
