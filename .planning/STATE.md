@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5.1
 milestone_name: — The Second Brain
 status: executing
-stopped_at: Phase 41 context gathered
-last_updated: "2026-06-12T13:28:42.886Z"
+stopped_at: Completed 41-04-PLAN.md — typed sessions, recency wiring, carrier weighting
+last_updated: "2026-06-12T13:48:35.261Z"
 last_activity: 2026-06-12 -- Phase 41 execution started
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 15
-  completed_plans: 13
+  completed_plans: 14
   percent: 67
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 41 (typed-sessionsummary-retention) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-06-12 -- Phase 41 execution started
 
@@ -117,6 +117,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 41-typed-sessionsummary-retention P01 | 3min | 3 tasks | 2 files |
 | Phase 41-typed-sessionsummary-retention P02 | 6 | 2 tasks | 5 files |
 | Phase 41-typed-sessionsummary-retention P03 | 102s | 2 tasks | 3 files |
+| Phase 41-typed-sessionsummary-retention PP04 | 25min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -177,6 +178,10 @@ Recent decisions affecting current work:
 - [Phase 40-02]: ADR-0004 accepted: sidecar-index supersedes frontmatter-read approach; supersession note records D-01/D-02/D-08/D-09 REVISED decisions
 - [Phase ?]: _hot_sessions bridged to RetentionPolicy from RecallConfig.recent_session_limit until Plan 04 lockstep removal (D-07)
 - [Phase ?]: _parse_session_summary deferred runtime import avoids circular import at vault.py edge
+- [Phase ?]: OQ1 RESOLVED: carrier namespace = (journal/, learning/, accomplishments/, references/) — positive allowlist for warm recency weighting (not journal-only)
+- [Phase ?]: OQ2 RESOLVED: RecallConfig.recent_session_limit REMOVED; hot_limit lives only on RetentionPolicy — single source of truth
+- [Phase ?]: OQ3 RESOLVED: RetentionPolicy injected as policy= kwarg into Recall.__init__, stored as self._policy; NOT threaded through RecallConfig
+- [Phase ?]: D-06 inbox/ gap DOCUMENT-AND-ACCEPT: low-confidence turns quarantined in inbox/ (sweep_skip_prefixes) are excluded from warm recall; inbox/ added to RecallConfig.exclude_prefixes default; characterized by test_inbox_gap_not_recalled
 
 ### Pending Todos
 
@@ -210,10 +215,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-06-12T13:28:42.881Z
-Stopped at: Phase 41 context gathered
+Last session: 2026-06-12T13:48:35.255Z
+Stopped at: Completed 41-04-PLAN.md — typed sessions, recency wiring, carrier weighting
 Resume file: 
-
-None
 
 **Next Plan:** 36 Plan 01 — Wave 0 RED TDD stubs for test_npcs.py (7 test functions)

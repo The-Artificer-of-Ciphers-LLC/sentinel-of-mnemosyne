@@ -807,7 +807,7 @@ Plans:
   4. The `ops/` exclusion in `RecallConfig` is not relaxed — older sessions are reached via conversation notes filed outside `ops/`, not by widening the exclusion list
   5. Recalled sessions are ordered/weighted by recency — a more recent session ranks above an older one for the same relevance — via a recency weighting applied to `SessionSummary.date` in the merge; the weighting affects only episodic sessions, never Self-namespace notes
 
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 Plans:
 **Wave 1**
 
@@ -820,7 +820,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 41-04-PLAN.md — Recall integration: typed RecalledContext.sessions, recency hot-ordering + warm carrier weighting (episodic-only), old-session-warm, remove recent_session_limit, record OQ1/OQ2/OQ3 + inbox gap (TDD)
+- [x] 41-04-PLAN.md — Recall integration: typed RecalledContext.sessions, recency hot-ordering + warm carrier weighting (episodic-only), old-session-warm, remove recent_session_limit, record OQ1/OQ2/OQ3 + inbox gap (TDD)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
