@@ -4,13 +4,13 @@ milestone: v0.5.1
 milestone_name: — The Second Brain
 status: executing
 stopped_at: Phase 41 context gathered
-last_updated: "2026-06-12T04:52:17.033Z"
-last_activity: 2026-06-12 -- Phase 40 execution started
+last_updated: "2026-06-12T13:13:24.335Z"
+last_activity: 2026-06-12 -- Phase 41 execution started
 progress:
   total_phases: 3
   completed_phases: 2
-  total_plans: 10
-  completed_plans: 10
+  total_plans: 15
+  completed_plans: 11
   percent: 67
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 40 — semantic-recall
+**Current focus:** Phase 41 — typed-sessionsummary-retention
 
 ## Current Position
 
-Phase: 40 (semantic-recall) — EXECUTING
-Plan: 3 of 7
+Phase: 41 (typed-sessionsummary-retention) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-06-12 -- Phase 40 execution started
+Last activity: 2026-06-12 -- Phase 41 execution started
 
 ## Milestone Progress
 
@@ -114,6 +114,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 40-semantic-recall P01 | 466 | 3 tasks | 2 files |
 | Phase 40-semantic-recall P02 | 25m | 3 tasks | 3 files |
 | Phase 40-semantic-recall P03 | 900 | 3 tasks | 3 files |
+| Phase 41-typed-sessionsummary-retention P01 | 3min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -205,10 +206,10 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-06-12T03:42:05.141Z
+Last session: 2026-06-12T13:13:24.328Z
 Stopped at: Phase 41 context gathered
 Resume file: 
 
-.planning/phases/41-typed-sessionsummary-retention/41-CONTEXT.md
+None
 
 **Next Plan:** 36 Plan 01 — Wave 0 RED TDD stubs for test_npcs.py (7 test functions)
