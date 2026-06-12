@@ -343,6 +343,102 @@ async def _emit_embedding_index(
         report.errors.append(f"index_emit: {exc}")
 
 
+# --- Index-only rebuild (non-destructive startup path, D-06) ---
+
+
+async def rebuild_embedding_index(
+    client,
+    embedder: Callable[[list[str]], Awaitable[list[list[float]]]],
+    *,
+    model_loaded: bool = True,
+    source_folder: str = "",
+) -> SweepReport:
+    """Walk vault, embed bodies, and write the embedding-index sidecar.
+
+    This is the STARTUP path (D-06 / T-40-13): it refreshes
+    ``ops/sweeps/embedding-index.json`` without ever calling the classifier,
+    relocating notes, moving anything to trash, or de-duplicating.  Only
+    ``list_under``, ``read_note``, and ``write_note`` primitives are used —
+    ``relocate``, ``move_to_trash``, and ``delete_note`` are NEVER called.
+
+    Because no destructive operation is performed, this routine takes NO
+    ``safe_to_mutate`` probe (that probe gates destructive moves in
+    ``run_sweep``).  The ``model_loaded`` keyword here governs ONLY whether
+    the embedder is invoked:
+
+    - ``model_loaded=True``  → embed bodies and write a fresh index.
+    - ``model_loaded=False`` → skip embedding entirely, log a WARNING, set
+      ``report.status = "skipped"``, and return WITHOUT writing fresh vectors.
+      The degraded-index invariant governs carry-forward semantics in
+      ``_emit_embedding_index``: a changed note's hash is never persisted
+      without a fresh vector.
+
+    Reuses the existing sweep lock so a cold-start rebuild and an admin
+    ``run_sweep`` cannot interleave writes (T-40-16).
+    """
+    sweep_id = _iso_utc()
+    report = SweepReport(sweep_id=sweep_id, status="running")
+
+    if not await client.acquire_sweep_lock():
+        raise SweepInProgressError("a sweep is already running")
+
+    try:
+        if not model_loaded:
+            logger.warning(
+                "rebuild_embedding_index: embedding model unavailable — index refresh skipped"
+            )
+            report.status = "skipped"
+            return report
+
+        # 1. Walk → freeze list at start (read/list only — no classifier)
+        paths: list[str] = []
+        async for p in walk_vault(client, root=source_folder):
+            paths.append(p)
+        report.files_total = len(paths)
+
+        # 2. Build survivors tuples (path, fm, rest, None) — NO classifier call
+        survivors: list[tuple[str, dict, str, "object"]] = []
+        for path in paths:
+            try:
+                body = await client.read_note(path)
+                fm, rest = split_frontmatter(body)
+                survivors.append((path, fm, rest, None))
+                report.files_processed += 1
+            except Exception as exc:
+                msg = f"{path}: {exc}"
+                logger.warning("rebuild_embedding_index error: %s", msg)
+                report.errors.append(msg)
+
+        # 3. Embed all surviving bodies (NOMIC_DOCUMENT_PREFIX for nomic instruction space)
+        bodies = [NOMIC_DOCUMENT_PREFIX + s[2] for s in survivors]
+        embeddings: list[list[float]] | None = None
+        if bodies:
+            try:
+                embeddings = await embedder(bodies)
+            except Exception as exc:
+                logger.warning(
+                    "rebuild_embedding_index: embedding endpoint failed (%s); index will be partial",
+                    exc,
+                )
+                embeddings = None
+
+        # 4. Emit index sidecar — reuses the shared helper; no classify/relocate/trash
+        active_paths: set[str] = {s[0] for s in survivors}
+        await _emit_embedding_index(client, survivors, embeddings, active_paths, report)
+
+        report.status = "complete"
+        return report
+    except SweepInProgressError:
+        report.status = "blocked"
+        raise
+    except Exception as exc:
+        report.status = "error"
+        report.errors.append(str(exc))
+        raise
+    finally:
+        await client.release_sweep_lock()
+
+
 # --- Sweep orchestrator ---
 
 
