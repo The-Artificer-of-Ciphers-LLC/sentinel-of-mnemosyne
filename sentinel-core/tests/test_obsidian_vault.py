@@ -6,7 +6,8 @@ import httpx
 import pytest
 from httpx import AsyncClient
 
-from app.vault import ObsidianVault, VaultUnreachableError
+from app.services.recall import RetentionPolicy, SessionSummary
+from app.vault import ObsidianVault, VaultUnreachableError, _parse_session_summary
 
 
 @pytest.fixture
@@ -36,19 +37,44 @@ def obsidian_connect_error_mock():
     return httpx.MockTransport(handler)
 
 
+_SESSION_NOTE_BODY = """\
+---
+timestamp: 2026-06-12T12:00:00+00:00
+user_id: trekkie
+model: qwen3
+---
+
+## User
+
+Hello sentinel
+
+## Sentinel
+
+Hello trekkie
+"""
+
+_SESSION_NOTE_DATE = "2026-06-12"
+_SESSION_NOTE_FILENAME = "trekkie-12-00-00.md"
+_SESSION_NOTE_PATH = f"ops/sessions/{_SESSION_NOTE_DATE}/{_SESSION_NOTE_FILENAME}"
+
+
 @pytest.fixture
 def obsidian_directory_listing_mock():
-    """MockTransport: returns a directory listing JSON for ops/sessions/ paths."""
+    """MockTransport: returns a directory listing JSON for ops/sessions/ paths.
+
+    The note body is a full parseable session note so typed contract tests can
+    assert on the parsed SessionSummary fields.
+    """
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if "/vault/ops/sessions/" in path and path.endswith("/"):
             # Return a list of filenames including one for trekkie
             return httpx.Response(
                 200,
-                json=["trekkie-12-00-00.md", "trekkie-13-00-00.md", "other-user-14-00-00.md"],
+                json=[_SESSION_NOTE_FILENAME, "other-user-14-00-00.md"],
             )
         if "/vault/ops/sessions/" in path and path.endswith(".md"):
-            return httpx.Response(200, text="## Session content for trekkie")
+            return httpx.Response(200, text=_SESSION_NOTE_BODY)
         return httpx.Response(404)
     return httpx.MockTransport(handler)
 
@@ -117,20 +143,59 @@ async def test_get_user_context_returns_none_on_connect_error(obsidian_connect_e
 
 
 async def test_get_recent_sessions_returns_list(obsidian_directory_listing_mock):
-    """get_recent_sessions() returns a list of strings from directory listing."""
+    """get_recent_sessions() returns a list of SessionSummary objects (typed contract — MEM-08)."""
     async with AsyncClient(transport=obsidian_directory_listing_mock, base_url="http://test") as client:
         obsidian = ObsidianVault(client, "http://test", "test-api-key")
-        result = await obsidian.get_recent_sessions("trekkie", limit=3)
+        result = await obsidian.get_recent_sessions("trekkie", policy=RetentionPolicy())
     assert isinstance(result, list)
-    # May have 0 to 3 items — graceful return, not assertion on count
+    assert len(result) >= 1, "Expected at least one parsed SessionSummary"
+    summary = result[0]
+    assert isinstance(summary, SessionSummary)
+    assert summary.date == _SESSION_NOTE_DATE
+    assert summary.user_id == "trekkie"
+    assert summary.user_msg == "Hello sentinel"
 
 
 async def test_get_recent_sessions_returns_empty_on_error(obsidian_connect_error_mock):
     """get_recent_sessions() returns [] when Obsidian is unreachable."""
     async with AsyncClient(transport=obsidian_connect_error_mock, base_url="http://test") as client:
         obsidian = ObsidianVault(client, "http://test", "test-api-key")
-        result = await obsidian.get_recent_sessions("trekkie")
+        result = await obsidian.get_recent_sessions("trekkie", policy=RetentionPolicy())
     assert result == []
+
+
+async def test_parse_session_summary_parses_full_note():
+    """_parse_session_summary parses a well-formed session note into exact SessionSummary fields."""
+    path = _SESSION_NOTE_PATH
+    parsed = _parse_session_summary(path, _SESSION_NOTE_BODY)
+    assert parsed is not None
+    assert isinstance(parsed, SessionSummary)
+    assert parsed.date == "2026-06-12"
+    assert parsed.user_id == "trekkie"
+    assert parsed.time == "12-00-00"
+    assert parsed.user_msg == "Hello sentinel"
+    assert parsed.sentinel_msg == "Hello trekkie"
+    assert parsed.path == path
+    assert "## User" in parsed.body
+
+
+async def test_parse_session_summary_malformed_note_does_not_raise():
+    """_parse_session_summary returns empty-string fallbacks for missing fields — never raises."""
+    path = "ops/sessions/2026-06-12/trekkie-09-00-00.md"
+    malformed_body = "no frontmatter, no headings, just raw text"
+    parsed = _parse_session_summary(path, malformed_body)
+    # Valid path → should not return None even with malformed body
+    assert parsed is not None
+    assert isinstance(parsed, SessionSummary)
+    assert parsed.date == "2026-06-12"
+    assert parsed.user_id == "trekkie"
+    assert parsed.user_msg == ""
+    assert parsed.sentinel_msg == ""
+
+
+async def test_parse_session_summary_unparseable_path_returns_none():
+    """_parse_session_summary returns None when path is too short to derive date/user_id/time."""
+    assert _parse_session_summary("bad/path.md", "some body") is None
 
 
 async def test_write_session_summary_calls_put(obsidian_put_capture_mock):

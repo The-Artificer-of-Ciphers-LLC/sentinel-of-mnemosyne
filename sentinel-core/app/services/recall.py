@@ -727,10 +727,15 @@ class Recall:
         return [r for r in self_results if isinstance(r, str) and r.strip()]
 
     async def _hot_sessions(self, user_id: str) -> list[str]:
-        """Fetch recent session summaries for the given user."""
-        return await self._vault.get_recent_sessions(
-            user_id, limit=self._config.recent_session_limit
-        )
+        """Fetch recent session summaries for the given user.
+
+        Bridges the typed Vault seam (MEM-08): constructs a RetentionPolicy from the
+        existing RecallConfig.recent_session_limit until Plan 04 rewires this
+        consumer in lockstep (D-07 / stage-removal of recent_session_limit).
+        """
+        policy = RetentionPolicy(hot_limit=self._config.recent_session_limit)
+        summaries = await self._vault.get_recent_sessions(user_id, policy)
+        return [s.body for s in summaries]
 
     async def _warm_search(self, content: str) -> list[SearchResult]:
         """RRF orchestrator: gather keyword + semantic results, merge, read bodies.

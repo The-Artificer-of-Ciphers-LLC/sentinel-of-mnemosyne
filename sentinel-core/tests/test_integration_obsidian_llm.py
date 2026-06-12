@@ -19,6 +19,7 @@ from httpx import ASGITransport, AsyncClient
 from unittest.mock import AsyncMock, MagicMock
 
 from app.main import app
+from app.services.recall import RetentionPolicy, SessionSummary
 
 AUTH_HEADERS = {"X-Sentinel-Key": "test-key-for-pytest"}
 
@@ -35,7 +36,19 @@ def setup_app_state():
     mock_obsidian.read_self_context.side_effect = lambda path: (
         KNOWN_IDENTITY if path == "self/identity.md" else ""
     )
-    mock_obsidian.get_recent_sessions = AsyncMock(return_value=[KNOWN_SESSION])
+    mock_obsidian.get_recent_sessions = AsyncMock(
+        return_value=[
+            SessionSummary(
+                date="2026-06-12",
+                user_id="test-user-123",
+                time="12-00-00",
+                user_msg="What is my current goal?",
+                sentinel_msg="Build the Sentinel platform.",
+                path="ops/sessions/2026-06-12/test-user-123-12-00-00.md",
+                body=KNOWN_SESSION,
+            )
+        ]
+    )
     mock_obsidian.find = AsyncMock(return_value=[])
     mock_obsidian.write_session_summary = AsyncMock(return_value=None)
 
@@ -163,7 +176,11 @@ async def test_recent_sessions_injected_into_llm_prompt():
 
     assert resp.status_code == 200
 
-    app.state.vault.get_recent_sessions.assert_called_once_with("test-user-123", limit=3)
+    # Typed contract: called with RetentionPolicy (MEM-08), not legacy limit= kwarg
+    call_args = app.state.vault.get_recent_sessions.call_args
+    assert call_args is not None
+    assert call_args.args[0] == "test-user-123"
+    assert isinstance(call_args.args[1], RetentionPolicy)
 
     all_content = " ".join(
         msg["content"] for msg in captured_messages if isinstance(msg.get("content"), str)
