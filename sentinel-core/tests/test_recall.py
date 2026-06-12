@@ -273,7 +273,7 @@ async def test_assemble_degrades_gracefully_when_sessions_tier_raises():
         }
     )
 
-    async def raising_sessions(user_id: str, limit: int = 3) -> list[str]:
+    async def raising_sessions(user_id: str, policy: RetentionPolicy) -> list[SessionSummary]:
         raise RuntimeError("simulated session tier failure")
 
     vault.get_recent_sessions = raising_sessions  # type: ignore[method-assign]
