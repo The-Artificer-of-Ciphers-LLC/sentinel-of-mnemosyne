@@ -764,7 +764,7 @@ Plans:
   3. Notes whose `embedding_model` frontmatter value does not match the active embedding model are skipped and not returned as recall candidates
   4. Keyword and semantic results are merged into one ranked list via RRF (k≈60) before being returned in `RecalledContext.warm`
 
-**Plans:** 5/7 plans executed
+**Plans:** 6/7 plans executed
 **Status note:** Reopened for gap closure 2026-06-11 — live UAT surfaced a production-down blocker: the first-boot startup rebuild ran a FULL destructive sweep and RELOCATED `sentinel/persona.md`, crash-looping the next boot. Plans 40-04..07 close it (40-04/05/06 revised + 40-07 added on 2026-06-11 to incorporate cross-AI review feedback in 40-REVIEWS.md).
 Plans:
 **Wave 1**
@@ -785,7 +785,7 @@ Plans:
 
 **Wave 2 (gap)** *(blocked on 40-04)*
 
-- [ ] 40-07-PLAN.md — Single-source the index path (`EMBEDDING_INDEX_PATH` == `RecallConfig.index_path`) + extension-aware fenced-JSON encode/decode so the `.json`→`.md` fallback is ONE atomic, pre-tested dual-constant change (both-extensions round-trip regression test)
+- [x] 40-07-PLAN.md — Single-source the index path (`EMBEDDING_INDEX_PATH` == `RecallConfig.index_path`) + extension-aware fenced-JSON encode/decode so the `.json`→`.md` fallback is ONE atomic, pre-tested dual-constant change (both-extensions round-trip regression test)
 
 **Wave 3 (gap)** *(blocked on 40-04 + 40-05 + 40-07)*
 
