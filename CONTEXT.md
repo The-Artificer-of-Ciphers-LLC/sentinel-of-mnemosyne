@@ -82,6 +82,15 @@ It owns route strings like `modules/pathfinder/player/ask` and payload dictionar
 Tests for this contract must validate generated payloads against the Pathfinder route request models in `modules/pathfinder/app/routes/player.py`, preventing adapter-to-route drift from reintroducing live `422` failures.
 _Avoid_: player router, Discord player schema, PF player API wrapper.
 
+**Pathfinder Rule Query**:
+The Pathfinder module behavior behind `POST /rule/query`: PF1 decline, topic classification,
+exact ruling cache, query embedding, rules-corpus retrieval, similar-ruling reuse, LLM ruling
+composition, and ruling cache write-through. The code module lives at
+`modules/pathfinder/app/rule_query.py`. The HTTP route in `modules/pathfinder/app/routes/rule.py`
+is only the adapter for request validation, dependency handoff, HTTP exception mapping, and JSON
+serialization.
+_Avoid_: rules route, rules engine route, rule API implementation.
+
 **Session**:
 One user message + one Sentinel response. Bounded by a single `POST /message` request.
 
@@ -171,6 +180,7 @@ Adapters should do only translation/auth/delegation.
 - Sweep status store: `app/services/sweep_status_store.py`
 - Background scheduling seam: `app/services/task_runner.py`
 - PF2e Foundry NeDB chat import: `modules/pathfinder/app/foundry_chat_import.py`
+- PF2e Rule Query: `modules/pathfinder/app/rule_query.py`
 
 ### Authoritative flows
 - Message flow:
