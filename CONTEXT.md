@@ -91,6 +91,15 @@ is only the adapter for request validation, dependency handoff, HTTP exception m
 serialization.
 _Avoid_: rules route, rules engine route, rule API implementation.
 
+**PF Archive Import Plan**:
+The side-effect-free Pathfinder module behavior that turns an on-disk archive root into planned
+Pathfinder Vault writes: markdown walk, known NPC slug discovery, route decisions, large-import
+cost guard, NPC-first limit ordering, NPC dedupe, and source-relative metadata. The code module
+lives at `modules/pathfinder/app/pf_archive_import_plan.py`. Live Vault reads for skip-existing,
+NPC extraction, token image download, Vault writes, and report persistence remain in the import
+executor behind `modules/pathfinder/app/pf_archive_import.py`.
+_Avoid_: Cartosia importer function, archive route logic, import preflight script.
+
 **Session**:
 One user message + one Sentinel response. Bounded by a single `POST /message` request.
 

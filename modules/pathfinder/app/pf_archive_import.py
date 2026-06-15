@@ -34,24 +34,26 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Protocol
+from typing import Protocol
 
 import yaml
 
-from app.pf_npc_extract import NpcExtractionError, extract_npc
-from app.pf_archive_router import RouteDecision, route, slugify
 from app.legendkeeper_image import download_token
+from app.pf_archive_import_plan import (
+    ImportCostGuardError,
+    build_pf_archive_import_plan,
+)
+from app.pf_archive_router import RouteDecision, slugify
+from app.pf_npc_extract import NpcExtractionError, extract_npc
 
 logger = logging.getLogger(__name__)
+
+__all__ = ["ImportCostGuardError", "ImportReport", "run_import"]
 
 
 # ---------------------------------------------------------------------------
 # Public types
 # ---------------------------------------------------------------------------
-
-
-class ImportCostGuardError(Exception):
-    """Raised when a live import would touch >20 NPCs without confirm_large."""
 
 
 @dataclass
@@ -111,7 +113,6 @@ class _ObsidianLike(Protocol):
 # ---------------------------------------------------------------------------
 
 
-_LARGE_NPC_THRESHOLD = 20  # research §LLM cost guard
 _LEGENDKEEPER_RE = re.compile(
     r"!\[[^\]]*\]\((https://assets\.legendkeeper\.com/[^)\s]+)"
 )
@@ -140,64 +141,23 @@ async def run_import(
     report path. Defaults to ``archive/cartosia`` for backward compat
     with the original cartosia-only importer.
     """
-    root = Path(archive_root).resolve()
-    if not root.exists() or not root.is_dir():
-        raise FileNotFoundError(f"archive_root does not exist or is not a directory: {root}")
-
+    plan = build_pf_archive_import_plan(
+        archive_root=archive_root,
+        dry_run=dry_run,
+        limit=limit,
+        confirm_large=confirm_large,
+        subfolder=subfolder,
+    )
+    root = plan.archive_root
     report = ImportReport(archive_root=str(root), dry_run=dry_run)
+    report.errors.extend(plan.errors)
 
-    # 1. Walk archive, collect all .md files.
-    all_md_files = sorted(p for p in root.rglob("*.md") if p.is_file())
-
-    # 2. First pass: build known_npc_slugs from files that sniff as NPC OR
-    #    are an NPC-as-folder envelope (a dir whose name appears as a slug
-    #    in dialogue children).
-    known_npc_slugs = _build_known_npc_slugs(all_md_files, root)
-
-    # 3. Second pass: classify everything.
-    classifications: list[tuple[Path, str, RouteDecision]] = []
-    for fp in all_md_files:
-        try:
-            content = fp.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            report.errors.append(f"unreadable file (non-utf8): {fp}")
-            continue
-        decision = route(fp, content, archive_root=root, known_npc_slugs=known_npc_slugs)
-        classifications.append((fp, content, decision))
-
-    # 4. Cost guard — count distinct NPC slugs (after dedupe by slug).
-    distinct_npc_slugs: set[str] = {
-        d.slug for _, _, d in classifications if d.bucket in {"npc_a", "npc_b"}
-    }
-    if (
-        not dry_run
-        and not confirm_large
-        and len(distinct_npc_slugs) > _LARGE_NPC_THRESHOLD
-    ):
-        raise ImportCostGuardError(
-            f"refusing to live-import {len(distinct_npc_slugs)} NPCs (>{_LARGE_NPC_THRESHOLD}); "
-            f"pass confirm_large=True to proceed"
-        )
-
-    # 5. Apply limit if set — preserve a stable order: NPCs first (so the
-    #    operator can sample LLM extraction quality with --limit 5), then
-    #    everything else.
-    if limit is not None and limit > 0:
-        npc_class = [c for c in classifications if c[2].bucket in {"npc_a", "npc_b"}]
-        rest_class = [c for c in classifications if c[2].bucket not in {"npc_a", "npc_b"}]
-        classifications = (npc_class + rest_class)[:limit]
-
-    # 6. Dedupe NPCs by slug — when two paths produce the same slug, prefer
-    #    the one with bucket==npc_a (PF2e stat block) for the body. Both
-    #    files' dialogue children stay separate (handled by route() — they
-    #    classify independently).
-    classifications = _dedupe_npcs(classifications)
-
-    # 7. Process per file.
     dialogue_buffers: dict[str, list[str]] = {}  # owner_slug → list of body chunks
     iso_now = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
 
-    for fp, content, decision in classifications:
+    for entry in plan.entries:
+        content = entry.content
+        decision = entry.decision
         if decision.bucket == "skip":
             report.skip_count += 1
             continue
@@ -210,14 +170,12 @@ async def run_import(
                     report.skipped_existing += 1
                 continue
 
-        rel_source = str(fp.relative_to(root))
-
         if decision.bucket in {"npc_a", "npc_b"}:
             await _process_npc(
-                fp=fp,
+                fp=entry.path,
                 content=content,
                 decision=decision,
-                rel_source=rel_source,
+                rel_source=entry.rel_source,
                 iso_now=iso_now,
                 dry_run=dry_run,
                 obsidian=obsidian_client,
@@ -227,11 +185,11 @@ async def run_import(
         elif decision.bucket == "npc_dialogue":
             owner = decision.owner_slug or "_orphan-dialogue"
             dialogue_buffers.setdefault(owner, []).append(
-                f"## From `{rel_source}`\n\n{content.strip()}\n"
+                f"## From `{entry.rel_source}`\n\n{content.strip()}\n"
             )
             report.dialogue_count += 1
             report.proposed_writes.append({
-                "source": rel_source,
+                "source": entry.rel_source,
                 "bucket": decision.bucket,
                 "dest": decision.dest,
                 "reason": decision.reason,
@@ -240,7 +198,7 @@ async def run_import(
             await _process_passthrough(
                 content=content,
                 decision=decision,
-                rel_source=rel_source,
+                rel_source=entry.rel_source,
                 iso_now=iso_now,
                 dry_run=dry_run,
                 obsidian=obsidian_client,
@@ -248,7 +206,6 @@ async def run_import(
                 subfolder=subfolder,
             )
 
-    # 8. Flush dialogue buffers (live mode only).
     if not dry_run:
         for owner_slug, chunks in dialogue_buffers.items():
             dest = f"mnemosyne/pf2e/npcs/{owner_slug}/dialogue.md"
@@ -261,7 +218,6 @@ async def run_import(
                 merged = "\n\n".join(chunks)
             await obsidian_client.put_note(dest, merged)
 
-    # 9. Write the report file.
     report_path = _write_report(report, dry_run=dry_run, iso_now=iso_now, subfolder=subfolder)
     report.report_path = report_path
     if not dry_run or True:  # always write the report (dry-run too)
@@ -402,54 +358,8 @@ async def _process_passthrough(
 
 
 # ---------------------------------------------------------------------------
-# Internals — dedupe + helpers.
+# Internals — helpers.
 # ---------------------------------------------------------------------------
-
-
-def _dedupe_npcs(
-    classifications: list[tuple[Path, str, RouteDecision]],
-) -> list[tuple[Path, str, RouteDecision]]:
-    """Collapse duplicate NPC slugs to one record, preferring npc_a (stat block).
-
-    Non-NPC entries pass through unchanged.
-    """
-    seen: dict[str, tuple[Path, str, RouteDecision]] = {}
-    out: list[tuple[Path, str, RouteDecision]] = []
-    for fp, content, decision in classifications:
-        if decision.bucket not in {"npc_a", "npc_b"}:
-            out.append((fp, content, decision))
-            continue
-        prior = seen.get(decision.slug)
-        if prior is None:
-            seen[decision.slug] = (fp, content, decision)
-            continue
-        # If new is npc_a and prior is npc_b, the new wins.
-        if decision.bucket == "npc_a" and prior[2].bucket == "npc_b":
-            seen[decision.slug] = (fp, content, decision)
-        # Otherwise keep the first.
-    out.extend(seen.values())
-    return out
-
-
-def _build_known_npc_slugs(
-    all_md_files: Iterable[Path], root: Path
-) -> frozenset[str]:
-    """Cheap first pass — slugs of any file that *might* be an NPC, plus
-    NPC-as-folder dir slugs. Used by ``route()`` to resolve dialogue owners.
-    """
-    slugs: set[str] = set()
-    for fp in all_md_files:
-        rel = fp.relative_to(root)
-        # Any directory named the same as a sibling .md file → NPC envelope.
-        # Plus all dirs whose parent is "The NPCs" / "the npcs".
-        for part in rel.parts[:-1]:
-            if part.lower() in {"the npcs", "the npc"}:
-                continue
-            slugs.add(slugify(part.replace('"', "").replace("“", "").replace("”", "")))
-        # File stems too.
-        head = re.split(r"\s+(?:-|—|–)\s+", fp.stem, maxsplit=1)[0]
-        slugs.add(slugify(head.replace('"', "")))
-    return frozenset(s for s in slugs if s)
 
 
 def _strip_existing_frontmatter(content: str) -> str:
