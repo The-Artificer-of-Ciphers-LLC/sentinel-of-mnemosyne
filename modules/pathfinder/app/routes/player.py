@@ -16,7 +16,6 @@ routes/npc.py.
 """
 from __future__ import annotations
 
-import logging
 import re
 from typing import Literal
 
@@ -24,8 +23,14 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
-from app import player_identity_resolver, player_vault_store
-from app.vault_markdown import _parse_frontmatter, build_frontmatter_markdown
+from app.player_interaction_orchestrator import (
+    VALID_OUTCOMES as VALID_CANONIZE_OUTCOMES,
+    VALID_STYLE_PRESETS,
+    PlayerInteractionRequest,
+    PlayerInteractionResult,
+    handle_player_interaction_with_obsidian,
+)
+from app.vault_markdown import build_frontmatter_markdown
 
 # Free-text caps + control-char filter mirror routes/npc.py validators.
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
@@ -42,18 +47,11 @@ def _sanitize_text(value: str, *, max_len: int = _MAX_TEXT_LEN) -> str:
         raise ValueError(f"text exceeds {max_len}-char limit")
     return cleaned
 
-logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/player", tags=["player"])
 
 # Module-level ObsidianClient — set by main.py lifespan, patched by tests.
 obsidian = None
 
-VALID_STYLE_PRESETS = frozenset(
-    {"Tactician", "Lorekeeper", "Cheerleader", "Rules-Lawyer Lite"}
-)
-
-VALID_CANONIZE_OUTCOMES = frozenset({"yellow", "green", "red"})
 _MAX_QUESTION_ID_LEN = 100
 _MAX_RULE_TEXT_LEN = 2000
 
@@ -197,21 +195,32 @@ def _require_obsidian() -> None:
         )
 
 
-async def _resolve_slug(user_id: str) -> str:
-    """Derive slug, honouring the alias map when present."""
+async def _run_player_interaction(
+    request: PlayerInteractionRequest,
+) -> PlayerInteractionResult:
+    """Run the Pathfinder Player Interaction module from the HTTP adapter."""
+    _require_obsidian()
     try:
-        alias_map = await player_identity_resolver.load_alias_map(obsidian)
-    except Exception:
-        alias_map = {}
-    return player_identity_resolver.slug_from_discord_user_id(user_id, alias_map)
-
-
-async def _read_profile(slug: str) -> dict:
-    """Read profile.md and return its parsed frontmatter (or {})."""
-    text = await player_vault_store.read_profile(slug, obsidian=obsidian)
-    if not text:
-        return {}
-    return _parse_frontmatter(text)
+        result = await handle_player_interaction_with_obsidian(
+            request,
+            obsidian_client=obsidian,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"error": str(exc)}) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "Obsidian interaction failed", "detail": str(exc)},
+        ) from exc
+    if result.requires_onboarding:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "player not onboarded",
+                "hint": "Run :pf player start to onboard first.",
+            },
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -226,43 +235,27 @@ async def onboard(req: PlayerOnboardRequest) -> JSONResponse:
     GET-then-PUT not required here — onboard is intentionally idempotent and
     always rewrites the profile with the latest onboarding form values.
     """
-    _require_obsidian()
-    slug = await _resolve_slug(req.user_id)
-    profile = {
-        "slug": slug,
-        "onboarded": True,
-        "character_name": req.character_name,
-        "preferred_name": req.preferred_name,
-        "style_preset": req.style_preset,
-    }
-    try:
-        await player_vault_store.write_profile(slug, profile, obsidian=obsidian)
-    except Exception as exc:
-        logger.error("Obsidian write failed for player onboard %s: %s", slug, exc)
-        raise HTTPException(
-            status_code=503,
-            detail={"error": "Obsidian write failed", "detail": str(exc)},
+    result = await _run_player_interaction(
+        PlayerInteractionRequest(
+            verb="start",
+            user_id=req.user_id,
+            character_name=req.character_name,
+            preferred_name=req.preferred_name,
+            style_preset=req.style_preset,
         )
-
-    path = f"mnemosyne/pf2e/players/{slug}/profile.md"
-    logger.info("Player onboarded: %s at %s", slug, path)
-    return JSONResponse({"status": "onboarded", "slug": slug, "path": path})
+    )
+    return JSONResponse(
+        {
+            "status": "onboarded",
+            "slug": result.slug,
+            "path": result.data["path"],
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Capture-verb shared helpers (plan 37-08)
 # ---------------------------------------------------------------------------
-
-
-def _onboarding_gate_or_409(fm: dict) -> None:
-    if not fm.get("onboarded"):
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "error": "player not onboarded",
-                "hint": "Run :pf player start to onboard first.",
-            },
-        )
 
 
 def _validate_free_text(value: str, *, max_len: int = _MAX_TEXT_LEN) -> str:
@@ -271,13 +264,6 @@ def _validate_free_text(value: str, *, max_len: int = _MAX_TEXT_LEN) -> str:
         return _sanitize_text(value, max_len=max_len)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail={"error": str(exc)}) from exc
-
-
-def _wrap_obsidian_write(action: str, slug: str):
-    """Context-manager-like helper for uniform 503-on-write-failure handling."""
-    # Returns a closure that wraps a coroutine; kept as a small helper so the
-    # four capture handlers stay readable.
-    pass  # pragma: no cover — intentionally a marker; handlers use try/except inline
 
 
 # ---------------------------------------------------------------------------
@@ -293,22 +279,11 @@ async def note(req: PlayerNoteRequest) -> JSONResponse:
     not yet have onboarded:true. Per-player isolation enforced by
     player_vault_store._resolve_player_path.
     """
-    _require_obsidian()
     text = _validate_free_text(req.text)
-    slug = await _resolve_slug(req.user_id)
-    fm = await _read_profile(slug)
-    _onboarding_gate_or_409(fm)
-    try:
-        await player_vault_store.append_to_inbox(slug, text, obsidian=obsidian)
-    except Exception as exc:
-        logger.error("Obsidian write failed for /player/note %s: %s", slug, exc)
-        raise HTTPException(
-            status_code=503,
-            detail={"error": "Obsidian write failed", "detail": str(exc)},
-        )
-    path = f"mnemosyne/pf2e/players/{slug}/inbox.md"
-    logger.info("Player note captured: slug=%s path=%s", slug, path)
-    return JSONResponse({"ok": True, "slug": slug, "path": path})
+    result = await _run_player_interaction(
+        PlayerInteractionRequest(verb="note", user_id=req.user_id, text=text)
+    )
+    return JSONResponse({"ok": True, "slug": result.slug, "path": result.data["path"]})
 
 
 # ---------------------------------------------------------------------------
@@ -327,22 +302,11 @@ async def ask(req: PlayerAskRequest) -> JSONResponse:
     v1 contract: store-only. NO LLM call is issued — the question is queued
     for later canonization. LLM-answered ask is deferred to v2.
     """
-    _require_obsidian()
     text = _validate_free_text(req.text)
-    slug = await _resolve_slug(req.user_id)
-    fm = await _read_profile(slug)
-    _onboarding_gate_or_409(fm)
-    try:
-        await player_vault_store.append_to_questions(slug, text, obsidian=obsidian)
-    except Exception as exc:
-        logger.error("Obsidian write failed for /player/ask %s: %s", slug, exc)
-        raise HTTPException(
-            status_code=503,
-            detail={"error": "Obsidian write failed", "detail": str(exc)},
-        )
-    path = f"mnemosyne/pf2e/players/{slug}/questions.md"
-    logger.info("Player question stored (no LLM): slug=%s path=%s", slug, path)
-    return JSONResponse({"ok": True, "slug": slug, "path": path})
+    result = await _run_player_interaction(
+        PlayerInteractionRequest(verb="ask", user_id=req.user_id, text=text)
+    )
+    return JSONResponse({"ok": True, "slug": result.slug, "path": result.data["path"]})
 
 
 # ---------------------------------------------------------------------------
@@ -358,45 +322,17 @@ async def npc(req: PlayerNpcRequest) -> JSONResponse:
     path. Per-player isolation is enforced by player_vault_store, which
     constrains every resolved path under players/{slug}/.
     """
-    _require_obsidian()
-    # Lazy import keeps app.routes.npc out of player.py module-load — avoids
-    # the circular-import risk Phase 32 documented for cross-route imports.
-    from app.routes.npc import slugify  # noqa: PLC0415
-
     name = _validate_free_text(req.npc_name, max_len=_MAX_NPC_NAME_LEN)
     note_text = _validate_free_text(req.note)
-    npc_slug = slugify(name)
-    if not npc_slug:
-        raise HTTPException(
-            status_code=422,
-            detail={"error": "npc_name produced an empty slug after sanitisation"},
+    result = await _run_player_interaction(
+        PlayerInteractionRequest(
+            verb="npc",
+            user_id=req.user_id,
+            npc_name=name,
+            note=note_text,
         )
-    slug = await _resolve_slug(req.user_id)
-    fm = await _read_profile(slug)
-    _onboarding_gate_or_409(fm)
-    # Build a minimal markdown body so the per-player NPC note is human-readable
-    # in Obsidian. Frontmatter records the npc identity; body holds the note.
-    content = (
-        f"---\n"
-        f"npc_slug: {npc_slug}\n"
-        f"npc_name: {name}\n"
-        f"player_slug: {slug}\n"
-        f"---\n\n"
-        f"{note_text}\n"
     )
-    try:
-        await player_vault_store.write_npc_knowledge(
-            slug, npc_slug, content, obsidian=obsidian
-        )
-    except Exception as exc:
-        logger.error("Obsidian write failed for /player/npc %s: %s", slug, exc)
-        raise HTTPException(
-            status_code=503,
-            detail={"error": "Obsidian write failed", "detail": str(exc)},
-        )
-    path = f"mnemosyne/pf2e/players/{slug}/npcs/{npc_slug}.md"
-    logger.info("Player NPC knowledge written: slug=%s npc=%s path=%s", slug, npc_slug, path)
-    return JSONResponse({"ok": True, "slug": slug, "path": path})
+    return JSONResponse({"ok": True, "slug": result.slug, "path": result.data["path"]})
 
 
 # ---------------------------------------------------------------------------
@@ -407,22 +343,11 @@ async def npc(req: PlayerNpcRequest) -> JSONResponse:
 @router.post("/todo")
 async def todo(req: PlayerTodoRequest) -> JSONResponse:
     """Append `text` to mnemosyne/pf2e/players/{slug}/todo.md."""
-    _require_obsidian()
     text = _validate_free_text(req.text)
-    slug = await _resolve_slug(req.user_id)
-    fm = await _read_profile(slug)
-    _onboarding_gate_or_409(fm)
-    try:
-        await player_vault_store.append_to_todo(slug, text, obsidian=obsidian)
-    except Exception as exc:
-        logger.error("Obsidian write failed for /player/todo %s: %s", slug, exc)
-        raise HTTPException(
-            status_code=503,
-            detail={"error": "Obsidian write failed", "detail": str(exc)},
-        )
-    path = f"mnemosyne/pf2e/players/{slug}/todo.md"
-    logger.info("Player todo captured: slug=%s path=%s", slug, path)
-    return JSONResponse({"ok": True, "slug": slug, "path": path})
+    result = await _run_player_interaction(
+        PlayerInteractionRequest(verb="todo", user_id=req.user_id, text=text)
+    )
+    return JSONResponse({"ok": True, "slug": result.slug, "path": result.data["path"]})
 
 
 # ---------------------------------------------------------------------------
@@ -438,32 +363,16 @@ async def todo(req: PlayerTodoRequest) -> JSONResponse:
 @router.post("/recall")
 async def recall(req: PlayerRecallRequest) -> JSONResponse:
     """Return ranked recall results scoped to the requesting player's namespace."""
-    _require_obsidian()
-    # Lazy import keeps the engine out of module load — symmetric with the
-    # routes/npc.slugify lazy import pattern in /player/npc.
-    from app.player_recall_engine import recall as recall_engine  # noqa: PLC0415
-
-    slug = await _resolve_slug(req.user_id)
-    fm = await _read_profile(slug)
-    _onboarding_gate_or_409(fm)
-    try:
-        results = await recall_engine(
-            slug, req.query or "", obsidian=obsidian
+    result = await _run_player_interaction(
+        PlayerInteractionRequest(
+            verb="recall",
+            user_id=req.user_id,
+            query=req.query or "",
         )
-    except ValueError as exc:
-        # Slug-shape validation error — surface as 422 since the offending
-        # value is derived from the user_id we just resolved.
-        raise HTTPException(
-            status_code=422, detail={"error": str(exc)}
-        ) from exc
-    except Exception as exc:
-        logger.error("Obsidian read failed for /player/recall %s: %s", slug, exc)
-        raise HTTPException(
-            status_code=503,
-            detail={"error": "Obsidian read failed", "detail": str(exc)},
-        ) from exc
-    logger.info("Player recall: slug=%s query=%r results=%d", slug, req.query, len(results))
-    return JSONResponse({"ok": True, "slug": slug, "results": results})
+    )
+    return JSONResponse(
+        {"ok": True, "slug": result.slug, "results": result.data["results"]}
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -483,37 +392,23 @@ async def canonize(req: PlayerCanonizeRequest) -> JSONResponse:
     question_id, rule_text} so a downstream reader can trace any green/red
     decision back to the original yellow question.
     """
-    _require_obsidian()
     rule_text = _validate_free_text(req.rule_text, max_len=_MAX_RULE_TEXT_LEN)
-    slug = await _resolve_slug(req.user_id)
-    fm = await _read_profile(slug)
-    _onboarding_gate_or_409(fm)
-    entry = {
-        "outcome": req.outcome,
-        "question_id": req.question_id,
-        "rule_text": rule_text,
-    }
-    try:
-        path = await player_vault_store.append_canonization(
-            slug, entry, obsidian=obsidian
+    result = await _run_player_interaction(
+        PlayerInteractionRequest(
+            verb="canonize",
+            user_id=req.user_id,
+            outcome=req.outcome,
+            question_id=req.question_id,
+            rule_text=rule_text,
         )
-    except Exception as exc:
-        logger.error("Obsidian write failed for /player/canonize %s: %s", slug, exc)
-        raise HTTPException(
-            status_code=503,
-            detail={"error": "Obsidian write failed", "detail": str(exc)},
-        )
-    logger.info(
-        "Player canonization recorded: slug=%s outcome=%s question_id=%s path=%s",
-        slug, req.outcome, req.question_id, path,
     )
     return JSONResponse(
         {
             "ok": True,
-            "slug": slug,
-            "path": path,
-            "outcome": req.outcome,
-            "question_id": req.question_id,
+            "slug": result.slug,
+            "path": result.data["path"],
+            "outcome": result.data["outcome"],
+            "question_id": result.data["question_id"],
         }
     )
 
@@ -531,10 +426,15 @@ async def style(req: PlayerStyleRequest) -> JSONResponse:
     action=set   — gated by onboarding; GET-then-PUT profile.md frontmatter
                    so style_preset persists alongside the existing fields.
     """
-    _require_obsidian()
     if req.action == "list":
-        presets = sorted(VALID_STYLE_PRESETS)
-        return JSONResponse({"presets": presets})
+        result = await _run_player_interaction(
+            PlayerInteractionRequest(
+                verb="style",
+                user_id=req.user_id,
+                action="list",
+            )
+        )
+        return JSONResponse({"presets": result.presets})
 
     # action == "set" — preset must be present.
     if req.preset is None:
@@ -543,31 +443,21 @@ async def style(req: PlayerStyleRequest) -> JSONResponse:
             detail={"error": "preset required when action=set"},
         )
 
-    slug = await _resolve_slug(req.user_id)
-    fm = await _read_profile(slug)
-    if not fm.get("onboarded"):
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "error": "player not onboarded",
-                "hint": "Run :pf player start to onboard first.",
-            },
+    result = await _run_player_interaction(
+        PlayerInteractionRequest(
+            verb="style",
+            user_id=req.user_id,
+            action="set",
+            preset=req.preset,
         )
-
-    fm["style_preset"] = req.preset
-    try:
-        await player_vault_store.write_profile(slug, fm, obsidian=obsidian)
-    except Exception as exc:
-        logger.error("Obsidian write failed for /player/style %s: %s", slug, exc)
-        raise HTTPException(
-            status_code=503,
-            detail={"error": "Obsidian write failed", "detail": str(exc)},
-        )
-
-    path = f"mnemosyne/pf2e/players/{slug}/profile.md"
-    logger.info("Player style preset updated: %s -> %s", slug, req.preset)
+    )
     return JSONResponse(
-        {"status": "set", "slug": slug, "path": path, "style_preset": req.preset}
+        {
+            "status": "set",
+            "slug": result.slug,
+            "path": result.data["path"],
+            "style_preset": result.data["style_preset"],
+        }
     )
 
 
@@ -583,16 +473,17 @@ async def state(user_id: str = Query(...)) -> JSONResponse:
     200 even when not onboarded — clients use the `onboarded` flag to decide
     whether to prompt the user to run :pf player start.
     """
-    _require_obsidian()
-    slug = await _resolve_slug(user_id)
-    fm = await _read_profile(slug)
+    result = await _run_player_interaction(
+        PlayerInteractionRequest(verb="state", user_id=user_id)
+    )
+    data = result.data or {}
     return JSONResponse(
         {
-            "slug": slug,
-            "onboarded": bool(fm.get("onboarded")),
-            "style_preset": fm.get("style_preset"),
-            "character_name": fm.get("character_name"),
-            "preferred_name": fm.get("preferred_name"),
+            "slug": result.slug,
+            "onboarded": data.get("onboarded"),
+            "style_preset": data.get("style_preset"),
+            "character_name": data.get("character_name"),
+            "preferred_name": data.get("preferred_name"),
         }
     )
 

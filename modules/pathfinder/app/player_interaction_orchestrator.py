@@ -1,14 +1,9 @@
-"""Player interaction orchestrator — onboarding gate + verb dispatch.
-
-Wave 2 slice (plan 37-07): implements the start/style/state surface only.
-Subsequent plans extend the verb Literal and add additional `match` arms
-(note/ask/npc/todo in plan 08, recall in 09, canonize in 10) — open/closed
-extension: never delete a branch, never narrow a return type.
+"""Pathfinder Player Interaction module.
 
 Contract (PVL-01, PVL-05, PVL-06, PVL-07):
   - Slug derivation goes ONLY through identity_adapter (test-injected resolver).
   - Onboarding gate: if profile.md is absent OR `onboarded` != True, every verb
-    other than `start` and `style:list` short-circuits to a result with
+    other than `start`, `state`, and `style:list` short-circuits to a result with
     requires_onboarding=True. No write adapters are called.
   - Style preset is a closed enum; `style set` with an unknown preset raises
     ValueError listing the four valid presets.
@@ -20,10 +15,6 @@ Adapters injected by the route layer:
                        /append_todo/write_npc_knowledge/write_canonization
                        /update_style_preset
   recall_adapter     — exposes async recall(slug, query, *, obsidian)
-
-The route handlers thread the same module-level singletons through; the
-orchestrator does not import the concrete adapters so unit tests inject
-mocks via the keyword args.
 """
 from __future__ import annotations
 
@@ -32,6 +23,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from app import player_identity_resolver, player_vault_store
 from app.vault_markdown import _parse_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -78,6 +70,103 @@ class PlayerInteractionResult(BaseModel):
     presets: list[str] | None = None
 
 
+class _IdentityAdapter:
+    def __init__(self, alias_map: dict[str, str] | None = None) -> None:
+        self._alias_map = alias_map or {}
+
+    def slug_from_discord_user_id(self, user_id: str) -> str:
+        return player_identity_resolver.slug_from_discord_user_id(
+            user_id, self._alias_map
+        )
+
+
+class _VaultStoreAdapter:
+    def __init__(self, obsidian_client: Any) -> None:
+        self._obsidian = obsidian_client
+
+    async def read_profile(self, slug: str) -> str | None:
+        return await player_vault_store.read_profile(slug, obsidian=self._obsidian)
+
+    async def write_profile(self, slug: str, profile: dict) -> None:
+        await player_vault_store.write_profile(
+            slug, profile, obsidian=self._obsidian
+        )
+
+    async def append_to_inbox(self, slug: str, entry: str) -> None:
+        await player_vault_store.append_to_inbox(
+            slug, entry, obsidian=self._obsidian
+        )
+
+    async def append_question(self, slug: str, entry: str) -> None:
+        await player_vault_store.append_to_questions(
+            slug, entry, obsidian=self._obsidian
+        )
+
+    async def append_todo(self, slug: str, entry: str) -> None:
+        await player_vault_store.append_to_todo(
+            slug, entry, obsidian=self._obsidian
+        )
+
+    async def write_npc_knowledge(
+        self, slug: str, npc_slug: str, content: str
+    ) -> None:
+        await player_vault_store.write_npc_knowledge(
+            slug, npc_slug, content, obsidian=self._obsidian
+        )
+
+    async def write_canonization(
+        self,
+        slug: str,
+        *,
+        question_id: str,
+        outcome: str,
+        rule_text: str | None,
+    ) -> str:
+        return await player_vault_store.append_canonization(
+            slug,
+            {
+                "outcome": outcome,
+                "question_id": question_id,
+                "rule_text": rule_text or "",
+            },
+            obsidian=self._obsidian,
+        )
+
+    async def update_style_preset(self, slug: str, preset: str | None) -> None:
+        text = await self.read_profile(slug)
+        fm = _parse_frontmatter(text or "") if text else {}
+        fm["style_preset"] = preset
+        await self.write_profile(slug, fm)
+
+
+class _RecallAdapter:
+    async def recall(
+        self, slug: str, query: str | None, *, obsidian: Any
+    ) -> list[dict]:
+        from app.player_recall_engine import recall  # noqa: PLC0415
+
+        return await recall(slug, query or "", obsidian=obsidian)
+
+
+async def handle_player_interaction_with_obsidian(
+    request: PlayerInteractionRequest,
+    *,
+    obsidian_client: Any,
+) -> PlayerInteractionResult:
+    """Production adapter wiring for Pathfinder Player Interaction."""
+    try:
+        alias_map = await player_identity_resolver.load_alias_map(obsidian_client)
+    except Exception:
+        alias_map = {}
+    return await handle_player_interaction(
+        request,
+        obsidian_client=obsidian_client,
+        identity_adapter=_IdentityAdapter(alias_map),
+        store_adapter=_VaultStoreAdapter(obsidian_client),
+        recall_adapter=_RecallAdapter(),
+    )
+
+
 async def _check_onboarded(
     slug: str,
     *,
@@ -111,21 +200,21 @@ async def handle_player_interaction(
 ) -> PlayerInteractionResult:
     """Resolve slug, gate on onboarding, dispatch verb.
 
-    Wave 2 slice covers start/style/state. Other verbs are gated and routed
-    where their downstream adapter behaviour can be observed by the plan-02
-    isolation/resolver tests (recall_adapter.recall and store_adapter.append_*),
-    even though their full route-side behaviour ships in later plans.
+    This is the module seam used by both production routes and direct tests.
     """
     slug = identity_adapter.slug_from_discord_user_id(request.user_id)
 
     # Verbs allowed pre-onboarding:
     #   - "start"        : creates the profile, must be allowed when not onboarded
+    #   - "state"        : read-only state check so clients can prompt onboarding
     #   - "style:list"   : read-only preset enumeration
     is_style_list = request.verb == "style" and request.action == "list"
-    pre_onboarding_allowed = request.verb == "start" or is_style_list
+    pre_onboarding_allowed = request.verb in {"start", "state"} or is_style_list
 
-    onboarded = await _check_onboarded(slug, store_adapter=store_adapter)
-    if not onboarded and not pre_onboarding_allowed:
+    if (
+        not pre_onboarding_allowed
+        and not await _check_onboarded(slug, store_adapter=store_adapter)
+    ):
         return PlayerInteractionResult(
             slug=slug,
             verb=request.verb,
@@ -154,7 +243,12 @@ async def handle_player_interaction(
                 profile["style_preset"] = request.style_preset
             await store_adapter.write_profile(slug, profile)
             return PlayerInteractionResult(
-                slug=slug, verb="start", data=profile
+                slug=slug,
+                verb="start",
+                data={
+                    "profile": profile,
+                    "path": f"mnemosyne/pf2e/players/{slug}/profile.md",
+                },
             )
 
         case "style":
@@ -171,7 +265,10 @@ async def handle_player_interaction(
             return PlayerInteractionResult(
                 slug=slug,
                 verb="style",
-                data={"style_preset": request.preset},
+                data={
+                    "style_preset": request.preset,
+                    "path": f"mnemosyne/pf2e/players/{slug}/profile.md",
+                },
             )
 
         case "state":
@@ -192,11 +289,19 @@ async def handle_player_interaction(
             # Plan 08 will widen behaviour; the seam routes the resolver-derived
             # slug to the inbox adapter so PVL-06/PVL-07 invariants hold today.
             await store_adapter.append_to_inbox(slug, request.text or "")
-            return PlayerInteractionResult(slug=slug, verb="note")
+            return PlayerInteractionResult(
+                slug=slug,
+                verb="note",
+                data={"path": f"mnemosyne/pf2e/players/{slug}/inbox.md"},
+            )
 
         case "ask":
             await store_adapter.append_question(slug, request.text or "")
-            return PlayerInteractionResult(slug=slug, verb="ask")
+            return PlayerInteractionResult(
+                slug=slug,
+                verb="ask",
+                data={"path": f"mnemosyne/pf2e/players/{slug}/questions.md"},
+            )
 
         case "npc":
             # Plan 37-08: derive npc_slug via the same slugify rule used by the
@@ -211,14 +316,35 @@ async def handle_player_interaction(
                     message="Usage: :pf player npc <npc_name> <note>",
                 )
             npc_slug = slugify(request.npc_name or "")
-            await store_adapter.write_npc_knowledge(
-                slug, npc_slug, request.note or ""
+            if not npc_slug:
+                raise ValueError("npc_name produced an empty slug after sanitisation")
+            content = (
+                f"---\n"
+                f"npc_slug: {npc_slug}\n"
+                f"npc_name: {request.npc_name}\n"
+                f"player_slug: {slug}\n"
+                f"---\n\n"
+                f"{request.note or ''}\n"
             )
-            return PlayerInteractionResult(slug=slug, verb="npc")
+            await store_adapter.write_npc_knowledge(
+                slug, npc_slug, content
+            )
+            return PlayerInteractionResult(
+                slug=slug,
+                verb="npc",
+                data={
+                    "path": f"mnemosyne/pf2e/players/{slug}/npcs/{npc_slug}.md",
+                    "npc_slug": npc_slug,
+                },
+            )
 
         case "todo":
             await store_adapter.append_todo(slug, request.text or "")
-            return PlayerInteractionResult(slug=slug, verb="todo")
+            return PlayerInteractionResult(
+                slug=slug,
+                verb="todo",
+                data={"path": f"mnemosyne/pf2e/players/{slug}/todo.md"},
+            )
 
         case "recall":
             results = await recall_adapter.recall(
@@ -236,10 +362,28 @@ async def handle_player_interaction(
                 )
             if not (request.question_id or "").strip():
                 raise ValueError("canonize requires a non-empty question_id")
-            await store_adapter.write_canonization(
+            path = await store_adapter.write_canonization(
                 slug,
                 question_id=request.question_id,
                 outcome=request.outcome,
                 rule_text=request.rule_text,
             )
-            return PlayerInteractionResult(slug=slug, verb="canonize")
+            return PlayerInteractionResult(
+                slug=slug,
+                verb="canonize",
+                data={
+                    "path": path,
+                    "outcome": request.outcome,
+                    "question_id": request.question_id,
+                },
+            )
+
+
+__all__ = [
+    "PlayerInteractionRequest",
+    "PlayerInteractionResult",
+    "VALID_OUTCOMES",
+    "VALID_STYLE_PRESETS",
+    "handle_player_interaction",
+    "handle_player_interaction_with_obsidian",
+]
