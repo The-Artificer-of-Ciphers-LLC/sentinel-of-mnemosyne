@@ -100,6 +100,15 @@ is only the adapter for request validation, dependency handoff, HTTP exception m
 serialization.
 _Avoid_: rules route, rules engine route, rule API implementation.
 
+**Rule Cache Catalog**:
+The read-only Pathfinder module behavior behind cached ruling browse operations: listing rulings
+for a topic, recent ruling history across topics, topic activity summaries, malformed-cache skip
+policy, and cache ordering by `last_reused_at`. The code module lives at
+`modules/pathfinder/app/rule_cache_catalog.py`. The HTTP routes in
+`modules/pathfinder/app/routes/rule.py` only validate request shape, enforce initialization, and
+serialize the catalog result.
+_Avoid_: rule list route logic, cached ruling helper, rule history adapter.
+
 **PF Archive Import Plan**:
 The side-effect-free Pathfinder module behavior that turns an on-disk archive root into planned
 Pathfinder Vault writes: markdown walk, known NPC slug discovery, route decisions, large-import
@@ -200,6 +209,7 @@ Adapters should do only translation/auth/delegation.
 - PF2e Foundry NeDB chat import: `modules/pathfinder/app/foundry_chat_import.py`
 - PF2e Rule Query: `modules/pathfinder/app/rule_query.py`
 - Pathfinder Player Interaction: `modules/pathfinder/app/player_interaction_orchestrator.py`
+- Rule Cache Catalog: `modules/pathfinder/app/rule_cache_catalog.py`
 
 ### Authoritative flows
 - Message flow:
