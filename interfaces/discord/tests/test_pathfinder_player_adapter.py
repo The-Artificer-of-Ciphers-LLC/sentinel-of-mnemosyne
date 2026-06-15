@@ -14,9 +14,15 @@ Conventions (mirrors ``test_pathfinder_foundry_adapter.py``):
 - Discord stubs come from ``conftest.py`` (no per-file stubs — Phase 33-01 decision).
 """
 
-from unittest.mock import AsyncMock
+import sys
+import types as _types
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from pathfinder_types import PathfinderRequest
+
+_AsyncMock = AsyncMock
 
 
 # --- :pf player start -------------------------------------------------------
@@ -414,13 +420,6 @@ async def test_user_id_is_forwarded_as_str():
 # is True for everything. Tests that exercise the thread-vs-non-thread branch install
 # a real `_FakeThread` class via monkeypatch on `discord.Thread` for the test scope.
 # ============================================================================
-
-import sys
-import types as _types
-from unittest.mock import MagicMock, AsyncMock as _AsyncMock
-
-import pytest
-
 
 class _FakeThread:
     """Stand-in for a real ``discord.Thread`` instance.

@@ -17,14 +17,31 @@ from pathfinder_types import (
     PathfinderRequest,
     PathfinderResponse,
 )
+from pathfinder_player_contract import (
+    PLAYER_STYLE_PRESETS as _VALID_STYLE_PRESETS,
+    ask_call,
+    canonize_call,
+    note_call,
+    npc_call,
+    onboard_call,
+    recall_call,
+    style_call,
+    todo_call,
+)
 
 
-_VALID_STYLE_PRESETS = ("Tactician", "Lorekeeper", "Cheerleader", "Rules-Lawyer Lite")
 _USAGE = (
     "Usage: `:pf player start <character_name> | <preferred_name> | <style_preset>`\n"
     "Style presets: " + ", ".join(f"`{p}`" for p in _VALID_STYLE_PRESETS) + ".\n"
     "Multi-step onboarding dialog tracked under Phase 38."
 )
+
+
+async def _post_player_call(request: PathfinderRequest, call):
+    """Post one route-shaped player module call through the injected client."""
+    return await request.sentinel_client.post_to_module(
+        call.route, call.payload, request.http_client
+    )
 
 
 async def _load_draft_resilient(thread_id: int, user_id: str, *, http_client):
@@ -123,14 +140,14 @@ class PlayerStartCommand(PathfinderCommand):
                 ),
             )
 
-        payload = {
-            "user_id": user_id,
-            "character_name": character_name,
-            "preferred_name": preferred_name,
-            "style_preset": style_preset,
-        }
-        result = await request.sentinel_client.post_to_module(
-            "modules/pathfinder/player/onboard", payload, request.http_client
+        result = await _post_player_call(
+            request,
+            onboard_call(
+                user_id=user_id,
+                character_name=character_name,
+                preferred_name=preferred_name,
+                style_preset=style_preset,
+            ),
         )
         path = result.get("path", "?")
         return PathfinderResponse(
@@ -152,9 +169,9 @@ class PlayerNoteCommand(PathfinderCommand):
                 kind="text", content="Usage: `:pf player note <text>`"
             )
         user_id = str(request.user_id)
-        payload = {"user_id": user_id, "text": text}
-        result = await request.sentinel_client.post_to_module(
-            "modules/pathfinder/player/note", payload, request.http_client
+        result = await _post_player_call(
+            request,
+            note_call(user_id=user_id, text=text),
         )
         path = result.get("path", "?")
         return PathfinderResponse(
@@ -176,12 +193,9 @@ class PlayerAskCommand(PathfinderCommand):
                 kind="text", content="Usage: `:pf player ask <question>`"
             )
         user_id = str(request.user_id)
-        # Route's PlayerAskRequest schema requires `text` (not `question`) — see
-        # plan-37-08 SUMMARY: the route was aligned to the RED test's `text`
-        # field, but this adapter shipped sending `question` and 422'd live.
-        payload = {"user_id": user_id, "text": text}
-        result = await request.sentinel_client.post_to_module(
-            "modules/pathfinder/player/ask", payload, request.http_client
+        result = await _post_player_call(
+            request,
+            ask_call(user_id=user_id, text=text),
         )
         # Route returns {ok, slug, path} — no question_id is generated; the
         # questions.md append is a free-form line. Operator finds the entry
@@ -213,9 +227,9 @@ class PlayerNpcCommand(PathfinderCommand):
             )
         npc_name, note = parts[0], parts[1].strip()
         user_id = str(request.user_id)
-        payload = {"user_id": user_id, "npc_name": npc_name, "note": note}
-        result = await request.sentinel_client.post_to_module(
-            "modules/pathfinder/player/npc", payload, request.http_client
+        result = await _post_player_call(
+            request,
+            npc_call(user_id=user_id, npc_name=npc_name, note=note),
         )
         path = result.get("path", "?")
         return PathfinderResponse(
@@ -233,9 +247,9 @@ class PlayerRecallCommand(PathfinderCommand):
             return rejection
         query = request.rest.strip()
         user_id = str(request.user_id)
-        payload = {"user_id": user_id, "query": query}
-        result = await request.sentinel_client.post_to_module(
-            "modules/pathfinder/player/recall", payload, request.http_client
+        result = await _post_player_call(
+            request,
+            recall_call(user_id=user_id, query=query),
         )
         results = result.get("results") or []
         if not results:
@@ -266,9 +280,9 @@ class PlayerTodoCommand(PathfinderCommand):
                 kind="text", content="Usage: `:pf player todo <text>`"
             )
         user_id = str(request.user_id)
-        payload = {"user_id": user_id, "text": text}
-        result = await request.sentinel_client.post_to_module(
-            "modules/pathfinder/player/todo", payload, request.http_client
+        result = await _post_player_call(
+            request,
+            todo_call(user_id=user_id, text=text),
         )
         path = result.get("path", "?")
         return PathfinderResponse(
@@ -291,9 +305,9 @@ class PlayerStyleCommand(PathfinderCommand):
         user_id = str(request.user_id)
 
         if not rest or rest.lower() == "list":
-            payload = {"user_id": user_id, "action": "list"}
-            result = await request.sentinel_client.post_to_module(
-                "modules/pathfinder/player/style", payload, request.http_client
+            result = await _post_player_call(
+                request,
+                style_call(user_id=user_id, action="list"),
             )
             presets = result.get("presets") or []
             if not presets:
@@ -313,9 +327,9 @@ class PlayerStyleCommand(PathfinderCommand):
                     content="Usage: `:pf player style set <preset>` or `:pf player style list`",
                 )
             preset = parts[1].strip()
-            payload = {"user_id": user_id, "action": "set", "preset": preset}
-            result = await request.sentinel_client.post_to_module(
-                "modules/pathfinder/player/style", payload, request.http_client
+            result = await _post_player_call(
+                request,
+                style_call(user_id=user_id, action="set", preset=preset),
             )
             chosen = result.get("preset", preset)
             return PathfinderResponse(
@@ -548,14 +562,14 @@ class PlayerCanonizeCommand(PathfinderCommand):
             )
         outcome, question_id, rule_text = parts[0], parts[1], parts[2].strip()
         user_id = str(request.user_id)
-        payload = {
-            "user_id": user_id,
-            "outcome": outcome,
-            "question_id": question_id,
-            "rule_text": rule_text,
-        }
-        result = await request.sentinel_client.post_to_module(
-            "modules/pathfinder/player/canonize", payload, request.http_client
+        result = await _post_player_call(
+            request,
+            canonize_call(
+                user_id=user_id,
+                outcome=outcome,
+                question_id=question_id,
+                rule_text=rule_text,
+            ),
         )
         path = result.get("path", "?")
         return PathfinderResponse(
