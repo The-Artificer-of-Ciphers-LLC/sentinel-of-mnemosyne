@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 
+from datetime import datetime, timezone
+
 import pytest
 
 from tests.fakes.vault import FakeVault
@@ -122,8 +124,9 @@ async def test_assemble_returns_sessions():
     The seeded note must parse to a SessionSummary with .body containing the seeded text
     and .user_id == "trekkie".
     """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     notes = {
-        "ops/sessions/2026-06-11/trekkie-12-00-00.md": "session body here",
+        f"ops/sessions/{today}/trekkie-12-00-00.md": "session body here",
     }
     recall, _ = make_recall(notes=notes)
     result = await recall.assemble(make_request(), budget=8192)
@@ -495,7 +498,7 @@ async def test_recall_warm_search_uses_rrf_when_both_strategies_present():
 
     Verifies: blank content -> [], and the RRF orchestrator integrates keyword + semantic.
     """
-    from app.services.recall import SemanticRecall, KeywordRecall
+    from app.services.recall import SemanticRecall
 
     model = "test-model-v1"
     # note_A is close to query; note_B is the keyword hit
@@ -662,7 +665,6 @@ async def test_semantic_all_mismatch_degrades_to_keyword():
     keyword results in warm (WR-03 graceful path preserved). Logs a warning.
     """
     from app.services.recall import SemanticRecall
-    import logging
 
     wrong_model = "old-model-v1"
     active_model = "new-model-v2"
@@ -910,8 +912,6 @@ async def test_semantic_resilient_to_corrupt_and_wrong_dim_entries():
     3. Skip (not raise on) the wrong-dimension entry
     """
     from app.services.recall import SemanticRecall
-    import base64
-    import struct
 
     model = "test-model-v1"
 
@@ -973,18 +973,18 @@ async def test_semantic_resilient_to_corrupt_and_wrong_dim_entries():
 
 
 def test_index_path_single_source_constant_equality():
-    """EMBEDDING_INDEX_PATH (vault_sweeper) == RecallConfig().index_path.
+    """EMBEDDING_INDEX_PATH (embedding_sidecar_index) == RecallConfig().index_path.
 
     RecallConfig.index_path must DERIVE FROM (import) EMBEDDING_INDEX_PATH.
     This test guards the derivation: if a future edit reintroduces a literal
     in recall.py, this fails CI immediately.
     """
-    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH
+    from app.services.embedding_sidecar_index import EMBEDDING_INDEX_PATH
     from app.services.recall import RecallConfig
 
     assert EMBEDDING_INDEX_PATH == RecallConfig().index_path, (
         "RecallConfig.index_path must equal EMBEDDING_INDEX_PATH (single physical source); "
-        f"vault_sweeper={EMBEDDING_INDEX_PATH!r}, recall={RecallConfig().index_path!r}"
+        f"embedding_sidecar_index={EMBEDDING_INDEX_PATH!r}, recall={RecallConfig().index_path!r}"
     )
 
 
@@ -992,14 +992,14 @@ async def test_recall_no_duplicate_index_literal_behavioral():
     """RecallConfig().index_path must equal EMBEDDING_INDEX_PATH at runtime.
 
     Replaces the source-grep test (banned by Behavioral-Test-Only Rule):
-    if recall.py introduced its own literal that diverged from the vault_sweeper
+    if recall.py introduced its own literal that diverged from the sidecar index
     constant, this assertion would fail with the actual vs expected values.
 
     The existing test_index_path_single_source_constant_equality already covers
     this invariant; this test adds a SemanticRecall-instantiation sanity check
     to confirm the config propagates to the live object.
     """
-    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH
+    from app.services.embedding_sidecar_index import EMBEDDING_INDEX_PATH
     from app.services.recall import RecallConfig, SemanticRecall
 
     config = RecallConfig()
@@ -1051,7 +1051,6 @@ async def test_recall_json_extension_round_trip():
     FakeVault as raw JSON (what _emit_embedding_index writes for .json), and
     verifies SemanticRecall loads it into a dict equal to the original.
     """
-    import time
     from app.services.recall import SemanticRecall
 
     model = "test-model-v1"
@@ -1087,7 +1086,7 @@ async def test_recall_md_extension_round_trip():
     to the original.
     """
     from app.services.recall import SemanticRecall
-    from app.services.vault_sweeper import _encode_index_body
+    from app.services.embedding_sidecar_index import encode_index_body
 
     model = "test-model-v1"
     note_a_vec = [1.0, 0.0, 0.0]
@@ -1098,7 +1097,7 @@ async def test_recall_md_extension_round_trip():
         index_ttl_seconds=0.0,
     )
     idx = make_fixture_index(["notes/a.md"], [note_a_vec], model)
-    fenced_body = _encode_index_body(idx, index_path)
+    fenced_body = encode_index_body(idx, index_path)
 
     vault = FakeVault()
     vault.notes[index_path] = fenced_body
@@ -1119,10 +1118,10 @@ async def test_recall_md_extension_body_contains_fenced_block():
     Verifies that the writer actually fences the JSON (not writes raw JSON)
     when the path ends in .md, so the Obsidian REST API accepts it as a note.
     """
-    from app.services.vault_sweeper import _encode_index_body
+    from app.services.embedding_sidecar_index import encode_index_body
 
     idx = make_fixture_index(["notes/a.md"], [[1.0, 0.0, 0.0]], "test-model-v1")
-    body = _encode_index_body(idx, "ops/sweeps/embedding-index.md")
+    body = encode_index_body(idx, "ops/sweeps/embedding-index.md")
     assert "```" in body, (
         ".md body must contain a fenced code block (Obsidian REST API requires note format)"
     )
@@ -1137,7 +1136,7 @@ async def test_recall_md_extension_body_contains_fenced_block():
 async def test_recall_md_uppercase_extension_round_trip():
     """Case-insensitive .MD round-trip: writer fences, recall loader parses."""
     from app.services.recall import SemanticRecall
-    from app.services.vault_sweeper import _encode_index_body
+    from app.services.embedding_sidecar_index import encode_index_body
 
     model = "test-model-v1"
     note_a_vec = [1.0, 0.0, 0.0]
@@ -1148,7 +1147,7 @@ async def test_recall_md_uppercase_extension_round_trip():
         index_ttl_seconds=0.0,
     )
     idx = make_fixture_index(["notes/a.md"], [note_a_vec], model)
-    fenced_body = _encode_index_body(idx, index_path)
+    fenced_body = encode_index_body(idx, index_path)
 
     assert "```" in fenced_body, ".MD (uppercase) body must contain a fenced code block"
 
@@ -1635,7 +1634,6 @@ async def test_old_session_warm_reachable_journal():
     A journal/ note that references the same topic as the session is returned
     in warm; ops/ exclusion is NOT relaxed.
     """
-    today = "2026-06-12"
     old_date = "2026-05-01"  # well outside hot_window_days=2
     carrier_path = f"journal/{old_date}/session-carrier-old.md"
 
@@ -1669,7 +1667,6 @@ async def test_old_session_warm_reachable_topic_dir():
     Uses a references/ carrier note (not journal/) to prove the full carrier set,
     not journal-only reachability.  ops/ exclusion is NOT relaxed.
     """
-    today = "2026-06-12"
     old_date = "2026-05-01"
     carrier_path = f"references/old-session-ref-{old_date}.md"
 
