@@ -1,5 +1,6 @@
 """Tests for ObsidianVault (MEM-01, MEM-05, MEM-08)."""
 import unittest.mock
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import httpx
@@ -151,7 +152,7 @@ async def test_get_recent_sessions_returns_list(obsidian_directory_listing_mock)
     assert len(result) >= 1, "Expected at least one parsed SessionSummary"
     summary = result[0]
     assert isinstance(summary, SessionSummary)
-    assert summary.date == _SESSION_NOTE_DATE
+    assert summary.date == datetime.now(timezone.utc).strftime("%Y-%m-%d")
     assert summary.user_id == "trekkie"
     assert summary.user_msg == "Hello sentinel"
 

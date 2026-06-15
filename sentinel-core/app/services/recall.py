@@ -12,7 +12,6 @@ never contains chat messages or injection-wrapped text. Presentation concerns
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -21,15 +20,13 @@ from typing import TYPE_CHECKING, Awaitable, Callable, Protocol, runtime_checkab
 
 import numpy as np
 
-from sentinel_shared.embedding_codec import decode_embedding
 from sentinel_shared.similarity import cosine_similarity
 
-# Single physical source of truth for the index path (plan 40-07, round-2 item D).
-# RecallConfig.index_path derives from this constant — no duplicate literal in this
-# module.  vault_sweeper.py owns the canonical definition; recall.py imports it so
-# the writer and reader cannot diverge by construction.
-from app.services.vault_sweeper import EMBEDDING_INDEX_PATH as _EMBEDDING_INDEX_PATH
-from app.services.vault_sweeper import _decode_index_body as _decode_index_body_from_sweeper
+from app.services.embedding_sidecar_index import (
+    EMBEDDING_INDEX_PATH as _EMBEDDING_INDEX_PATH,
+    decode_index_body,
+    eligible_entries,
+)
 
 if TYPE_CHECKING:
     from app.vault import Vault
@@ -302,9 +299,9 @@ class RecallConfig:
     index_path: str = _EMBEDDING_INDEX_PATH
     """Relative path (vault-seam key) for the sweeper-maintained embedding index sidecar.
 
-    DERIVED FROM (imports) ``EMBEDDING_INDEX_PATH`` in ``vault_sweeper.py`` — the
-    literal lives in exactly one module (vault_sweeper).  Changing the single
-    constant in vault_sweeper atomically updates both writer and reader.
+    DERIVED FROM (imports) ``EMBEDDING_INDEX_PATH`` in
+    ``embedding_sidecar_index.py``. Changing that single constant atomically
+    updates writer and reader.
     (plan 40-07, round-2 item D — no duplicate-literal alternative)."""
 
     index_ttl_seconds: float = 60.0
@@ -328,7 +325,7 @@ __all__ = [
 ]
 
 # Nomic-embed-text-v1.5 instruction prefix for query embeddings.
-# Mirrors NOMIC_DOCUMENT_PREFIX in vault_sweeper.py (which prefixes note bodies).
+# Mirrors the document prefix owned by embedding_sidecar_index.py.
 NOMIC_QUERY_PREFIX = "search_query: "
 
 
@@ -482,12 +479,12 @@ class SemanticRecall:
             self._index = {}
             return
 
-        # Use _decode_index_body for extension-aware parsing (plan 40-07):
+        # Use decode_index_body for extension-aware parsing (plan 40-07):
         # - .md path: strips the fenced code block wrapper before json.loads
         # - .json (or other) path: json.loads directly
         # Falls back to {} on any parse failure (T-40-01 / T-40-30 self-healing).
         try:
-            parsed = _decode_index_body_from_sweeper(raw, self._config.index_path)
+            parsed = decode_index_body(raw, self._config.index_path)
         except Exception as exc:
             logger.warning(
                 "SemanticRecall: index parse error at %r: %r — treating as empty",
@@ -499,7 +496,8 @@ class SemanticRecall:
         # WR-05: top-level must be a dict; null/list/str is treated as absent.
         if not isinstance(parsed, dict):
             logger.warning(
-                "SemanticRecall: index at %r has unexpected type %r (expected dict) — treating as empty",
+                "SemanticRecall: index at %r has unexpected type %r "
+                "(expected dict) — treating as empty",
                 self._config.index_path, type(parsed).__name__,
             )
             self._index = {}
@@ -561,77 +559,20 @@ class SemanticRecall:
         qv = np.asarray(query_vec, dtype=np.float32)
 
         candidates: list[tuple[float, str]] = []  # (cosine, path)
-        matched_model_count = 0
+        decoded_entries, matched_model_count = eligible_entries(
+            self._index,
+            active_model=self._active_model,
+            exclude_prefixes=self._config.exclude_prefixes,
+            query_dim=len(qv),
+        )
 
-        # CR-02: sanity cap on base64 string length before decoding.
-        # A 4096-dim float32 vector = 4096*4 = 16384 bytes → ~21848 base64 chars.
-        # Cap at 256 KB of base64 (a tampered entry would need to be absurdly large
-        # to trigger an allocation attack; this still comfortably covers any realistic
-        # embedding dimension while bounding the risk from corrupt/tampered entries).
-        _MAX_B64_LEN = 256 * 1024  # 256 KB
-
-        query_dim = len(qv)  # dimension of the query vector for mismatch checks
-
-        for path, entry in self._index.items():
-            # T-40-07: apply exclude_prefixes fence (same as KeywordRecall)
-            if path.startswith(self._config.exclude_prefixes):
-                continue
-
-            # Round-3 / MEM-05 reader-side completion (plan 40-07):
-            # 40-04's degraded-index invariant marks a changed-but-unembedded entry
-            # stale: true (old/absent vector, new content_hash).  Returning such a
-            # stale embedding at query time would surface a vector that no longer
-            # matches the note body.  Skip before decode/score so cost is minimal.
-            if entry.get("stale"):
-                continue
-
-            em = entry.get("embedding_model", "")
-            if not em or em != self._active_model:
-                # D-12/D-13: exact-string mismatch or missing → skip
-                continue
-            matched_model_count += 1
-
-            # CR-02: wrap the decode + cosine step so one bad entry never kills
-            # the entire result set; just skip the offending entry.
-            try:
-                b64 = entry.get("embedding_b64", "")
-
-                # CR-02: length cap — skip implausibly large entries before decode
-                if len(b64) > _MAX_B64_LEN:
-                    logger.warning(
-                        "SemanticRecall: embedding_b64 for %r exceeds cap (%d > %d), skipping",
-                        path, len(b64), _MAX_B64_LEN,
-                    )
-                    continue
-
-                raw = decode_embedding(b64)
-                if not raw:
-                    # Pitfall 4: zero-length embedding → skip (T-40-06)
-                    logger.warning("SemanticRecall: zero-length embedding for %r, skipping", path)
-                    continue
-
-                # CR-02: dimension mismatch guard — skip instead of letting cosine crash
-                if len(raw) != query_dim:
-                    logger.warning(
-                        "SemanticRecall: dimension mismatch for %r (%d vs query %d), skipping",
-                        path, len(raw), query_dim,
-                    )
-                    continue
-
-                nv = np.asarray(raw, dtype=np.float32)
-                sim = float(cosine_similarity(qv, nv))
-            except Exception as exc:
-                logger.warning(
-                    "SemanticRecall: error decoding/scoring %r: %r — skipping entry",
-                    path, exc,
-                )
-                continue
-
+        for entry in decoded_entries:
+            sim = float(cosine_similarity(qv, entry.vector))
             if sim < self._config.semantic_cosine_floor:
                 # D-11: cosine floor gates weak candidates before RRF
                 continue
 
-            candidates.append((sim, path))
+            candidates.append((sim, entry.path))
 
         if matched_model_count == 0 and self._index:
             # D-14: all-mismatch silent degrade — keyword-only via WR-03 path

@@ -12,8 +12,6 @@ Lockfile sentinel ``ops/sweeps/_in-progress.md`` prevents overlapping sweeps
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 from typing import AsyncIterator, Awaitable, Callable
 
@@ -22,6 +20,14 @@ from pydantic import BaseModel, Field
 
 from app.errors import SweepInProgressError
 from app.markdown_frontmatter import join_frontmatter, split_frontmatter
+from app.services.embedding_sidecar_index import (
+    EMBEDDING_INDEX_PATH,
+    NOMIC_DOCUMENT_PREFIX,
+    build_embedding_index,
+    content_hash as _content_hash,
+    decode_index_body as _decode_index_body,
+    encode_index_body as _encode_index_body,
+)
 from app.time_utils import _iso_utc, _today_str
 from sentinel_shared.embedding_codec import decode_embedding, encode_embedding
 from sentinel_shared.similarity import cosine_similarity, find_dup_clusters
@@ -35,8 +41,13 @@ from app.services.sweep_status_store import (
 # Re-exports preserved for backwards compatibility with existing import sites
 # (tests + any downstream callers that import these names from vault_sweeper).
 __all__ = [
+    "EMBEDDING_INDEX_PATH",
+    "NOMIC_DOCUMENT_PREFIX",
     "decode_embedding",
     "encode_embedding",
+    "_content_hash",
+    "_decode_index_body",
+    "_encode_index_body",
     "cosine_similarity",
     "find_dup_clusters",
     "split_frontmatter",
@@ -74,82 +85,6 @@ def _active_skip_prefixes() -> tuple[str, ...]:
 LOCKFILE_PATH = "ops/sweeps/_in-progress.md"
 STALE_LOCK_SECONDS = 3600  # 1 hour
 
-EMBEDDING_INDEX_PATH = "ops/sweeps/embedding-index.json"
-"""Canonical vault-relative path for the sweeper-maintained embedding sidecar.
-
-Must equal ``RecallConfig.index_path`` in Plan 02 so both sides reference
-the same REST path. Persisted via ``vault.write_note()`` — the vault is
-REST-only (D-08 REVISED / A6), so there is NO tempfile/os.replace write.
-"""
-
-def _encode_index_body(index: dict, path: str) -> str:
-    """Encode an embedding index dict to a string body for vault storage.
-
-    Case-insensitively extension-aware (plan 40-07, round-2 item D):
-    - If ``path.lower().endswith(".md")``: wrap the JSON in a markdown fenced
-      code block tagged with a ``json`` info-string so the Obsidian REST API
-      accepts it as a note body.  Example::
-
-          ```json
-          {"notes/a.md": {...}}
-          ```
-
-    - Otherwise (e.g. ``.json``): return the raw JSON string (existing behaviour).
-
-    Both branches are lossless: ``_decode_index_body`` is the symmetric reader.
-    """
-    raw_json = json.dumps(index, ensure_ascii=False)
-    if path.lower().endswith(".md"):
-        return f"```json\n{raw_json}\n```\n"
-    return raw_json
-
-
-def _decode_index_body(raw: str, path: str) -> dict:
-    """Decode an index body string back to a dict; case-insensitively extension-aware.
-
-    Symmetric to ``_encode_index_body`` (plan 40-07):
-    - If ``path.lower().endswith(".md")``: extract the contents of the first
-      fenced code block and ``json.loads`` them.  Falls back to ``{}`` if there
-      is no parseable fenced JSON (self-healing — preserves T-40-01 / T-40-30).
-    - Otherwise: ``json.loads(raw)`` directly (existing behaviour).
-
-    Any parse failure degrades to ``{}`` for both branches (same graceful
-    behaviour that ``_emit_embedding_index`` already applies to the existing-
-    index read).
-    """
-    import re as _re
-
-    if path.lower().endswith(".md"):
-        # Extract the first fenced code block (``` … ```)
-        match = _re.search(r"```(?:\w*)\n(.*?)\n```", raw, _re.DOTALL)
-        if not match:
-            return {}
-        try:
-            parsed = json.loads(match.group(1))
-            return parsed if isinstance(parsed, dict) else {}
-        except Exception:
-            return {}
-    else:
-        try:
-            parsed = json.loads(raw)
-            return parsed if isinstance(parsed, dict) else {}
-        except Exception:
-            return {}
-
-
-NOMIC_DOCUMENT_PREFIX = "search_document: "
-"""Instruction prefix for nomic-embed-text-v1.5 document embeddings.
-
-Adding this prefix requires a one-time full re-embed because
-``hash("search_document: " + body) != hash(body)``. The content-hash
-incremental rebuild handles this naturally: every existing entry's hash
-diverges from the new prefixed hash on the first post-upgrade sweep,
-triggering re-embedding of the whole vault. This is the intended behaviour.
-
-See also: ``SemanticRecall.NOMIC_QUERY_PREFIX = "search_query: "`` (Plan 02).
-"""
-
-
 def _embedding_model_id() -> str:
     """Return the configured embedding model id for frontmatter recording.
 
@@ -164,21 +99,6 @@ def _embedding_model_id() -> str:
     except Exception:
         return "text-embedding-nomic-embed-text-v1.5"
 
-
-def _content_hash(text: str) -> str:
-    """Return the first 16 hex chars of the SHA-256 of *text*.
-
-    Used to detect body changes for incremental index rebuild (D-05).
-    The hash is of the frontmatter-stripped note body — the same ``rest``
-    variable passed to the embedder — so a frontmatter-only edit does NOT
-    trigger an unnecessary re-embed.
-
-    16 hex chars (64 bits) is sufficient to detect accidental collisions at
-    personal-vault scale (~10K notes).
-    """
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
-
-
 class SweepReport(BaseModel):
     sweep_id: str
     status: str = "complete"  # idle | running | complete | error
@@ -191,15 +111,6 @@ class SweepReport(BaseModel):
     # In dry_run mode, populated with {kind, src, dst, reason} dicts
     # describing every move the sweeper WOULD make. Empty for live runs.
     proposed_moves: list[dict] = Field(default_factory=list)
-
-
-
-
-
-# --- Time / utility ---
-
-
-
 
 
 # --- Frontmatter helpers migrated to app.markdown_frontmatter (260502-g8c Task 3) ---
@@ -346,102 +257,30 @@ async def _emit_embedding_index(
     # _decode_index_body is extension-aware (fenced JSON for .md, raw JSON for .json)
     try:
         raw = await client.read_note(EMBEDDING_INDEX_PATH)
-        existing_index: dict = _decode_index_body(raw, EMBEDDING_INDEX_PATH) if raw and raw.strip() else {}
+        existing_index: dict = (
+            _decode_index_body(raw, EMBEDDING_INDEX_PATH) if raw and raw.strip() else {}
+        )
     except Exception:
         existing_index = {}
 
-    new_index: dict = {}
-
-    # Carry forward entries for paths still active (D-05 incremental)
-    for path, entry in existing_index.items():
-        if path in active_paths:
-            new_index[path] = entry
-        # else: pruned (path is trashed or no longer in the vault)
-
-    # Update / insert entries for survivors that have embeddings.
-    #
-    # DEGRADED-INDEX INVARIANT (MEM-05 / T-40-23, deterministic rule):
-    # On a degraded run (embeddings=None or partial), a changed note's entry
-    # MUST NOT be persisted with the new content_hash and a stale/missing vector.
-    # Rule: if the body hash changed but no fresh vector is available, write the
-    # entry with the OLD vector and mark it ``stale: true``. This preserves the
-    # new content_hash (so SemanticRecall can detect stale entries — 40-07) while
-    # making it explicit that the vector does NOT match the new body.
-    # The reader-side skip of ``stale: true`` entries is owned by 40-07.
-    if embeddings:
-        # WR-06: if embedder returned fewer vectors than survivors, log and record
-        # the mismatch instead of silently breaking mid-loop.
-        if len(embeddings) < len(survivors):
-            msg = (
-                f"_emit_embedding_index: embedder returned {len(embeddings)} vectors "
-                f"for {len(survivors)} survivors — index will be partial"
-            )
-            logger.warning("sweep: %s", msg)
-            report.errors.append(msg)
-
-        for idx, (path, _fm, rest, _cls) in enumerate(survivors):
-            if idx >= len(embeddings):
-                # No fresh vector for this survivor — apply degraded-index rule
-                content_hash = _content_hash(rest)
-                active_model = _embedding_model_id()
-                existing_entry = existing_index.get(path, {})
-                if (
-                    existing_entry.get("content_hash") == content_hash
-                    and existing_entry.get("embedding_model") == active_model
-                ):
-                    new_index[path] = existing_entry
-                else:
-                    # Body changed but no fresh vector available — mark stale
-                    new_index[path] = {
-                        "embedding_b64": existing_entry.get("embedding_b64", ""),
-                        "embedding_model": existing_entry.get("embedding_model", _embedding_model_id()),
-                        "content_hash": content_hash,
-                        "stale": True,
-                    }
-                continue
-            content_hash = _content_hash(rest)
-            active_model = _embedding_model_id()
-            existing_entry = existing_index.get(path, {})
-
-            if (
-                existing_entry.get("content_hash") == content_hash
-                and existing_entry.get("embedding_model") == active_model
-            ):
-                # Hash + model match — carry forward unchanged (D-05)
-                new_index[path] = existing_entry
-            else:
-                # Body changed, or model changed (triggers re-embed) — write fresh entry
-                new_index[path] = {
-                    "embedding_b64": encode_embedding(embeddings[idx]),
-                    "embedding_model": active_model,
-                    "content_hash": content_hash,
-                }
-    else:
-        # No embeddings at all (degraded run) — apply degraded-index rule to all survivors
-        for path, _fm, rest, _cls in survivors:
-            content_hash = _content_hash(rest)
-            active_model = _embedding_model_id()
-            existing_entry = existing_index.get(path, {})
-            if (
-                existing_entry.get("content_hash") == content_hash
-                and existing_entry.get("embedding_model") == active_model
-            ):
-                # Unchanged — carry forward (may still have stale=True from a prior
-                # degraded run; preserving it is correct — the body still matches)
-                new_index[path] = existing_entry
-            else:
-                # Body changed but no fresh vector — mark stale (MEM-05 invariant)
-                new_index[path] = {
-                    "embedding_b64": existing_entry.get("embedding_b64", ""),
-                    "embedding_model": existing_entry.get("embedding_model", active_model),
-                    "content_hash": content_hash,
-                    "stale": True,
-                }
+    new_index, index_errors = build_embedding_index(
+        existing_index=existing_index,
+        survivors=survivors,
+        embeddings=embeddings,
+        active_paths=active_paths,
+        active_model=_embedding_model_id(),
+    )
+    for msg in index_errors:
+        logger.warning("sweep: %s", msg)
+        report.errors.append(msg)
 
     # Persist via vault seam — single REST PUT (D-08 REVISED)
     # _encode_index_body is extension-aware: fenced JSON for .md, raw JSON for .json
     try:
-        await client.write_note(EMBEDDING_INDEX_PATH, _encode_index_body(new_index, EMBEDDING_INDEX_PATH))
+        await client.write_note(
+            EMBEDDING_INDEX_PATH,
+            _encode_index_body(new_index, EMBEDDING_INDEX_PATH),
+        )
     except Exception as exc:
         logger.warning("sweep: embedding index write failed: %s", exc)
         report.errors.append(f"index_emit: {exc}")

@@ -67,6 +67,14 @@ persona**, the prompt-injection wrapping, and the final token-ceiling check stay
 Interface: `Recall.assemble(request, budget) -> RecalledContext`.
 _Avoid_: retriever, context manager, memory service.
 
+**Embedding sidecar index**:
+The Vault note at `ops/sweeps/embedding-index.json` that records note embeddings for semantic **Recall**.
+Written by the **vault sweeper** and read by SemanticRecall through the **Vault** seam; owns both the sidecar file format and entry eligibility semantics.
+The code module lives at `sentinel-core/app/services/embedding_sidecar_index.py`.
+Fail-soft behavior is required: missing/corrupt index data, stale entries, model mismatch, oversized embeddings, decode failure, and dimension mismatch degrade by skipping entries rather than raising into Recall or sweep execution.
+Tests for sidecar format and eligibility belong primarily on the Embedding sidecar index module, with Recall and vault-sweeper tests retaining only integration coverage.
+_Avoid_: vector store, embedding cache, frontmatter embeddings.
+
 **Session**:
 One user message + one Sentinel response. Bounded by a single `POST /message` request.
 
