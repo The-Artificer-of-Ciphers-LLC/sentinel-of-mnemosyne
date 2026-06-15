@@ -14,6 +14,11 @@ Sub-verbs: start, note, ask, npc, recall, todo, style, canonize.
 from __future__ import annotations
 
 from pathfinder_command_catalog import PLAYER_USAGE
+from pathfinder_player_draft_store import (
+    delete_draft,
+    list_user_thread_ids,
+    load_draft,
+)
 from pathfinder_types import (
     PathfinderCommand,
     PathfinderRequest,
@@ -45,32 +50,6 @@ async def _post_player_call(request: PathfinderRequest, call):
     return await request.sentinel_client.post_to_module(
         call.route, call.payload, request.http_client
     )
-
-
-async def _load_draft_resilient(thread_id: int, user_id: str, *, http_client):
-    """Call ``pathfinder_player_dialog.load_draft`` if available, else delegate
-    via a direct GET against the same vault URL. Resilient against unit-test
-    fakes that swap ``pathfinder_player_dialog`` with a partial mock that omits
-    ``load_draft``."""
-    import pathfinder_player_dialog as _ppd
-
-    load_draft = getattr(_ppd, "load_draft", None)
-    if load_draft is not None:
-        return await load_draft(thread_id, user_id, http_client=http_client)
-
-    # Fallback: re-implement the GET-and-parse contract inline (mirrors
-    # pathfinder_player_dialog.load_draft byte-for-byte; only used in tests
-    # that supply a partial fake module).
-    import importlib.util as _iu
-    import os as _os
-
-    _spec = _iu.spec_from_file_location(
-        "_real_pathfinder_player_dialog",
-        _os.path.join(_os.path.dirname(__file__), "pathfinder_player_dialog.py"),
-    )
-    _real = _iu.module_from_spec(_spec)
-    _spec.loader.exec_module(_real)
-    return await _real.load_draft(thread_id, user_id, http_client=http_client)
 
 
 def _is_real_thread(channel) -> bool:
@@ -105,7 +84,7 @@ class PlayerStartCommand(PathfinderCommand):
 
             channel = request.channel
             if _is_real_thread(channel):
-                existing = await _load_draft_resilient(
+                existing = await load_draft(
                     channel.id, user_id, http_client=request.http_client
                 )
                 if existing is not None:
@@ -352,99 +331,6 @@ class PlayerStyleCommand(PathfinderCommand):
         )
 
 
-_DRAFT_DIR_REL = "mnemosyne/pf2e/players/_drafts"
-
-
-def _vault_drafts_listing_url() -> str:
-    """Vault URL for the ``_drafts/`` directory listing.
-
-    Matches the URL convention in ``pathfinder_player_dialog._vault_url`` —
-    OBSIDIAN_API_URL or its default, ``/vault/``, then the relative path with
-    a trailing slash so the Local REST API returns a directory listing.
-    """
-    import os
-
-    base = os.environ.get(
-        "OBSIDIAN_API_URL", "http://host.docker.internal:27123"
-    ).rstrip("/")
-    return f"{base}/vault/{_DRAFT_DIR_REL}/"
-
-
-def _vault_drafts_headers() -> dict:
-    """Bearer-key headers, mirroring ``pathfinder_player_dialog._vault_headers``."""
-    import os
-
-    try:
-        from bot import _read_secret
-
-        key = _read_secret("obsidian_api_key", os.environ.get("OBSIDIAN_API_KEY", ""))
-    except Exception:
-        key = os.environ.get("OBSIDIAN_API_KEY", "")
-    return {"Authorization": f"Bearer {key}"}
-
-
-def _parse_draft_filenames(payload) -> list[str]:
-    """Extract filenames from the drafts-listing response.
-
-    Honours the dual-shape contract (RESEARCH §Pitfall 5): the Local REST API
-    returns either a list of filenames or ``{"files": [{"path": "..."}]}``.
-    """
-    if isinstance(payload, list):
-        return [str(p) for p in payload if isinstance(p, str)]
-    if isinstance(payload, dict):
-        files = payload.get("files")
-        if isinstance(files, list):
-            out: list[str] = []
-            for entry in files:
-                if isinstance(entry, dict):
-                    p = entry.get("path") or entry.get("name")
-                    if isinstance(p, str):
-                        out.append(p)
-                elif isinstance(entry, str):
-                    out.append(entry)
-            return out
-    return []
-
-
-async def _list_user_draft_thread_ids(user_id: str, *, http_client) -> list[int]:
-    """List thread_ids for every in-flight draft owned by ``user_id``.
-
-    GETs ``_drafts/`` (404-tolerant per RESEARCH §Pitfall 4), parses both the
-    array and object shapes (Pitfall 5), filters to ``*-{user_id}.md``, and
-    returns the parsed thread_id ints in the order they appeared.
-    """
-    try:
-        resp = await http_client.get(
-            _vault_drafts_listing_url(),
-            headers=_vault_drafts_headers(),
-            timeout=10.0,
-        )
-    except Exception:
-        return []
-    status = getattr(resp, "status_code", 200)
-    if status == 404:
-        return []
-    if status >= 400:
-        return []
-    try:
-        body = resp.json()
-    except Exception:
-        return []
-    filenames = _parse_draft_filenames(body)
-    suffix = f"-{user_id}.md"
-    out: list[int] = []
-    for name in filenames:
-        # Strip any leading directory components — the listing may include
-        # full paths (object-shape) or bare filenames (array-shape).
-        leaf = name.rsplit("/", 1)[-1]
-        if not leaf.endswith(suffix):
-            continue
-        head = leaf[: -len(suffix)]
-        if head.isdigit():
-            out.append(int(head))
-    return out
-
-
 async def reject_if_draft_open(request: PathfinderRequest) -> PathfinderResponse | None:
     """Phase 38 mid-dialog guard. See SPEC Req 5, D-05/D-07/D-08.
 
@@ -457,9 +343,7 @@ async def reject_if_draft_open(request: PathfinderRequest) -> PathfinderResponse
     normal flow. Returns ``None`` on 404 (drafts dir absent — RESEARCH §Pitfall 4).
     """
     user_id = str(request.user_id)
-    thread_ids = await _list_user_draft_thread_ids(
-        user_id, http_client=request.http_client
-    )
+    thread_ids = await list_user_thread_ids(user_id, http_client=request.http_client)
     if not thread_ids:
         return None
     links = ", ".join(f"<#{tid}>" for tid in thread_ids)
@@ -503,7 +387,7 @@ class PlayerCancelCommand(PathfinderCommand):
             return PathfinderResponse(kind="text", content=text)
 
         # Cancel from a non-thread channel — D-17 symmetry: archive ALL drafts.
-        thread_ids = await _list_user_draft_thread_ids(
+        thread_ids = await list_user_thread_ids(
             user_id, http_client=request.http_client
         )
         if not thread_ids:
@@ -521,11 +405,7 @@ class PlayerCancelCommand(PathfinderCommand):
             if thread is None:
                 # Orphan draft — clean up the file directly.
                 try:
-                    delete_draft = getattr(ppd, "delete_draft", None)
-                    if delete_draft is not None:
-                        await delete_draft(
-                            tid, user_id, http_client=request.http_client
-                        )
+                    await delete_draft(tid, user_id, http_client=request.http_client)
                 except Exception:
                     pass
                 failures.append(tid)
