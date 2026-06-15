@@ -82,6 +82,15 @@ It owns route strings like `modules/pathfinder/player/ask` and payload dictionar
 Tests for this contract must validate generated payloads against the Pathfinder route request models in `modules/pathfinder/app/routes/player.py`, preventing adapter-to-route drift from reintroducing live `422` failures.
 _Avoid_: player router, Discord player schema, PF player API wrapper.
 
+**Player Onboarding Draft Store**:
+The Discord-side persistence module for in-flight `:pf player start` onboarding drafts: canonical
+draft paths, Obsidian REST URL/auth headers, frontmatter round-trip, draft existence checks, delete
+semantics, directory-listing parsing, and thread-id discovery for a user's open drafts. The code
+module lives at `interfaces/discord/pathfinder_player_draft_store.py`. Discord dialog modules own
+thread lifecycle and question policy; they must not rebuild draft URLs, auth headers, or filename
+grammar.
+_Avoid_: dialog draft helper, onboarding temp file, player draft route.
+
 **Pathfinder Player Interaction**:
 The Pathfinder module behavior behind the `:pf player <verb>` surface after a route or Discord
 adapter has validated request shape: player slug resolution, onboarding gate, style preset policy,
@@ -202,6 +211,7 @@ Adapters should do only translation/auth/delegation.
 - Message exception mapping: `app/services/message_http_mapping.py`
 - Module forwarding: `app/services/module_gateway.py`
 - Module registry ops: `app/services/module_registry.py`
+- Player Onboarding Draft Store: `interfaces/discord/pathfinder_player_draft_store.py`
 - Sweep orchestration: `app/services/note_sweep_runner.py`
 - Sweep engine: `app/services/vault_sweeper.py`
 - Sweep status store: `app/services/sweep_status_store.py`

@@ -2,27 +2,40 @@
 
 Owns:
   - STEPS / QUESTIONS module-level constants (D-13)
-  - Draft frontmatter round-trip against Obsidian REST (D-12)
   - start_dialog / resume_dialog / consume_as_answer / cancel_dialog (D-12, D-15)
 
-Persistence layer mirrors bot.py:_persist_thread_id (bot.py:536) — direct httpx +
-OBSIDIAN_API_URL + bearer key from _read_secret. Frontmatter helpers are inlined
-here because sentinel-core/app/markdown_frontmatter.py lives in a different
-deployable.
+Draft persistence lives in pathfinder_player_draft_store; this module owns
+Discord thread lifecycle and dialog step policy.
 """
 from __future__ import annotations
 
 import datetime
 import logging
-import os
-import re
 
 import discord
-import yaml
 
+from pathfinder_player_draft_store import (
+    delete_draft,
+    draft_path,
+    load_draft,
+    save_draft,
+)
 from pathfinder_player_adapter import _VALID_STYLE_PRESETS
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "QUESTIONS",
+    "STEPS",
+    "cancel_dialog",
+    "consume_as_answer",
+    "delete_draft",
+    "draft_path",
+    "load_draft",
+    "resume_dialog",
+    "save_draft",
+    "start_dialog",
+]
 
 
 # --- Module-level constants (D-13, locked verbatim against 38-01 RED tests) ---
@@ -40,121 +53,6 @@ QUESTIONS: dict[str, str] = {
         "4) Rules-Lawyer Lite"
     ),
 }
-
-
-_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
-_DRAFT_DIR = "mnemosyne/pf2e/players/_drafts"
-
-
-class _NoTimestampLoader(yaml.SafeLoader):
-    """SafeLoader that keeps ISO-8601 timestamps as plain strings.
-
-    The default SafeLoader resolves ``2026-05-08T00:00:00Z`` to ``datetime``,
-    but our draft round-trip stores ``started_at`` as a string and tests assert
-    the raw ISO form survives the GET (D-12 contract).
-    """
-
-
-# Drop the implicit `tag:yaml.org,2002:timestamp` resolver.
-_NoTimestampLoader.yaml_implicit_resolvers = {
-    ch: [(tag, regexp) for (tag, regexp) in resolvers if tag != "tag:yaml.org,2002:timestamp"]
-    for ch, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
-}
-
-
-# --- Path / frontmatter helpers ---
-
-
-def draft_path(thread_id: int, user_id) -> str:
-    """Canonical draft path under the vault (D-05). Coerces user_id to str (Pitfall 6)."""
-    return f"{_DRAFT_DIR}/{thread_id}-{str(user_id)}.md"
-
-
-def _split_frontmatter(body: str) -> tuple[dict, str]:
-    """Split a markdown body into (frontmatter dict, remaining body)."""
-    match = _FRONTMATTER_RE.match(body or "")
-    if not match:
-        return ({}, body or "")
-    try:
-        fm = yaml.load(match.group(1), Loader=_NoTimestampLoader) or {}
-        if not isinstance(fm, dict):
-            fm = {}
-    except yaml.YAMLError:
-        fm = {}
-    return (fm, body[match.end():])
-
-
-def _join_frontmatter(fm: dict, rest: str = "") -> str:
-    """Render a frontmatter dict + optional body into a markdown string."""
-    block = yaml.safe_dump(
-        fm, sort_keys=False, allow_unicode=True, default_flow_style=False
-    ).strip()
-    return f"---\n{block}\n---\n\n{rest.lstrip()}"
-
-
-# --- Vault REST helpers (mirrors bot.py:_persist_thread_id at bot.py:536) ---
-
-
-def _vault_url(rel: str) -> str:
-    base = os.environ.get("OBSIDIAN_API_URL", "http://host.docker.internal:27123").rstrip("/")
-    return f"{base}/vault/{rel}"
-
-
-def _vault_headers() -> dict:
-    # Lazy import: bot module imports this module indirectly via dialog_router (38-05).
-    from bot import _read_secret
-
-    key = _read_secret("obsidian_api_key", os.environ.get("OBSIDIAN_API_KEY", ""))
-    return {"Authorization": f"Bearer {key}"}
-
-
-# --- Draft I/O ---
-
-
-async def save_draft(thread_id: int, user_id, draft: dict, *, http_client) -> None:
-    """PUT the draft as a frontmatter-only markdown body."""
-    body = _join_frontmatter(draft, "")
-    headers = {**_vault_headers(), "Content-Type": "text/markdown"}
-    resp = await http_client.put(
-        _vault_url(draft_path(thread_id, user_id)),
-        headers=headers,
-        content=body,
-        timeout=10.0,
-    )
-    # raise_for_status is a sync MagicMock by default; call only if available.
-    raise_for_status = getattr(resp, "raise_for_status", None)
-    if callable(raise_for_status) and resp.status_code >= 400:
-        raise_for_status()
-
-
-async def load_draft(thread_id: int, user_id, *, http_client) -> dict | None:
-    """GET the draft and parse frontmatter. Returns None on 404 (Pitfall 4)."""
-    resp = await http_client.get(
-        _vault_url(draft_path(thread_id, user_id)),
-        headers=_vault_headers(),
-        timeout=10.0,
-    )
-    if resp.status_code == 404:
-        return None
-    if resp.status_code >= 400:
-        raise_for_status = getattr(resp, "raise_for_status", None)
-        if callable(raise_for_status):
-            raise_for_status()
-    fm, _rest = _split_frontmatter(resp.text)
-    return fm or None
-
-
-async def delete_draft(thread_id: int, user_id, *, http_client) -> None:
-    """DELETE the draft. 404 is tolerated (idempotent cleanup)."""
-    resp = await http_client.delete(
-        _vault_url(draft_path(thread_id, user_id)),
-        headers=_vault_headers(),
-        timeout=10.0,
-    )
-    if resp.status_code not in (200, 204, 404):
-        raise_for_status = getattr(resp, "raise_for_status", None)
-        if callable(raise_for_status):
-            raise_for_status()
 
 
 # --- Dialog lifecycle ---
