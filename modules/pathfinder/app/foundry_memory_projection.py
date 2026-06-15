@@ -31,13 +31,16 @@ Dry-run path produces an identical metric shape but performs zero writes
 """
 from __future__ import annotations
 
-import datetime as dt
 import json
 import logging
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Callable
 
-from app.foundry_chat_import import _message_key, _speaker, _strip_html
+from app.foundry_projection_planner import (
+    ProjectionPlan,
+    ProjectionState,
+    build_foundry_projection_plan,
+)
 from app.memory_projection_store import (
     append_npc_history_row,
     write_player_map_section,
@@ -46,13 +49,6 @@ from app.memory_projection_store import (
 logger = logging.getLogger(__name__)
 
 _PLAYER_MAP_DEFAULT_SECTION = "Chat Timeline"
-
-Target = Literal["player_map", "npc_history"]
-
-
-def _projection_key(record: dict, target: Target) -> str:
-    """Per-target dedupe key. Reuses _message_key recipe; appends target."""
-    return f"{_message_key(record)}|target:{target}"
 
 
 def _load_projection_state(path: Path) -> dict[str, set[str]]:
@@ -106,37 +102,14 @@ def _save_projection_state(
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def _format_timestamp(ts_ms: Any) -> str:
-    """Foundry timestamps are milliseconds since epoch; format as UTC ISO date+time."""
-    try:
-        ts_int = int(ts_ms)
-    except (TypeError, ValueError):
-        return "0000-00-00 00:00:00"
-    moment = dt.datetime.fromtimestamp(ts_int / 1000.0, tz=dt.timezone.utc)
-    return moment.strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _build_row(record: dict, key: str) -> str:
-    ts_iso = _format_timestamp(record.get("timestamp"))
-    content = _strip_html(str(record.get("content", "")))
-    return f"- [{ts_iso}] (foundry, key={key}) {content}"
-
-
-async def _maybe_await(value: Any) -> Any:
-    """Allow identity_resolver / npc_matcher to be sync or async callables."""
-    if hasattr(value, "__await__"):
-        return await value
-    return value
-
-
 # Success statuses returned by append_npc_history_row that represent a real write.
 _NPC_APPEND_SUCCESS = frozenset({"appended", "created"})
 
 
 async def _do_npc_append(
     *,
-    record: dict,
     key: str,
+    row: str,
     npc_slug: str,
     dry_run: bool,
     obsidian_client: Any,
@@ -162,7 +135,6 @@ async def _do_npc_append(
         new_npc_keys.add(key)
         return True
 
-    row = _build_row(record, key)
     status = await append_npc_history_row(npc_slug, row=row, obsidian=obsidian_client)
     if status in _NPC_APPEND_SUCCESS:
         new_npc_keys.add(key)
@@ -220,189 +192,61 @@ async def project_foundry_chat_memory(
       dict with keys: player_updates, npc_updates, player_deduped, npc_deduped,
       unmatched_speakers, dry_run.
     """
-    options = options or {}
     state = _load_projection_state(dedupe_store_path)
-    imported_keys = state["imported_keys"]
-    player_keys = state["player_projection_keys"]
-    npc_keys = state["npc_projection_keys"]
+    projection_state = ProjectionState(
+        imported_keys=state["imported_keys"],
+        player_projection_keys=state["player_projection_keys"],
+        npc_projection_keys=state["npc_projection_keys"],
+    )
+    plan = await build_foundry_projection_plan(
+        records=records,
+        state=projection_state,
+        identity_resolver=identity_resolver,
+        npc_matcher=npc_matcher,
+        options=options,
+        project_player_maps=project_player_maps,
+        project_npc_history=project_npc_history,
+    )
 
-    # Track in-run additions separately so dedupe within a single run also fires.
-    new_player_keys: set[str] = set()
-    new_npc_keys: set[str] = set()
+    return await _execute_projection_plan(
+        plan=plan,
+        state=projection_state,
+        dry_run=dry_run,
+        obsidian_client=obsidian_client,
+        dedupe_store_path=dedupe_store_path,
+    )
 
-    # Per-call cache: speaker_token -> resolved npc slug (or None if unresolvable).
-    # Populated lazily so each distinct unknown speaker is probed at most once.
-    _npc_matcher_cache: dict[str, str | None] = {}
 
-    player_updates = 0
+async def _execute_projection_plan(
+    *,
+    plan: ProjectionPlan,
+    state: ProjectionState,
+    dry_run: bool,
+    obsidian_client: Any,
+    dedupe_store_path: Path,
+) -> dict:
+    successful_npc_keys: set[str] = set()
+    unmatched_speakers = list(plan.unmatched_speakers)
+    unmatched_seen = set(unmatched_speakers)
     npc_updates = 0
-    player_deduped = 0
-    npc_deduped = 0
-    unmatched_speakers: list[str] = []
-    unmatched_seen: set[str] = set()
 
-    # Player-map writes are batched per slug → list[str] of timeline rows.
-    # Section override per record is not yet supported (options reserved); we
-    # always write to the default ## Chat Timeline section.
-    player_batches: dict[str, list[str]] = {}
+    for row in plan.npc_rows:
+        wrote = await _do_npc_append(
+            key=row.key,
+            row=row.row,
+            npc_slug=row.npc_slug,
+            dry_run=dry_run,
+            obsidian_client=obsidian_client,
+            new_npc_keys=successful_npc_keys,
+            unmatched_seen=unmatched_seen,
+            unmatched_speakers=unmatched_speakers,
+            speaker_token=row.speaker_token,
+        )
+        if wrote:
+            npc_updates += 1
 
-    for record in records:
-        speaker_token = _speaker(record)
-
-        try:
-            classification = identity_resolver(speaker_token)
-            classification = await _maybe_await(classification)
-        except Exception:
-            logger.exception(
-                "identity_resolver raised for speaker %r; treating as unknown",
-                speaker_token,
-            )
-            classification = ("unknown", speaker_token)
-
-        if not isinstance(classification, tuple) or len(classification) != 2:
-            logger.warning(
-                "identity_resolver returned unexpected shape %r for speaker %r",
-                classification,
-                speaker_token,
-            )
-            classification = ("unknown", speaker_token)
-
-        kind, payload = classification
-
-        if kind == "player":
-            if not project_player_maps:
-                continue
-            slug = str(payload)
-            key = _projection_key(record, "player_map")
-            if (
-                key in player_keys
-                or key in new_player_keys
-            ):
-                player_deduped += 1
-                continue
-            new_player_keys.add(key)
-            row = _build_row(record, key)
-            player_batches.setdefault(slug, []).append(row)
-            player_updates += 1
-            logger.info(
-                "project_foundry_chat_memory: queued player-map row for %s key=%s",
-                slug,
-                key,
-            )
-            continue
-
-        if kind == "npc":
-            if not project_npc_history:
-                continue
-            npc_slug = payload if payload else None
-            if not npc_slug:
-                # Defence-in-depth fallback to npc_matcher.
-                try:
-                    matched = npc_matcher(speaker_token)
-                    matched = await _maybe_await(matched)
-                except Exception:
-                    logger.exception(
-                        "npc_matcher raised for speaker %r", speaker_token
-                    )
-                    matched = None
-                npc_slug = matched
-
-            if not npc_slug:
-                if speaker_token not in unmatched_seen:
-                    unmatched_seen.add(speaker_token)
-                    unmatched_speakers.append(speaker_token)
-                    logger.warning(
-                        "project_foundry_chat_memory: unmatched speaker %r",
-                        speaker_token,
-                    )
-                continue
-
-            key = _projection_key(record, "npc_history")
-            if key in npc_keys or key in new_npc_keys:
-                npc_deduped += 1
-                continue
-
-            logger.info(
-                "project_foundry_chat_memory: appending npc history row for %s key=%s",
-                npc_slug,
-                key,
-            )
-            wrote = await _do_npc_append(
-                record=record,
-                key=key,
-                npc_slug=str(npc_slug),
-                dry_run=dry_run,
-                obsidian_client=obsidian_client,
-                new_npc_keys=new_npc_keys,
-                unmatched_seen=unmatched_seen,
-                unmatched_speakers=unmatched_speakers,
-                speaker_token=speaker_token,
-            )
-            if wrote:
-                npc_updates += 1
-            continue
-
-        # kind == "unknown" or anything else — rescue via npc_matcher before
-        # giving up. Foundry aliases are capitalized ("Bandit") but the roster
-        # keys are lowercased slugs, so the identity_resolver case-sensitive
-        # lookup fails. npc_matcher uses .lower() and vault probes, so it
-        # correctly resolves these speakers. A per-call cache avoids probing
-        # the same speaker token more than once within a single import run.
-        if not project_npc_history:
-            # Unknown + NPC history disabled: skip entirely (do not add to unmatched).
-            continue
-
-        if speaker_token not in _npc_matcher_cache:
-            try:
-                _matched = npc_matcher(speaker_token)
-                _matched = await _maybe_await(_matched)
-            except Exception:
-                logger.exception(
-                    "npc_matcher raised for unknown speaker %r", speaker_token
-                )
-                _matched = None
-            _npc_matcher_cache[speaker_token] = _matched or None
-
-        rescued_slug = _npc_matcher_cache[speaker_token]
-
-        if rescued_slug:
-            key = _projection_key(record, "npc_history")
-            if key in npc_keys or key in new_npc_keys:
-                npc_deduped += 1
-                continue
-
-            logger.info(
-                "project_foundry_chat_memory: rescued unknown speaker %r → npc %s key=%s",
-                speaker_token,
-                rescued_slug,
-                key,
-            )
-            wrote = await _do_npc_append(
-                record=record,
-                key=key,
-                npc_slug=str(rescued_slug),
-                dry_run=dry_run,
-                obsidian_client=obsidian_client,
-                new_npc_keys=new_npc_keys,
-                unmatched_seen=unmatched_seen,
-                unmatched_speakers=unmatched_speakers,
-                speaker_token=speaker_token,
-            )
-            if wrote:
-                npc_updates += 1
-            continue
-
-        if speaker_token not in unmatched_seen:
-            unmatched_seen.add(speaker_token)
-            unmatched_speakers.append(speaker_token)
-            logger.warning(
-                "project_foundry_chat_memory: unmatched speaker %r",
-                speaker_token,
-            )
-
-    # Flush per-player batches: one consolidated put_note per slug.
     if not dry_run:
-        for slug, rows in player_batches.items():
+        for slug, rows in plan.player_batches().items():
             await write_player_map_section(
                 slug,
                 section=_PLAYER_MAP_DEFAULT_SECTION,
@@ -410,19 +254,18 @@ async def project_foundry_chat_memory(
                 obsidian=obsidian_client,
             )
 
-        # Persist merged state.
         _save_projection_state(
             dedupe_store_path,
-            imported_keys=imported_keys,
-            player_keys=player_keys | new_player_keys,
-            npc_keys=npc_keys | new_npc_keys,
+            imported_keys=state.imported_keys,
+            player_keys=state.player_projection_keys | plan.player_keys,
+            npc_keys=state.npc_projection_keys | successful_npc_keys,
         )
 
     return {
-        "player_updates": player_updates,
+        "player_updates": plan.player_updates,
         "npc_updates": npc_updates,
-        "player_deduped": player_deduped,
-        "npc_deduped": npc_deduped,
+        "player_deduped": plan.player_deduped,
+        "npc_deduped": plan.npc_deduped,
         "unmatched_speakers": unmatched_speakers,
         "dry_run": dry_run,
     }

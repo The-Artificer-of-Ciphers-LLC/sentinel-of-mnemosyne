@@ -73,6 +73,40 @@ def _make_npc_matcher(npc_roster: dict[str, str]):
 
 
 @pytest.mark.asyncio
+async def test_projection_planner_builds_typed_plan_without_vault():
+    from app.foundry_projection_planner import (
+        ProjectionState,
+        build_foundry_projection_plan,
+        projection_key,
+    )
+
+    player_record = _record(_id="p1", speaker="Valeros", content="hi")
+    npc_record = _record(_id="n1", speaker="Goblin Boss", content="grrr")
+    unknown_record = _record(_id="u1", speaker="Mystery Voice", content="who")
+    state = ProjectionState(
+        imported_keys=set(),
+        player_projection_keys={projection_key(player_record, "player_map")},
+        npc_projection_keys=set(),
+    )
+
+    plan = await build_foundry_projection_plan(
+        records=[player_record, npc_record, unknown_record],
+        state=state,
+        identity_resolver=_make_identity_resolver(
+            alias_map={"Valeros": "u1"},
+            npc_roster={"goblin boss": "goblin-boss"},
+        ),
+        npc_matcher=_make_npc_matcher({"goblin boss": "goblin-boss"}),
+    )
+
+    assert plan.player_updates == 0
+    assert plan.player_deduped == 1
+    assert plan.npc_updates == 1
+    assert plan.npc_rows[0].npc_slug == "goblin-boss"
+    assert plan.unmatched_speakers == ("Mystery Voice",)
+
+
+@pytest.mark.asyncio
 async def test_classify_speaker_precedence_alias_first(tmp_path):
     from app.foundry_memory_projection import project_foundry_chat_memory
 
@@ -568,7 +602,7 @@ async def test_npc_history_rows_are_newline_separated(tmp_path):
         - [2024-01-13 01:22:11] ... 26- [2023-12-02 ...] Bandit takes 1 damage.
     """
     from app.foundry_memory_projection import project_foundry_chat_memory
-    from app.memory_projection_store import append_npc_history_row, _NPC_HISTORY_HEADING
+    from app.memory_projection_store import _NPC_HISTORY_HEADING
 
     # Simulate the full projection flow using a fake obsidian that actually
     # accumulates the note body in memory so we can inspect the final state.
