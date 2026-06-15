@@ -230,7 +230,7 @@ async def test_force_overwrites_existing_npcs():
     ), patch(
         "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
     ):
-        report = await run_import(
+        await run_import(
             archive_root=str(FIXTURES),
             dry_run=False,
             limit=None,
