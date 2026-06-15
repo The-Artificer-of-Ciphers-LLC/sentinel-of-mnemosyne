@@ -10,8 +10,10 @@ slug derivation downstream depends on byte-stable identity.
 
 Sub-verbs: start, note, ask, npc, recall, todo, style, canonize.
 """
+
 from __future__ import annotations
 
+from pathfinder_command_catalog import PLAYER_USAGE
 from pathfinder_types import (
     PathfinderCommand,
     PathfinderRequest,
@@ -31,7 +33,8 @@ from pathfinder_player_contract import (
 
 
 _USAGE = (
-    "Usage: `:pf player start <character_name> | <preferred_name> | <style_preset>`\n"
+    PLAYER_USAGE + "\n"
+    "Start: `:pf player start <character_name> | <preferred_name> | <style_preset>`\n"
     "Style presets: " + ", ".join(f"`{p}`" for p in _VALID_STYLE_PRESETS) + ".\n"
     "Multi-step onboarding dialog tracked under Phase 38."
 )
@@ -99,6 +102,7 @@ class PlayerStartCommand(PathfinderCommand):
         if not rest:
             # No-args: multi-step onboarding dialog (Phase 38, D-15).
             import pathfinder_player_dialog as ppd
+
             channel = request.channel
             if _is_real_thread(channel):
                 existing = await _load_draft_resilient(
@@ -255,7 +259,9 @@ class PlayerRecallCommand(PathfinderCommand):
         if not results:
             return PathfinderResponse(
                 kind="text",
-                content="No recall snippets found." if query else "No personal memory yet.",
+                content="No recall snippets found."
+                if query
+                else "No personal memory yet.",
             )
         lines = [f"Recall ({len(results)} hit{'s' if len(results) != 1 else ''}):"]
         for item in results[:10]:
@@ -311,10 +317,13 @@ class PlayerStyleCommand(PathfinderCommand):
             )
             presets = result.get("presets") or []
             if not presets:
-                return PathfinderResponse(kind="text", content="No style presets available.")
+                return PathfinderResponse(
+                    kind="text", content="No style presets available."
+                )
             return PathfinderResponse(
                 kind="text",
-                content="Available style presets:\n" + "\n".join(f"- {p}" for p in presets),
+                content="Available style presets:\n"
+                + "\n".join(f"- {p}" for p in presets),
             )
 
         # set <preset>
@@ -354,6 +363,7 @@ def _vault_drafts_listing_url() -> str:
     a trailing slash so the Local REST API returns a directory listing.
     """
     import os
+
     base = os.environ.get(
         "OBSIDIAN_API_URL", "http://host.docker.internal:27123"
     ).rstrip("/")
@@ -363,8 +373,10 @@ def _vault_drafts_listing_url() -> str:
 def _vault_drafts_headers() -> dict:
     """Bearer-key headers, mirroring ``pathfinder_player_dialog._vault_headers``."""
     import os
+
     try:
         from bot import _read_secret
+
         key = _read_secret("obsidian_api_key", os.environ.get("OBSIDIAN_API_KEY", ""))
     except Exception:
         key = os.environ.get("OBSIDIAN_API_KEY", "")

@@ -3,8 +3,10 @@
 Deepened into a PathfinderCommand: one handle() method, one request object,
 one response type.  HTTP plumbing stays in the bridge.
 """
+
 from __future__ import annotations
 
+from pathfinder_command_catalog import HARVEST_USAGE
 from pathfinder_types import (
     PathfinderCommand,
     PathfinderRequest,
@@ -29,7 +31,7 @@ class HarvestCommand(PathfinderCommand):
             raw = " ".join(request.parts[1:])
         names = [n.strip() for n in raw.split(",") if n.strip()]
         if not names:
-            return PathfinderResponse(kind="text", content="Usage: `:pf harvest <Name>[,<Name>...]`")
+            return PathfinderResponse(kind="text", content=HARVEST_USAGE)
         result = await request.sentinel_client.post_to_module(
             "modules/pathfinder/harvest",
             {"names": names, "user_id": request.user_id},

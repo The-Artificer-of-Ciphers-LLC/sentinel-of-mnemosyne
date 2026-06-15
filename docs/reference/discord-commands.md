@@ -266,9 +266,9 @@ For monsters not in the harvest tables, components are AI-generated and flagged 
 
 ### `:pf rule`
 
-Rules lookups against the PF2e Remaster corpus. Four sub-verbs.
-
-> **Required syntax:** the sub-verb must be one of `query`, `list`, `show`, `history` — typing `:pf rule what is sneak attack?` parses "what" as the verb and replies ``Unknown rule sub-command `what`.``.
+Rules lookups against the PF2e Remaster corpus. Free-text questions are supported
+directly after `:pf rule`; the named verbs are `query`, `list`, `show`, and
+`history`.
 
 #### `:pf rule query <question>`
 
@@ -277,6 +277,9 @@ Look up a rule. Returns a Discord embed with the ruling, marker (`[SOURCED]` / `
 ```
 :pf rule query Does Sneak Attack work on grabbed targets?
 → (embed with ruling text, marker, source citation)
+
+:pf rule Does Sneak Attack work on grabbed targets?
+→ (same query path, with the question beginning immediately after `rule`)
 ```
 
 Bare `:pf rule query` (or bare `:pf rule`) returns

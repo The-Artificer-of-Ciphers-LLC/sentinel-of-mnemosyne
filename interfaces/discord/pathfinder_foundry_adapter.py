@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathfinder_command_catalog import FOUNDRY_IMPORT_MESSAGES_USAGE
 from pathfinder_types import PathfinderCommand, PathfinderRequest, PathfinderResponse
 
 
@@ -18,14 +19,14 @@ class FoundryImportMessagesCommand(PathfinderCommand):
         if request.verb != "import-messages":
             return PathfinderResponse(
                 kind="text",
-                content="Usage: `:pf foundry import-messages <inbox_dir> [--dry-run|--live] [--limit N]` (admin-only)",
+                content=FOUNDRY_IMPORT_MESSAGES_USAGE,
             )
 
         tokens = [t for t in request.rest.split() if t]
         if not tokens:
             return PathfinderResponse(
                 kind="text",
-                content="Usage: `:pf foundry import-messages <inbox_dir> [--dry-run|--live] [--limit N]` (admin-only)",
+                content=FOUNDRY_IMPORT_MESSAGES_USAGE,
             )
 
         inbox_dir: str | None = None
@@ -42,7 +43,8 @@ class FoundryImportMessagesCommand(PathfinderCommand):
             elif tok == "--limit":
                 if i + 1 >= len(tokens) or not tokens[i + 1].lstrip("-").isdigit():
                     return PathfinderResponse(
-                        kind="text", content="Usage: `--limit N` requires an integer argument."
+                        kind="text",
+                        content="Usage: `--limit N` requires an integer argument.",
                     )
                 limit_val = int(tokens[i + 1])
                 i += 1
@@ -58,7 +60,7 @@ class FoundryImportMessagesCommand(PathfinderCommand):
         if not inbox_dir:
             return PathfinderResponse(
                 kind="text",
-                content="Usage: `:pf foundry import-messages <inbox_dir> [--dry-run|--live] [--limit N]` (admin-only)",
+                content=FOUNDRY_IMPORT_MESSAGES_USAGE,
             )
 
         payload = {
@@ -72,7 +74,8 @@ class FoundryImportMessagesCommand(PathfinderCommand):
 
         if not isinstance(result, dict):
             return PathfinderResponse(
-                kind="text", content=f"Foundry messages import returned unexpected response: {result!r}"
+                kind="text",
+                content=f"Foundry messages import returned unexpected response: {result!r}",
             )
 
         mode = "dry-run" if result.get("dry_run", dry_run) else "live"
