@@ -12,10 +12,12 @@ registers itself via COMMANDS[noun][verb] = ClassName().
 
 See pathfinder_types.py for the full registry contract.
 """
+
 from __future__ import annotations
 
 import logging
 
+from pathfinder_command_catalog import CATALOG_REGISTRY_VERBS
 from pathfinder_types import (
     PathfinderCommand,
     PathfinderRequest,
@@ -42,6 +44,21 @@ def register_star(noun: str, command: PathfinderCommand) -> None:
     COMMANDS[noun]["*"] = command
 
 
+def register_catalog_commands(
+    noun: str, commands: dict[str, PathfinderCommand]
+) -> None:
+    """Register commands and verify they match the command catalog."""
+    expected = CATALOG_REGISTRY_VERBS[noun]
+    actual = frozenset(commands)
+    if actual != expected:
+        missing = ", ".join(sorted(expected - actual)) or "none"
+        extra = ", ".join(sorted(actual - expected)) or "none"
+        raise RuntimeError(
+            f"Command catalog mismatch for `{noun}`: missing {missing}; extra {extra}."
+        )
+    COMMANDS[noun] = commands
+
+
 async def dispatch(
     *,
     noun: str,
@@ -66,10 +83,10 @@ async def dispatch(
     this into a str | dict for Discord rendering.
 
     If the noun/verb combination is not registered, returns a text error
-    response: ``"Unknown pf category \`{noun}\`."``.
+    response: ``"Unknown pf category `{noun}`."``.
 
     Args:
-        noun: The pathfinder noun (harvest, rule, session, npc, ingest, cartosia).
+        noun: The pathfinder noun from the command catalog.
         verb: The sub-verb (create, show, query, etc.).  For nouns without
               sub-verbs (harvest), verb is ignored and the wildcard handler is used.
         rest: Raw remaining text after noun/verb parsing.
@@ -102,7 +119,9 @@ async def dispatch(
         return PathfinderResponse(kind="text", content=f"Unknown pf category `{noun}`.")
 
     # Try exact verb match first, then wildcard.
-    command: PathfinderCommand | None = noun_commands.get(verb) or noun_commands.get("*")
+    command: PathfinderCommand | None = noun_commands.get(verb) or noun_commands.get(
+        "*"
+    )
     if command is None:
         return PathfinderResponse(
             kind="text", content=f"Unknown `{noun}` sub-command `{verb}`."
@@ -174,52 +193,70 @@ from pathfinder_player_adapter import (  # noqa: E402, F401
 )
 
 # Populate the registry from imported command classes.
-# Harvest: wildcard handler (no sub-verbs).
-register_star("harvest", HarvestCommand())
+register_catalog_commands("harvest", {"*": HarvestCommand()})
 
 # Rule: each sub-verb is a separate command.
 # The wildcard handler catches free-text queries (e.g. "rule How does flanking work?")
 # where the question starts in the verb position.  Named verbs take precedence.
-COMMANDS.setdefault("rule", {})["query"] = RuleQueryCommand()
-COMMANDS["rule"]["list"] = RuleListCommand()
-COMMANDS["rule"]["show"] = RuleShowCommand()
-COMMANDS["rule"]["history"] = RuleHistoryCommand()
-COMMANDS["rule"]["*"] = RuleQueryCommand()
+register_catalog_commands(
+    "rule",
+    {
+        "query": RuleQueryCommand(),
+        "list": RuleListCommand(),
+        "show": RuleShowCommand(),
+        "history": RuleHistoryCommand(),
+        "*": RuleQueryCommand(),
+    },
+)
 
 # Session: each sub-verb is a separate command.
-COMMANDS.setdefault("session", {})["start"] = SessionStartCommand()
-COMMANDS["session"]["show"] = SessionShowCommand()
-COMMANDS["session"]["end"] = SessionEndCommand()
+register_catalog_commands(
+    "session",
+    {
+        "start": SessionStartCommand(),
+        "show": SessionShowCommand(),
+        "end": SessionEndCommand(),
+    },
+)
 
-# NPC basic: sub-verbs that npc_rich doesn't handle.
-COMMANDS.setdefault("npc", {})["create"] = NpcCreateCommand()
-COMMANDS["npc"]["update"] = NpcUpdateCommand()
-COMMANDS["npc"]["show"] = NpcShowCommand()
-COMMANDS["npc"]["relate"] = NpcRelateCommand()
-
-# NPC rich: sub-verbs that npc_basic doesn't handle.
-COMMANDS["npc"]["import"] = NpcImportCommand()
-COMMANDS["npc"]["export"] = NpcExportCommand()
-COMMANDS["npc"]["token"] = NpcTokenCommand()
-COMMANDS["npc"]["token-image"] = NpcTokenImageCommand()
-COMMANDS["npc"]["stat"] = NpcStatCommand()
-COMMANDS["npc"]["pdf"] = NpcPdfCommand()
-COMMANDS["npc"]["say"] = NpcSayCommand()
+register_catalog_commands(
+    "npc",
+    {
+        "create": NpcCreateCommand(),
+        "update": NpcUpdateCommand(),
+        "show": NpcShowCommand(),
+        "relate": NpcRelateCommand(),
+        "import": NpcImportCommand(),
+        "export": NpcExportCommand(),
+        "token": NpcTokenCommand(),
+        "token-image": NpcTokenImageCommand(),
+        "stat": NpcStatCommand(),
+        "pdf": NpcPdfCommand(),
+        "say": NpcSayCommand(),
+    },
+)
 
 # Ingest: two nouns, each with its own command.
-COMMANDS.setdefault("ingest", {})["*"] = IngestCommand()
-COMMANDS["cartosia"] = {"*": CartosiaCommand()}
+register_catalog_commands("ingest", {"*": IngestCommand()})
+register_catalog_commands("cartosia", {"*": CartosiaCommand()})
 
 # Foundry import commands.
-COMMANDS.setdefault("foundry", {})["import-messages"] = FoundryImportMessagesCommand()
+register_catalog_commands(
+    "foundry", {"import-messages": FoundryImportMessagesCommand()}
+)
 
 # Player: per-player memory verbs (Phase 37 — pf2e-per-player-memory).
-COMMANDS.setdefault("player", {})["start"] = PlayerStartCommand()
-COMMANDS["player"]["note"] = PlayerNoteCommand()
-COMMANDS["player"]["ask"] = PlayerAskCommand()
-COMMANDS["player"]["npc"] = PlayerNpcCommand()
-COMMANDS["player"]["recall"] = PlayerRecallCommand()
-COMMANDS["player"]["todo"] = PlayerTodoCommand()
-COMMANDS["player"]["style"] = PlayerStyleCommand()
-COMMANDS["player"]["canonize"] = PlayerCanonizeCommand()
-COMMANDS["player"]["cancel"] = PlayerCancelCommand()
+register_catalog_commands(
+    "player",
+    {
+        "start": PlayerStartCommand(),
+        "note": PlayerNoteCommand(),
+        "ask": PlayerAskCommand(),
+        "npc": PlayerNpcCommand(),
+        "recall": PlayerRecallCommand(),
+        "todo": PlayerTodoCommand(),
+        "style": PlayerStyleCommand(),
+        "canonize": PlayerCanonizeCommand(),
+        "cancel": PlayerCancelCommand(),
+    },
+)

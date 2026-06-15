@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-PF_NOUNS = frozenset({"npc", "harvest", "rule", "session", "ingest", "cartosia", "foundry", "player"})
+from pathfinder_command_catalog import (
+    CARTOSIA_USAGE,
+    PF_NOUNS,
+    top_level_usage_message,
+)
 
 
-def parse_pf_args(args: str) -> tuple[tuple[str, str, str, list[str]] | None, str | None]:
+def parse_pf_args(
+    args: str,
+) -> tuple[tuple[str, str, str, list[str]] | None, str | None]:
     parts = args.strip().split(" ", 2)
     if len(parts) >= 1 and parts[0].lower() == "cartosia" and len(parts) < 2:
         return None, cartosia_usage_message()
@@ -19,20 +25,11 @@ def parse_pf_args(args: str) -> tuple[tuple[str, str, str, list[str]] | None, st
 
 
 def usage_message() -> str:
-    return (
-        "Usage: `:pf npc <create|update|show|relate|import|say> ...` "
-        "or `:pf harvest <Name>[,<Name>...]` "
-        "or `:pf rule <question>|show <topic>|history [N]|list` "
-        "or `:pf cartosia <archive_path> [--live] [--limit N]` (admin-only) "
-        "or `:pf foundry import-messages <inbox_dir> [--dry-run|--live] [--limit N]` (admin-only)"
-    )
+    return top_level_usage_message()
 
 
 def cartosia_usage_message() -> str:
-    return (
-        "Usage: `:pf cartosia <archive_path> [--live] [--dry-run] "
-        "[--limit N] [--force] [--confirm-large]` (admin-only)"
-    )
+    return CARTOSIA_USAGE
 
 
 def unknown_noun_message(noun: str) -> str:

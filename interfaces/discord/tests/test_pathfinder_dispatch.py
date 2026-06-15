@@ -13,18 +13,24 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import pathfinder_dispatch
+from pathfinder_command_catalog import CATALOG_REGISTRY_VERBS, COMMAND_CATALOG
 from pathfinder_dispatch import COMMANDS
-from pathfinder_types import (
-    PathfinderCommand,
-    PathfinderRequest,
-    PathfinderResponse,
-)
+from pathfinder_types import PathfinderRequest
 
 
 # --- Registry structure tests ---
 
+
 class TestRegistryStructure:
     """Verify the COMMANDS registry has all expected nouns and verbs."""
+
+    def test_registry_nouns_match_catalog(self):
+        assert set(COMMANDS) == set(COMMAND_CATALOG)
+
+    def test_registry_verbs_match_catalog(self):
+        actual = {noun: frozenset(verbs) for noun, verbs in COMMANDS.items()}
+        assert actual == CATALOG_REGISTRY_VERBS
 
     def test_harvest_has_wildcard(self):
         assert "harvest" in COMMANDS
@@ -58,6 +64,25 @@ class TestRegistryStructure:
         assert "cartosia" in COMMANDS
         assert "*" in COMMANDS["cartosia"]
 
+    def test_foundry_has_import_messages(self):
+        assert "foundry" in COMMANDS
+        assert "import-messages" in COMMANDS["foundry"]
+
+    def test_player_has_all_verbs(self):
+        assert "player" in COMMANDS
+        for verb in (
+            "start",
+            "note",
+            "ask",
+            "npc",
+            "recall",
+            "todo",
+            "style",
+            "canonize",
+            "cancel",
+        ):
+            assert verb in COMMANDS["player"], f"Missing player sub-verb: {verb}"
+
     def test_all_commands_implement_pathfinder_command(self):
         """Every registered command must have a handle() method."""
         for noun, verbs in COMMANDS.items():
@@ -71,6 +96,7 @@ class TestRegistryStructure:
 
 
 # --- Dispatch routing tests ---
+
 
 class TestDispatchRouting:
     """Test that dispatch looks up the correct command from COMMANDS."""
@@ -149,6 +175,7 @@ class TestDispatchRouting:
 
 # --- Individual command tests ---
 
+
 class TestHarvestCommand:
     """Test HarvestCommand directly."""
 
@@ -158,7 +185,10 @@ class TestHarvestCommand:
         cmd = COMMANDS["harvest"]["*"]
         # parts mirrors production: ["harvest"] only → len==1 → no names
         request = PathfinderRequest(
-            noun="harvest", verb="*", rest="", user_id="u1",
+            noun="harvest",
+            verb="*",
+            rest="",
+            user_id="u1",
             parts=["harvest"],
         )
         response = await cmd.handle(request)
@@ -170,14 +200,19 @@ class TestHarvestCommand:
         """Single name → embed response."""
         cmd = COMMANDS["harvest"]["*"]
         mock_client = AsyncMock()
-        mock_client.post_to_module = AsyncMock(return_value={
-            "name": "Test Character",
-            "path": "/vault/harvest/test-character.md",
-        })
+        mock_client.post_to_module = AsyncMock(
+            return_value={
+                "name": "Test Character",
+                "path": "/vault/harvest/test-character.md",
+            }
+        )
         # parts mirrors production: "harvest Test Character" → ["harvest", "Test", "Character"]
         request = PathfinderRequest(
-            noun="harvest", verb="*", rest="Test Character",
-            user_id="u1", sentinel_client=mock_client,
+            noun="harvest",
+            verb="*",
+            rest="Test Character",
+            user_id="u1",
+            sentinel_client=mock_client,
             parts=["harvest", "Test", "Character"],
         )
 
@@ -193,9 +228,7 @@ class TestRuleQueryCommand:
     async def test_rule_query_no_question(self):
         """Empty query → usage error."""
         cmd = COMMANDS["rule"]["query"]
-        request = PathfinderRequest(
-            noun="rule", verb="query", rest="", user_id="u1"
-        )
+        request = PathfinderRequest(noun="rule", verb="query", rest="", user_id="u1")
         response = await cmd.handle(request)
         assert response.kind == "text"
         assert "Usage:" in response.content
@@ -205,14 +238,18 @@ class TestRuleQueryCommand:
         """Question → embed response."""
         cmd = COMMANDS["rule"]["query"]
         mock_client = AsyncMock()
-        mock_client.post_to_module = AsyncMock(return_value={
-            "question": "How does sneak attack work?",
-            "answer": "Sneak attack deals extra damage when...",
-        })
+        mock_client.post_to_module = AsyncMock(
+            return_value={
+                "question": "How does sneak attack work?",
+                "answer": "Sneak attack deals extra damage when...",
+            }
+        )
         request = PathfinderRequest(
-            noun="rule", verb="query",
+            noun="rule",
+            verb="query",
             rest="How does sneak attack work?",
-            user_id="u1", sentinel_client=mock_client,
+            user_id="u1",
+            sentinel_client=mock_client,
         )
 
         response = await cmd.handle(request)
@@ -226,9 +263,7 @@ class TestNpcCreateCommand:
     async def test_npc_create_no_name(self):
         """No name → usage error."""
         cmd = COMMANDS["npc"]["create"]
-        request = PathfinderRequest(
-            noun="npc", verb="create", rest="", user_id="u1"
-        )
+        request = PathfinderRequest(noun="npc", verb="create", rest="", user_id="u1")
         response = await cmd.handle(request)
         assert response.kind == "text"
         assert "Usage:" in response.content
@@ -238,17 +273,21 @@ class TestNpcCreateCommand:
         """Name + description → text response."""
         cmd = COMMANDS["npc"]["create"]
         mock_client = AsyncMock()
-        mock_client.post_to_module = AsyncMock(return_value={
-            "name": "Grog",
-            "path": "/vault/npc/grog.md",
-            "ancestry": "Orc",
-            "class": "Barbarian",
-            "level": 5,
-        })
+        mock_client.post_to_module = AsyncMock(
+            return_value={
+                "name": "Grog",
+                "path": "/vault/npc/grog.md",
+                "ancestry": "Orc",
+                "class": "Barbarian",
+                "level": 5,
+            }
+        )
         request = PathfinderRequest(
-            noun="npc", verb="create",
+            noun="npc",
+            verb="create",
             rest="Grog | A strong orc warrior",
-            user_id="u1", sentinel_client=mock_client,
+            user_id="u1",
+            sentinel_client=mock_client,
         )
 
         response = await cmd.handle(request)
@@ -263,9 +302,7 @@ class TestNpcShowCommand:
     async def test_npc_show_no_name(self):
         """No name → usage error."""
         cmd = COMMANDS["npc"]["show"]
-        request = PathfinderRequest(
-            noun="npc", verb="show", rest="", user_id="u1"
-        )
+        request = PathfinderRequest(noun="npc", verb="show", rest="", user_id="u1")
         response = await cmd.handle(request)
         assert response.kind == "text"
 
@@ -274,21 +311,25 @@ class TestNpcShowCommand:
         """Name → text response with NPC details."""
         cmd = COMMANDS["npc"]["show"]
         mock_client = AsyncMock()
-        mock_client.post_to_module = AsyncMock(return_value={
-            "name": "Grog",
-            "level": 5,
-            "ancestry": "Orc",
-            "class": "Barbarian",
-            "personality": "Brash and loyal",
-            "backstory": "Once a slave, now free...",
-            "stats": {"ac": 16, "hp": 45},
-            "relationships": [{"target": "Aragorn", "relation": "friend"}],
-            "mood": "content",
-            "path": "/vault/npc/grog.md",
-        })
+        mock_client.post_to_module = AsyncMock(
+            return_value={
+                "name": "Grog",
+                "level": 5,
+                "ancestry": "Orc",
+                "class": "Barbarian",
+                "personality": "Brash and loyal",
+                "backstory": "Once a slave, now free...",
+                "stats": {"ac": 16, "hp": 45},
+                "relationships": [{"target": "Aragorn", "relation": "friend"}],
+                "mood": "content",
+                "path": "/vault/npc/grog.md",
+            }
+        )
         request = PathfinderRequest(
-            noun="npc", verb="show",
-            rest="Grog", user_id="u1",
+            noun="npc",
+            verb="show",
+            rest="Grog",
+            user_id="u1",
             sentinel_client=mock_client,
         )
 
@@ -306,9 +347,11 @@ class TestNpcRelateCommand:
         """Invalid relation type → error."""
         cmd = COMMANDS["npc"]["relate"]
         request = PathfinderRequest(
-            noun="npc", verb="relate",
+            noun="npc",
+            verb="relate",
             rest="Grog | foobar | Aragorn",
-            user_id="u1", valid_relations=frozenset({"knows", "fights"}),
+            user_id="u1",
+            valid_relations=frozenset({"knows", "fights"}),
         )
         response = await cmd.handle(request)
         assert response.kind == "text"
@@ -321,16 +364,14 @@ class TestNpcRelateCommand:
         mock_client = AsyncMock()
         mock_client.post_to_module = AsyncMock(return_value={})
         request = PathfinderRequest(
-            noun="npc", verb="relate",
+            noun="npc",
+            verb="relate",
             rest="Grog | knows | Aragorn",
-            user_id="u1", valid_relations=frozenset({"knows", "fights"}),
+            user_id="u1",
+            valid_relations=frozenset({"knows", "fights"}),
             sentinel_client=mock_client,
         )
 
         response = await cmd.handle(request)
         assert response.kind == "text"
         assert "Relationship added:" in response.content
-
-
-# --- Import pathfinder_dispatch to trigger registry population ---
-import pathfinder_dispatch  # noqa: F401 — triggers COMMANDS population

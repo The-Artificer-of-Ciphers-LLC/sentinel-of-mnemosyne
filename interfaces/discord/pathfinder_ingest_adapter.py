@@ -5,8 +5,10 @@ one request object, one response type.  HTTP plumbing stays in the bridge.
 
 Nouns: ingest (subfolder), cartosia (deprecated, forwards to ingest).
 """
+
 from __future__ import annotations
 
+from pathfinder_command_catalog import CARTOSIA_USAGE, INGEST_USAGE
 from pathfinder_types import (
     PathfinderCommand,
     PathfinderRequest,
@@ -20,7 +22,8 @@ class IngestCommand(PathfinderCommand):
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
         if request.is_admin is None or not request.is_admin(request.user_id):
             return PathfinderResponse(
-                kind="text", content="Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command."
+                kind="text",
+                content="Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command.",
             )
 
         # Reconstruct the full arg string from parts (excluding the noun at parts[0]).
@@ -30,7 +33,11 @@ class IngestCommand(PathfinderCommand):
         if request.parts and len(request.parts) >= 2:
             raw_args = " ".join(request.parts[1:])
         else:
-            raw_args = (request.verb + " " + request.rest).strip() if request.verb else request.rest
+            raw_args = (
+                (request.verb + " " + request.rest).strip()
+                if request.verb
+                else request.rest
+            )
         tokens = [t for t in raw_args.split() if t]
         archive_path: str | None = None
         live = False
@@ -51,7 +58,8 @@ class IngestCommand(PathfinderCommand):
             elif tok == "--limit":
                 if i + 1 >= len(tokens) or not tokens[i + 1].lstrip("-").isdigit():
                     return PathfinderResponse(
-                        kind="text", content="Usage: `--limit N` requires an integer argument."
+                        kind="text",
+                        content="Usage: `--limit N` requires an integer argument.",
                     )
                 limit_val = int(tokens[i + 1])
                 i += 1
@@ -67,10 +75,7 @@ class IngestCommand(PathfinderCommand):
         if not archive_path:
             return PathfinderResponse(
                 kind="text",
-                content=(
-                    "Usage: `:pf ingest <subfolder> [--live] [--dry-run] "
-                    "[--limit N] [--force] [--confirm-large]` (admin-only)"
-                ),
+                content=INGEST_USAGE,
             )
 
         payload = {
@@ -87,7 +92,8 @@ class IngestCommand(PathfinderCommand):
         )
         if not isinstance(result, dict):
             return PathfinderResponse(
-                kind="text", content=f"PF2e archive ingest returned unexpected response: {result!r}"
+                kind="text",
+                content=f"PF2e archive ingest returned unexpected response: {result!r}",
             )
 
         report_path = result.get("report_path", "?")
@@ -117,7 +123,8 @@ class CartosiaCommand(PathfinderCommand):
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
         if request.is_admin is None or not request.is_admin(request.user_id):
             return PathfinderResponse(
-                kind="text", content="Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command."
+                kind="text",
+                content="Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command.",
             )
 
         # Reconstruct the full arg string from parts (excluding the noun at parts[0]).
@@ -126,7 +133,11 @@ class CartosiaCommand(PathfinderCommand):
         if request.parts and len(request.parts) >= 2:
             raw_args = " ".join(request.parts[1:])
         else:
-            raw_args = (request.verb + " " + request.rest).strip() if request.verb else request.rest
+            raw_args = (
+                (request.verb + " " + request.rest).strip()
+                if request.verb
+                else request.rest
+            )
         tokens = [t for t in raw_args.split() if t]
         archive_path: str | None = None
         live = False
@@ -147,7 +158,8 @@ class CartosiaCommand(PathfinderCommand):
             elif tok == "--limit":
                 if i + 1 >= len(tokens) or not tokens[i + 1].lstrip("-").isdigit():
                     return PathfinderResponse(
-                        kind="text", content="Usage: `--limit N` requires an integer argument."
+                        kind="text",
+                        content="Usage: `--limit N` requires an integer argument.",
                     )
                 limit_val = int(tokens[i + 1])
                 i += 1
@@ -163,10 +175,7 @@ class CartosiaCommand(PathfinderCommand):
         if not archive_path:
             return PathfinderResponse(
                 kind="text",
-                content=(
-                    "Usage: `:pf cartosia <archive_path> [--live] [--dry-run] "
-                    "[--limit N] [--force] [--confirm-large]` (admin-only)"
-                ),
+                content=CARTOSIA_USAGE,
             )
 
         payload = {
@@ -183,7 +192,8 @@ class CartosiaCommand(PathfinderCommand):
         )
         if not isinstance(result, dict):
             return PathfinderResponse(
-                kind="text", content=f"PF2e archive ingest returned unexpected response: {result!r}"
+                kind="text",
+                content=f"PF2e archive ingest returned unexpected response: {result!r}",
             )
 
         report_path = result.get("report_path", "?")
@@ -205,6 +215,7 @@ class CartosiaCommand(PathfinderCommand):
             f"Errors: {len(result.get('errors', []) or [])}"
         )
         summary = (
-            "Deprecated: use `:pf ingest archive/cartosia` instead — forwarding...\n\n" + summary
+            "Deprecated: use `:pf ingest archive/cartosia` instead — forwarding...\n\n"
+            + summary
         )
         return PathfinderResponse(kind="text", content=summary)

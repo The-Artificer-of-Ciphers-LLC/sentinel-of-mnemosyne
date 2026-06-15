@@ -7,8 +7,10 @@ Sub-verbs: query (default), list, show, history.
 The wildcard handler (registered as rule/*) forwards free-text queries to
 RuleQueryCommand when the question begins at the verb position in the parsed args.
 """
+
 from __future__ import annotations
 
+from pathfinder_command_catalog import RULE_QUERY_USAGE
 from pathfinder_types import (
     PathfinderCommand,
     PathfinderRequest,
@@ -39,7 +41,11 @@ class RuleQueryCommand(PathfinderCommand):
         # sub-command), parts[1:] contains the full question tokens with original
         # casing (e.g. ["How", "does flanking work?"]).  When invoked via the
         # explicit "query" verb, use rest directly.
-        if request.verb not in _RULE_NAMED_VERBS and request.parts and len(request.parts) >= 2:
+        if (
+            request.verb not in _RULE_NAMED_VERBS
+            and request.parts
+            and len(request.parts) >= 2
+        ):
             sub_arg = " ".join(request.parts[1:])
         else:
             sub_arg = request.rest.strip()
@@ -47,12 +53,7 @@ class RuleQueryCommand(PathfinderCommand):
         if not sub_arg:
             return PathfinderResponse(
                 kind="text",
-                content=(
-                    "Usage: `:pf rule <question>` | "
-                    "`:pf rule show <topic>` | "
-                    "`:pf rule history [N]` | "
-                    "`:pf rule list`"
-                ),
+                content=RULE_QUERY_USAGE,
             )
 
         # Placeholder UX (D-11): send "thinking" placeholder before the slow call.
@@ -95,7 +96,9 @@ class RuleListCommand(PathfinderCommand):
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
         result = await request.sentinel_client.post_to_module(
-            "modules/pathfinder/rule/list", {}, request.http_client,
+            "modules/pathfinder/rule/list",
+            {},
+            request.http_client,
         )
         topics = result.get("topics", []) or [] if isinstance(result, dict) else []
         if not topics:
@@ -116,7 +119,9 @@ class RuleShowCommand(PathfinderCommand):
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
         sub_arg = request.rest.strip()
         if not sub_arg:
-            return PathfinderResponse(kind="text", content="Usage: `:pf rule show <topic>`")
+            return PathfinderResponse(
+                kind="text", content="Usage: `:pf rule show <topic>`"
+            )
         result = await request.sentinel_client.post_to_module(
             "modules/pathfinder/rule/show",
             {"topic": sub_arg},
@@ -124,14 +129,17 @@ class RuleShowCommand(PathfinderCommand):
         )
         rulings = result.get("rulings", []) or [] if isinstance(result, dict) else []
         if not rulings:
-            return PathfinderResponse(kind="text", content=f"_No rulings under `{sub_arg}`._")
+            return PathfinderResponse(
+                kind="text", content=f"_No rulings under `{sub_arg}`._"
+            )
         lines = [
             f"• `{r.get('hash', '?')}` — {(r.get('question', '') or '')[:80]} [{r.get('marker', '?')}]"
             for r in rulings
         ]
         return PathfinderResponse(
             kind="text",
-            content=f"**Rulings under `{sub_arg}`** ({len(rulings)}):\n" + "\n".join(lines),
+            content=f"**Rulings under `{sub_arg}`** ({len(rulings)}):\n"
+            + "\n".join(lines),
         )
 
 

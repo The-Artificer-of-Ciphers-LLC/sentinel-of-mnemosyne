@@ -26,9 +26,11 @@ The onboarding gate is closed. Run `:pf player start ...` to write your profile.
 
 ---
 
-### `:pf rule what is sneak attack?` says "Unknown sub-command"
+### `:pf rule what is sneak attack?` does not return a ruling
 
-`:pf rule` requires an explicit verb. Use `:pf rule query <question>` (or `list`/`show`/`history`). Bare-noun lookup is not supported.
+`:pf rule <question>` and `:pf rule query <question>` use the same query path.
+If the command still fails, check whether sentinel-core is reachable and whether
+the PF2e rules module is returning an error.
 
 ---
 
