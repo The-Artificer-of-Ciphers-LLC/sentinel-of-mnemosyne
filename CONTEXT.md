@@ -153,6 +153,14 @@ lives at `modules/pathfinder/app/pf_archive_import_execution.py`. The compatibil
 `modules/pathfinder/app/pf_archive_import.py` builds the plan and delegates execution.
 _Avoid_: live importer helper, Cartosia writer, report wrapper.
 
+**Vault Sweep Plan**:
+The Sentinel Core behavior that describes Vault sweep move intent before dry-run reporting or live
+mutation: noise trash targets, misplaced-topic relocation targets, duplicate trash targets, and
+their reportable reasons. The code module lives at `sentinel-core/app/services/vault_sweep_plan.py`.
+`sentinel-core/app/services/vault_sweeper.py` owns orchestration, locks, safety probes, embedding,
+and live Vault I/O; it should use sweep plans instead of rebuilding proposed-move dictionaries inline.
+_Avoid_: sweep proposal dict helper, dry-run move formatter, vault move decision.
+
 **Session**:
 One user message + one Sentinel response. Bounded by a single `POST /message` request.
 
