@@ -34,6 +34,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord  # provided by conftest stub
 import httpx
+from pathfinder_player_dialog_outcome import DialogOutcome
 
 
 # --- helpers ---------------------------------------------------------------
@@ -60,8 +61,10 @@ def _make_response(status_code: int, body: str = "step: character_name\n") -> ht
     return httpx.Response(status_code=status_code, text=body)
 
 
-def _stub_consume_as_answer(monkeypatch, *, return_value: str | None = "next question"):
-    """Install an ``AsyncMock`` at ``pathfinder_player_dialog.consume_as_answer``.
+def _stub_consume_as_answer_outcome(
+    monkeypatch, *, return_value: DialogOutcome | None = None
+):
+    """Install an ``AsyncMock`` at ``pathfinder_player_dialog.consume_as_answer_outcome``.
 
     Both ``pathfinder_player_dialog`` and ``dialog_router`` are net-new — the
     test's authoritative RED signal is ImportError on ``dialog_router``. We try
@@ -72,12 +75,14 @@ def _stub_consume_as_answer(monkeypatch, *, return_value: str | None = "next que
     import sys
     import types
 
+    if return_value is None:
+        return_value = DialogOutcome.message("next question")
     mock = AsyncMock(return_value=return_value)
     mod = sys.modules.get("pathfinder_player_dialog")
     if mod is None:
         mod = types.ModuleType("pathfinder_player_dialog")
         sys.modules["pathfinder_player_dialog"] = mod
-    monkeypatch.setattr(mod, "consume_as_answer", mock, raising=False)
+    monkeypatch.setattr(mod, "consume_as_answer_outcome", mock, raising=False)
     return mock
 
 
@@ -86,7 +91,7 @@ def _stub_consume_as_answer(monkeypatch, *, return_value: str | None = "next que
 
 async def test_miss_when_message_has_colon_prefix(monkeypatch):
     monkeypatch.setattr(discord, "Thread", _RealThread, raising=False)
-    consume = _stub_consume_as_answer(monkeypatch)
+    consume = _stub_consume_as_answer_outcome(monkeypatch)
 
     from dialog_router import maybe_consume_as_answer
 
@@ -116,7 +121,7 @@ async def test_miss_when_message_has_leading_whitespace_then_colon(monkeypatch):
     with ``command_router.py``: ``"  :pf player ask foo"`` is still a command,
     not an onboarding answer."""
     monkeypatch.setattr(discord, "Thread", _RealThread, raising=False)
-    consume = _stub_consume_as_answer(monkeypatch)
+    consume = _stub_consume_as_answer_outcome(monkeypatch)
 
     from dialog_router import maybe_consume_as_answer
 
@@ -146,7 +151,7 @@ async def test_miss_when_channel_is_not_thread(monkeypatch):
     HTTP GET (D-02 ordering — cheapest check first to keep blast radius zero
     in regular text channels)."""
     monkeypatch.setattr(discord, "Thread", _RealThread, raising=False)
-    consume = _stub_consume_as_answer(monkeypatch)
+    consume = _stub_consume_as_answer_outcome(monkeypatch)
 
     from dialog_router import maybe_consume_as_answer
 
@@ -174,7 +179,7 @@ async def test_miss_when_channel_is_not_thread(monkeypatch):
 
 async def test_miss_when_draft_does_not_exist(monkeypatch):
     monkeypatch.setattr(discord, "Thread", _RealThread, raising=False)
-    consume = _stub_consume_as_answer(monkeypatch)
+    consume = _stub_consume_as_answer_outcome(monkeypatch)
 
     from dialog_router import maybe_consume_as_answer
 
@@ -199,13 +204,14 @@ async def test_miss_when_draft_does_not_exist(monkeypatch):
 # --- hit: invokes consume_as_answer ----------------------------------------
 
 
-async def test_hit_invokes_consume_as_answer(monkeypatch):
+async def test_hit_invokes_consume_as_answer_outcome(monkeypatch):
     """All three hit conditions hold: no colon, real Thread, draft 200.
-    Result MUST be the string returned by ``consume_as_answer`` and the call
-    args MUST forward thread/user_id/message_text/sentinel_client/http_client
-    by keyword."""
+    Result MUST be rendered from the dialog outcome and the call args MUST
+    forward thread/user_id/message_text/sentinel_client/http_client by keyword."""
     monkeypatch.setattr(discord, "Thread", _RealThread, raising=False)
-    consume = _stub_consume_as_answer(monkeypatch, return_value="next question")
+    consume = _stub_consume_as_answer_outcome(
+        monkeypatch, return_value=DialogOutcome.message("next question")
+    )
 
     from dialog_router import maybe_consume_as_answer
 
@@ -233,6 +239,32 @@ async def test_hit_invokes_consume_as_answer(monkeypatch):
     assert kwargs["http_client"] is http_client
 
 
+async def test_hit_converts_suppressed_dialog_outcome(monkeypatch):
+    monkeypatch.setattr(discord, "Thread", _RealThread, raising=False)
+    consume = _stub_consume_as_answer_outcome(
+        monkeypatch, return_value=DialogOutcome.suppressed()
+    )
+
+    from dialog_router import maybe_consume_as_answer
+
+    channel = MagicMock(spec=_RealThread)
+    channel.id = 42
+    http_client = MagicMock()
+    http_client.get = AsyncMock(return_value=_make_response(200))
+    sentinel_client = MagicMock()
+
+    result = await maybe_consume_as_answer(
+        user_id="u-1",
+        message="Tactician",
+        channel=channel,
+        sentinel_client=sentinel_client,
+        http_client=http_client,
+    )
+
+    assert result == {"type": "suppressed"}
+    assert consume.await_count == 1
+
+
 # --- hit: thread id used in draft path lookup ------------------------------
 
 
@@ -241,7 +273,9 @@ async def test_hit_uses_thread_id_in_draft_path_lookup(monkeypatch):
     ``mnemosyne/pf2e/players/_drafts/{thread.id}-{user_id}.md`` so the gate
     is keyed strictly on ``(thread_id, user_id)`` (38-CONTEXT.md D-02)."""
     monkeypatch.setattr(discord, "Thread", _RealThread, raising=False)
-    _stub_consume_as_answer(monkeypatch, return_value="next question")
+    _stub_consume_as_answer_outcome(
+        monkeypatch, return_value=DialogOutcome.message("next question")
+    )
 
     from dialog_router import maybe_consume_as_answer
 
@@ -275,7 +309,7 @@ async def test_empty_message_is_miss(monkeypatch):
     """Avoids treating Discord embed-only messages (or whitespace-only edits)
     as onboarding answers."""
     monkeypatch.setattr(discord, "Thread", _RealThread, raising=False)
-    consume = _stub_consume_as_answer(monkeypatch)
+    consume = _stub_consume_as_answer_outcome(monkeypatch)
 
     from dialog_router import maybe_consume_as_answer
 
@@ -305,7 +339,7 @@ async def test_obsidian_get_error_falls_through(monkeypatch):
     Obsidian during the existence check must not crash the message handler —
     the router treats it as a miss so ``command_router`` still runs."""
     monkeypatch.setattr(discord, "Thread", _RealThread, raising=False)
-    consume = _stub_consume_as_answer(monkeypatch)
+    consume = _stub_consume_as_answer_outcome(monkeypatch)
 
     from dialog_router import maybe_consume_as_answer
 

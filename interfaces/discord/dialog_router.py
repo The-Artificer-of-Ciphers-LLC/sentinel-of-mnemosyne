@@ -2,7 +2,8 @@
 
 Inserted into ``discord_router_bridge.route_message`` BEFORE ``command_router``
 so that plain-text replies inside a draft-bearing thread are consumed as
-onboarding answers, not routed to the AI / command pipeline. On miss, returns
+onboarding answers, not routed to the AI / command pipeline. On hit, returns a
+renderable dialog response string or suppression dict. On miss, returns
 ``None`` and the bridge falls through to ``command_router`` unchanged.
 
 Hit conditions (Phase 38, D-02 in 38-CONTEXT.md — ALL must hold):
@@ -32,8 +33,8 @@ async def maybe_consume_as_answer(
     channel,
     sentinel_client,
     http_client,
-) -> str | None:
-    """Return a response string if this message is an onboarding answer, else None.
+) -> str | dict | None:
+    """Return a renderable response if this message is an onboarding answer.
 
     Cheapest checks first to keep the blast radius zero in regular text channels:
     empty/colon-prefix → channel-type → draft existence (HTTP).
@@ -58,10 +59,11 @@ async def maybe_consume_as_answer(
     import pathfinder_player_dialog as ppd
 
     # All conditions met — consume the message as the next dialog answer.
-    return await ppd.consume_as_answer(
+    outcome = await ppd.consume_as_answer_outcome(
         thread=channel,
         user_id=str(user_id),
         message_text=message,
         sentinel_client=sentinel_client,
         http_client=http_client,
     )
+    return outcome.to_router_response()

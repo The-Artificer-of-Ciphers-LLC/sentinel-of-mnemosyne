@@ -1,8 +1,8 @@
 """Bridge wrapper for top-level Discord message routing/subcommands.
 
 Pre-router gate (Phase 38, D-01): ``dialog_router.maybe_consume_as_answer``
-runs first; on hit (returns ``str``), its response is returned directly,
-bypassing ``command_router``. On miss (returns ``None``), the bridge calls
+runs first; on hit, its renderable response is returned directly, bypassing
+``command_router``. On miss (returns ``None``), the bridge calls
 ``command_router`` with the original kwargs unchanged so ``:`` commands and
 non-thread plain text behave byte-for-byte as before.
 

@@ -381,10 +381,10 @@ class PlayerCancelCommand(PathfinderCommand):
         channel = request.channel
 
         if _is_real_thread(channel):
-            text = await ppd.cancel_dialog(
+            outcome = await ppd.cancel_dialog_outcome(
                 thread=channel, user_id=user_id, http_client=request.http_client
             )
-            return PathfinderResponse(kind="text", content=text)
+            return outcome.to_pathfinder_response()
 
         # Cancel from a non-thread channel — D-17 symmetry: archive ALL drafts.
         thread_ids = await list_user_thread_ids(
@@ -411,7 +411,7 @@ class PlayerCancelCommand(PathfinderCommand):
                 failures.append(tid)
                 continue
             try:
-                await ppd.cancel_dialog(
+                await ppd.cancel_dialog_outcome(
                     thread=thread,
                     user_id=user_id,
                     http_client=request.http_client,

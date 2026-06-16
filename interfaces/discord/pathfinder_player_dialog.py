@@ -14,6 +14,7 @@ import logging
 
 import discord
 
+from pathfinder_player_dialog_outcome import DialogOutcome
 from pathfinder_player_draft_store import (
     delete_draft,
     draft_path,
@@ -25,10 +26,13 @@ from pathfinder_player_adapter import _VALID_STYLE_PRESETS
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "DialogOutcome",
     "QUESTIONS",
     "STEPS",
     "cancel_dialog",
+    "cancel_dialog_outcome",
     "consume_as_answer",
+    "consume_as_answer_outcome",
     "delete_draft",
     "draft_path",
     "load_draft",
@@ -180,31 +184,31 @@ def _normalise_style_preset(answer: str) -> str | None:
     return None
 
 
-async def consume_as_answer(
+async def consume_as_answer_outcome(
     *,
     thread,
     user_id: str,
     message_text: str,
     sentinel_client,
     http_client,
-) -> str:
+) -> DialogOutcome:
     """Advance the dialog one step. On final step, POST /player/onboard + cleanup.
 
-    Returns the response text. The caller (bot.py on_message via
-    response_renderer) is responsible for posting it to the thread —
-    sending here would double-post (UAT G-03).
+    Returns an explicit dialog outcome. The caller renders ``message`` outcomes;
+    ``suppressed`` means this module already posted directly, which is required
+    for terminal send-before-archive ordering (UAT G-04).
     """
     draft = await load_draft(thread.id, str(user_id), http_client=http_client)
     if draft is None:
         # Defensive — caller (dialog_router) pre-checks. Safety net: do nothing.
-        return ""
+        return DialogOutcome.suppressed()
     step = draft.get("step", STEPS[0])
     answer = (message_text or "").strip()
 
     if step == "style_preset":
         normalised = _normalise_style_preset(answer)
         if normalised is None:
-            return (
+            return DialogOutcome.message(
                 f"`{answer}` isn't a valid style. Please choose one of: "
                 + ", ".join(_VALID_STYLE_PRESETS)
                 + "."
@@ -212,14 +216,14 @@ async def consume_as_answer(
         draft["style_preset"] = normalised
     elif step in ("character_name", "preferred_name"):
         if not answer:
-            return QUESTIONS[step]
+            return DialogOutcome.message(QUESTIONS[step])
         draft[step] = answer
 
     idx = STEPS.index(step)
     if idx + 1 < len(STEPS):
         draft["step"] = STEPS[idx + 1]
         await save_draft(thread.id, str(user_id), draft, http_client=http_client)
-        return QUESTIONS[STEPS[idx + 1]]
+        return DialogOutcome.message(QUESTIONS[STEPS[idx + 1]])
 
     # Final step — POST to /player/onboard with the four-field payload.
     payload = {
@@ -244,22 +248,39 @@ async def consume_as_answer(
     except Exception:
         logger.warning("consume_as_answer: success send failed for %s", thread.id)
     await _archive_and_discard(thread)
-    return ""  # already sent — signal to bot.py response_renderer to no-op
+    return DialogOutcome.suppressed()
 
 
-async def cancel_dialog(*, thread, user_id: str, http_client) -> str:
+async def consume_as_answer(
+    *,
+    thread,
+    user_id: str,
+    message_text: str,
+    sentinel_client,
+    http_client,
+) -> str:
+    """Compatibility wrapper returning the historical text/suppression sentinel."""
+    outcome = await consume_as_answer_outcome(
+        thread=thread,
+        user_id=user_id,
+        message_text=message_text,
+        sentinel_client=sentinel_client,
+        http_client=http_client,
+    )
+    return outcome.to_legacy_text()
+
+
+async def cancel_dialog_outcome(*, thread, user_id: str, http_client) -> DialogOutcome:
     """Delete the draft, post the cancel ack, then archive the thread.
 
-    Returns the cancel-ack text on the no-draft path (caller's response_renderer
-    sends it to the invoking channel). On the with-draft path, posts the ack
-    DIRECTLY to the dialog thread first, archives, and returns "" so bot.py's
-    response_renderer skips its send. Discord auto-unarchives a thread on any
-    new message, so the post-must-precede-archive ordering is required to make
-    archival actually stick (UAT G-04).
+    Returns a renderable dialog outcome. On the with-draft path, posts the ack
+    directly to the dialog thread first, archives, and returns ``suppressed``.
+    Discord auto-unarchives a thread on any new message, so post-before-archive
+    ordering is required to make archival stick (UAT G-04).
     """
     draft = await load_draft(thread.id, str(user_id), http_client=http_client)
     if draft is None:
-        return "No onboarding dialog in progress."
+        return DialogOutcome.message("No onboarding dialog in progress.")
     ack = "Onboarding cancelled. Run `:pf player start` to begin again."
     await delete_draft(thread.id, str(user_id), http_client=http_client)
     # Send ack BEFORE archive — any message after archive auto-unarchives.
@@ -268,4 +289,12 @@ async def cancel_dialog(*, thread, user_id: str, http_client) -> str:
     except Exception:
         logger.warning("cancel_dialog: thread.send failed for %s", thread.id)
     await _archive_and_discard(thread)
-    return ""  # already sent — signal to bot.py response_renderer to no-op
+    return DialogOutcome.suppressed()
+
+
+async def cancel_dialog(*, thread, user_id: str, http_client) -> str:
+    """Compatibility wrapper returning the historical text/suppression sentinel."""
+    outcome = await cancel_dialog_outcome(
+        thread=thread, user_id=user_id, http_client=http_client
+    )
+    return outcome.to_legacy_text()

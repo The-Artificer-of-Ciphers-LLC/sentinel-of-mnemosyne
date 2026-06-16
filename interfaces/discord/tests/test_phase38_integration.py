@@ -512,9 +512,9 @@ async def test_acceptance_06_cancel_with_draft_deletes_and_acks(monkeypatch):
     assert "cancelled" in ack_sent.lower()
     assert ":pf player start" in ack_sent
 
-    # PathfinderResponse content is the empty-string sentinel — bot's
-    # response_renderer no-ops since the dialog already sent the ack.
-    assert response.kind == "text"
+    # The dialog already sent the ack, so the adapter returns an explicit
+    # suppressed response for the bridge/renderer.
+    assert response.kind == "suppressed"
     assert response.content == ""
     assert sentinel_client.post_to_module.await_count == 0
 
