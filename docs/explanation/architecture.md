@@ -1,9 +1,9 @@
 # Sentinel of Mnemosyne — Architecture Explanation
 
 **Type:** Explanation (Diataxis)
-**Version:** 0.50
-**Date:** 2026-05-06
-**Scope:** Core system (Path B) — Interface layer, Sentinel Core container, AI provider layer, Module API gateway, Obsidian vault.
+**Version audit:** Sentinel Core `v0.51.1`, Discord interface `v0.2.1`, Pathfinder module `v1.1.2`
+**Date:** 2026-06-16
+**Scope:** Core system (Path B) — interface layer, Sentinel Core container, AI provider layer, module API gateway, Obsidian vault, and current Pathfinder integration.
 
 For the full API specification, env vars, ports, schemas, and file formats, see [`../reference/api-and-contracts.md`](../reference/api-and-contracts.md).
 For the full vault folder and file-format specification, see [`../reference/obsidian-vault.md`](../reference/obsidian-vault.md).
@@ -34,8 +34,8 @@ The Sentinel of Mnemosyne is a self-hosted, containerised AI assistant platform.
            ▼                 ▼
 ┌──────────────────┐  ┌──────────────────────┐
 │  AI PROVIDER     │  │  MODULE CONTAINERS   │
-│  LiteLLMProvider │  │  (v0.50: Pathfinder, │
-│  → LM Studio     │  │  Music, Finance, etc)│
+│  LiteLLMProvider │  │  (Pathfinder v1.1.2,│
+│  → LM Studio     │  │  future modules)     │
 │  → Claude API    │  │  Each: FastAPI        │
 └──────────────────┘  │  POST /register →    │
                       │  sentinel-core       │
@@ -188,7 +188,7 @@ docker compose up
 
 ---
 
-## 10. Build Sequence History (v0.1 → v0.50)
+## 10. Build Sequence History (v0.1 → v0.51.1)
 
 ### Phases 1–4: Core Loop, Memory, Voice, AI Layer
 
@@ -204,9 +204,9 @@ Phase 11 delivered the first module under the Path B contract. The Pathfinder mo
 
 | # | Question | Notes | Target |
 |---|---|---|---|
-| 1 | Module registry persistence | In-memory registry clears on sentinel-core restart; modules re-register on their restart. Is restart ordering reliable enough, or do we need a persistent registry? | v0.50 |
-| 2 | Module health checking | Should sentinel-core probe registered modules periodically? Or return 503 on-demand only? | v0.50 |
-| 3 | Module API versioning | Should module routes include a version prefix (`/v1/npcs`)? Start without, add if needed. | v0.50 |
+| 1 | Registry durability beyond heartbeat | Pathfinder now re-registers on startup and by heartbeat. A durable registry is still optional unless more modules need stronger discovery guarantees. | Future |
+| 2 | Module health aggregation | Sentinel Core exposes `/modules` and returns proxy errors, but does not yet aggregate module health into `/status`. | Future |
+| 3 | Module API versioning | Module routes are unversioned. Add version prefixes only when there is a concrete compatibility boundary to maintain. | Future |
 | 4 | Pi harness integration depth | v0.7 scope: Pi as a parallel coding environment. Does it share the Obsidian vault context with sentinel-core, or maintain its own? | v0.7 |
 
 ---

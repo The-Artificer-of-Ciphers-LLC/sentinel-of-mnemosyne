@@ -34,6 +34,7 @@ Accurate, up-to-date technical information. Use these when you need to look some
 
 | Doc | Purpose |
 |-----|---------|
+| [Feature Reference](reference/features.md) | Current shipped and planned capability list |
 | [Discord Commands](reference/discord-commands.md) | Every `/sen` command and subcommand with examples |
 | [API and Contracts](reference/api-and-contracts.md) | Sentinel Core HTTP API, message envelope schema, module protocol |
 | [Obsidian Vault Layout](reference/obsidian-vault.md) | Vault directory structure, frontmatter conventions, naming rules |

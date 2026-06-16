@@ -1,82 +1,82 @@
 # Obsidian vault reference
 
-> **Version audit:** Reviewed for Sentinel v0.50 (2026-05-06).
+**Type:** Reference (Diataxis)
+**Version audit:** Sentinel Core `v0.51.1`, Pathfinder module `v1.1.2`
 
-Sentinel Core reads from and writes to the Obsidian vault via the Local REST API plugin. This document specifies the folder structure, context injection behaviour, and file formats.
-
----
-
-## Vault Structure
-
-The vault lives at the path configured in `OBSIDIAN_API_URL` (default: `http://host.docker.internal:27123`).
-All paths below are relative to the vault root.
-
-```
-self/
-├── identity.md        — who the Sentinel is and how it works; injected as persona context
-├── methodology.md     — how to work with notes (referenced but not auto-injected)
-├── goals.md           — current active threads (music, kids, Coincert, gear, etc.)
-└── relationships.md   — kids schedules, family context, key people
-
-notes/                 — prose-as-title atomic knowledge notes with YAML frontmatter
-inbox/                 — capture pipeline; Sentinel writes new notes here
-ops/
-├── reminders.md       — time-bound commitments; injected alongside self/ context
-├── sessions/          — session logs written after every completed exchange
-│   └── YYYY-MM-DD/
-│       └── {user_id}-{HH-MM-SS}.md
-└── observations/      — friction signals (written manually or by future modules)
-
-templates/             — note templates (not read by Sentinel)
-```
+Sentinel uses an Obsidian vault as its system of record. The vault remains plain markdown owned by the operator. Sentinel Core and modules access it through the Obsidian Local REST API, and Pathfinder also mounts the vault at `/vault` for archive and Foundry import flows.
 
 ---
 
-## What the Sentinel Reads
+## Core Vault Paths
 
-### Self context (`get_self_context`)
+All paths are relative to the vault root.
 
-Concatenates five files on every message:
-
-| File | Purpose |
-|------|---------|
-| `self/identity.md` | Sentinel persona — values, working style, what it pays attention to |
-| `self/methodology.md` | How to work with notes and structure knowledge |
-| `self/goals.md` | Current active threads and priorities |
-| `self/relationships.md` | Kids schedules, family context, key people |
-| `ops/reminders.md` | Time-bound commitments injected alongside self/ context |
-
-All five are fetched in parallel. Any file that returns 404 or errors is silently skipped —
-the others still inject. If all five fail, context injection is skipped for that exchange.
-
-### Reminders (`get_reminders`)
-
-Reads `ops/reminders.md` — time-bound commitments (follow-ups, deadlines, scheduled events).
-Injected as a separate context section after self/ context. Returns `None` on 404 or error.
-
-### Recent sessions (`get_recent_sessions`)
-
-Lists today's and yesterday's `ops/sessions/{date}/` directories, filters files matching the
-current `user_id`, fetches the most recent 3. Injected as "Recent session history" after
-reminders. Graceful degrade: returns `[]` on any error.
+| Path | Owner | Purpose |
+|---|---|---|
+| `sentinel/persona.md` | Operator | Runtime persona prompt. Required when Obsidian is reachable at Core startup |
+| `self/identity.md` | Operator | Identity and long-lived self context |
+| `self/methodology.md` | Operator | Knowledge-working methodology |
+| `self/goals.md` | Operator | Current goals and active threads |
+| `self/relationships.md` | Operator | People and relationship context |
+| `ops/reminders.md` | Operator/Core | Time-bound reminders |
+| `ops/sessions/{YYYY-MM-DD}/{user_id}-{HH-MM-SS}.md` | Core | Session summaries written after exchanges |
+| `ops/sweeps/` | Core | Vault sweep reports |
+| `ops/observations/` | Core/Discord command prompts | Operational observations |
+| `inbox/` | Core | Low-confidence or raw captures awaiting classification |
+| `notes/` | Core/operator | Classified knowledge notes |
+| `core/users/{user_id}.md` | Core compatibility | Legacy per-user context path read by `get_user_context` |
 
 ---
 
-## What the Sentinel Writes
+## Persona Contract
+
+`sentinel/persona.md` is the operator-controlled Sentinel voice file.
+
+Startup behaviour:
+
+| Condition | Behaviour |
+|---|---|
+| Obsidian reachable and `sentinel/persona.md` exists | Core starts and uses the vault persona |
+| Obsidian reachable and `sentinel/persona.md` is missing | Core fails startup with a setup error |
+| Obsidian unreachable at startup | Core starts degraded and uses the fallback persona |
+| Persona read fails during a message | The message still proceeds with fallback persona and a warning log |
+
+Edit this file in Obsidian to change Sentinel's voice without rebuilding or restarting containers.
+
+---
+
+## Recall Inputs
+
+On each `/message` request, Core assembles recall context from:
+
+| Source | Notes |
+|---|---|
+| Persona/self context | Includes persona and configured self-context files |
+| Reminders | `ops/reminders.md` |
+| Recent sessions | Hot window defaults to the most recent 3 sessions over 2 days |
+| Warm recall | Semantic recall over searchable notes within the context budget |
+
+The assembled context is budgeted against the active model's context window before the provider call.
+
+---
+
+## Core Writes
 
 ### Session summaries
 
-After every completed exchange, a session note is written as a background task (best-effort —
-failure is logged, never surfaces to the user).
+Path:
 
-**Path:** `ops/sessions/{YYYY-MM-DD}/{user_id}-{HH-MM-SS}.md`
+```text
+ops/sessions/{YYYY-MM-DD}/{user_id}-{HH-MM-SS}.md
+```
 
-**Format:**
+Typical shape:
+
 ```markdown
 ---
-timestamp: 2026-04-10T14:23:01+00:00
+timestamp: 2026-06-16T12:00:00+00:00
 user_id: 123456789012345678
-model: llama-3.2-3b-instruct
+model: gemma-4-e4b-it-mlx
 ---
 
 ## User
@@ -85,106 +85,120 @@ model: llama-3.2-3b-instruct
 
 ## Sentinel
 
-<AI response>
+<assistant response>
 ```
 
-### Inbox captures
+### Classified notes and inbox
 
-When `:capture <text>` is invoked, Core receives a message prefixed "Capture this to my inbox: …".
-The LM response triggers an `ObsidianClient.write_inbox_note()` call (currently via Core's
-message handler interpreting the prompt — a dedicated `/capture` endpoint may be added in a
-future phase).
+The note intake pipeline classifies substantive content into a closed vocabulary used by the Discord `:note` and inbox commands:
 
-**Path:** `inbox/{YYYYMMDDHHMMSS}-{slug}.md`
-
-**Format:**
-```markdown
----
-description: <title>
-type: insight
-status: active
-created: YYYY-MM-DD
----
-
-# <title>
-
-<content>
+```text
+learning
+accomplishment
+journal
+reference
+observation
+noise
+unsure
 ```
 
+Classifier outcomes:
+
+| Outcome | Effect |
+|---|---|
+| `filed` | Writes a topic-organised note |
+| `inboxed` | Appends an item to `inbox/` for review |
+| `dropped` | Drops low-value noise without filing |
+
+The Discord inbox commands call Core's `/inbox`, `/inbox/classify`, and `/inbox/discard` routes.
+
 ---
 
-## Context Injection Model
+## Sweep Safety
 
-On each `/message` request, Core builds a single context block from three sources and prepends
-it as a `user`/`assistant` pair before the actual user message:
+Vault sweep flows skip or protect operator-critical namespaces.
 
+Default sweep skip prefixes include:
+
+```text
+_trash/
+pf2e/
+mnemosyne/
+core/
+self/
+templates/
+archive/
+security/
+ops/sessions/
+ops/sweeps/
+inbox/
+.obsidian/
 ```
-Vault context (identity, methodology, goals, relationships, reminders):
-<self/identity.md + self/methodology.md + self/goals.md + self/relationships.md + ops/reminders.md>
 
-Recent session history:
-<last 3 session files>
----
-<next session>
----
-<next session>
+Protected namespaces that Core refuses to move or trash:
+
+```text
+sentinel/
+self/
+security/
 ```
 
-The combined block is truncated to 25% of the model's context window before the token guard
-runs. If truncation occurs, a warning is logged with the token counts.
+Live sweeps also require runtime model readiness. Dry-runs do not mutate the vault.
 
 ---
 
-## System Prompt (Lifebook Persona)
+## Pathfinder Vault Layout
 
-```
-You are the Sentinel of Mnemosyne — a personal second brain and AI assistant.
-You know the user's goals, gear, kids' schedules, and active projects from their Obsidian vault.
-You are warm, direct, and unafraid to call out neglected gear or stale goals.
-You remember context from prior sessions and reference it naturally.
-Answer conversationally. Use markdown only when asked.
+The Pathfinder module writes under:
+
+```text
+mnemosyne/pf2e/
 ```
 
+Primary paths:
+
+| Path | Purpose |
+|---|---|
+| `mnemosyne/pf2e/npcs/{npc_slug}.md` | Global GM-owned NPC profiles |
+| `mnemosyne/pf2e/tokens/{npc_slug}.png` | NPC token images uploaded from Discord |
+| `mnemosyne/pf2e/rulings/` | Cached PF2e rulings |
+| `mnemosyne/pf2e/sessions/YYYY-MM-DD.md` | Session notes |
+| `mnemosyne/pf2e/sessions/foundry-chat/` | Foundry chat import reports |
+| `mnemosyne/pf2e/ingest-reports/` | PF2e archive import reports |
+| `mnemosyne/pf2e/players/_aliases.json` | Optional Discord user id to readable slug mapping |
+| `mnemosyne/pf2e/players/_drafts/` | Multi-step onboarding drafts |
+| `mnemosyne/pf2e/players/{player_slug}.md` | Foundry chat-map projection for a player |
+| `mnemosyne/pf2e/players/{player_slug}/profile.md` | Player onboarding profile |
+| `mnemosyne/pf2e/players/{player_slug}/inbox.md` | Player notes |
+| `mnemosyne/pf2e/players/{player_slug}/questions.md` | Player questions |
+| `mnemosyne/pf2e/players/{player_slug}/canonization.md` | Operator canonized rulings |
+| `mnemosyne/pf2e/players/{player_slug}/todo.md` | Player todos |
+| `mnemosyne/pf2e/players/{player_slug}/npcs/{npc_slug}.md` | Player-specific NPC knowledge |
+
+Per-player routes enforce path-prefix isolation so one player's writes do not land in another player's namespace or in the global NPC namespace.
+
 ---
 
-## Discord `/sentask` Subcommand Map
+## Foundry Chat Import State
 
-Subcommands are triggered by prefixing the message with `:`. Anything without a `:` prefix is
-sent directly to the AI as a plain message.
+Foundry chat imports read a filesystem inbox mounted at `/vault` inside the Pathfinder container. The import state is stored beside the source inbox:
 
-> For the user-facing description of these verbs, see [Discord commands reference](discord-commands.md).
+```text
+<inbox_dir>/.foundry_chat_import_state.json
+```
 
-| Subcommand | Action | Prompt sent to Core |
-|------------|--------|---------------------|
-| `:help` | Returns help text locally | — (no Core call) |
-| `:capture <text>` | Capture thought to inbox | `"Capture this to my inbox: <text>"` |
-| `:next` | What to work on next | `"What should I work on next based on my current goals?"` |
-| `:health` | Vault health check | `"Run a health check on my vault and report orphan notes, stale goals, neglected gear."` |
-| `:goals` | Show active goals | `"Show me my current active goals."` |
-| `:reminders` | Show reminders | `"What are my current time-bound reminders?"` |
-| `:<unknown>` | Error message | — (no Core call) |
+The state tracks:
 
-All subcommands still create a thread and route the response through the normal thread/followup
-flow — the only difference is the message that reaches Core (or the local help text for `:help`).
+| Key | Purpose |
+|---|---|
+| `imported_keys` | Records parsed and classified |
+| `player_projection_keys` | Records projected into player chat maps |
+| `npc_projection_keys` | Records projected into NPC notes |
 
----
-
-## Vault Path Conventions
-
-| Purpose | Path pattern |
-|---------|-------------|
-| Self context | `self/identity.md`, `self/methodology.md`, `self/goals.md`, `self/relationships.md`, `ops/reminders.md` |
-| Reminders | `ops/reminders.md` |
-| Session logs | `ops/sessions/{YYYY-MM-DD}/{user_id}-{HH-MM-SS}.md` |
-| Inbox captures | `inbox/{YYYYMMDDHHMMSS}-{slug}.md` |
-| Keyword search | `POST /search/simple/?query=…` (via `search_vault`) |
-
-**Single-user vault:** No `user_id` keying is applied to reads from `self/` or `ops/reminders.md`.
-These paths are always the same person. `user_id` (Discord snowflake) is only used to namespace
-session files within `ops/sessions/`.
+Re-running a live import on the same inbox should produce zero duplicate writes for records already present in the state.
 
 ---
 
 ## Backward Compatibility
 
-`get_user_context` reads `core/users/{user_id}.md`.
+`core/users/{user_id}.md` remains a compatibility read path for older per-user context. New operator identity context should live in `sentinel/`, `self/`, and `ops/`.

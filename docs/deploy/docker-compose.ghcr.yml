@@ -50,7 +50,7 @@ services:
       - SESSION_TZ=America/New_York
       - DISCORD_BOT_INTERNAL_URL=http://discord-bot:8001
     volumes:
-      - ${OBSIDIAN_VAULT_PATH:-/Users/trekkie/projects/2ndbrain}:/vault:ro
+      - ${OBSIDIAN_VAULT_PATH:-/Users/trekkie/projects/2ndbrain}:/vault:rw
     secrets:
       - sentinel_api_key
     depends_on:
