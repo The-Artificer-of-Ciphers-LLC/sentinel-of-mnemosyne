@@ -136,6 +136,14 @@ NPC extraction, token image download, Vault writes, and report persistence remai
 executor behind `modules/pathfinder/app/pf_archive_import.py`.
 _Avoid_: Cartosia importer function, archive route logic, import preflight script.
 
+**PF Archive Import Execution**:
+The Pathfinder module behavior that executes a **PF Archive Import Plan** against the Vault:
+skip-existing policy, per-bucket report counters, NPC frontmatter rendering, token image handoff,
+dialogue consolidation, passthrough note rendering, and import report persistence. The code module
+lives at `modules/pathfinder/app/pf_archive_import_execution.py`. The compatibility interface
+`modules/pathfinder/app/pf_archive_import.py` builds the plan and delegates execution.
+_Avoid_: live importer helper, Cartosia writer, report wrapper.
+
 **Session**:
 One user message + one Sentinel response. Bounded by a single `POST /message` request.
 
