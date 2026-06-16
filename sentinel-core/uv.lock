@@ -1506,7 +1506,7 @@ wheels = [
 
 [[package]]
 name = "sentinel-core"
-version = "0.51.0"
+version = "0.51.1"
 source = { virtual = "." }
 dependencies = [
     { name = "anthropic" },

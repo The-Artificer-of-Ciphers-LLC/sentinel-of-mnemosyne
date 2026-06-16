@@ -99,4 +99,4 @@ For design rationale and architectural decisions, see [`../explanation/architect
 ## Versions
 
 - Sentinel Core and Sentinel modules version independently.
-- Current shipped baseline: Sentinel Core `v0.50`, Pathfinder module `v1.1`.
+- Current shipped baseline: Sentinel Core `v0.51.1`, Discord interface `v0.2.1`, Pathfinder module `v1.1.2`.

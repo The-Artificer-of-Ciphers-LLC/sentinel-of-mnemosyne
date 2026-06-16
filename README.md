@@ -42,8 +42,8 @@ The design goal is maximum flexibility with a stable, narrow core API. You add a
 
 | Module | Purpose | Status |
 |---|---|---|
-| Core | Routing, context, Obsidian writes | Working (Sentinel Core v0.50) |
-| Pathfinder 2e DM | NPC management, dialogue, session notes, harvest, rules RAG, ingest | Working (Pathfinder module v1.1) |
+| Core | Routing, context, Obsidian writes | Working (Sentinel Core v0.51.1) |
+| Pathfinder 2e DM | NPC management, dialogue, session notes, harvest, rules RAG, ingest | Working (Pathfinder module v1.1.2) |
 | Music Lesson Tracker | Practice logs, chord ideas, progress | Planned v0.6 |
 | Coder Interface | AI-assisted module development | Planned v0.7 |
 | Personal Finance | OFX import, spending analysis, budgets | Planned v0.8 |
@@ -106,7 +106,7 @@ The stack runs entirely in Docker Compose — pull the sample files, populate yo
 
 Flags:
   --discord      Start Discord bot interface
-  --pf2e         Start Pathfinder 2e DM module (v0.5, shipped)
+  --pf2e         Start Pathfinder 2e DM module (v1.1.2, shipped)
   --music        Start Music Lesson Tracker module (v0.6, planned)
   --finance      Start Personal Finance module (v0.8, planned)
   --trader       Start Stock Trader module (v0.9, planned)
@@ -191,7 +191,7 @@ sentinel-of-mnemosyne/
 ├── interfaces/
 │   ├── discord/                # Discord bot (/sen command)
 │   └── messages/               # Apple Messages bridge (Mac-native component)
-├── modules/                    # Module containers (Pathfinder module currently v1.1)
+├── modules/                    # Module containers (Pathfinder module currently v1.1.2)
 ├── skills/                     # Skill files for module dispatch
 ├── secrets/                    # Secret files (gitignored — one file per secret)
 ├── security/                   # Security tooling
@@ -246,7 +246,7 @@ Start here: [Documentation hub](docs/index.md)
 
 ## Status
 
-This repo currently ships **Sentinel Core v0.50** and **Pathfinder module v1.1**.
+This repo currently ships **Sentinel Core v0.51.1**, **Discord interface v0.2.1**, and **Pathfinder module v1.1.2**.
 
 Module versions are independent from Sentinel Core versions.
 
@@ -259,7 +259,7 @@ Shipped and validated:
 - Note classify/inbox/sweep flows
 
 Current baseline:
-- Automated tests: 279 passed, 12 skipped
+- Automated tests: component suites pass in CI before release
 - Live smoke checks: `/health`, `/status`, `/modules`, `/note/classify`, `/message`
 
 Core architecture: LiteLLM-direct chat via ProviderRouter (LM Studio, Claude, Ollama, llama.cpp).

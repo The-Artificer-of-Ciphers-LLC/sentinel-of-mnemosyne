@@ -1,6 +1,6 @@
 [project]
 name = "sentinel-discord"
-version = "0.2.0"
+version = "0.2.1"
 requires-python = ">=3.12"
 dependencies = [
     "discord.py>=2.7.0",
