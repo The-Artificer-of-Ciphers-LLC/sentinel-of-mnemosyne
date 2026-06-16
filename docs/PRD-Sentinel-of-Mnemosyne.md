@@ -1,9 +1,9 @@
 # Product Requirements Document
 ## Sentinel of Mnemosyne
-**Version:** 0.50
+**Version audit:** Sentinel Core `v0.51.1`, Discord interface `v0.2.1`, Pathfinder module `v1.1.2`
 **Author:** Tom Boucher
-**Date:** 2026-05-06
-**Status:** Active Reference — v0.50 hardening baseline
+**Date:** 2026-06-16
+**Status:** Active Reference — current shipped baseline
 
 ---
 
@@ -23,7 +23,7 @@ The core philosophy is flexibility over prescription. Whether you want a Dungeon
 
 **Obsidian as the heart.** All persistent knowledge — session summaries, NPC records, music practice logs, code snippets, user preferences — lives in an Obsidian vault. This means your data is always human-readable, portable plain-text markdown files, not locked in a proprietary database.
 
-**LiteLLM-direct as the AI layer.** The Sentinel calls LiteLLM → the configured AI provider (LM Studio, Claude API, Ollama, LlamaCpp) directly. No intermediate layer. Pi harness is an optional power tool for advanced coding tasks, activated via `./sentinel.sh --pi`, scoped to v0.7.
+**LiteLLM-direct as the AI layer.** The Sentinel calls LiteLLM → the configured AI provider (LM Studio, Claude API, Ollama, LlamaCpp) directly. No intermediate layer. Coding-agent work remains outside the standard chat path.
 
 **Pluggable interfaces.** How you talk to the Sentinel is up to you. Discord, Apple Messages, Slack, WhatsApp, Telegram — each interface lives in its own Docker container and talks to the core engine via a defined standard. You want a new interface? Drop in the container, wire the hooks, done.
 
@@ -59,8 +59,8 @@ The core philosophy is flexibility over prescription. Whether you want a Dungeon
            ▼                 ▼
 ┌──────────────────┐  ┌──────────────────────┐
 │  AI PROVIDER     │  │  MODULE CONTAINERS   │
-│  LiteLLMProvider │  │  (v0.50+: Pathfinder, │
-│  → LM Studio     │  │  Music, Finance, etc)│
+│  LiteLLMProvider │  │  (Pathfinder v1.1.2,│
+│  → LM Studio     │  │  future modules)     │
 │  → Claude API    │  │  Each: FastAPI        │
 └──────────────────┘  │  POST /register →    │
                       │  sentinel-core       │
@@ -71,7 +71,6 @@ The core philosophy is flexibility over prescription. Whether you want a Dungeon
               │  REST API plugin         │
               └──────────────────────────┘
 
-[ Pi Harness ] — optional, only with sentinel.sh --pi flag, v0.7 scope
 ```
 
 sentinel-core is the API gateway: it handles all chat completions via LiteLLM-direct and proxies all module requests to registered module containers. Interface containers translate channel-specific messages into the standard envelope and post to sentinel-core. Module containers register their endpoints with sentinel-core at startup via `POST /modules/register`.
@@ -91,62 +90,65 @@ LiteLLM runs inside the Sentinel Core container — not a separate service. It a
 Not a container — a folder on the host filesystem accessible via the Obsidian Local REST API plugin. Obsidian on your Mac reads the same folder. Markdown files, organized by module conventions. No database, no migrations.
 
 **Module Containers**
-Optional FastAPI containers (v0.50+) that add capability. Each module calls `POST /modules/register` on sentinel-core at startup, declaring its `name`, `base_url`, and available `routes`. sentinel-core then proxies `POST /modules/{name}/{path}` requests to the appropriate module. Modules may have their own Obsidian folder conventions (e.g., `/pathfinder/npcs/`, `/music/lessons/`).
+Optional FastAPI containers that add capability. Each module calls `POST /modules/register` on sentinel-core at startup, declaring its `name`, `base_url`, and available `routes`. sentinel-core then proxies `GET` or `POST /modules/{name}/{path}` requests to the appropriate module. Modules may have their own Obsidian folder conventions, such as Pathfinder's `mnemosyne/pf2e/` namespace.
 
-**Pi Harness Container (optional — v0.7 scope)**
-The pi-mono coding-agent running in Docker, activated via `./sentinel.sh --pi`. An advanced coding tool for interactive code-generation tasks. Not in the standard chat message path.
-
-### 3.3 Standard Message Envelope (Draft)
+### 3.3 Standard Message Envelope
 
 All interface containers must produce and consume this envelope format. This is the core contract that makes the pluggable architecture possible.
 
 ```json
 {
-  "id": "uuid",
-  "source": "discord | messages | slack | ...",
-  "user_id": "string",
-  "channel_id": "string",
-  "timestamp": "ISO8601",
   "content": "string",
-  "attachments": [],
-  "metadata": {}
+  "user_id": "string",
+  "source": "discord",
+  "channel_id": "string"
 }
 ```
 
-Responses follow a similar shape, with an added `reply_to` field and an optional `actions` array for interface-specific behavior (e.g., adding a reaction emoji in Discord).
+Responses return `content` and the model id used for generation. Additional metadata fields are reserved for future expansion.
 
 ### 3.4 Core API (Minimal, Stable)
 
-The Core exposes a small HTTP API. The goal is four or fewer primary endpoints — everything else is a module skill.
+The Core exposes a small gateway API plus operational endpoints.
 
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/message` | POST | Receive a message envelope from an interface |
-| `/status` | GET | Health check and system info |
+| `/health` | GET | Unauthenticated container health |
+| `/status` | GET | Authenticated runtime status |
 | `/context/{user_id}` | GET | Retrieve recent context for a user |
-| `/skill/{skill_name}` | POST | Directly invoke a named module skill |
+| `/note/classify` | POST | Classify and file note content |
+| `/inbox` | GET | List pending inbox items |
+| `/inbox/classify` | POST | Classify an inbox item |
+| `/inbox/discard` | POST | Discard an inbox item |
+| `/vault/sweep/start` | POST | Admin-gated vault sweep |
+| `/vault/sweep/status` | GET | Vault sweep status |
+| `/modules/register` | POST | Register a module |
+| `/modules` | GET | List registered modules |
+| `/modules/{name}/{path}` | GET/POST | Proxy to a registered module |
 
 ### 3.5 Docker Compose Strategy
 
-The base system has a `docker-compose.yml` that defines the Core and Pi harness containers. Each interface and module ships its own `docker-compose.override.yml` fragment. Docker Compose natively supports override files — you include them at startup:
+The base system has a root `docker-compose.yml` that uses Docker Compose `include`. Each interface and module ships a self-contained `compose.yml`. Profiles keep optional modules opt-in.
 
 ```bash
-docker compose -f docker-compose.yml -f discord/docker-compose.override.yml up
+./sentinel.sh up -d
+./sentinel.sh --discord --pf2e up -d
 ```
 
-This means adding a new module never touches the base file. Anyone building a module publishes their override file alongside their container definition. No central "mega compose file" that gets unwieldy over time.
+The pre-built image deployment sample lives in `docs/deploy/docker-compose.ghcr.yml`.
 
 ---
 
 ## 4. AI Provider Configuration
 
-The Pi harness is configured to target a specific AI endpoint. For development, this is LM Studio running on a Mac Mini on the local network. LM Studio exposes an OpenAI-compatible API, making it straightforward to swap providers.
+Sentinel Core is configured to target a specific AI endpoint. For development, this is LM Studio running on a Mac Mini on the local network. LM Studio exposes an OpenAI-compatible API, making it straightforward to swap providers through LiteLLM.
 
 **v0.x target:** LM Studio (local, OpenAI-compatible endpoint)
 **Secondary target:** Anthropic Claude API (for heavier reasoning tasks, especially in the Coder module)
 **Future:** Any OpenAI-compatible endpoint, configurable per-module if needed
 
-Provider configuration lives in environment variables in the Pi harness container — no hardcoding.
+Provider configuration lives in environment variables and secret files — no hardcoding.
 
 ---
 
@@ -159,11 +161,14 @@ The vault is the long-term memory of the system. Folder structure by module keep
   /core/
     /users/           ← per-user preference and context files
     /sessions/        ← session summaries
-  /pathfinder/
-    /campaigns/
-    /npcs/
-    /sessions/
-    /rules/
+  /sentinel/
+    persona.md
+  /mnemosyne/
+    /pf2e/
+      /npcs/
+      /sessions/
+      /rulings/
+      /players/
   /music/
     /lessons/
     /practice-log/
@@ -227,12 +232,12 @@ The vault is the long-term memory of the system. Folder structure by module keep
 **Purpose:** Provide a coding-focused AI environment that can write, review, and iterate on new Sentinel modules — eating its own cooking.
 
 **Key capabilities:**
-- Separate Pi harness instance (or separate profile) tuned for code tasks
+- Separate coding-agent workspace or compose profile tuned for code tasks
 - Can route heavy tasks to a more capable model (e.g., Claude API) while lighter tasks stay local
 - Writes new module scaffolding, reviews container configs, helps debug compose files
 - Does NOT run inside the main Sentinel engine — operates as a parallel environment that can optionally route through the Sentinel for memory/context
 
-**Design note:** The "coder" Pi environment should be cleanly separated from the production Sentinel engine. You work in the coder environment to build new modules; those modules are then deployed to the Sentinel. Think of it as a dev environment that happens to be AI-assisted.
+**Design note:** The coder environment should be cleanly separated from the production Sentinel engine. You work in the coder environment to build new modules; those modules are then deployed to the Sentinel. Think of it as a dev environment that happens to be AI-assisted.
 
 ### 6.4 Module: Media & Music Discovery (Future)
 
@@ -418,7 +423,7 @@ Uses AppleScript or a Mac-native bridge to monitor and send iMessages. This is t
 
 ### 7.3 Future Interfaces
 
-Slack, WhatsApp (via Business API or unofficial bridge), Telegram, SMS (via Twilio). Each ships as its own container + override file. The standard envelope contract means none of these require Core changes.
+Slack, WhatsApp (via Business API or unofficial bridge), Telegram, SMS (via Twilio). Each ships as its own interface component and compose fragment. The standard envelope contract means none of these require Core changes.
 
 ---
 
@@ -461,7 +466,7 @@ Slack, WhatsApp (via Business API or unofficial bridge), Telegram, SMS (via Twil
 - Provider configuration via environment variables (not hardcoded)
 - At least two providers testable (LM Studio + one other)
 - Basic error handling, retry logic, timeout management
-- Pi harness wrapper finalized — clean API the rest of the system depends on
+- LiteLLM provider wrapper finalized — clean API the rest of the system depends on
 
 **Success criteria:** Switch AI providers without touching anything except an env file.
 
@@ -472,7 +477,7 @@ Slack, WhatsApp (via Business API or unofficial bridge), Telegram, SMS (via Twil
 - Session note capture
 - Dialogue generation
 - Obsidian vault structure for `/pathfinder/` established
-- Module delivered as a Docker Compose override file
+- Module delivered as a Docker Compose include fragment with `pf2e` profile
 
 **Success criteria:** Run a Pathfinder session using the Sentinel for NPC dialogue and session notes.
 
@@ -532,7 +537,7 @@ Slack, WhatsApp (via Business API or unofficial bridge), Telegram, SMS (via Twil
 
 ### v1.0 — Polish, Stability, Community
 - Documentation pass for external contributors
-- Module development guide published (MODULE-SPEC.md)
+- Module development and API reference published
 - GitHub repository structured for open contribution
 - Discogs / ListenBrainz integration (if music module has proven useful)
 - Foundry VTT integration investigation begins
@@ -544,11 +549,11 @@ Slack, WhatsApp (via Business API or unofficial bridge), Telegram, SMS (via Twil
 | Question | Notes |
 |---|---|
 | How does the Core retrieve relevant context from Obsidian? | Full-text search via grep? Obsidian's search API? A lightweight vector index? Start simple (grep/search), optimize later. |
-| What language does the Core container use? | Python is a natural fit given the Pi harness ecosystem and available libraries. Needs a decision before v0.1. |
+| What language does the Core container use? | Decided: Python with FastAPI. |
 | AppleScript bridge architecture | Messages interface requires Mac-side component. Define the bridge protocol before v0.3. |
-| Pi harness version pinning | The pi-mono project is under active development. Need a strategy for pinning and upgrading the Pi version. |
+| Coding-agent version pinning | Any optional coding-agent workspace should be pinned and upgraded independently from the production Sentinel runtime. |
 | Obsidian vault sync | Local vault only for now. If multi-device access is needed later, iCloud sync of the vault folder is the simplest option before considering Obsidian Sync. |
-| Module discovery and registration | How does the Core know which modules are running? Environment variable list? A registration endpoint? Design for v0.50. |
+| Module discovery and registration | Shipped through `POST /modules/register` plus Pathfinder re-registration heartbeat. Durable registry remains optional future work. |
 | Authentication | Who is allowed to talk to the Sentinel? For personal use, a shared secret token in the envelope header is probably sufficient for v0.x. |
 
 ---
@@ -568,7 +573,7 @@ Slack, WhatsApp (via Business API or unofficial bridge), Telegram, SMS (via Twil
 - Pi harness (coding-agent): https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent
 - LM Studio: https://lmstudio.ai
 - Obsidian: https://obsidian.md
-- Docker Compose override files: https://docs.docker.com/compose/how-tos/multiple-compose-files/
+- Docker Compose include: https://docs.docker.com/reference/compose-file/include/
 - ListenBrainz API: https://listenbrainz.readthedocs.io
 - Discogs API: https://www.discogs.com/developers
 - Foundry VTT: https://foundryvtt.com

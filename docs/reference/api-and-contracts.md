@@ -1,568 +1,331 @@
-# Sentinel of Mnemosyne — API and Contracts Reference
+# Sentinel API and contracts reference
 
 **Type:** Reference (Diataxis)
-**Version:** 0.50
-**Date:** 2026-05-06
-**Scope:** Core system (Path B) — container specifications, module API contract, message envelopes, core endpoints, vault integration, Docker Compose structure, repository layout, key API formats.
+**Version audit:** Sentinel Core `v0.51.1`, Discord interface `v0.2.1`, Pathfinder module `v1.1.2`
+**Scope:** HTTP APIs, message envelopes, module registration, container contracts, deployment files, and route inventory.
 
-For design rationale and ADRs, see [`../explanation/architecture.md`](../explanation/architecture.md).
-For the full vault folder and file-format specification, see [`../reference/obsidian-vault.md`](../reference/obsidian-vault.md).
+For rationale, see [Architecture](../explanation/architecture.md). For vault paths, see [Obsidian Vault Layout](obsidian-vault.md). For feature coverage, see [Feature Reference](features.md).
 
 ---
 
-## 3. Container Specifications
+## Authentication
 
-### 3.1 Sentinel Core Container
+Every Sentinel Core endpoint except `GET /health` requires:
 
-**Language:** Python 3.12
-**Framework:** FastAPI
-**Base image:** `python:3.12-slim`
-
-**Responsibilities:**
-- Receive message envelopes from interface containers (`POST /message`)
-- Retrieve relevant context from Obsidian vault
-- Build prompt: system context + retrieved vault notes + user message
-- Call LiteLLMProvider directly for chat completions
-- Write session summary to Obsidian as a background task
-- Maintain module registry: accept `POST /modules/register` at startup from module containers
-- Proxy module requests: `POST /modules/{name}/{path}` → module container via httpx
-- Return response to calling interface
-
-**Environment variables:**
-```
-# Obsidian
-OBSIDIAN_API_URL=http://host.docker.internal:27123
-OBSIDIAN_API_KEY=<from obsidian plugin settings>
-
-# Security
-SENTINEL_API_KEY=<shared secret for interface auth>
-LOG_LEVEL=INFO
-
-# AI provider
-AI_PROVIDER=lmstudio          # lmstudio | claude | ollama | llamacpp
-AI_FALLBACK_PROVIDER=none     # claude | none
-
-# LM Studio (primary default)
-LMSTUDIO_BASE_URL=http://host.docker.internal:1234/v1
-MODEL_NAME=llama-3.2-8b-instruct
-
-# Claude / Anthropic (optional fallback)
-ANTHROPIC_API_KEY=
-CLAUDE_MODEL=claude-haiku-4-5
-
-# Ollama (stub — future)
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:14b
-
-# llama.cpp (stub — future)
-LLAMACPP_BASE_URL=http://localhost:8080
-LLAMACPP_MODEL=local-model
+```http
+X-Sentinel-Key: <contents of secrets/sentinel_api_key>
 ```
 
-**Exposed port:** `8000` (internal Docker network)
+The Discord interface and module containers read the shared key from Docker secrets and forward it when calling Sentinel Core. Sentinel Core returns `401` when the header is missing or mismatched.
 
 ---
 
-### 3.3 Interface Container (base spec)
+## Standard Message Envelope
 
-Each interface is its own container implementing this contract.
-
-**Responsibilities:**
-- Monitor the specific messaging channel (Discord, Messages, etc.)
-- Translate incoming messages to the standard Sentinel Message Envelope
-- HTTP POST the envelope to Sentinel Core at `http://sentinel-core:8000/message`
-- Receive the response and post it back to the originating channel
-
-**Required environment variables:**
-```
-SENTINEL_CORE_URL=http://sentinel-core:8000
-SENTINEL_API_KEY=<shared secret>
-```
-
----
-
-### 3.4 Module Containers (v0.50+)
-
-Each module (Pathfinder, Music, Finance, etc.) is a self-contained FastAPI container.
-
-**Responsibilities:**
-- Call `POST /modules/register` on sentinel-core at container startup
-- Expose the endpoints declared in its registration payload
-- Respond to proxied requests from sentinel-core
-
-**Environment variables (all modules):**
-```
-SENTINEL_CORE_URL=http://sentinel-core:8000
-SENTINEL_API_KEY=<shared secret>
-MODULE_NAME=<module-name>
-MODULE_BASE_URL=http://<module-service-name>:<port>
-```
-
----
-
-### 3.5 AI Provider Layer
-
-The AI Provider Layer lives entirely inside the Sentinel Core container. LiteLLM-direct is the primary and default path.
-
-#### AIProvider Protocol (`app/clients/base.py`)
-
-All providers implement:
-```python
-async def complete(messages: list[dict]) -> str
-```
-`messages` is an OpenAI-format chat array (`[{"role": "user", "content": "..."}]`).
-
-#### LiteLLMProvider (`app/clients/litellm_provider.py`)
-
-Wraps `litellm.acompletion()`. Supports LM Studio, Claude, Ollama, and llama.cpp.
-
-| Backend | `model_string` | Notes |
-|---------|---------------|-------|
-| LM Studio | `openai/<model_name>` | `api_base` = LM Studio `/v1` URL |
-| Claude | `claude-haiku-4-5` (etc.) | `api_key` = `ANTHROPIC_API_KEY` |
-| Ollama | `ollama/<model_name>` | `api_base` = `http://<host>:11434` |
-| llama.cpp | `openai/<model_name>` | `api_base` = llama.cpp `/v1` URL |
-
-Retry policy: 3 attempts, exponential backoff 1s→2s→4s on `RateLimitError`, `ServiceUnavailableError`, `ConnectError`, `TimeoutException`. Fatal errors (401, 422, 404) propagate immediately. Hard 30s per-call timeout.
-
-> **Supply chain note:** `litellm>=1.83.0` required — versions 1.82.7–1.82.8 were malicious (March 2026).
-
-#### ProviderRouter (`app/services/provider_router.py`)
-
-```
-ProviderRouter.complete(messages)
-  → primary.complete(messages)
-    on ConnectError / TimeoutException:
-      → fallback.complete(messages)     ← only if fallback configured
-        both fail → ProviderUnavailableError → HTTP 503
-    on any other exception:
-      → propagates immediately (no fallback attempt)
-```
-
-#### ModelRegistry (`app/services/model_registry.py`)
-
-Built at startup. Provides `dict[model_id, ModelInfo]` containing context window sizes used to enforce the token guard.
-
-1. Loads `models-seed.json` (always — offline baseline)
-2. Fetches live context window from active provider API (non-fatal on failure)
-3. Live data takes precedence over seed for overlapping model IDs
-4. Stored in `app.state.model_registry`
-
----
-
-## 4. Module API Contract
-
-Every module container must implement this contract to integrate with sentinel-core.
-
-### Registration (module → sentinel-core at startup)
-
-```
-POST /modules/register
-  Payload: {
-    "name": str,           # unique module identifier (e.g. "pathfinder")
-    "base_url": str,       # module's reachable URL (e.g. "http://pathfinder:8001")
-    "routes": [
-      { "path": str, "description": str }
-    ]
-  }
-  Response: { "status": "registered" }
-  Call: module container calls this at startup
-```
-
-### Module Proxy (interface/client → sentinel-core → module)
-
-```
-POST /modules/{name}/{path}
-  sentinel-core receives, looks up module.base_url from registry,
-  proxies request body via httpx to module.base_url/{path}
-
-  Returns 503 { "error": "module unavailable" } if module is unreachable
-  Returns 404 if module is not registered
-```
-
-**Module startup pattern:**
-```python
-# In module's FastAPI lifespan
-async with httpx.AsyncClient() as client:
-    await client.post(
-        f"{SENTINEL_CORE_URL}/modules/register",
-        json={
-            "name": MODULE_NAME,
-            "base_url": MODULE_BASE_URL,
-            "routes": [
-                {"path": "/npcs", "description": "NPC management"},
-                {"path": "/sessions", "description": "Session notes"},
-            ]
-        },
-        headers={"X-Sentinel-Key": SENTINEL_API_KEY},
-    )
-```
-
----
-
-## 5. Standard Message Envelope
-
-This is the contract all interface containers must implement.
-
-### Inbound (Interface → Core)
+Interfaces call `POST /message` with:
 
 ```json
 {
   "content": "the user's message text",
-  "user_id": "user-identifier-string",
+  "user_id": "stable-user-id",
   "source": "discord",
-  "channel_id": "channel-or-thread-identifier"
+  "channel_id": "channel-or-thread-id"
 }
 ```
 
-**Fields:**
-- `content` — (required) the raw text of the user's message
-- `user_id` — (required, default `"default"`) stable identifier for the user
-- `source` — (optional, default `null`) identifies which interface sent this
-- `channel_id` — (optional, default `null`) where to post the reply
+Fields:
 
-### Outbound (Core → Interface)
+| Field | Required | Notes |
+|---|---:|---|
+| `content` | yes | Raw user message |
+| `user_id` | yes | Stable user identifier; Discord uses the snowflake string |
+| `source` | no | Interface name such as `discord` |
+| `channel_id` | no | Interface-specific channel or thread id |
+
+Response:
 
 ```json
 {
-  "id": "uuid-v4",
-  "reply_to": "inbound-message-id",
-  "source": "sentinel-core",
-  "timestamp": "2026-04-20T12:00:01Z",
-  "content": "the AI response text",
-  "actions": [],
-  "metadata": {}
+  "content": "assistant response",
+  "model": "model-id"
 }
 ```
 
 ---
 
-## 6. Core API Endpoints
+## Sentinel Core Endpoints
 
-| Endpoint | Method | Auth | Purpose |
+Memtrace currently maps 44 HTTP endpoints across the repository, including Core and Pathfinder routes. Sentinel Core exposes the public gateway surface below.
+
+| Method | Path | Auth | Purpose |
 |---|---|---|---|
-| `/message` | POST | API key header | Receive a message envelope, return a response envelope |
-| `/health` | GET | None | Container health check |
-| `/status` | GET | API key header | System status — Obsidian reachable? LM Studio reachable? |
-| `/context/{user_id}` | GET | API key header | Retrieve recent context for a user (debugging) |
-| `/modules/register` | POST | API key header | Module self-registration at startup |
-| `/modules/{name}/{path}` | POST | API key header | Proxy request to registered module |
+| `GET` | `/health` | no | Container health and non-blocking runtime probes |
+| `POST` | `/message` | yes | Process a standard message envelope |
+| `GET` | `/status` | yes | Report runtime status for Obsidian and active AI provider |
+| `GET` | `/context/{user_id}` | yes | Debug recall context for a user |
+| `POST` | `/note/classify` | yes | Classify content and file, inbox, or drop it |
+| `GET` | `/inbox` | yes | List pending inbox entries with Discord-ready rendering |
+| `POST` | `/inbox/classify` | yes | File an inbox entry under a topic |
+| `POST` | `/inbox/discard` | yes | Remove an inbox entry without filing |
+| `POST` | `/vault/sweep/start` | yes | Admin-gated vault sweep start; supports dry-run and force reclassify |
+| `GET` | `/vault/sweep/status` | yes | Return current or last sweep status |
+| `POST` | `/modules/register` | yes | Module startup registration |
+| `GET` | `/modules` | yes | List registered modules |
+| `GET` | `/modules/{name}/{path:path}` | yes | Proxy a GET request to a registered module |
+| `POST` | `/modules/{name}/{path:path}` | yes | Proxy a POST request to a registered module |
 
-**`POST /message` flow:**
-1. Validate envelope structure and API key (`APIKeyMiddleware`)
-2. Retrieve user context from Obsidian: `/core/users/{user_id}.md` (graceful skip on failure)
-3. Retrieve last 3 hot-tier session summaries from Obsidian (graceful skip on failure)
-4. Build messages array: context injected as user/assistant pair + actual user message
-5. Truncate injected context to 25% of model's context window budget (prevents systematic 422s)
-6. Token guard — reject with HTTP 422 if total messages exceed context window
-7. Call `ProviderRouter.complete(messages)` via LiteLLM-direct:
-   - Tries primary provider (configured via `AI_PROVIDER`)
-   - On `ConnectError`/`TimeoutException` only: tries fallback (`AI_FALLBACK_PROVIDER`)
-   - Both fail → HTTP 503
-8. Write session note to Obsidian as background task: `ops/sessions/{YYYY-MM-DD}/{user_id}-{HH-MM-SS}.md`
-9. Return response envelope to caller
+### `POST /message` behaviour
+
+The message route:
+
+1. Validates the API key and envelope.
+2. Assembles recall context from persona/self context, recent sessions, and warm semantic recall.
+3. Applies prompt-injection filtering before provider calls.
+4. Enforces context-window limits through the model registry and token guard.
+5. Calls the configured LiteLLM provider path.
+6. Scans the output before returning.
+7. Schedules a session summary write.
+8. Schedules best-effort note filing for substantive chat content.
+
+### Note intake request formats
+
+`POST /note/classify`:
+
+```json
+{
+  "content": "note body",
+  "topic": "learning"
+}
+```
+
+`topic` is optional. Response action is one of `filed`, `inboxed`, or `dropped`.
+
+`POST /inbox/classify`:
+
+```json
+{
+  "entry_n": 1,
+  "topic": "reference"
+}
+```
+
+`POST /inbox/discard`:
+
+```json
+{
+  "entry_n": 1
+}
+```
+
+`POST /vault/sweep/start`:
+
+```json
+{
+  "user_id": "discord-user-id",
+  "force_reclassify": false,
+  "dry_run": true,
+  "source_folder": ""
+}
+```
+
+Live sweep requests fail closed unless the runtime can confirm both the embedding model and classifier model are ready.
 
 ---
 
-## 7. Obsidian Vault Integration
+## Module Registration Contract
 
-For plugin setup, see the [Installation Guide](../how-to/install.md).
+Every module container registers itself with Sentinel Core:
 
-### 7.2 Vault Folder Structure
-
-```
-mnemosyne/
-├── .obsidian/
-├── core/
-│   └── users/
-│       └── {user_id}.md
-├── ops/
-│   └── sessions/
-│       └── {YYYY-MM-DD}/
-│           └── {user_id}-{HH-MM-SS}.md
-├── inbox/
-│   └── imports/
-└── (module folders added in v0.50+: /pathfinder/, /music/, etc.)
+```http
+POST /modules/register
+X-Sentinel-Key: <shared key>
+Content-Type: application/json
 ```
 
-### 7.3 User Context File Format
-
-```markdown
----
-user_id: discord_123456789
-display_name: Tom
-source: discord
-last_seen: 2026-04-20T12:00:00Z
-tags: [user, active]
----
-
-# Tom
-
-## Preferences
-- Prefers concise responses
-
-## Context
-- Has a Mac Mini running LM Studio with Llama 3.2 70B
-
-## Recent Topics
-- [[sessions/2026-04-06/tom-120000]] — Discussed NPC Vareth's backstory
+```json
+{
+  "name": "pathfinder",
+  "base_url": "http://pf2e-module:8000",
+  "routes": [
+    {
+      "path": "npc/create",
+      "description": "Create NPC in Obsidian"
+    }
+  ]
+}
 ```
 
-### 7.4 Session Note Format
+Sentinel Core stores registrations in memory. Modules re-register on startup, and Pathfinder also sends a periodic registration heartbeat so a Sentinel Core restart self-heals.
 
-```markdown
----
-date: 2026-04-20
-user_id: discord_123456789
-source: discord
-channel_id: general
-tags: [session, core]
----
+Proxy path:
 
-# Session — 2026-04-20 12:00
-
-## Summary
-Brief AI-generated summary of what was discussed.
-
-## Key Points
-- Point 1
-
-## Follow-ups
-Any unresolved questions or things to remember next time.
-
-## Raw Exchange
-**User:** the full message text
-**Sentinel:** the full response text
+```text
+/modules/{name}/{path:path} -> {base_url}/{path}
 ```
+
+Proxy errors:
+
+| Condition | Status |
+|---|---:|
+| Module name is not registered | `404` |
+| Module transport error | `503` |
+| Module request timeout on POST | `504` |
 
 ---
 
-## 8. Docker Compose Structure
+## Pathfinder Module Endpoints
 
-### 8.1 Base `docker-compose.yml` (Core only)
+Direct module routes are served inside the `pf2e-module` container. In normal operation, callers use Sentinel Core's proxy:
 
-```yaml
-networks:
-  sentinel-net:
-    driver: bridge
-
-services:
-  sentinel-core:
-    build: ./sentinel-core
-    container_name: sentinel-core
-    restart: unless-stopped
-    networks:
-      - sentinel-net
-    ports:
-      - "8000:8000"
-    environment:
-      - OBSIDIAN_API_URL=${OBSIDIAN_API_URL}
-      - OBSIDIAN_API_KEY=${OBSIDIAN_API_KEY}
-      - SENTINEL_API_KEY=${SENTINEL_API_KEY}
-      - AI_PROVIDER=${AI_PROVIDER:-lmstudio}
-      - LMSTUDIO_BASE_URL=${LMSTUDIO_BASE_URL}
-      - MODEL_NAME=${MODEL_NAME}
-      - LOG_LEVEL=INFO
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+```text
+POST /modules/pathfinder/npc/create
+GET  /modules/pathfinder/npcs/
 ```
 
-### 8.2 Example Interface Override `interfaces/discord/docker-compose.override.yml`
+Pathfinder registers these routes:
 
-```yaml
-services:
-  discord-interface:
-    build: ./interfaces/discord
-    container_name: sentinel-discord
-    restart: unless-stopped
-    networks:
-      - sentinel-net
-    environment:
-      - SENTINEL_CORE_URL=http://sentinel-core:8000
-      - SENTINEL_API_KEY=${SENTINEL_API_KEY}
-      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
-      - DISCORD_ALLOWED_CHANNELS=${DISCORD_ALLOWED_CHANNELS}
-    depends_on:
-      - sentinel-core
-```
+| Method | Module path | Purpose |
+|---|---|---|
+| `GET` | `/healthz` | Module health check |
+| `POST` | `/npc/create` | Create an NPC profile |
+| `POST` | `/npc/update` | Update NPC fields |
+| `POST` | `/npc/show` | Show NPC summary data |
+| `POST` | `/npc/relate` | Add NPC relationship |
+| `POST` | `/npc/import` | Bulk import NPCs from Foundry JSON |
+| `POST` | `/npc/export-foundry` | Export NPC as Foundry actor JSON |
+| `POST` | `/npc/token` | Generate a token image prompt |
+| `POST` | `/npc/token-image` | Store an NPC token image |
+| `POST` | `/npc/stat` | Return structured stat block data |
+| `POST` | `/npc/pdf` | Generate a PDF stat card |
+| `POST` | `/npc/say` | Generate in-character NPC dialogue |
+| `POST` | `/harvest` | Monster harvest report |
+| `POST` | `/rule/query` | PF2e rules query |
+| `POST` | `/rule/show` | Show cached rulings under a topic |
+| `POST` | `/rule/history` | Recent cached rulings |
+| `POST` | `/rule/list` | List cached rule topics |
+| `POST` | `/session` | Session verb router for `start`, `show`, and `end` |
+| `POST` | `/foundry/event` | Receive Foundry VTT events |
+| `POST` | `/foundry/messages/import` | Import Foundry chat logs |
+| `GET` | `/npcs/` | List Sentinel NPCs |
+| `GET` | `/npcs/{slug}/foundry-actor` | Return PF2e actor JSON for Foundry |
+| `POST` | `/ingest` | Bulk import a PF2e archive folder |
+| `POST` | `/player/onboard` | Create a per-player profile |
+| `POST` | `/player/note` | Append a player note |
+| `POST` | `/player/ask` | Store a player question |
+| `POST` | `/player/npc` | Record player-specific NPC knowledge |
+| `POST` | `/player/todo` | Append a player todo |
+| `POST` | `/player/recall` | Deterministic player recall |
+| `POST` | `/player/canonize` | Record a player-facing ruling outcome |
+| `POST` | `/player/style` | List or set player style |
+| `GET` | `/player/state` | Read player onboarding/style state |
 
-### 8.3 Example Module `modules/pathfinder/docker-compose.yml`
+The Discord command reference maps these routes to `:pf` commands.
 
-```yaml
-services:
-  pathfinder:
-    build: ./modules/pathfinder
-    container_name: sentinel-pathfinder
-    restart: unless-stopped
-    networks:
-      - sentinel-net
-    environment:
-      - SENTINEL_CORE_URL=http://sentinel-core:8000
-      - SENTINEL_API_KEY=${SENTINEL_API_KEY}
-      - MODULE_NAME=pathfinder
-      - MODULE_BASE_URL=http://pathfinder:8001
-    depends_on:
-      - sentinel-core
-```
+---
 
-### 8.4 Environment File `.env`
+## Container Contracts
+
+### Sentinel Core
+
+| Item | Value |
+|---|---|
+| Service | `sentinel-core` |
+| Port | `8000` |
+| Framework | FastAPI, Python 3.12 |
+| Image | `ghcr.io/the-artificer-of-ciphers-llc/sentinel-core:latest` for deploy sample |
+| Health | `GET /health` |
+
+Required secret files:
+
+- `secrets/sentinel_api_key`
+- `secrets/obsidian_api_key`
+
+Optional secret files:
+
+- `secrets/lmstudio_api_key`
+- `secrets/anthropic_api_key`
+- Alpaca keys for planned trading module work
+
+### Discord Interface
+
+| Item | Value |
+|---|---|
+| Source service | `discord` |
+| Deploy sample service | `discord-bot` |
+| Image | `ghcr.io/the-artificer-of-ciphers-llc/sentinel-discord:latest` |
+| Required secrets | `discord_bot_token`, `sentinel_api_key` |
+| Main command | `/sen` |
+
+### Pathfinder Module
+
+| Item | Value |
+|---|---|
+| Service | `pf2e-module` |
+| Registry name | `pathfinder` |
+| Compose profile | `pf2e` |
+| Internal port | `8000` |
+| Image | `ghcr.io/the-artificer-of-ciphers-llc/sentinel-pathfinder:latest` |
+| Health | `GET /healthz` |
+| Vault mount | Host `OBSIDIAN_VAULT_PATH` mounted at `/vault` |
+
+The vault mount is read-write for import flows that need filesystem locks, marker renames, or co-located dedupe state.
+
+---
+
+## Environment Variables
+
+Non-secret configuration belongs in `.env`; secrets belong in `secrets/`.
+
+| Variable | Used by | Purpose |
+|---|---|---|
+| `LMSTUDIO_BASE_URL` | Core | LM Studio `/v1` API base URL |
+| `MODEL_NAME` | Core | Core chat model without provider prefix |
+| `EMBEDDING_MODEL` | Core | Embedding model for recall/sweep |
+| `AI_PROVIDER` | Core | `lmstudio`, `claude`, `ollama`, or `llamacpp` |
+| `AI_FALLBACK_PROVIDER` | Core | `claude` or `none` |
+| `CLAUDE_MODEL` | Core | Claude model id |
+| `OBSIDIAN_API_URL` | Core | Obsidian Local REST API URL |
+| `OBSIDIAN_BASE_URL` | Pathfinder | Obsidian Local REST API URL |
+| `OBSIDIAN_API_KEY` | Pathfinder | Optional direct Obsidian REST bearer token |
+| `OBSIDIAN_VAULT_PATH` | Pathfinder | Host path mounted as `/vault` |
+| `LITELLM_MODEL` | Pathfinder | Module model with LiteLLM provider prefix |
+| `LITELLM_API_BASE` | Pathfinder | OpenAI-compatible model server URL |
+| `RULES_EMBEDDING_MODEL` | Pathfinder | Embedding model for PF2e rules retrieval |
+| `SESSION_AUTO_RECAP` | Pathfinder | Auto-recap setting for session end |
+| `SESSION_TZ` | Pathfinder | Timezone for session notes |
+| `SESSION_RECAP_MODEL` | Pathfinder | Optional recap model override |
+| `FOUNDRY_NARRATION_MODEL` | Pathfinder | Optional Foundry narration model override |
+| `DISCORD_BOT_INTERNAL_URL` | Pathfinder | Internal Discord notification service URL |
+| `DISCORD_ALLOWED_CHANNELS` | Discord | Comma-separated channel allowlist |
+| `DISCORD_NOTIFY_CHANNEL_ID` | Discord | Foundry notification channel override |
+| `SENTINEL_ADMIN_USER_IDS` | Core, Discord | Admin allowlist for destructive operations |
+| `CORS_ALLOW_ORIGINS` | Core | Explicit browser origins |
+| `CORS_ALLOW_ORIGIN_REGEX` | Core | Regex browser origins, typically Forge |
+| `LOG_LEVEL` | All Python services | Logging verbosity |
+
+---
+
+## Compose Files
+
+| File | Purpose |
+|---|---|
+| `docker-compose.yml` | Source-checkout stack using Compose `include` |
+| `sentinel-core/compose.yml` | Core service |
+| `interfaces/discord/compose.yml` | Discord interface service |
+| `modules/pathfinder/compose.yml` | Pathfinder service with `pf2e` profile |
+| `docs/deploy/docker-compose.ghcr.yml` | Pre-built image deployment sample |
+| `docs/deploy/.env.sample` | Pre-built deployment environment template |
+
+Source-checkout wrapper:
 
 ```bash
-# Sentinel Core — AI provider
-AI_PROVIDER=lmstudio          # lmstudio | claude | ollama | llamacpp
-AI_FALLBACK_PROVIDER=none
-MODEL_NAME=llama-3.2-8b-instruct
-LMSTUDIO_BASE_URL=http://host.docker.internal:1234/v1
-
-# Claude (required if AI_PROVIDER=claude or AI_FALLBACK_PROVIDER=claude)
-ANTHROPIC_API_KEY=
-CLAUDE_MODEL=claude-haiku-4-5
-
-# Obsidian
-OBSIDIAN_API_URL=http://host.docker.internal:27123
-OBSIDIAN_API_KEY=your-obsidian-api-key-here
-
-# Security
-SENTINEL_API_KEY=change-this-to-a-random-string
-
-# Logging
-LOG_LEVEL=INFO
-
-# Discord (only needed if using discord interface)
-DISCORD_BOT_TOKEN=
-DISCORD_ALLOWED_CHANNELS=
+./sentinel.sh up -d
+./sentinel.sh --discord --pf2e up -d
+./sentinel.sh down
 ```
 
-### 8.5 Wrapper Script `sentinel.sh`
+Pre-built image deployment:
 
 ```bash
-#!/bin/bash
-# Uses Docker Compose profiles + include directive (NOT -f stacking).
-# Profiles are declared in each service's compose.yml via `profiles: [name]`.
-PROFILES=()
-ARGS=()
-
-for arg in "$@"; do
-  case "$arg" in
-    --discord)    PROFILES+=("discord") ;;
-    --pf2e)       PROFILES+=("pf2e") ;;
-    --music)      PROFILES+=("music") ;;
-    --finance)    PROFILES+=("finance") ;;
-    *)            ARGS+=("$arg") ;;
-  esac
-done
-
-PROFILE_FLAGS=()
-for p in "${PROFILES[@]}"; do
-  PROFILE_FLAGS+=("--profile" "$p")
-done
-
-docker compose "${PROFILE_FLAGS[@]}" "${ARGS[@]}"
-
-# Usage:
-# ./sentinel.sh --discord up -d
-# ./sentinel.sh --discord --pf2e up -d
-# ./sentinel.sh down
-```
-
----
-
-## 9. Repository Structure
-
-```
-sentinel-of-mnemosyne/
-├── docker-compose.yml              ← base compose (core only)
-├── .env.example                    ← template, never commit .env
-├── sentinel.sh                     ← convenience wrapper script
-│
-├── sentinel-core/                  ← Python/FastAPI core container
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   ├── models-seed.json
-│   └── app/
-│       ├── main.py                 ← FastAPI app, lifespan, APIKeyMiddleware
-│       ├── config.py               ← pydantic-settings Settings class
-│       ├── models.py               ← MessageEnvelope / ResponseEnvelope
-│       ├── clients/
-│       │   ├── base.py             ← AIProvider Protocol
-│       │   ├── litellm_provider.py ← LiteLLM wrapper (LM Studio, Claude)
-│       │   ├── ollama_provider.py  ← Ollama stub (future)
-│       │   ├── llamacpp_provider.py← llama.cpp stub (future)
-│       │   └── obsidian.py         ← Obsidian Local REST API client
-│       ├── routes/
-│       │   ├── message.py          ← POST /message handler
-│       │   └── modules.py          ← POST /modules/register, POST /modules/{name}/{path}
-│       └── services/
-│           ├── provider_router.py  ← ProviderRouter + ProviderUnavailableError
-│           ├── model_registry.py   ← ModelRegistry (live fetch + seed fallback)
-│           ├── module_registry.py  ← ModuleRegistry (in-memory, populated at runtime)
-│           └── token_guard.py      ← context-window token limit enforcement
-│
-├── interfaces/
-│   └── discord/
-│       ├── Dockerfile
-│       ├── docker-compose.override.yml
-│       ├── requirements.txt
-│       └── bot.py
-│
-├── modules/                        ← (populated in v0.50+)
-│   └── .gitkeep
-│
-└── docs/
-    ├── PRD-Sentinel-of-Mnemosyne.md
-    ├── explanation/architecture.md ← architecture reference
-    └── MODULE-SPEC.md              ← module authoring guide (post-v0.4)
-```
-
----
-
-## 12. Key API Formats
-
-### Chat Completion Request (LiteLLM → LM Studio)
-```bash
-curl http://[mac-mini-ip]:1234/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "llama-3.2-8b-instruct",
-    "messages": [
-      {"role": "system", "content": "You are the Sentinel of Mnemosyne."},
-      {"role": "user", "content": "Hello, what do you remember about my last session?"}
-    ],
-    "temperature": 0.7,
-    "stream": false
-  }'
-```
-
-### Module Registration
-```bash
-curl -X POST http://sentinel-core:8000/modules/register \
-  -H "X-Sentinel-Key: ${SENTINEL_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "pathfinder",
-    "base_url": "http://pathfinder:8001",
-    "routes": [
-      {"path": "/npcs", "description": "NPC management"},
-      {"path": "/sessions/capture", "description": "Session note capture"},
-      {"path": "/dialogue/generate", "description": "In-character dialogue generation"}
-    ]
-  }'
-```
-
-### Obsidian Local REST API — Write a Note
-```bash
-curl -X PUT https://localhost:27124/vault/ops/sessions/2026-04-20/test.md \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -H "Content-Type: text/markdown" \
-  --insecure \
-  -d '---
-date: 2026-04-20
-tags: [session, test]
----
-
-# Test Session
-This is a test note written by the Sentinel Core.'
+docker compose -f docker-compose.ghcr.yml up -d
 ```

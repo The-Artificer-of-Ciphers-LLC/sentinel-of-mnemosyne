@@ -18,7 +18,7 @@ A self-hosted, containerized AI assistant platform built for personal use. The S
     | LiteLLM       | httpx proxy       | REST API
     v               v                   v
 [ AI Providers ]  [ Module Containers ] [ Obsidian Local REST API ]
-  LM Studio         (v0.50: Pathfinder,   Mnemosyne vault
+  LM Studio         (v1.1.2: Pathfinder,  Mnemosyne vault
   Claude API         Music/Finance next)
   Ollama (future)
 
@@ -96,6 +96,8 @@ Edit the file in Obsidian to change voice; `sentinel-core` picks up the change o
 ## Quick Start
 
 The stack runs entirely in Docker Compose — pull the sample files, populate your secrets, and `docker compose up -d`. For the full walkthrough including environment variables, secret file setup, and validation steps, see [docs/how-to/install.md](docs/how-to/install.md).
+
+For the complete shipped capability list, see [docs/reference/features.md](docs/reference/features.md).
 
 ---
 
@@ -235,6 +237,7 @@ Start here: [Documentation hub](docs/index.md)
 
 - [Documentation hub](docs/index.md) — Diataxis-organised entry point for all docs
 - [Installation Guide](docs/how-to/install.md) — operator setup and validation
+- [Feature Reference](docs/reference/features.md) — current shipped and planned capabilities
 - [Discord Commands](docs/reference/discord-commands.md) — every `/sen` command with examples
 - [Obsidian Vault Layout](docs/reference/obsidian-vault.md) — vault structure and conventions
 - [Architecture](docs/explanation/architecture.md) — technical decisions, API specs, Docker layout

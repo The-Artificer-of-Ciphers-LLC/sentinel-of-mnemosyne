@@ -42,7 +42,7 @@ your Obsidian vault.
 # Verify the module registered with sentinel-core:
 curl -s -H "X-Sentinel-Key: $(cat secrets/sentinel_api_key)" \
      http://localhost:8000/modules | jq '.[0].routes | length'
-# → 29 (as of v0.5)
+# → 29 (as of Pathfinder v1.1.2)
 
 # In Discord, the bot now responds to :pf <noun> <verb> commands.
 # Onboard yourself for per-player memory:
@@ -255,10 +255,9 @@ The module's contract with the rest of Sentinel:
 
 ## Roadmap
 
-- **Phase 38** (queued) — Multi-step Discord onboarding dialog. Replaces
-  the pipe-separated one-shot syntax for `:pf player start` with a
-  stateful conversational flow. Pipe-args remain supported as a power-user
-  shortcut. See `.planning/ROADMAP.md` Phase 38.
+- **Phase 38** (shipped) — Multi-step Discord onboarding dialog for
+  `:pf player start`, with vault-backed drafts that survive bot restarts.
+  Pipe-separated one-shot syntax remains supported as a power-user shortcut.
 - Future PF2E milestones live in `docs/plans/PF2E-Future-Roadmap-Prioritized.md`.
 
 ## See Also
