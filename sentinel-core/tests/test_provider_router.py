@@ -23,26 +23,31 @@ def fallback():
 
 async def test_returns_primary_response_on_success(primary, fallback):
     router = ProviderRouter(primary, fallback)
-    result = await router.complete([{"role": "user", "content": "hi"}])
+    messages = [{"role": "user", "content": "hi"}]
+    result = await router.complete(messages, stop=["END"], temperature=0.2)
     assert result == "primary response"
-    primary.complete.assert_called_once()
+    primary.complete.assert_awaited_once_with(messages, stop=["END"], temperature=0.2)
     fallback.complete.assert_not_called()
 
 
 async def test_falls_back_on_connect_error(primary, fallback):
     primary.complete.side_effect = httpx.ConnectError("refused")
     router = ProviderRouter(primary, fallback)
-    result = await router.complete([{"role": "user", "content": "hi"}])
+    messages = [{"role": "user", "content": "hi"}]
+    result = await router.complete(messages, stop=["END"], temperature=0.4)
     assert result == "fallback response"
-    fallback.complete.assert_called_once()
+    primary.complete.assert_awaited_once_with(messages, stop=["END"], temperature=0.4)
+    fallback.complete.assert_awaited_once_with(messages, temperature=0.4)
 
 
 async def test_falls_back_on_timeout(primary, fallback):
     primary.complete.side_effect = httpx.TimeoutException("timeout")
     router = ProviderRouter(primary, fallback)
-    result = await router.complete([{"role": "user", "content": "hi"}])
+    messages = [{"role": "user", "content": "hi"}]
+    result = await router.complete(messages, stop=["END"], temperature=0.7)
     assert result == "fallback response"
-    fallback.complete.assert_called_once()
+    primary.complete.assert_awaited_once_with(messages, stop=["END"], temperature=0.7)
+    fallback.complete.assert_awaited_once_with(messages, temperature=0.7)
 
 
 async def test_no_fallback_on_rate_limit_error(primary, fallback):
@@ -51,7 +56,7 @@ async def test_no_fallback_on_rate_limit_error(primary, fallback):
     )
     router = ProviderRouter(primary, fallback)
     with pytest.raises(litellm.RateLimitError):
-        await router.complete([{"role": "user", "content": "hi"}])
+        await router.complete([{"role": "user", "content": "hi"}], stop=["END"])
     fallback.complete.assert_not_called()
 
 

@@ -31,11 +31,15 @@ Dry-run path produces an identical metric shape but performs zero writes
 """
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any, Callable
 
+from app.foundry_import_state_ledger import (
+    load_foundry_import_state,
+    load_projection_state_dict,
+    save_projection_state,
+)
 from app.foundry_projection_planner import (
     ProjectionPlan,
     ProjectionState,
@@ -62,28 +66,7 @@ def _load_projection_state(path: Path) -> dict[str, set[str]]:
     Missing file or malformed JSON yields all-empty sets. Tolerant of legacy
     state files that contain only ``imported_keys``.
     """
-    out: dict[str, set[str]] = {
-        "imported_keys": set(),
-        "player_projection_keys": set(),
-        "npc_projection_keys": set(),
-    }
-    if not path.exists():
-        return out
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return out
-    if not isinstance(data, dict):
-        return out
-    for key in (
-        "imported_keys",
-        "player_projection_keys",
-        "npc_projection_keys",
-    ):
-        val = data.get(key)
-        if isinstance(val, list):
-            out[key] = {str(k) for k in val}
-    return out
+    return load_projection_state_dict(path)
 
 
 def _save_projection_state(
@@ -94,12 +77,12 @@ def _save_projection_state(
     npc_keys: set[str],
 ) -> None:
     """Atomically write projection state to disk preserving all three arrays."""
-    payload = {
-        "imported_keys": sorted(imported_keys),
-        "player_projection_keys": sorted(player_keys),
-        "npc_projection_keys": sorted(npc_keys),
-    }
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    save_projection_state(
+        path,
+        imported_keys=imported_keys,
+        player_keys=player_keys,
+        npc_keys=npc_keys,
+    )
 
 
 # Success statuses returned by append_npc_history_row that represent a real write.
@@ -192,11 +175,11 @@ async def project_foundry_chat_memory(
       dict with keys: player_updates, npc_updates, player_deduped, npc_deduped,
       unmatched_speakers, dry_run.
     """
-    state = _load_projection_state(dedupe_store_path)
+    state = load_foundry_import_state(dedupe_store_path)
     projection_state = ProjectionState(
-        imported_keys=state["imported_keys"],
-        player_projection_keys=state["player_projection_keys"],
-        npc_projection_keys=state["npc_projection_keys"],
+        imported_keys=state.imported_keys,
+        player_projection_keys=state.player_projection_keys,
+        npc_projection_keys=state.npc_projection_keys,
     )
     plan = await build_foundry_projection_plan(
         records=records,

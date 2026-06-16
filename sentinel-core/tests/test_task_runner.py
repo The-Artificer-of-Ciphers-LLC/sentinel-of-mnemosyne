@@ -5,12 +5,13 @@ from app.services.task_runner import AsyncioTaskRunner
 
 def test_asyncio_task_runner_uses_create_task(monkeypatch):
     called = {"count": 0}
+    task = object()
 
     def _fake_create_task(coro):
         called["count"] += 1
         # close coroutine to avoid warnings in test
         coro.close()
-        return object()
+        return task
 
     monkeypatch.setattr(asyncio, "create_task", _fake_create_task)
 
@@ -18,6 +19,7 @@ def test_asyncio_task_runner_uses_create_task(monkeypatch):
         return None
 
     runner = AsyncioTaskRunner()
-    runner.schedule(_work())
+    scheduled = runner.schedule(_work())
 
     assert called["count"] == 1
+    assert scheduled is task

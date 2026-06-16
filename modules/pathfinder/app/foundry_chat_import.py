@@ -6,7 +6,14 @@ import re
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Callable, Protocol
+
+from app.foundry_import_state_ledger import (
+    load_imported_keys,
+    load_projection_state_dict,
+    save_imported_keys,
+    state_path_for_inbox,
+)
 
 try:
     import plyvel  # type: ignore
@@ -21,7 +28,6 @@ class _ObsidianLike(Protocol):
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
 _IMPORTED_SUFFIX_RE = re.compile(r"_imported(?:_\d+)?$")
-_DEDUPE_STATE_FILE = ".foundry_chat_import_state.json"
 
 
 def _strip_html(text: str) -> str:
@@ -182,21 +188,11 @@ def _mark_leveldb_dir_imported(inbox: Path) -> list[str]:
 
 
 def _dedupe_state_path(inbox: Path) -> Path:
-    return inbox / _DEDUPE_STATE_FILE
+    return state_path_for_inbox(inbox)
 
 
 def _load_dedupe_keys(inbox: Path) -> set[str]:
-    path = _dedupe_state_path(inbox)
-    if not path.exists():
-        return set()
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return set()
-    keys = data.get("imported_keys") if isinstance(data, dict) else None
-    if not isinstance(keys, list):
-        return set()
-    return {str(k) for k in keys}
+    return load_imported_keys(inbox)
 
 
 def _load_projection_state(path: Path) -> dict[str, set[str]]:
@@ -214,67 +210,16 @@ def _load_projection_state(path: Path) -> dict[str, set[str]]:
     Pre-Phase-37 state files (only `imported_keys`) load cleanly with empty
     projection sets — no exceptions, no KeyError.
     """
-    out: dict[str, set[str]] = {
-        "imported_keys": set(),
-        "player_projection_keys": set(),
-        "npc_projection_keys": set(),
-    }
-    if not path.exists():
-        return out
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return out
-    if not isinstance(data, dict):
-        return out
-    for key in (
-        "imported_keys",
-        "player_projection_keys",
-        "npc_projection_keys",
-    ):
-        val = data.get(key)
-        if isinstance(val, list):
-            out[key] = {str(k) for k in val}
-    return out
-
-
-def _save_state(
-    path: Path,
-    *,
-    imported_keys: set[str],
-    player_keys: set[str] | None = None,
-    npc_keys: set[str] | None = None,
-) -> None:
-    """Write state file. If projection keys are None, preserve legacy single-array shape.
-
-    When player_keys/npc_keys are provided, all three arrays are emitted. This
-    matches the foundry_memory_projection write shape exactly.
-    """
-    if player_keys is None and npc_keys is None:
-        payload: dict[str, Any] = {"imported_keys": sorted(imported_keys)}
-    else:
-        payload = {
-            "imported_keys": sorted(imported_keys),
-            "player_projection_keys": sorted(player_keys or set()),
-            "npc_projection_keys": sorted(npc_keys or set()),
-        }
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return load_projection_state_dict(path)
 
 
 def _save_dedupe_keys(inbox: Path, keys: set[str]) -> None:
-    """Legacy single-array writer — preserved as a thin wrapper over _save_state.
+    """Legacy single-array writer — preserved as a thin wrapper over the ledger.
 
     When projection state is also tracked on disk, the importer must NOT trample
     the projection arrays. Read-then-merge keeps all three buckets intact.
     """
-    path = _dedupe_state_path(inbox)
-    existing = _load_projection_state(path)
-    player = existing["player_projection_keys"]
-    npc = existing["npc_projection_keys"]
-    if player or npc:
-        _save_state(path, imported_keys=keys, player_keys=player, npc_keys=npc)
-    else:
-        _save_state(path, imported_keys=keys)
+    save_imported_keys(inbox, keys)
 
 
 def _message_key(record: dict) -> str:

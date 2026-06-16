@@ -27,6 +27,12 @@ async def test_send_message_success(client):
     result = await client.send_message("user1", "hello", mock_http)
     assert result == "AI reply"
     mock_http.post.assert_called_once()
+    assert mock_http.post.call_args.args == ("http://sentinel-core:8000/message",)
+    assert mock_http.post.call_args.kwargs == {
+        "json": {"content": "hello", "user_id": "user1"},
+        "headers": {"X-Sentinel-Key": "test-secret-key"},
+        "timeout": 10.0,
+    }
 
 
 async def test_send_message_timeout(client):
@@ -118,8 +124,14 @@ async def test_post_to_module_success(client):
     result = await client.post_to_module("modules/pathfinder/npc/create", {"name": "Varek"}, mock_http)
     assert result == {"name": "Varek", "slug": "varek", "path": "mnemosyne/pf2e/npcs/varek.md"}
     mock_http.post.assert_called_once()
-    call_url = mock_http.post.call_args[0][0]
-    assert call_url.endswith("modules/pathfinder/npc/create")
+    assert mock_http.post.call_args.args == (
+        "http://sentinel-core:8000/modules/pathfinder/npc/create",
+    )
+    assert mock_http.post.call_args.kwargs == {
+        "json": {"name": "Varek"},
+        "headers": {"X-Sentinel-Key": "test-secret-key"},
+        "timeout": 10.0,
+    }
 
 
 async def test_post_to_module_strips_leading_slash(client):

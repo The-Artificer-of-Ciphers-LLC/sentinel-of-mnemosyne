@@ -32,6 +32,8 @@ async def send_rendered_response(send_fn, response: "str | dict") -> None:
         if rtype == "embed":
             await send_fn(content=response.get("content", ""), embed=response["embed"])
             return
+        if rtype == "suppressed":
+            return
         await send_fn(response.get("content", str(response)))
         return
 

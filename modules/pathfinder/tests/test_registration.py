@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 async def test_registration_succeeds_on_first_attempt():
     """Registration completes without retry when Core responds 200 on first attempt."""
-    from app.main import _register_with_retry
+    from app.main import REGISTRATION_PAYLOAD, _register_with_retry
 
     mock_resp = MagicMock()
     mock_resp.raise_for_status = MagicMock()  # does not raise
@@ -22,6 +22,14 @@ async def test_registration_succeeds_on_first_attempt():
         await _register_with_retry(mock_client)
 
     mock_client.post.assert_called_once()
+    assert mock_client.post.call_args.args == (
+        "http://sentinel-core:8000/modules/register",
+    )
+    assert mock_client.post.call_args.kwargs["json"] == REGISTRATION_PAYLOAD
+    assert mock_client.post.call_args.kwargs["headers"] == {
+        "X-Sentinel-Key": "test-key-for-pytest"
+    }
+    assert mock_client.post.call_args.kwargs["timeout"] == 10.0
     mock_sleep.assert_not_called()
 
 
@@ -45,7 +53,7 @@ async def test_registration_retries_on_failure():
         await _register_with_retry(mock_client)
 
     assert mock_client.post.call_count == 3
-    assert mock_sleep.call_count == 2
+    assert [call.args for call in mock_sleep.await_args_list] == [(1,), (2,)]
 
 
 async def test_registration_exits_after_all_failures():
@@ -61,6 +69,9 @@ async def test_registration_exits_after_all_failures():
 
     assert exc_info.value.code == 1
     assert mock_client.post.call_count == 5
+    assert [call.args[0] for call in mock_client.post.await_args_list] == [
+        "http://sentinel-core:8000/modules/register",
+    ] * 5
 
 
 async def test_registration_payload_correct(monkeypatch):
