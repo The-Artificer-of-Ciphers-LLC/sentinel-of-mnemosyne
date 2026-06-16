@@ -47,7 +47,7 @@ The Sentinel of Mnemosyne is a self-hosted, containerised AI assistant platform.
               └──────────────────────────┘
 ```
 
-**v0.50 release snapshot:**
+**v0.51.1 release snapshot:**
 - Core route seam uses `RouteContext` (`app.state.route_ctx`) with strict access.
 - Startup wiring/policy centralised in `initialize_startup()`.
 - Runtime probe, health formatting, message request mapping, module gateway/registry, and sweep orchestration are extracted as deep modules behind thin route adapters.

@@ -1,6 +1,6 @@
 # Set up Sentinel Connector for the first time
 
-> **Version audit:** Reviewed for Sentinel Core v0.50 and Pathfinder module v1.1 (2026-05-08).
+> **Version audit:** Reviewed for Sentinel Core v0.51.1 and Pathfinder module v1.1.2 (2026-06-16).
 
 By the end of this tutorial you will have a working **Sentinel Connector** that watches every attack roll, save, and skill check in your Pathfinder 2e game and posts a Discord embed to your DM channel within a second or two of each roll. You will finish in webhook-only mode — roll embeds appear without AI narration — which is the correct starting point and works from anywhere, including Forge-hosted games.
 
