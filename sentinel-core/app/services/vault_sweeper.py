@@ -28,6 +28,13 @@ from app.services.embedding_sidecar_index import (
     decode_index_body as _decode_index_body,
     encode_index_body as _encode_index_body,
 )
+from app.services.vault_sweep_plan import (
+    is_in_topic_dir,
+    plan_duplicate_trash,
+    plan_noise_trash,
+    plan_topic_move,
+    propose_topic_move,
+)
 from app.time_utils import _iso_utc, _today_str
 from sentinel_shared.embedding_codec import decode_embedding, encode_embedding
 from sentinel_shared.similarity import cosine_similarity, find_dup_clusters
@@ -50,8 +57,10 @@ __all__ = [
     "_encode_index_body",
     "cosine_similarity",
     "find_dup_clusters",
+    "is_in_topic_dir",
     "split_frontmatter",
     "join_frontmatter",
+    "propose_topic_move",
 ]
 
 logger = logging.getLogger(__name__)
@@ -178,44 +187,8 @@ async def walk_vault(client, root: str = "") -> AsyncIterator[str]:
 # stays here; I/O goes through the injected ``vault``.
 
 
-# --- Topic-folder move (misplaced note → correct topic dir) ---
-
-
-def is_in_topic_dir(path: str, topic_dir: str) -> bool:
-    """True when ``path`` is already within ``topic_dir``.
-
-    Handles the journal nested-date case: ``journal/2026-04-27/foo.md`` is
-    considered in-dir for any ``journal/...`` topic_dir, not just exact
-    same-day match. The sweeper does not relocate journal entries between
-    days — only flags a wrong-topic placement.
-    """
-    if not topic_dir:
-        return False
-    # Same dir or any subdirectory of topic_dir's root family.
-    # For journal/2026-04-27, the family root is "journal/"; so journal/.../
-    # is considered "in topic_dir family".
-    family_root = topic_dir.split("/", 1)[0] + "/"
-    return path.startswith(family_root)
-
-
-def propose_topic_move(
-    src_path: str, topic: str, *, today: str | None = None
-) -> str | None:
-    """Return the destination path a topic-move WOULD use, or None if no
-    move is needed (already in topic family) or topic has no canonical dir.
-
-    Used by ``run_sweep(dry_run=True)`` to populate ``proposed_moves``
-    without touching the vault.
-    """
-    from app.services.note_classifier import topic_dir_for
-
-    topic_dir = topic_dir_for(topic, today=today)
-    if not topic_dir:
-        return None
-    if is_in_topic_dir(src_path, topic_dir):
-        return None
-    filename = src_path.rsplit("/", 1)[-1]
-    return f"{topic_dir}/{filename}"
+# Topic-folder move planning lives in app.services.vault_sweep_plan and is
+# imported/re-exported here for backwards compatibility with existing callers.
 
 
 # --- Lockfile (migrated to ObsidianVault.acquire_sweep_lock / release_sweep_lock) ---
@@ -481,12 +454,9 @@ async def run_sweep(
                 if getattr(result, "topic", None) == "noise":
                     if dry_run:
                         today = _today_str()
-                        report.proposed_moves.append({
-                            "kind": "trash",
-                            "src": path,
-                            "dst": f"_trash/{today}/{path.rsplit('/', 1)[-1]}",
-                            "reason": "cheap-filter:noise",
-                        })
+                        report.proposed_moves.append(
+                            plan_noise_trash(path, today=today).asdict()
+                        )
                         report.noise_moved += 1
                     else:
                         # MANDATORY per-move safety check (re-evaluated here, not once per run)
@@ -509,17 +479,19 @@ async def run_sweep(
                 # directory and the current path isn't already in that family,
                 # move (or propose to move) the note to {topic_dir}/{filename}.
                 topic = getattr(result, "topic", None)
-                proposed_dst = (
-                    propose_topic_move(path, topic) if topic else None
+                topic_plan = (
+                    plan_topic_move(
+                        path,
+                        topic,
+                        confidence=float(result.confidence),
+                    )
+                    if topic
+                    else None
                 )
+                proposed_dst = topic_plan.dst if topic_plan is not None else None
                 if proposed_dst is not None:
                     if dry_run:
-                        report.proposed_moves.append({
-                            "kind": "topic",
-                            "src": path,
-                            "dst": proposed_dst,
-                            "reason": f"topic={topic} (confidence={result.confidence:.2f})",
-                        })
+                        report.proposed_moves.append(topic_plan.asdict())
                         # 260427-cza: parity with the live `else` branch below
                         # which increments topic_moves. Without this, dry-run
                         # reports `topic_moves: 0` while listing N proposals.
@@ -664,13 +636,14 @@ async def run_sweep(
                     keeper_path = survivors[keeper_idx][0]
                     if dry_run:
                         today = _today_str()
-                        proposed = f"_trash/{today}/{src.rsplit('/', 1)[-1]}"
-                        report.proposed_moves.append({
-                            "kind": "trash",
-                            "src": src,
-                            "dst": proposed,
-                            "reason": f"duplicate of {keeper_path} (cosine≥0.92, conf={conf:.1f})",
-                        })
+                        report.proposed_moves.append(
+                            plan_duplicate_trash(
+                                src,
+                                keeper_path,
+                                confidence=conf,
+                                today=today,
+                            ).asdict()
+                        )
                         report.duplicates_moved += 1
                         continue
                     # MANDATORY per-move safety check (re-evaluated before each dedup-trash)
