@@ -118,6 +118,15 @@ policy, and cache ordering by `last_reused_at`. The code module lives at
 serialize the catalog result.
 _Avoid_: rule list route logic, cached ruling helper, rule history adapter.
 
+**Foundry Import State Ledger**:
+The Pathfinder module behavior behind the `.foundry_chat_import_state.json` file shared by Foundry
+chat import dedupe and Foundry memory projection idempotency: state path naming, missing/malformed
+file tolerance, legacy `imported_keys` compatibility, projection key preservation, and sorted JSON
+write shape. The code module lives at `modules/pathfinder/app/foundry_import_state_ledger.py`.
+Foundry import and projection modules must not duplicate the state-file schema or read-merge-write
+rules.
+_Avoid_: Foundry state helper, chat import JSON cache, projection dedupe file.
+
 **PF Archive Import Plan**:
 The side-effect-free Pathfinder module behavior that turns an on-disk archive root into planned
 Pathfinder Vault writes: markdown walk, known NPC slug discovery, route decisions, large-import
@@ -217,6 +226,7 @@ Adapters should do only translation/auth/delegation.
 - Sweep status store: `app/services/sweep_status_store.py`
 - Background scheduling seam: `app/services/task_runner.py`
 - PF2e Foundry NeDB chat import: `modules/pathfinder/app/foundry_chat_import.py`
+- Foundry Import State Ledger: `modules/pathfinder/app/foundry_import_state_ledger.py`
 - PF2e Rule Query: `modules/pathfinder/app/rule_query.py`
 - Pathfinder Player Interaction: `modules/pathfinder/app/player_interaction_orchestrator.py`
 - Rule Cache Catalog: `modules/pathfinder/app/rule_cache_catalog.py`

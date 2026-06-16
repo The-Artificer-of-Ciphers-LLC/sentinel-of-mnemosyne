@@ -12,6 +12,14 @@ def _ai_provider_returning(verdict: str) -> AsyncMock:
     return provider
 
 
+def _classifier_user_content(ai_provider: AsyncMock) -> str:
+    ai_provider.complete.assert_awaited_once()
+    messages = ai_provider.complete.await_args.args[0]
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    return messages[1]["content"]
+
+
 @pytest.fixture
 def mock_ai_provider():
     """Mock ProviderRouter — `complete` returns 'SAFE' by default."""
@@ -45,33 +53,56 @@ async def test_empty_response_passes(scanner, mock_ai_provider):
 async def test_api_key_triggers_classifier_returns_leak():
     ai_provider = _ai_provider_returning("LEAK")
     scanner = OutputScanner(ai_provider=ai_provider)
-    is_safe, reason = await scanner.scan("Your key is sk-ant-abc123def456ghi789jkl012mno345")
+    text = "Your key is sk-ant-abc123def456ghi789jkl012mno345"
+    is_safe, reason = await scanner.scan(text)
     assert is_safe is False
     assert reason is not None
-    ai_provider.complete.assert_called_once()
+    assert "anthropic_api_key" in reason
+    user_content = _classifier_user_content(ai_provider)
+    assert "anthropic_api_key" in user_content
+    assert text in user_content
 
 
 async def test_api_key_triggers_classifier_returns_safe():
     ai_provider = _ai_provider_returning("SAFE")
     scanner = OutputScanner(ai_provider=ai_provider)
-    is_safe, reason = await scanner.scan("Your key is sk-ant-abc123def456ghi789jkl012mno345")
+    text = "Your key is sk-ant-abc123def456ghi789jkl012mno345"
+    is_safe, reason = await scanner.scan(text)
     assert is_safe is True
-    ai_provider.complete.assert_called_once()
+    assert reason is None
+    user_content = _classifier_user_content(ai_provider)
+    assert "anthropic_api_key" in user_content
+    assert text in user_content
 
 
 async def test_openai_style_key_fires(scanner, mock_ai_provider):
-    await scanner.scan("sk-abcdefghijklmnopqrstuvwxyz1234567890")
-    mock_ai_provider.complete.assert_called()
+    text = "sk-abcdefghijklmnopqrstuvwxyz1234567890"
+    is_safe, reason = await scanner.scan(text)
+    assert is_safe is True
+    assert reason is None
+    user_content = _classifier_user_content(mock_ai_provider)
+    assert "openai_style_key" in user_content
+    assert text in user_content
 
 
 async def test_aws_key_fires(scanner, mock_ai_provider):
-    await scanner.scan("AKIAIOSFODNN7EXAMPLE")
-    mock_ai_provider.complete.assert_called()
+    text = "AKIAIOSFODNN7EXAMPLE"
+    is_safe, reason = await scanner.scan(text)
+    assert is_safe is True
+    assert reason is None
+    user_content = _classifier_user_content(mock_ai_provider)
+    assert "aws_access_key" in user_content
+    assert text in user_content
 
 
 async def test_sentinel_key_name_fires(scanner, mock_ai_provider):
-    await scanner.scan("SENTINEL_API_KEY=supersecretvalue123")
-    mock_ai_provider.complete.assert_called()
+    text = "SENTINEL_API_KEY=supersecretvalue123"
+    is_safe, reason = await scanner.scan(text)
+    assert is_safe is True
+    assert reason is None
+    user_content = _classifier_user_content(mock_ai_provider)
+    assert "sentinel_key_name" in user_content
+    assert text in user_content
 
 
 # --- fail-open tests ---
@@ -104,6 +135,7 @@ async def test_exception_fails_open():
     scanner = OutputScanner(ai_provider=ai_provider)
     is_safe, reason = await scanner.scan("sk-ant-abc123def456ghi789jkl012mno345")
     assert is_safe is True
+    assert reason is None
 
 
 async def test_no_classifier_degrades_gracefully():
