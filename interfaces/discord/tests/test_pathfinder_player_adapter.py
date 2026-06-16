@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pathfinder_player_dialog_outcome import DialogOutcome
 from pathfinder_types import PathfinderRequest
 
 _AsyncMock = AsyncMock
@@ -450,6 +451,7 @@ def _install_fake_dialog_module(monkeypatch, **funcs):
     fake.start_dialog = funcs.get("start_dialog", _AsyncMock())
     fake.resume_dialog = funcs.get("resume_dialog", _AsyncMock())
     fake.cancel_dialog = funcs.get("cancel_dialog", _AsyncMock())
+    fake.cancel_dialog_outcome = funcs.get("cancel_dialog_outcome", _AsyncMock())
     monkeypatch.setitem(sys.modules, "pathfinder_player_dialog", fake)
     return fake
 
@@ -676,9 +678,11 @@ async def test_player_cancel_with_no_draft_returns_no_progress_text(monkeypatch)
     monkeypatch.setattr("discord.Thread", _FakeThread)
     channel = _FakeThread(thread_id=42)
 
-    cancel_dialog = _AsyncMock(return_value="No onboarding dialog in progress.")
+    cancel_dialog_outcome = _AsyncMock(
+        return_value=DialogOutcome.message("No onboarding dialog in progress.")
+    )
     fake_dialog = _install_fake_dialog_module(
-        monkeypatch, cancel_dialog=cancel_dialog
+        monkeypatch, cancel_dialog_outcome=cancel_dialog_outcome
     )
 
     http_client = _make_http_client(get_responses=[_resp(404)])
@@ -695,9 +699,7 @@ async def test_player_cancel_with_no_draft_returns_no_progress_text(monkeypatch)
     response = await PlayerCancelCommand().handle(request)
     assert response.kind == "text"
     assert response.content == "No onboarding dialog in progress."
-    # Either cancel_dialog returned that text or the adapter returned it directly.
-    # In both cases the contract is the verbatim string. fake_dialog kept for symmetry.
-    _ = fake_dialog
+    assert fake_dialog.cancel_dialog_outcome.await_count == 1
 
 
 async def test_player_cancel_with_draft_delegates_to_cancel_dialog(monkeypatch):
@@ -707,10 +709,9 @@ async def test_player_cancel_with_draft_delegates_to_cancel_dialog(monkeypatch):
     monkeypatch.setattr("discord.Thread", _FakeThread)
     channel = _FakeThread(thread_id=42)
 
-    ack = "Onboarding cancelled. Run `:pf player start` to begin again."
-    cancel_dialog = _AsyncMock(return_value=ack)
+    cancel_dialog_outcome = _AsyncMock(return_value=DialogOutcome.suppressed())
     fake_dialog = _install_fake_dialog_module(
-        monkeypatch, cancel_dialog=cancel_dialog
+        monkeypatch, cancel_dialog_outcome=cancel_dialog_outcome
     )
 
     draft_body = "---\nstep: preferred_name\n---\n"
@@ -726,12 +727,13 @@ async def test_player_cancel_with_draft_delegates_to_cancel_dialog(monkeypatch):
         http_client=http_client,
     )
     response = await PlayerCancelCommand().handle(request)
-    assert fake_dialog.cancel_dialog.await_count == 1
-    ckwargs = fake_dialog.cancel_dialog.call_args.kwargs
+    assert fake_dialog.cancel_dialog_outcome.await_count == 1
+    ckwargs = fake_dialog.cancel_dialog_outcome.call_args.kwargs
     assert ckwargs.get("thread") is channel
     assert ckwargs.get("user_id") == "u-1"
     assert ckwargs.get("http_client") is http_client
-    assert response.content == ack
+    assert response.kind == "suppressed"
+    assert response.content == ""
 
 
 async def test_player_cancel_from_non_thread_channel_single_draft_archives_remote_thread(monkeypatch):
@@ -746,9 +748,9 @@ async def test_player_cancel_from_non_thread_channel_single_draft_archives_remot
     get_channel = MagicMock(return_value=resolved_thread)
     monkeypatch.setattr(bot_module.bot, "get_channel", get_channel, raising=False)
 
-    cancel_dialog = _AsyncMock(return_value="Cancelled the onboarding dialog.")
+    cancel_dialog_outcome = _AsyncMock(return_value=DialogOutcome.suppressed())
     fake_dialog = _install_fake_dialog_module(
-        monkeypatch, cancel_dialog=cancel_dialog
+        monkeypatch, cancel_dialog_outcome=cancel_dialog_outcome
     )
 
     # _drafts/ directory listing — single user-owned draft for u-1.
@@ -768,8 +770,8 @@ async def test_player_cancel_from_non_thread_channel_single_draft_archives_remot
     response = await PlayerCancelCommand().handle(request)
 
     get_channel.assert_called_once_with(999)
-    assert fake_dialog.cancel_dialog.await_count == 1
-    ckwargs = fake_dialog.cancel_dialog.call_args.kwargs
+    assert fake_dialog.cancel_dialog_outcome.await_count == 1
+    ckwargs = fake_dialog.cancel_dialog_outcome.call_args.kwargs
     assert ckwargs.get("thread") is resolved_thread
     assert "Cancelled the onboarding dialog." in response.content
 
@@ -809,10 +811,10 @@ async def test_player_cancel_from_non_thread_channel_with_two_drafts_archives_bo
         await http_client.delete(f"_drafts/{thread.id}-{user_id}.md")
         await thread.edit(archived=True)
         fake_set.discard(thread.id)
-        return "ok"
+        return DialogOutcome.suppressed()
 
     fake_dialog = _install_fake_dialog_module(
-        monkeypatch, cancel_dialog=_AsyncMock(side_effect=_cancel_dialog)
+        monkeypatch, cancel_dialog_outcome=_AsyncMock(side_effect=_cancel_dialog)
     )
 
     listing = _resp(
@@ -841,7 +843,7 @@ async def test_player_cancel_from_non_thread_channel_with_two_drafts_archives_bo
 
     # cancel_dialog called for 111 and 222, NOT 333.
     targeted_ids = sorted(
-        c.kwargs["thread"].id for c in fake_dialog.cancel_dialog.await_args_list
+        c.kwargs["thread"].id for c in fake_dialog.cancel_dialog_outcome.await_args_list
     )
     assert targeted_ids == [111, 222]
 
@@ -904,12 +906,12 @@ async def test_player_cancel_multi_draft_one_archive_failure_still_completes_oth
         try:
             await thread.edit(archived=True)
         except discord_module.HTTPException:
-            return "failed-archive"
+            return DialogOutcome.message("failed-archive")
         fake_set.discard(thread.id)
-        return "ok"
+        return DialogOutcome.suppressed()
 
     _install_fake_dialog_module(
-        monkeypatch, cancel_dialog=_AsyncMock(side_effect=_cancel_dialog)
+        monkeypatch, cancel_dialog_outcome=_AsyncMock(side_effect=_cancel_dialog)
     )
 
     listing = _resp(200, json_body=["111-u-1.md", "222-u-1.md"])

@@ -10,9 +10,9 @@ import discord
 async def send_rendered_response(send_fn, response: "str | dict") -> None:
     """Render router response via provided async send function.
 
-    Empty-string responses are a sentinel from upstream handlers that have
-    already posted their final message directly (e.g. dialog cancel/completion
-    needs to send before archiving — see UAT G-04). Skip the send entirely.
+    ``{"type": "suppressed"}`` is the explicit no-send response for handlers
+    that already posted directly. Empty-string no-op remains for older call
+    sites that have not yet moved to the typed suppression vocabulary.
     """
     if isinstance(response, str):
         if not response:

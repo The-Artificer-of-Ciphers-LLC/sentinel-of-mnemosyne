@@ -91,6 +91,15 @@ thread lifecycle and question policy; they must not rebuild draft URLs, auth hea
 grammar.
 _Avoid_: dialog draft helper, onboarding temp file, player draft route.
 
+**Pathfinder Player Dialog Outcome**:
+The Discord-side response vocabulary for the `:pf player start` onboarding dialog after lifecycle
+side effects are complete. The code module lives at
+`interfaces/discord/pathfinder_player_dialog_outcome.py`. It translates dialog results into
+renderable text or an explicit suppressed response when the dialog already sent directly to preserve
+send-before-archive ordering. Dialog routing and player adapters should use this outcome vocabulary
+instead of treating empty strings as the architectural contract.
+_Avoid_: onboarding blank response, dialog renderer sentinel, player dialog no-op.
+
 **Pathfinder Player Interaction**:
 The Pathfinder module behavior behind the `:pf player <verb>` surface after a route or Discord
 adapter has validated request shape: player slug resolution, onboarding gate, style preset policy,
