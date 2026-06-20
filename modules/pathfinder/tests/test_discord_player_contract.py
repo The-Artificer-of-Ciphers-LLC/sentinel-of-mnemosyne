@@ -32,10 +32,17 @@ from pathfinder_player_contract import (  # noqa: E402
     style_call,
     todo_call,
 )
+from pathfinder_types import PathfinderModuleCall  # noqa: E402
 
 
 def test_style_presets_match_route_contract():
     assert set(PLAYER_STYLE_PRESETS) == set(VALID_STYLE_PRESETS)
+
+
+def test_player_contract_returns_shared_module_call():
+    call = ask_call(user_id="u1", text="What rule applies?")
+
+    assert isinstance(call, PathfinderModuleCall)
 
 
 def test_onboard_call_matches_route_model():

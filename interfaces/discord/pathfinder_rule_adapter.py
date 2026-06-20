@@ -11,14 +11,23 @@ RuleQueryCommand when the question begins at the verb position in the parsed arg
 from __future__ import annotations
 
 from pathfinder_command_catalog import RULE_QUERY_USAGE
+from pathfinder_rule_contract import history_call, list_call, query_call, show_call
 from pathfinder_types import (
     PathfinderCommand,
+    PathfinderModuleCall,
     PathfinderRequest,
     PathfinderResponse,
 )
 
 # Known explicit sub-verbs for the rule noun.
 _RULE_NAMED_VERBS = frozenset({"query", "show", "list", "history"})
+
+
+async def _post_rule_call(request: PathfinderRequest, call: PathfinderModuleCall):
+    """Post one route-shaped rule module call through the injected client."""
+    return await request.sentinel_client.post_to_module(
+        call.route, call.payload, request.http_client
+    )
 
 
 class RuleQueryCommand(PathfinderCommand):
@@ -62,10 +71,9 @@ class RuleQueryCommand(PathfinderCommand):
             placeholder = await request.channel.send("⏳ Thinking…")
 
         try:
-            result = await request.sentinel_client.post_to_module(
-                "modules/pathfinder/rule/query",
-                {"query": sub_arg, "user_id": request.user_id},
-                request.http_client,
+            result = await _post_rule_call(
+                request,
+                query_call(user_id=request.user_id, query=sub_arg),
             )
         except Exception:
             if placeholder is not None:
@@ -95,11 +103,7 @@ class RuleListCommand(PathfinderCommand):
     """Handle ``:pf rule list``."""
 
     async def handle(self, request: PathfinderRequest) -> PathfinderResponse:
-        result = await request.sentinel_client.post_to_module(
-            "modules/pathfinder/rule/list",
-            {},
-            request.http_client,
-        )
+        result = await _post_rule_call(request, list_call())
         topics = result.get("topics", []) or [] if isinstance(result, dict) else []
         if not topics:
             return PathfinderResponse(kind="text", content="_No rulings cached yet._")
@@ -122,11 +126,7 @@ class RuleShowCommand(PathfinderCommand):
             return PathfinderResponse(
                 kind="text", content="Usage: `:pf rule show <topic>`"
             )
-        result = await request.sentinel_client.post_to_module(
-            "modules/pathfinder/rule/show",
-            {"topic": sub_arg},
-            request.http_client,
-        )
+        result = await _post_rule_call(request, show_call(topic=sub_arg))
         rulings = result.get("rulings", []) or [] if isinstance(result, dict) else []
         if not rulings:
             return PathfinderResponse(
@@ -154,10 +154,7 @@ class RuleHistoryCommand(PathfinderCommand):
                 n = max(1, min(50, int(sub_arg)))
             except ValueError:
                 pass
-        result = await request.sentinel_client.post_to_module(
-            "modules/pathfinder/rule/history",
-            {"n": n},
-        )
+        result = await _post_rule_call(request, history_call(n=n))
         rulings = result.get("rulings", []) or [] if isinstance(result, dict) else []
         if not rulings:
             return PathfinderResponse(kind="text", content="_No rulings yet._")

@@ -7,19 +7,15 @@ command class.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Literal
+
+from pathfinder_types import PathfinderModuleCall
 
 
 PLAYER_STYLE_PRESETS = ("Tactician", "Lorekeeper", "Cheerleader", "Rules-Lawyer Lite")
 
 
-@dataclass(frozen=True)
-class PlayerModuleCall:
-    """A Sentinel module call for one Pathfinder player route."""
-
-    route: str
-    payload: dict[str, str]
+PlayerModuleCall = PathfinderModuleCall
 
 
 def _route(verb: str) -> str:
@@ -32,8 +28,8 @@ def onboard_call(
     character_name: str,
     preferred_name: str,
     style_preset: str,
-) -> PlayerModuleCall:
-    return PlayerModuleCall(
+) -> PathfinderModuleCall:
+    return PathfinderModuleCall(
         route=_route("onboard"),
         payload={
             "user_id": user_id,
@@ -44,36 +40,36 @@ def onboard_call(
     )
 
 
-def note_call(*, user_id: str, text: str) -> PlayerModuleCall:
-    return PlayerModuleCall(
+def note_call(*, user_id: str, text: str) -> PathfinderModuleCall:
+    return PathfinderModuleCall(
         route=_route("note"),
         payload={"user_id": user_id, "text": text},
     )
 
 
-def ask_call(*, user_id: str, text: str) -> PlayerModuleCall:
-    return PlayerModuleCall(
+def ask_call(*, user_id: str, text: str) -> PathfinderModuleCall:
+    return PathfinderModuleCall(
         route=_route("ask"),
         payload={"user_id": user_id, "text": text},
     )
 
 
-def npc_call(*, user_id: str, npc_name: str, note: str) -> PlayerModuleCall:
-    return PlayerModuleCall(
+def npc_call(*, user_id: str, npc_name: str, note: str) -> PathfinderModuleCall:
+    return PathfinderModuleCall(
         route=_route("npc"),
         payload={"user_id": user_id, "npc_name": npc_name, "note": note},
     )
 
 
-def recall_call(*, user_id: str, query: str) -> PlayerModuleCall:
-    return PlayerModuleCall(
+def recall_call(*, user_id: str, query: str) -> PathfinderModuleCall:
+    return PathfinderModuleCall(
         route=_route("recall"),
         payload={"user_id": user_id, "query": query},
     )
 
 
-def todo_call(*, user_id: str, text: str) -> PlayerModuleCall:
-    return PlayerModuleCall(
+def todo_call(*, user_id: str, text: str) -> PathfinderModuleCall:
+    return PathfinderModuleCall(
         route=_route("todo"),
         payload={"user_id": user_id, "text": text},
     )
@@ -84,11 +80,11 @@ def style_call(
     user_id: str,
     action: Literal["list", "set"],
     preset: str | None = None,
-) -> PlayerModuleCall:
+) -> PathfinderModuleCall:
     payload = {"user_id": user_id, "action": action}
     if preset is not None:
         payload["preset"] = preset
-    return PlayerModuleCall(route=_route("style"), payload=payload)
+    return PathfinderModuleCall(route=_route("style"), payload=payload)
 
 
 def canonize_call(
@@ -97,8 +93,8 @@ def canonize_call(
     outcome: str,
     question_id: str,
     rule_text: str,
-) -> PlayerModuleCall:
-    return PlayerModuleCall(
+) -> PathfinderModuleCall:
+    return PathfinderModuleCall(
         route=_route("canonize"),
         payload={
             "user_id": user_id,
