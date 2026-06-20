@@ -56,6 +56,14 @@ class PathfinderRequest:
 
 
 @dataclass(frozen=True)
+class PathfinderModuleCall:
+    """A Sentinel module call for one Pathfinder route."""
+
+    route: str
+    payload: dict[str, object]
+
+
+@dataclass(frozen=True)
 class PathfinderResponse:
     """Unified response type, discriminated by ``kind``.
 

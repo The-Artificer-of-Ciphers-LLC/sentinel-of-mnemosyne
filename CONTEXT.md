@@ -75,12 +75,13 @@ Fail-soft behavior is required: missing/corrupt index data, stale entries, model
 Tests for sidecar format and eligibility belong primarily on the Embedding sidecar index module, with Recall and vault-sweeper tests retaining only integration coverage.
 _Avoid_: vector store, embedding cache, frontmatter embeddings.
 
-**Pathfinder player command contract**:
-The Discord-side contract that maps `:pf player <verb>` command intent to the Pathfinder module route name and payload shape.
-The code module lives at `interfaces/discord/pathfinder_player_contract.py`.
-It owns route strings like `modules/pathfinder/player/ask` and payload dictionaries like `{user_id, text}` so adapter commands do not duplicate route schema details.
-Tests for this contract must validate generated payloads against the Pathfinder route request models in `modules/pathfinder/app/routes/player.py`, preventing adapter-to-route drift from reintroducing live `422` failures.
-_Avoid_: player router, Discord player schema, PF player API wrapper.
+**Pathfinder command contract**:
+The Discord-side contract for a `:pf <noun>` surface that maps command intent to Pathfinder module route names and payload shapes.
+Contracts are noun-specific modules, not one global dispatcher contract; the shipped Player instance lives at
+`interfaces/discord/pathfinder_player_contract.py`.
+They own route strings like `modules/pathfinder/player/ask` and payload dictionaries like `{user_id, text}` so adapter commands do not duplicate route schema details.
+Tests for each contract must validate generated payloads against the Pathfinder route request models, preventing adapter-to-route drift from reintroducing live `422` failures.
+_Avoid_: player router, Discord player schema, PF player API wrapper, global PF command schema.
 
 **Player Onboarding Draft Store**:
 The Discord-side persistence module for in-flight `:pf player start` onboarding drafts: canonical
