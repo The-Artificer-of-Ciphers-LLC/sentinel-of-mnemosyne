@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
     from app.config import Settings
     from app.services.message_processing import MessageProcessor
+    from app.services.provider_router import ProviderRouter
     from app.services.recall import Recall
     from app.vault import Vault
 
@@ -61,6 +62,11 @@ class RouteContext:
     # None only in test fixtures that don't exercise recall-dependent routes.
     # Code that calls ctx.recall.assemble() must guard with _require_recall() below.
     recall: "Recall | None" = None
+    # The ProviderRouter instance itself (distinct from ai_provider_name, which is
+    # just the configured provider name string). Exposes primary+fallback routing
+    # to narrow completion routes (e.g. the pf2e chat-handoff endpoint, D-09
+    # prerequisite). Pinned in initialize_startup() from graph.ai_provider.
+    ai_provider: "ProviderRouter | None" = None
 
 
 def get_route_context(request: Request) -> RouteContext:

@@ -410,6 +410,7 @@ async def initialize_startup(
         module_registry=graph.module_registry,
         ai_provider_name=graph.ai_provider_name,
         recall=graph.recall,
+        ai_provider=graph.ai_provider,
     )
     app.state.settings = graph.settings
     app.state.vault = graph.vault

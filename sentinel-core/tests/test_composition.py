@@ -163,6 +163,7 @@ async def test_initialize_startup_pins_route_context_and_minimal_state(
     """initialize_startup pins route_ctx + minimal non-route state onto app.state."""
     fake_vault = AsyncMock()
     fake_vault.read_persona = AsyncMock(return_value="persona")
+    fake_router = object()
     fake_graph = SimpleNamespace(
         vault=fake_vault,
         message_processor=object(),
@@ -174,6 +175,7 @@ async def test_initialize_startup_pins_route_context_and_minimal_state(
         embeddings=SimpleNamespace(embed=AsyncMock(return_value=[])),
         module_registry={},
         ai_provider_name="lmstudio",
+        ai_provider=fake_router,
         recall=None,
     )
 
@@ -189,6 +191,9 @@ async def test_initialize_startup_pins_route_context_and_minimal_state(
     assert app.state.route_ctx.vault is fake_vault
     assert app.state.settings is fake_graph.settings
     assert app.state.vault is fake_vault
+    # D-09 prerequisite: RouteContext exposes the ProviderRouter itself, pinned
+    # from graph.ai_provider (not just the ai_provider_name string).
+    assert app.state.route_ctx.ai_provider is fake_router
 
 
 async def test_initialize_startup_returns_warning_when_vault_unreachable(
@@ -208,6 +213,7 @@ async def test_initialize_startup_returns_warning_when_vault_unreachable(
         embeddings=SimpleNamespace(embed=AsyncMock(return_value=[])),
         module_registry={},
         ai_provider_name="lmstudio",
+        ai_provider=object(),
         recall=None,
     )
 
@@ -238,6 +244,7 @@ async def test_initialize_startup_raises_when_persona_missing(monkeypatch):
         embeddings=SimpleNamespace(embed=AsyncMock(return_value=[])),
         module_registry={},
         ai_provider_name="lmstudio",
+        ai_provider=object(),
         recall=None,
     )
 
@@ -337,6 +344,7 @@ async def test_initialize_startup_calls_rebuild_embedding_index_not_run_sweep(
         embeddings=SimpleNamespace(embed=fake_embedder),
         module_registry={},
         ai_provider_name="lmstudio",
+        ai_provider=object(),
         recall=None,
         embedding_model_loaded=True,
     )
@@ -395,6 +403,7 @@ async def test_initialize_startup_passes_embedding_model_loaded_from_graph(
         embeddings=SimpleNamespace(embed=AsyncMock(return_value=[])),
         module_registry={},
         ai_provider_name="lmstudio",
+        ai_provider=object(),
         recall=None,
         embedding_model_loaded=False,  # model NOT loaded
     )

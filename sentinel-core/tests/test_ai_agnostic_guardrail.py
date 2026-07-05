@@ -29,6 +29,10 @@ EXCLUDED_PATHS = {
     # model_selector.py uses litellm.get_model_info for capability metadata scoring only —
     # it does not make AI calls. All actual AI calls still route through app.state.ai_provider.
     APP_DIR / "services" / "model_selector.py",
+    # provider_router.py imports litellm ONLY for litellm.NotFoundError, a vendor-normalized
+    # exception type used as a fallback trigger (D-06, Phase 42) — it does not make AI calls
+    # itself (that stays in app/clients/litellm_provider.py, which app.state.ai_provider wraps).
+    APP_DIR / "services" / "provider_router.py",
 }
 
 # Vendor SDK import patterns that are forbidden in app/ business logic.
