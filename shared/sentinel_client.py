@@ -106,3 +106,36 @@ class SentinelCoreClient:
         )
         resp.raise_for_status()
         return resp.json()
+
+    async def embed(self, texts: list[str], client: httpx.AsyncClient) -> dict:
+        """POST /embeddings — thin embeddings passthrough to core.
+
+        Mirrors complete()'s raise-on-error posture EXACTLY (NOT
+        send_message()'s swallow-to-string posture) so pf2e's
+        _build_rules_index_safely() 503-degrade contract keeps getting a
+        real exception to react to (D-07).
+
+        Sends ONLY `texts` in the request body — no model/api_base/base_url
+        override. Core owns backend selection (D-04); those params are not
+        accepted here.
+
+        Args:
+            texts: list of raw strings to embed.
+            client: Caller-owned httpx.AsyncClient (same pattern as complete()).
+
+        Returns:
+            Parsed JSON response dict: {"embeddings": [[float, ...], ...], "model": str}.
+
+        Raises:
+            httpx.HTTPStatusError: On 4xx/5xx responses.
+            httpx.ConnectError: If sentinel-core is unreachable.
+            httpx.TimeoutException: If request exceeds self._timeout.
+        """
+        resp = await client.post(
+            f"{self._base_url}/embeddings",
+            json={"texts": texts},
+            headers={"X-Sentinel-Key": self._api_key},
+            timeout=self._timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()
