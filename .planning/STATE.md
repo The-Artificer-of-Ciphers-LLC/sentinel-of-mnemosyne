@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.5.2
 milestone_name: — Provider Independence
 status: executing
-stopped_at: Completed 43-04-PLAN.md
-last_updated: "2026-07-05T22:21:28.137Z"
+stopped_at: 43-05 Task 1 complete (regression gate green); paused at Task 2 checkpoint (operator cutover)
+last_updated: "2026-07-05T22:30:09.713Z"
 last_activity: 2026-07-05 -- Phase 43 execution started
 progress:
   total_phases: 2
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 Phase: 43 (embeddings-through-sentinel) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
-Last activity: 2026-07-05 -- Phase 43 execution started
+Status: Paused — awaiting operator checkpoint (Task 2 of 3: LM Studio cutover)
+Last activity: 2026-07-05 -- 43-05 Task 1 (regression gate) green; paused at operator checkpoint
 
 ## Milestone Progress
 
@@ -223,6 +223,7 @@ Recent decisions affecting current work:
 ### Blockers/Concerns
 
 - Pi-mono releases breaking changes every 2-4 days -- adapter pattern in Phase 1 is the mitigation
+- Phase 43 Plan 05 paused at operator checkpoint (Task 2/3) — awaiting LM Studio cutover (load nomic model, set EMBEDDING_BASE_URL, docker compose restart sentinel-core pathfinder, confirm /health embedding_model_loaded, :pf rule, and semantic recall live)
 
 ### Quick Tasks Completed
 
@@ -248,6 +249,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-05T22:21:28.131Z
-Stopped at: Completed 43-04-PLAN.md
+Last session: 2026-07-05T22:30:09.704Z
+Stopped at: 43-05 Task 1 complete (regression gate green); paused at Task 2 checkpoint (operator cutover)
 Resume file: 
+None
