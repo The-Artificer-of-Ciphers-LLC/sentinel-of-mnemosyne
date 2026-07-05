@@ -873,3 +873,21 @@ Plans:
   4. core's Phase-40 semantic recall produces/reads embeddings successfully against the same backend (no silent empty-index degradation caused by the exo cutover)
 
 **UI hint**: no
+
+**Plans:** 5 plans
+
+Plans:
+
+**Wave 1**
+
+- [ ] 43-01-PLAN.md — Core embeddings backend config: `embedding_*` settings triplet + composition rewire (both call sites) + repoint client default off exo + correct the two bug-locking tests (EMB-02, EMB-04)
+- [ ] 43-02-PLAN.md — Core `POST /embeddings` narrow passthrough route (mirror of `/provider/complete`) + main.py wiring + route tests (auth/size-cap/503-non-leak) (EMB-01)
+
+**Wave 2** *(43-03 blocked on 43-01+43-02; 43-04 blocked on 43-01)*
+
+- [ ] 43-03-PLAN.md — pf2e handoff: `SentinelCoreClient.embed()` + swap `embed_texts()` internals off direct litellm (signature preserved) + delegation/guardrail tests (EMB-01, EMB-03)
+- [ ] 43-04-PLAN.md — Dimension-mismatch guard verify/extend/badge (D-08) + persist `embedding_dim` in sidecar via sweeper + document restart-is-cutover (D-09) (EMB-04)
+
+**Wave 3** *(blocked on all of Wave 1+2)*
+
+- [ ] 43-05-PLAN.md — Cutover + live verification gate (autonomous: false): phase regression suites + operator LM Studio cutover + human-verify EMB-03/EMB-04 (EMB-03, EMB-04)
