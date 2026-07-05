@@ -1,0 +1,13 @@
+# GSD Debug Knowledge Base
+
+Resolved debug sessions. Used by `gsd-debugger` to surface known-pattern hypotheses at the start of new investigations.
+
+---
+
+## lmstudio-provider-switch — LM Studio host dead; litellm exception_mapping_utils crash; provider switch to exo
+- **Date:** 2026-07-05
+- **Error patterns:** litellm, exception_mapping_utils, exception_type, LM Studio, APIConnectionError, connection refused, LITELLM_API_BASE, LMSTUDIO_BASE_URL, host.docker.internal, crash-loop, restart: unless-stopped, embeddings, Method Not Allowed, provider-prefix, model_selector, select_model, exo
+- **Root cause:** Three compounding issues in pf2e-module (litellm_api_base pointed at a dead LM Studio host; main.py's lifespan built the RAG embedding index at startup with no exception handling, crash-looping the whole container on any embedding-call failure; model_selector.py compared provider-prefixed settings values against bare ids from `/v1/models`, which never matched). sentinel-core shared the same stale `lmstudio_base_url` default (config.py + 3 dead fallback constants) but already had non-fatal error handling everywhere and no analogous model_selector prefix bug (its convention stores model ids bare).
+- **Fix:** pathfinder: config.py default -> host.docker.internal:52415/v1 (exo); main.py extracted `_build_rules_index_safely()` for graceful startup degradation (rules_index=None, /rule/query returns 503); model_selector.py bare-normalizes preferred/default before comparing against loaded ids. sentinel-core: config.py lmstudio_base_url default + 3 fallback constants synced to the same exo endpoint; confirmed no resilience change needed (already non-fatal) and no prefix bug existed (bare convention). Live operational .env updated: LITELLM_API_BASE=http://host.docker.internal:52415/v1, LITELLM_MODEL=openai/mlx-community/Qwen3.5-27B-8bit (the one exo instance confirmed RunnerReady via exo's /state endpoint). Incidental: fixed 3 sentinel-core test_recall.py tests that hardcoded absolute calendar dates checked against the real wall clock (time-bomb tests), unrelated to the provider bug but surfaced while running the full suite.
+- **Files changed:** modules/pathfinder/app/config.py, modules/pathfinder/app/main.py, modules/pathfinder/app/model_selector.py, modules/pathfinder/tests/test_model_selector.py, modules/pathfinder/tests/test_main.py, sentinel-core/app/config.py, sentinel-core/app/clients/embeddings.py, sentinel-core/app/composition.py, sentinel-core/app/services/note_classifier.py, sentinel-core/app/clients/litellm_provider.py, sentinel-core/tests/test_config.py, sentinel-core/tests/test_embeddings.py, sentinel-core/tests/test_recall.py, /Volumes/Mini Me/Users/trekkie/projects/sentinel-of-mnemosyne/.env
+---
