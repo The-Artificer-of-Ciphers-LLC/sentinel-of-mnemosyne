@@ -971,6 +971,17 @@ async def test_rebuild_embedding_index_writes_index_with_all_fields():
         assert "embedding_b64" in entry, f"missing embedding_b64 for {path}"
         assert "embedding_model" in entry, f"missing embedding_model for {path}"
         assert "content_hash" in entry, f"missing content_hash for {path}"
+        # D-08/EMB-04: every written entry must carry the resolved embedding
+        # dimension (the fake embedder produces 4-dim vectors) so the sidecar
+        # reader can skip-before-decode on a stale-dimension entry.
+        assert "embedding_dim" in entry, f"missing embedding_dim for {path}"
+        assert isinstance(entry["embedding_dim"], int) and entry["embedding_dim"] > 0, (
+            f"embedding_dim must be a positive int; got {entry['embedding_dim']!r}"
+        )
+        assert entry["embedding_dim"] == len(embedder._VECS[0]), (
+            f"embedding_dim must equal the produced vector length "
+            f"({len(embedder._VECS[0])}); got {entry['embedding_dim']}"
+        )
 
     assert report.status == "complete"
 
