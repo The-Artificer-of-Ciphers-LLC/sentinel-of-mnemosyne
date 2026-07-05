@@ -137,3 +137,7 @@ None - no external service configuration required. Operators who override `LMSTU
 ---
 *Phase: 43-embeddings-through-sentinel*
 *Completed: 2026-07-05*
+
+## Self-Check: PASSED
+
+All modified files confirmed present on disk; all task commit hashes (840987f, 93c1d6d, 206c969) and the SUMMARY commit (7ad5442) confirmed present in git log.
