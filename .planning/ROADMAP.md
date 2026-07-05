@@ -874,7 +874,7 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 
 Plans:
 
@@ -886,7 +886,7 @@ Plans:
 **Wave 2** *(43-03 blocked on 43-01+43-02; 43-04 blocked on 43-01)*
 
 - [x] 43-03-PLAN.md — pf2e handoff: `SentinelCoreClient.embed()` + swap `embed_texts()` internals off direct litellm (signature preserved) + delegation/guardrail tests (EMB-01, EMB-03)
-- [ ] 43-04-PLAN.md — Dimension-mismatch guard verify/extend/badge (D-08) + persist `embedding_dim` in sidecar via sweeper + document restart-is-cutover (D-09) (EMB-04)
+- [x] 43-04-PLAN.md — Dimension-mismatch guard verify/extend/badge (D-08) + persist `embedding_dim` in sidecar via sweeper + document restart-is-cutover (D-09) (EMB-04)
 
 **Wave 3** *(blocked on all of Wave 1+2)*
 

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5.2
 milestone_name: — Provider Independence
 status: executing
-stopped_at: Completed 43-01-PLAN.md
-last_updated: "2026-07-05T22:10:41.093Z"
+stopped_at: Completed 43-04-PLAN.md
+last_updated: "2026-07-05T22:21:28.137Z"
 last_activity: 2026-07-05 -- Phase 43 execution started
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 10
-  completed_plans: 8
+  completed_plans: 9
   percent: 50
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 43 (embeddings-through-sentinel) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-05 -- Phase 43 execution started
 
@@ -130,6 +130,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 43 P01 | 20min | 3 tasks | 5 files |
 | Phase 43 P02 | 15min | 2 tasks | 3 files |
 | Phase 43 P03 | 12min | 2 tasks | 4 files |
+| Phase 43 P04 | 15min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -212,6 +213,8 @@ Recent decisions affecting current work:
 - [Phase 43]: 43-02: per-text length cap implemented as pydantic field_validator (not manual handler check) so 422 fires before ctx.embedder is called
 - [Phase ?]: 43-03: embed() sends ONLY {texts} in the request body — no model/api_base/base_url forwarded (D-04); core owns backend selection
 - [Phase ?]: 43-03: embed_texts()'s model/api_base params remain accepted but vestigial so both call sites (main.py _rule_embed_fn, rule_query.py deps.embed_texts) need zero changes (Pattern 3)
+- [Phase 43-04]: D-08 dimension guard extended with persisted embedding_dim fast path (skip-before-decode); backward compatible with pre-existing indexes lacking the field — catches same-embedding_model-string/different-dimension cutover case beyond the MEM-05 model-string check
+- [Phase 43-04]: D-09 restart-is-cutover documented in rebuild_embedding_index docstring: existing non-blocking startup rebuild + container restart IS the cutover mechanism; no new trigger/route/CLI added
 
 ### Pending Todos
 
@@ -245,7 +248,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-05T22:09:54.505Z
-Stopped at: Completed 43-01-PLAN.md
+Last session: 2026-07-05T22:21:28.131Z
+Stopped at: Completed 43-04-PLAN.md
 Resume file: 
-None
