@@ -933,20 +933,16 @@ async def test_npc_say_scene_missing_fails_fast():
 
 async def test_npc_say_json_parse_salvage():
     """Plain-prose LLM output (no JSON) degrades gracefully: mood_delta=0, reply salvaged (DLG-01, T-31-SEC-03)."""
-    from types import SimpleNamespace
     mock_obs = MagicMock()
     mock_obs.get_note = AsyncMock(return_value=NOTE_VAREK_NEUTRAL)
     mock_obs.put_note = AsyncMock(return_value=None)
-    # Mock the low-level litellm call: returns a response whose choices[0].message.content
-    # is plain prose (no JSON) — the real generate_npc_reply salvage path must kick in.
-    fake_response = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(
-            content="this is plain prose, no JSON at all"
-        ))]
-    )
+    # Mock the core-completion call (42-04: pf2e -> sentinel-core handoff):
+    # returns a result dict whose "content" is plain prose (no JSON) — the
+    # real generate_npc_reply salvage path must kick in.
+    fake_result = {"content": "this is plain prose, no JSON at all", "model": "test-model"}
     with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
          patch("app.routes.npc.obsidian", mock_obs), \
-         patch("app.llm.litellm.acompletion", new=AsyncMock(return_value=fake_response)):
+         patch("app.llm._core_client.complete", new=AsyncMock(return_value=fake_result)):
         from app.main import app
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post("/npc/say", json={

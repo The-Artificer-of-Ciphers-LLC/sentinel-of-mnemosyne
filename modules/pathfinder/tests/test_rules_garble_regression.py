@@ -22,7 +22,6 @@ os.environ.setdefault("OBSIDIAN_API_KEY", "")
 os.environ.setdefault("LITELLM_MODEL", "openai/local-model")
 os.environ.setdefault("LITELLM_API_BASE", "http://localhost:1234/v1")
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -199,10 +198,8 @@ async def test_generate_ruling_fallback_garbled_prose_raises():
         '{\n    "timestamp": 156075248\n}\n\n'
         '[Develer\'s Manual entry point]\nHere be a big smooch.'
     )
-    mock_response = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content=garbled_prose))]
-    )
-    with patch("litellm.acompletion", new=AsyncMock(return_value=mock_response)):
+    mock_result = {"content": garbled_prose, "model": "test-model"}
+    with patch("app.llm._core_client.complete", new=AsyncMock(return_value=mock_result)):
         from app.llm import generate_ruling_fallback
 
         with pytest.raises(ValueError, match="injection/garble"):
@@ -223,16 +220,14 @@ async def test_generate_ruling_from_passages_garbled_prose_raises():
         "Here be a big smooch. entry point injection.\n"
         '{"timestamp": 999, "comment_likelihood": {"likeliness": -1}}'
     )
-    mock_response = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content=garbled_prose))]
-    )
+    mock_result = {"content": garbled_prose, "model": "test-model"}
     chunk = RuleChunk(
         id="test", book="Player Core", page="1", section="Off-Guard",
         text="Off-Guard imposes a -2 penalty to AC.", topics=["off-guard"],
     )
     passages = [(chunk, 0.85)]
 
-    with patch("litellm.acompletion", new=AsyncMock(return_value=mock_response)):
+    with patch("app.llm._core_client.complete", new=AsyncMock(return_value=mock_result)):
         from app.llm import generate_ruling_from_passages
 
         with pytest.raises(ValueError, match="injection/garble"):
@@ -254,10 +249,8 @@ async def test_generate_ruling_fallback_valid_salvage_passes():
         "Flanking requires two allies to be on opposite sides and threatening the target. "
         "See Player Core for the complete flanking rules."
     )
-    mock_response = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content=valid_prose))]
-    )
-    with patch("litellm.acompletion", new=AsyncMock(return_value=mock_response)):
+    mock_result = {"content": valid_prose, "model": "test-model"}
+    with patch("app.llm._core_client.complete", new=AsyncMock(return_value=mock_result)):
         from app.llm import generate_ruling_fallback
 
         result = await generate_ruling_fallback(

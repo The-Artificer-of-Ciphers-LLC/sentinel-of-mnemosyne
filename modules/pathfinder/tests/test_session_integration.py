@@ -302,7 +302,7 @@ async def test_end_writes_full_note():
         patch("app.main._register_with_retry", new=AsyncMock(return_value=None)),
         patch("app.routes.session.obsidian", vault),
         patch("app.routes.session.npc_roster_cache", {"varek": "varek"}),
-        patch("litellm.acompletion", new=AsyncMock(return_value=_make_llm_json_response(mock_llm_result))),
+        patch("app.llm._core_client.complete", new=AsyncMock(return_value=_make_llm_json_response(mock_llm_result))),
     ):
         from app.main import app
 
@@ -336,7 +336,7 @@ async def test_end_llm_failure_writes_skeleton():
         patch("app.main._register_with_retry", new=AsyncMock(return_value=None)),
         patch("app.routes.session.obsidian", vault),
         patch("app.routes.session.npc_roster_cache", {}),
-        patch("litellm.acompletion", new=AsyncMock(side_effect=RuntimeError("timeout"))),
+        patch("app.llm._core_client.complete", new=AsyncMock(side_effect=RuntimeError("timeout"))),
     ):
         from app.main import app
 
@@ -376,7 +376,7 @@ async def test_location_stub_created():
         patch("app.main._register_with_retry", new=AsyncMock(return_value=None)),
         patch("app.routes.session.obsidian", vault),
         patch("app.routes.session.npc_roster_cache", {}),
-        patch("litellm.acompletion", new=AsyncMock(return_value=_make_llm_json_response(mock_llm_result))),
+        patch("app.llm._core_client.complete", new=AsyncMock(return_value=_make_llm_json_response(mock_llm_result))),
     ):
         from app.main import app
 
@@ -418,10 +418,13 @@ def _make_llm_narrative_response(text: str):
     return SimpleNamespace(choices=[choice])
 
 
-def _make_llm_json_response(data: dict):
-    """Build a minimal litellm-shaped response with JSON content (end verb)."""
-    import json
-    from types import SimpleNamespace
+def _make_llm_json_response(data: dict) -> dict:
+    """Build a minimal core_client.complete()-shaped result dict (end verb).
 
-    choice = SimpleNamespace(message=SimpleNamespace(content=json.dumps(data)))
-    return SimpleNamespace(choices=[choice])
+    42-04: generate_session_recap now reaches the LLM via
+    app.llm._core_client.complete(), which returns {content, model} instead
+    of a litellm-shaped response object.
+    """
+    import json
+
+    return {"content": json.dumps(data), "model": "test-model"}

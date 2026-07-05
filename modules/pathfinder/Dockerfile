@@ -32,5 +32,12 @@ COPY . .
 # (WORKDIR /app) makes `import sentinel_shared.<module>` resolve.
 COPY --from=shared sentinel_shared/ /app/sentinel_shared/
 
+# Copy the shared SentinelCoreClient (42-04, D-09 pf2e->core chat handoff).
+# Flattened to /app/sentinel_client.py — same convention as sentinel_shared/
+# above — so `from sentinel_client import SentinelCoreClient` resolves under
+# WORKDIR /app, matching the local pytest pythonpath (pyproject.toml:
+# pythonpath = [".", "../../shared"]).
+COPY --from=shared sentinel_client.py /app/sentinel_client.py
+
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
