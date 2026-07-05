@@ -214,8 +214,16 @@ async def _resolve_model_for_classification() -> tuple[str, object | None, str |
             default=settings.model_name or None,
         )
     except Exception as exc:
-        logger.warning("note_classifier: select_model failed (%s); falling back to first loaded", exc)
-        model_id = loaded[0] if loaded else (settings.model_name or "openai/local-model")
+        # select_model only raises when there's no configured default AND the loaded/catalog
+        # set is ambiguous (0 or 2+ unscored/unmatched entries). Falling back to `loaded[0]`
+        # here would reintroduce the unsound "guess a catalog entry" behavior select_model
+        # just refused to do (exo-model-notfound-502) — prefer the configured model_name
+        # (even if unconfirmed) over an arbitrary catalog pick.
+        logger.warning(
+            "note_classifier: select_model failed (%s); falling back to configured MODEL_NAME",
+            exc,
+        )
+        model_id = settings.model_name or "openai/local-model"
 
     # Ensure litellm provider prefix — HF-style namespaces (qwen/qwen2.5-coder-14b)
     # are NOT litellm provider tags, so '/' alone is not a sufficient guard.

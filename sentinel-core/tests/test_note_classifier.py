@@ -14,9 +14,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.config import settings
+from app.errors import ModelSelectorError
 from app.services.note_classifier import (
     _apply_cheap_filter,
     _coerce_topic,
+    _resolve_model_for_classification,
     _slugify,
     classify_note,
 )
@@ -158,6 +161,47 @@ async def test_classify_confidence_rounded_one_decimal():
             "real content here that survives filter, not too short to pass", user_topic=None
         )
     assert result.confidence == 0.9
+
+
+# --- _resolve_model_for_classification (exo-model-notfound-502) ---
+#
+# No existing test above calls _resolve_model_for_classification directly — every
+# classify_note test mocks it out entirely (patches
+# "app.services.note_classifier._resolve_model_for_classification"). Its own
+# `except Exception` fallback (added alongside the exo-model-notfound-502 fix) was
+# therefore genuinely untested until this test.
+
+
+@pytest.mark.asyncio
+async def test_resolve_model_for_classification_except_falls_back_to_settings_model_name(
+    monkeypatch,
+):
+    """Regression for exo-model-notfound-502: when select_model() raises (ambiguous,
+    unscored, multi-entry catalog and no usable default), _resolve_model_for_classification's
+    except-handler must fall back to settings.model_name, never loaded[0]."""
+    monkeypatch.setattr(settings, "model_name", "configured-fallback-model")
+    monkeypatch.setattr(settings, "model_preferred", None)
+    monkeypatch.setattr(settings, "lmstudio_base_url", "http://test-exo/v1")
+
+    with patch(
+        "app.services.note_classifier.get_loaded_models",
+        new=AsyncMock(
+            return_value=[
+                "mlx-community/MiniMax-M2.7-4bit",  # loaded[0] — must NOT be chosen
+                "mlx-community/Some-Other-Model-4bit",
+            ]
+        ),
+    ), patch(
+        "app.services.note_classifier.select_model",
+        side_effect=ModelSelectorError("forced for test"),
+    ), patch(
+        "app.services.note_classifier.get_profile",
+        new=AsyncMock(return_value=None),
+    ):
+        model_id, profile, api_base = await _resolve_model_for_classification()
+
+    assert model_id == "openai/configured-fallback-model"
+    assert "MiniMax" not in model_id, "except-handler must never fall back to loaded[0]"
 
 
 # --- helpers ---

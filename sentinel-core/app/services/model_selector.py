@@ -140,9 +140,21 @@ def select_model(
     1. ``preferences[task_kind]`` if set AND that model is in ``loaded`` — honor user intent first.
     2. Highest-scoring loaded model per the task-kind rubric (see module docstring).
     3. ``default`` if set AND present in ``loaded``.
-    4. First entry in ``loaded`` if non-empty — best-effort last resort.
-    5. ``default`` if set (even if not loaded — LiteLLM may accept the name anyway).
+    4. The SOLE entry in ``loaded`` when ``len(loaded) == 1`` — unambiguous: with exactly
+       one candidate there is nothing to guess between.
+    5. ``default`` if set (even if not present in ``loaded`` — LiteLLM may accept the name
+       anyway, and an explicitly operator-configured model is always a safer bet than
+       guessing among an ambiguous multi-entry list).
     6. Raise ``ModelSelectorError``.
+
+    NOTE (exo-model-notfound-502): rule 4 used to be an unconditional "first entry in
+    ``loaded``" best-effort fallback. That is unsound for providers like exo whose
+    ``/v1/models`` advertises every model it *could* serve (100+ entries) rather than
+    the one it is *actually* serving — silently picking ``loaded[0]`` there returns an
+    essentially random, usually-unserveable model id and the downstream call 404s.
+    Now, when there is genuine ambiguity (0 or 2+ unscored/unmatched candidates), this
+    function prefers the explicitly configured ``default`` over guessing, and raises
+    rather than silently returning an arbitrary catalog entry when no default exists.
     """
     prefs = dict(preferences or {})
     preferred = prefs.get(task_kind)
@@ -161,13 +173,20 @@ def select_model(
 
         if default and default in loaded:
             return default
-        return loaded[0]
+
+        if len(loaded) == 1:
+            # Exactly one candidate — no ambiguity, regardless of whether it matches
+            # configured preferences/default. Safe even for exo-style providers,
+            # because a single-entry list can't be confused with an unserveable sibling.
+            return loaded[0]
 
     if default:
         return default
 
     raise ModelSelectorError(
-        f"No loaded models at LM Studio and no default configured (task_kind={task_kind})"
+        f"No scored/matched model for task_kind={task_kind} among {len(loaded)} "
+        "loaded/catalog entries, and no default configured. Refusing to guess an "
+        "arbitrary catalog entry (exo-model-notfound-502)."
     )
 
 
@@ -259,7 +278,19 @@ async def discover_active_model(
     try:
         chosen = select_model("chat", loaded, preferences=preferences, default=settings.model_name)
     except ModelSelectorError:
-        chosen = loaded[0]
+        # select_model only raises when `default` (settings.model_name) is falsy AND the
+        # loaded/catalog set is ambiguous (0 or 2+ unscored/unmatched entries) — i.e. there
+        # is no safe candidate at all. Falling back to `loaded[0]` here would reintroduce
+        # exactly the unsound "guess a catalog entry" behavior select_model just refused to
+        # do (exo-model-notfound-502); honor the documented contract above instead
+        # ("Falls back to _prefixed(settings.model_name) on any failure").
+        logger.warning(
+            "select_model found no safe candidate among %d loaded/catalog entries and no "
+            "default configured — falling back to MODEL_NAME=%s (may not be loaded)",
+            len(loaded),
+            settings.model_name,
+        )
+        chosen = settings.model_name
 
     logger.info("Auto-selected model: %s", chosen)
     return _prefixed(chosen)
@@ -284,16 +315,18 @@ async def probe_classifier_model_ready(
       as NOT ready (fail-closed).
 
     WHY a defaulted/non-scored selection is treated as NOT ready:
-    ``select_model`` can return a model via rule 4 (``loaded[0]`` last-resort) even when no
-    model genuinely scores for the ``"structured"`` task kind (i.e. ``_score("structured",
-    id) == 0``). ``classify_note`` would still run on such a model and emit degraded
-    classifications. This probe gates destructive sweeps on the ACTUAL classifier readiness —
-    not on whether a model string can be resolved. A degraded classifier must never drive
-    vault mutations. (Round-2 review concern 4.)
+    ``select_model`` can still return a model via rule 4 (the SOLE entry in ``loaded``
+    when ``len(loaded) == 1`` — post-exo-model-notfound-502, this is the only remaining
+    unconditional fallback) even when no model genuinely scores for the ``"structured"``
+    task kind (i.e. ``_score("structured", id) == 0``). ``classify_note`` would still run
+    on such a model and emit degraded classifications. This probe gates destructive sweeps
+    on the ACTUAL classifier readiness — not on whether a model string can be resolved. A
+    degraded classifier must never drive vault mutations. (Round-2 review concern 4.)
 
     Fail-closed contract:
     - Empty ``loaded`` → False (rule-5 default is NOT ready).
-    - ``loaded`` but no model scores for ``"structured"`` → False (rule-4 last-resort is NOT ready).
+    - ``loaded`` but no model scores for ``"structured"`` → False (rule-4 sole-candidate
+      fallback is NOT ready).
     - Any HTTP, JSON, or unexpected exception → False (never raises).
 
     260502: placed next to ``probe_embedding_model_loaded`` so both readiness probes
@@ -344,10 +377,11 @@ async def probe_classifier_model_ready(
             # Nothing loaded and no default → not ready
             return False
 
-        # Guard against rule-4 last-resort: the returned model is only "ready" if it
-        # genuinely scores for the structured kind. A model returned via rule 4
-        # (loaded[0] fallback) may have _score("structured", id) == 0 — that means
-        # no function calling support, and classify_note would emit degraded output.
+        # Guard against rule-4 sole-candidate fallback: the returned model is only
+        # "ready" if it genuinely scores for the structured kind. A model returned via
+        # rule 4 (the sole entry in loaded, when len(loaded) == 1) may have
+        # _score("structured", id) == 0 — that means no function calling support, and
+        # classify_note would emit degraded output.
         if _score("structured", selected_id) <= 0:
             return False
 

@@ -35,7 +35,11 @@ class Settings(BaseSettings):
     # see app/composition.py's non-fatal probes and app/clients/embeddings.py.
     lmstudio_base_url: str = "http://host.docker.internal:52415/v1"
     sentinel_api_key: str  # Required — no default. Startup fails fast if missing.
-    model_name: str = "gemma-4-e4b-it-mlx"
+    # Tracked default kept in sync with the exo backend's actual running model
+    # (exo-model-notfound-502). exo advertises ~120 catalog entries but serves only
+    # the one currently loaded — this MUST match exo's "Running model" exactly, or
+    # override via MODEL_NAME in .env when the loaded model changes.
+    model_name: str = "mlx-community/Qwen3.5-27B-8bit"
     # LM Studio embedding model id (no provider prefix — `openai/` is added at
     # the litellm call site). Single source of truth: previously duplicated as
     # hardcoded constants in app/clients/embeddings.py and

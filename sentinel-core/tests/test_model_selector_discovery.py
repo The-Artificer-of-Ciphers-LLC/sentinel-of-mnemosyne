@@ -1,11 +1,15 @@
 """Tests for discover_active_model integration in sentinel-core."""
+from unittest.mock import patch
+
 import pytest
 import httpx
 
+from app.errors import ModelSelectorError
 from app.services.model_selector import (  # noqa: F401 — probe used in tests below
     _reset_cache_for_tests,
     discover_active_model,
     probe_embedding_model_loaded,
+    select_model,
 )
 
 
@@ -301,3 +305,149 @@ async def test_probe_embedding_loaded_false_when_only_llm_loaded():
         )
 
     assert result is False
+
+
+# --- exo-model-notfound-502: select_model must not guess a catalog[0] entry ---
+#
+# exo's /v1/models advertises every model it *could* load (100+ entries in
+# production) but SERVES only the one actually running. Unlike real LM Studio
+# (where /v1/models genuinely reflects what's loaded), an unmatched preference/
+# default here must NOT fall through to an arbitrary "first entry" guess.
+
+
+def _unscored(task_kind: str, model_id: str) -> int:
+    """Patch target: nothing scores for any task_kind (simulates unknown mlx-community
+    ids that litellm.get_model_info() has no static metadata for)."""
+    return 0
+
+
+def test_select_model_ambiguous_catalog_prefers_configured_default_over_catalog_zero():
+    """Regression for exo-model-notfound-502: with a multi-entry, unscored catalog
+    and no matching preference, select_model must return the explicitly configured
+    `default`, never `loaded[0]`."""
+    # Mirrors the real incident: exo catalog[0] is an unrelated model; the
+    # operator's configured model is a DIFFERENT entry deeper in the list.
+    loaded = [
+        "mlx-community/MiniMax-M2.7-4bit",  # catalog[0] — must NOT be picked
+        "mlx-community/Some-Other-Model-4bit",
+        "mlx-community/Qwen3.5-27B-8bit",  # the actually-running/configured model
+    ]
+    with patch("app.services.model_selector._score", side_effect=_unscored):
+        result = select_model(
+            "chat",
+            loaded,
+            preferences={"chat": "qwen3.6-35b-a3b"},  # stale pref — matches nothing
+            default="mlx-community/Qwen3.5-27B-8bit",
+        )
+
+    assert result == "mlx-community/Qwen3.5-27B-8bit"
+    assert result != loaded[0], "must never silently fall back to catalog[0]"
+
+
+def test_select_model_ambiguous_catalog_no_default_raises_loudly():
+    """With no configured default and an ambiguous, unscored, multi-entry catalog,
+    select_model must fail loudly (raise) rather than silently return catalog[0]."""
+    loaded = [
+        "mlx-community/MiniMax-M2.7-4bit",
+        "mlx-community/Some-Other-Model-4bit",
+    ]
+    with patch("app.services.model_selector._score", side_effect=_unscored):
+        with pytest.raises(ModelSelectorError):
+            select_model(
+                "chat",
+                loaded,
+                preferences={"chat": "qwen3.6-35b-a3b"},
+                default=None,
+            )
+
+
+def test_select_model_sole_candidate_is_unambiguous():
+    """A single-entry loaded list has no ambiguity to guess between — it is safe
+    to return even when it doesn't match preferences/default (distinct from the
+    multi-entry exo-catalog case, which must NOT do this)."""
+    loaded = ["only-model-available"]
+    with patch("app.services.model_selector._score", side_effect=_unscored):
+        result = select_model(
+            "chat",
+            loaded,
+            preferences={"chat": "something-else"},
+            default="yet-another-model",
+        )
+
+    assert result == "only-model-available"
+
+
+async def test_discovery_exo_style_catalog_honors_configured_default_not_catalog_zero(
+    monkeypatch,
+):
+    """End-to-end regression for exo-model-notfound-502 at the discover_active_model
+    level: a large, unscored, unmatched catalog (simulating exo's ~120-model
+    /v1/models advertisement) must resolve to the configured MODEL_NAME/MODEL_PREFERRED,
+    never to the catalog's first entry."""
+    monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
+    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
+    monkeypatch.setenv("MODEL_NAME", "mlx-community/Qwen3.5-27B-8bit")
+    monkeypatch.setenv("MODEL_PREFERRED", "qwen3.6-35b-a3b")  # stale — matches nothing
+    monkeypatch.setenv("AI_PROVIDER", "lmstudio")
+    monkeypatch.setenv("LMSTUDIO_BASE_URL", "http://test-exo/v1")
+    from app.config import Settings
+    s = Settings()
+
+    catalog = [
+        {"id": "mlx-community/MiniMax-M2.7-4bit"},  # catalog[0] — must NOT be chosen
+        {"id": "mlx-community/Some-Other-Model-4bit"},
+        {"id": "mlx-community/Qwen3.5-27B-8bit"},
+    ]
+
+    def handler(request):
+        return httpx.Response(200, json={"data": catalog})
+
+    transport = httpx.MockTransport(handler)
+    with patch("app.services.model_selector._score", side_effect=_unscored):
+        async with httpx.AsyncClient(transport=transport) as client:
+            result = await discover_active_model(s, client)
+
+    assert result == "openai/mlx-community/Qwen3.5-27B-8bit"
+    assert "MiniMax" not in result, "must never silently resolve to exo's catalog[0]"
+
+
+async def test_discovery_except_handler_falls_back_to_settings_model_name_not_loaded_zero(
+    monkeypatch,
+):
+    """Regression for exo-model-notfound-502: discover_active_model's OWN
+    `except ModelSelectorError` handler (distinct from select_model's internal logic)
+    must fall back to settings.model_name, never loaded[0].
+
+    The test above (test_discovery_exo_style_catalog_honors_configured_default_not_catalog_zero)
+    passes a non-empty settings.model_name as `default` into select_model, which
+    select_model itself then returns via its own rule 3 ("default in loaded") — it never
+    actually raises, so that test never exercises discover_active_model's except-handler
+    at all. This test forces select_model to raise directly so the except-handler
+    (lines ~278-293) is genuinely hit."""
+    monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
+    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
+    monkeypatch.setenv("MODEL_NAME", "configured-fallback-model")
+    monkeypatch.setenv("MODEL_PREFERRED", "")
+    monkeypatch.setenv("AI_PROVIDER", "lmstudio")
+    monkeypatch.setenv("LMSTUDIO_BASE_URL", "http://test-exo/v1")
+    from app.config import Settings
+    s = Settings()
+
+    catalog = [
+        {"id": "mlx-community/MiniMax-M2.7-4bit"},  # loaded[0] — must NOT be chosen
+        {"id": "mlx-community/Some-Other-Model-4bit"},
+    ]
+
+    def handler(request):
+        return httpx.Response(200, json={"data": catalog})
+
+    transport = httpx.MockTransport(handler)
+    with patch(
+        "app.services.model_selector.select_model",
+        side_effect=ModelSelectorError("forced for test"),
+    ):
+        async with httpx.AsyncClient(transport=transport) as client:
+            result = await discover_active_model(s, client)
+
+    assert result == "openai/configured-fallback-model"
+    assert "MiniMax" not in result, "except-handler must never fall back to loaded[0]"
