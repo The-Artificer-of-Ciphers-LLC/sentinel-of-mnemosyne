@@ -248,11 +248,12 @@ async def test_show_calls_llm_and_patches_story():
 
     stub_narrative = "The party arrived in Westcrown and found trouble."
 
+    core_complete_mock = AsyncMock(return_value=_make_llm_narrative_response(stub_narrative))
     with (
         patch("app.main._register_with_retry", new=AsyncMock(return_value=None)),
         patch("app.routes.session.obsidian", vault),
         patch("app.routes.session.npc_roster_cache", {}),
-        patch("litellm.acompletion", new=AsyncMock(return_value=_make_llm_narrative_response(stub_narrative))),
+        patch("app.llm._core_client.complete", new=core_complete_mock),
     ):
         from app.main import app
 
@@ -264,9 +265,8 @@ async def test_show_calls_llm_and_patches_story():
             )
             body = resp.json()
 
-    # LLM was called
-    import litellm
-    assert litellm.acompletion.await_count >= 1
+    # LLM was called (via app.llm._core_client.complete — 42-04 handoff)
+    assert core_complete_mock.await_count >= 1
     # Story So Far section was patched
     assert vault.patch_heading.await_count >= 1
     patch_calls = vault.patch_heading.call_args_list
@@ -410,12 +410,14 @@ async def test_location_stub_created():
 # ---------------------------------------------------------------------------
 
 
-def _make_llm_narrative_response(text: str):
-    """Build a minimal litellm-shaped response for narrative (show verb)."""
-    from types import SimpleNamespace
+def _make_llm_narrative_response(text: str) -> dict:
+    """Build a minimal core_client.complete()-shaped result dict (show verb).
 
-    choice = SimpleNamespace(message=SimpleNamespace(content=text))
-    return SimpleNamespace(choices=[choice])
+    42-04: generate_story_so_far now reaches the LLM via
+    app.llm._core_client.complete(), which returns {content, model} instead
+    of a litellm-shaped response object.
+    """
+    return {"content": text, "model": "test-model"}
 
 
 def _make_llm_json_response(data: dict) -> dict:

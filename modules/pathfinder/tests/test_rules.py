@@ -20,7 +20,6 @@ os.environ.setdefault("LITELLM_MODEL", "openai/local-model")
 os.environ.setdefault("LITELLM_API_BASE", "http://localhost:1234/v1")
 
 import json
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -375,14 +374,8 @@ def test_retrieve_with_topic_filter_restricts():
 
 async def test_classify_rule_topic_returns_known_slug():
     """classify_rule_topic returns a slug from the closed vocabulary."""
-    mock_response = SimpleNamespace(
-        choices=[
-            SimpleNamespace(
-                message=SimpleNamespace(content=json.dumps({"topic": "flanking"}))
-            )
-        ]
-    )
-    with patch("litellm.acompletion", new=AsyncMock(return_value=mock_response)):
+    mock_result = {"content": json.dumps({"topic": "flanking"}), "model": "test-model"}
+    with patch("app.llm._core_client.complete", new=AsyncMock(return_value=mock_result)):
         from app.llm import classify_rule_topic
 
         result = await classify_rule_topic(
@@ -393,16 +386,8 @@ async def test_classify_rule_topic_returns_known_slug():
 
 async def test_classify_rule_topic_unknown_slug_coerced_to_misc():
     """L-6: classifier invents a slug not in RULE_TOPIC_SLUGS → coerced to 'misc'."""
-    mock_response = SimpleNamespace(
-        choices=[
-            SimpleNamespace(
-                message=SimpleNamespace(
-                    content=json.dumps({"topic": "flank-attack"})
-                )
-            )
-        ]
-    )
-    with patch("litellm.acompletion", new=AsyncMock(return_value=mock_response)):
+    mock_result = {"content": json.dumps({"topic": "flank-attack"}), "model": "test-model"}
+    with patch("app.llm._core_client.complete", new=AsyncMock(return_value=mock_result)):
         from app.llm import classify_rule_topic
 
         result = await classify_rule_topic(
@@ -413,12 +398,8 @@ async def test_classify_rule_topic_unknown_slug_coerced_to_misc():
 
 async def test_classify_rule_topic_malformed_json_returns_misc():
     """LLM returns malformed JSON → graceful degradation to 'misc' (no raise)."""
-    mock_response = SimpleNamespace(
-        choices=[
-            SimpleNamespace(message=SimpleNamespace(content="oops not json"))
-        ]
-    )
-    with patch("litellm.acompletion", new=AsyncMock(return_value=mock_response)):
+    mock_result = {"content": "oops not json", "model": "test-model"}
+    with patch("app.llm._core_client.complete", new=AsyncMock(return_value=mock_result)):
         from app.llm import classify_rule_topic
 
         result = await classify_rule_topic(

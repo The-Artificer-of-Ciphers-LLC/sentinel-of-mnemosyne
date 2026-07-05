@@ -40,11 +40,16 @@ import httpx
 import pytest
 
 from app.llm import (
+    classify_rule_topic,
+    extract_npc_fields,
+    generate_harvest_fallback,
     generate_mj_description,
     generate_npc_reply,
     generate_ruling_fallback,
     generate_ruling_from_passages,
     generate_session_recap,
+    generate_story_so_far,
+    update_npc_fields,
 )
 from app.rules import RuleChunk
 
@@ -203,3 +208,122 @@ async def test_generate_mj_description_uses_core_client_returns_plain_string():
 
     assert result == "nervous eyes, disheveled clothing"
     mock_complete.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# extract_npc_fields — structured (JSON-contract) NPC field extractor
+# ---------------------------------------------------------------------------
+
+
+async def test_extract_npc_fields_uses_core_client_and_parses_field_dict():
+    payload = {
+        "name": "Fenn", "level": 4, "ancestry": "Human", "class": "Scout",
+        "traits": [], "personality": "p", "backstory": "b", "mood": "neutral",
+    }
+    with patch(
+        "app.llm._core_client.complete",
+        new=AsyncMock(return_value=_core_result(json.dumps(payload))),
+    ) as mock_complete:
+        result = await extract_npc_fields(name="Fenn", description="a scout", model="m")
+
+    assert result == payload
+    mock_complete.assert_awaited_once()
+    kwargs = mock_complete.await_args.kwargs
+    assert "model" not in kwargs
+    assert "api_base" not in kwargs
+
+
+# ---------------------------------------------------------------------------
+# update_npc_fields — structured NPC field-update helper
+# ---------------------------------------------------------------------------
+
+
+async def test_update_npc_fields_uses_core_client_and_parses_changed_fields():
+    with patch(
+        "app.llm._core_client.complete",
+        new=AsyncMock(return_value=_core_result(json.dumps({"level": 7}))),
+    ) as mock_complete:
+        result = await update_npc_fields(
+            current_note="---\nname: Varek\nlevel: 1\n---\n",
+            correction="Varek is now level 7",
+            model="m",
+        )
+
+    assert result == {"level": 7}
+    mock_complete.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# generate_harvest_fallback — structured harvest-fallback composer
+# ---------------------------------------------------------------------------
+
+
+async def test_generate_harvest_fallback_uses_core_client_and_parses_shape():
+    payload = {
+        "monster": "Bogeyman",
+        "level": 5,  # DC_BY_LEVEL[5] == 20
+        "components": [
+            {
+                "type": "Hide",
+                "medicine_dc": 20,
+                "craftable": [{"name": "Leather armor", "crafting_dc": 15, "value": "2 gp"}],
+            }
+        ],
+    }
+    with patch(
+        "app.llm._core_client.complete",
+        new=AsyncMock(return_value=_core_result(json.dumps(payload))),
+    ) as mock_complete:
+        result = await generate_harvest_fallback(monster_name="Bogeyman", model="m")
+
+    assert result["source"] == "llm-generated"
+    assert result["verified"] is False
+    assert result["components"][0]["medicine_dc"] == 20
+    mock_complete.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# classify_rule_topic — structured topic classifier
+# ---------------------------------------------------------------------------
+
+
+async def test_classify_rule_topic_uses_core_client_returns_known_slug():
+    with patch(
+        "app.llm._core_client.complete",
+        new=AsyncMock(return_value=_core_result(json.dumps({"topic": "flanking"}))),
+    ) as mock_complete:
+        result = await classify_rule_topic("How does flanking work?", model="m")
+
+    assert result == "flanking"
+    mock_complete.assert_awaited_once()
+    kwargs = mock_complete.await_args.kwargs
+    assert "model" not in kwargs
+    assert "api_base" not in kwargs
+
+
+# ---------------------------------------------------------------------------
+# generate_story_so_far — best-effort plain-string mid-session summary
+# ---------------------------------------------------------------------------
+
+
+async def test_generate_story_so_far_uses_core_client_returns_plain_string():
+    with patch(
+        "app.llm._core_client.complete",
+        new=AsyncMock(return_value=_core_result("The party arrived in Westcrown.")),
+    ) as mock_complete:
+        result = await generate_story_so_far(events_log="stuff happened", model="m")
+
+    assert result == "The party arrived in Westcrown."
+    mock_complete.assert_awaited_once()
+
+
+async def test_generate_story_so_far_core_raise_degrades_gracefully():
+    """generate_story_so_far wraps the call in try/except Exception (best-effort,
+    D-13) — a core failure must still degrade to the fallback string, not raise."""
+    with patch(
+        "app.llm._core_client.complete",
+        new=AsyncMock(side_effect=httpx.ConnectError("core unreachable")),
+    ):
+        result = await generate_story_so_far(events_log="stuff happened", model="m")
+
+    assert result == "_Story so far generation failed — events are in the Events Log below._"

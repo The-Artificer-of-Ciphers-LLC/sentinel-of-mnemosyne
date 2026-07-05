@@ -27,7 +27,6 @@ import litellm
 
 from app.config import settings
 from sentinel_client import SentinelCoreClient
-from sentinel_shared.llm_call import acompletion_with_profile
 from sentinel_shared.model_profiles import ModelProfile
 
 logger = logging.getLogger(__name__)
@@ -100,17 +99,15 @@ async def extract_npc_fields(
         "mood (string, always 'neutral' for new NPCs). "
         "Return nothing except the JSON object."
     )
-    response = await acompletion_with_profile(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Name: {name}\nDescription: {description}"},
-        ],
-        profile=profile,
-        api_base=api_base,
-        timeout=60.0,
-    )
-    content = response.choices[0].message.content
+    async with httpx.AsyncClient() as client:
+        result = await _core_client.complete(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Name: {name}\nDescription: {description}"},
+            ],
+            client=client,
+        )
+    content = result["content"]
     return json.loads(_strip_code_fences(content))
 
 
@@ -239,17 +236,15 @@ async def update_npc_fields(
         "Do not include fields that did not change. "
         "Return nothing except the JSON object."
     )
-    response = await acompletion_with_profile(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Current note:\n{current_note}\n\nCorrection: {correction}"},
-        ],
-        profile=profile,
-        api_base=api_base,
-        timeout=60.0,
-    )
-    content = response.choices[0].message.content
+    async with httpx.AsyncClient() as client:
+        result = await _core_client.complete(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Current note:\n{current_note}\n\nCorrection: {correction}"},
+            ],
+            client=client,
+        )
+    content = result["content"]
     return json.loads(_strip_code_fences(content))
 
 
@@ -317,17 +312,15 @@ async def generate_harvest_fallback(
     # supplied (replaced with single-quotes) so they cannot close the
     # code-span and leak prompt-injection payloads outside it.
     safe_name = monster_name.replace("`", "'")
-    response = await acompletion_with_profile(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Monster: `{safe_name}`"},
-        ],
-        profile=profile,
-        api_base=api_base,
-        timeout=60.0,
-    )
-    content = response.choices[0].message.content
+    async with httpx.AsyncClient() as client:
+        result = await _core_client.complete(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Monster: `{safe_name}`"},
+            ],
+            client=client,
+        )
+    content = result["content"]
     parsed = json.loads(_strip_code_fences(content))
 
     # Stamp source + verified per SC-4 / T-32-LLM-01.
@@ -539,17 +532,15 @@ async def classify_rule_topic(
     # wrapper (same WR-07 hardening as generate_harvest_fallback).
     safe_query = query.replace("`", "'") if isinstance(query, str) else ""
     try:
-        response = await acompletion_with_profile(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Query: `{safe_query}`"},
-            ],
-            profile=profile,
-            api_base=api_base,
-            timeout=_TOPIC_CLASSIFIER_TIMEOUT_S,
-        )
-        content = response.choices[0].message.content or ""
+        async with httpx.AsyncClient() as client:
+            result = await _core_client.complete(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Query: `{safe_query}`"},
+                ],
+                client=client,
+            )
+        content = result["content"] or ""
         parsed = json.loads(_strip_code_fences(content))
     except json.JSONDecodeError:
         logger.warning(
@@ -875,17 +866,15 @@ async def generate_story_so_far(
     """
     logger.info("generate_story_so_far: calling LLM model=%s", model)
     try:
-        response = await acompletion_with_profile(
-            model=model,
-            messages=[
-                {"role": "system", "content": SESSION_STORY_SO_FAR_SYSTEM_PROMPT},
-                {"role": "user", "content": f"Events so far this session:\n{events_log}"},
-            ],
-            profile=profile,
-            api_base=api_base,
-            timeout=60.0,
-        )
-        content = response.choices[0].message.content or ""
+        async with httpx.AsyncClient() as client:
+            result = await _core_client.complete(
+                messages=[
+                    {"role": "system", "content": SESSION_STORY_SO_FAR_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"Events so far this session:\n{events_log}"},
+                ],
+                client=client,
+            )
+        content = result["content"] or ""
         return content.strip() or "_Story so far generation failed — events are in the Events Log below._"
     except Exception as exc:
         logger.warning("generate_story_so_far: LLM call failed: %s", exc)

@@ -474,23 +474,18 @@ async def test_harvest_llm_missing_medicine_dc_filled_from_level():
     """
     import json as _json
 
-    class _FakeResp:
-        class _Choice:
-            class _Msg:
-                content = _json.dumps({
-                    "monster": "Bogeyman",
-                    "level": 5,  # DC_BY_LEVEL[5] == 20
-                    "components": [
-                        {"type": "Hide", "craftable": [
-                            {"name": "Leather armor", "crafting_dc": 15, "value": "2 gp"}
-                        ]}  # no medicine_dc — must be filled from level
-                    ],
-                })
-            message = _Msg()
-        choices = [_Choice()]
+    fake_content = _json.dumps({
+        "monster": "Bogeyman",
+        "level": 5,  # DC_BY_LEVEL[5] == 20
+        "components": [
+            {"type": "Hide", "craftable": [
+                {"name": "Leather armor", "crafting_dc": 15, "value": "2 gp"}
+            ]}  # no medicine_dc — must be filled from level
+        ],
+    })
 
-    async def _fake_acompletion(**_kwargs):
-        return _FakeResp()
+    async def _fake_complete(**_kwargs):
+        return {"content": fake_content, "model": "test-model"}
 
     mock_obs = MagicMock()
     mock_obs.get_note = AsyncMock(return_value=None)
@@ -499,7 +494,7 @@ async def test_harvest_llm_missing_medicine_dc_filled_from_level():
     with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
          patch("app.routes.harvest.obsidian", mock_obs), \
          patch("app.routes.harvest.harvest_tables", stub_tables), \
-         patch("app.llm.litellm.acompletion", new=_fake_acompletion):
+         patch("app.llm._core_client.complete", new=_fake_complete):
         from app.main import app
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
@@ -522,19 +517,14 @@ async def test_harvest_llm_truly_malformed_500():
     """
     import json as _json
 
-    class _FakeResp:
-        class _Choice:
-            class _Msg:
-                content = _json.dumps({
-                    "monster": "Bogeyman",
-                    "level": 5,
-                    "components": "not-a-list",  # unrepairable
-                })
-            message = _Msg()
-        choices = [_Choice()]
+    fake_content = _json.dumps({
+        "monster": "Bogeyman",
+        "level": 5,
+        "components": "not-a-list",  # unrepairable
+    })
 
-    async def _fake_acompletion(**_kwargs):
-        return _FakeResp()
+    async def _fake_complete(**_kwargs):
+        return {"content": fake_content, "model": "test-model"}
 
     mock_obs = MagicMock()
     mock_obs.get_note = AsyncMock(return_value=None)
@@ -543,7 +533,7 @@ async def test_harvest_llm_truly_malformed_500():
     with patch("app.main._register_with_retry", new=AsyncMock(return_value=None)), \
          patch("app.routes.harvest.obsidian", mock_obs), \
          patch("app.routes.harvest.harvest_tables", stub_tables), \
-         patch("app.llm.litellm.acompletion", new=_fake_acompletion):
+         patch("app.llm._core_client.complete", new=_fake_complete):
         from app.main import app
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(
