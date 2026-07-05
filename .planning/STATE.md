@@ -1,7 +1,7 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.5.1
-milestone_name: — The Second Brain
+milestone: v0.5.2
+milestone_name: — Provider Independence
 status: verifying
 stopped_at: Completed 42-05-PLAN.md
 last_updated: "2026-07-05T19:36:02.468Z"
@@ -40,7 +40,8 @@ Last activity: 2026-07-05
 | v0.4 | Functional Alpha | 04–10 | ✅ COMPLETE |
 | v0.40 | Pre-Beta Refactoring | 21–26 | ✅ COMPLETE |
 | v0.5 | The Dungeon | 28–36 | 🔜 IN PROGRESS |
-| v0.5.1 | The Second Brain | 39–41 | 🔜 IN PROGRESS |
+| v0.5.1 | The Second Brain | 39–41 | ✅ COMPLETE |
+| v0.5.2 | Provider Independence | 42–43 | 🔜 IN PROGRESS |
 | v0.6 | The Practice Room | TBD | — |
 | v0.7 | The Workshop | TBD | — |
 | v0.8 | The Ledger | TBD | — |
