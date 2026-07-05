@@ -196,5 +196,87 @@ def test_eligible_entries_skips_stale_model_and_dimension_mismatch():
     assert matched_model_count == 2
 
 
+def test_eligible_entries_skips_same_model_different_persisted_dim_cutover_case():
+    """D-08 cutover case (EMB-04): an entry whose embedding_model string
+    MATCHES the active model but whose PERSISTED embedding_dim differs from
+    the live query dimension (e.g. same nomic model name, truncated
+    Matryoshka dim after an LM Studio cutover) must be skipped by the
+    dimension guard even though the MEM-05 model-string check alone would
+    pass it through. This must be caught BEFORE the vector is decoded.
+    """
+    index = {
+        "notes/same-model-diff-dim.md": {
+            # Decoded length (3) intentionally matches query_dim so that,
+            # absent the persisted-dim fast path, the decode-time check
+            # would wrongly admit this entry. The persisted embedding_dim
+            # (768) is what must trigger the skip.
+            "embedding_b64": encode_embedding([1.0, 0.0, 0.0]),
+            "embedding_model": "m",
+            "content_hash": "hcut",
+            "embedding_dim": 768,
+        },
+    }
+
+    entries, matched_model_count = eligible_entries(
+        index,
+        active_model="m",
+        exclude_prefixes=("ops/", "_trash/", "self/"),
+        query_dim=3,
+    )
+
+    assert entries == []
+    # Model string matched, so it still counts toward matched_model_count —
+    # the dimension guard is a separate, later check.
+    assert matched_model_count == 1
+
+
+def test_eligible_entries_no_embedding_dim_field_falls_back_to_decode_check():
+    """An entry with no persisted `embedding_dim` field must still be
+    skipped via the decode-time `len(raw) != query_dim` fallback — proving
+    backward compatibility with pre-existing (pre-D-08) index entries.
+    """
+    index = {
+        "notes/no-dim-field.md": {
+            "embedding_b64": encode_embedding([1.0, 0.0]),  # decodes to dim 2
+            "embedding_model": "m",
+            "content_hash": "hnodim",
+            # no "embedding_dim" key at all
+        },
+    }
+
+    entries, matched_model_count = eligible_entries(
+        index,
+        active_model="m",
+        exclude_prefixes=("ops/", "_trash/", "self/"),
+        query_dim=3,
+    )
+
+    assert entries == []
+    assert matched_model_count == 1
+
+
+def test_eligible_entries_matching_model_and_persisted_dim_is_retained():
+    """A matching-model, matching-persisted-dim entry is retained (positive
+    control for the fast path added above)."""
+    index = {
+        "notes/matching.md": {
+            "embedding_b64": encode_embedding([1.0, 0.0, 0.0]),
+            "embedding_model": "m",
+            "content_hash": "hmatch",
+            "embedding_dim": 3,
+        },
+    }
+
+    entries, matched_model_count = eligible_entries(
+        index,
+        active_model="m",
+        exclude_prefixes=("ops/", "_trash/", "self/"),
+        query_dim=3,
+    )
+
+    assert [entry.path for entry in entries] == ["notes/matching.md"]
+    assert matched_model_count == 1
+
+
 def test_embedding_index_path_constant():
     assert EMBEDDING_INDEX_PATH == "ops/sweeps/embedding-index.json"
