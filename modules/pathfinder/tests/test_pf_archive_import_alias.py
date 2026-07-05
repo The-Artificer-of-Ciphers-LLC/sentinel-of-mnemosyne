@@ -67,22 +67,18 @@ async def test_imported_from_uses_subfolder_argument_for_npc(tmp_path):
     obs = _FakeObsidian()
 
     async def _llm_response(*args, **kwargs):
+        """core_client.complete()-shaped result: {content, model} (Phase 42-05)."""
         return {
-            "choices": [
-                {
-                    "message": {
-                        "content": (
-                            '{"name":"Test Goblin","ancestry":"Goblin",'
-                            '"class":"Warrior","level":1,"mood":"neutral",'
-                            '"personality":"Hostile.","backstory":"Lives in caves.",'
-                            '"traits":["goblin","humanoid"]}'
-                        )
-                    }
-                }
-            ]
+            "content": (
+                '{"name":"Test Goblin","ancestry":"Goblin",'
+                '"class":"Warrior","level":1,"mood":"neutral",'
+                '"personality":"Hostile.","backstory":"Lives in caves.",'
+                '"traits":["goblin","humanoid"]}'
+            ),
+            "model": "test-model",
         }
 
-    with patch("app.pf_npc_extract.acompletion_with_profile",
+    with patch("app.pf_npc_extract._core_client.complete",
                new=AsyncMock(side_effect=_llm_response)), \
          patch("app.pf_archive_import.download_token",
                new=AsyncMock(return_value=None)):
@@ -117,7 +113,7 @@ async def test_imported_from_uses_subfolder_argument_for_passthrough(tmp_path):
     lore.write_text("# Some Place\n\n" + ("descriptive prose " * 50))
 
     obs = _FakeObsidian()
-    with patch("app.pf_npc_extract.acompletion_with_profile", new=AsyncMock()), \
+    with patch("app.pf_npc_extract._core_client.complete", new=AsyncMock()), \
          patch("app.pf_archive_import.download_token",
                new=AsyncMock(return_value=None)):
         await run_import(
@@ -151,7 +147,7 @@ async def test_report_path_slug_derives_from_subfolder(tmp_path):
     archive = _make_archive(tmp_path, "archive/classes/wizard")
     obs = _FakeObsidian()
 
-    with patch("app.pf_npc_extract.acompletion_with_profile", new=AsyncMock()), \
+    with patch("app.pf_npc_extract._core_client.complete", new=AsyncMock()), \
          patch("app.pf_archive_import.download_token",
                new=AsyncMock(return_value=None)):
         report = await run_import(
@@ -180,7 +176,7 @@ async def test_default_subfolder_is_archive_cartosia(tmp_path):
     archive = _make_archive(tmp_path, "any/path")
     obs = _FakeObsidian()
 
-    with patch("app.pf_npc_extract.acompletion_with_profile", new=AsyncMock()), \
+    with patch("app.pf_npc_extract._core_client.complete", new=AsyncMock()), \
          patch("app.pf_archive_import.download_token",
                new=AsyncMock(return_value=None)):
         report = await run_import(

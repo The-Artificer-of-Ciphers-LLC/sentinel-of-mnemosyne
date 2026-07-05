@@ -22,7 +22,6 @@ from pydantic import BaseModel, Field
 import app.foundry as _foundry
 from app.config import settings
 from app.foundry_chat_import import import_nedb_chatlogs_from_inbox
-from sentinel_shared.model_profiles import get_profile
 
 logger = logging.getLogger(__name__)
 
@@ -103,13 +102,14 @@ async def foundry_event(
 
 
 async def _handle_roll(event: FoundryRollEvent) -> JSONResponse:
-    """Process a roll event: narrate via LLM, dispatch to Discord bot (FVT-02, FVT-03)."""
-    model = settings.foundry_narration_model or settings.litellm_model
-    api_base = settings.litellm_api_base or None
-    # Strip openai/ prefix if present — get_profile expects the bare model name.
-    bare_model = model.removeprefix("openai/")
-    profile = await get_profile(bare_model, api_base=api_base or "http://host.docker.internal:1234")
+    """Process a roll event: narrate via LLM, dispatch to Discord bot (FVT-02, FVT-03).
 
+    Phase 42 (D-09, SC-6): no model/api_base/profile resolution here — core
+    resolves provider+model itself via SentinelCoreClient.complete(). The
+    prior settings.foundry_narration_model / settings.litellm_model chat
+    defaults (and the get_profile() LM Studio lookup they fed) are removed;
+    neither field exists in app/config.py anymore.
+    """
     # D-11: LLM narrative (max 20 words)
     narrative = await _foundry.generate_foundry_narrative(
         actor_name=event.actor_name,
@@ -118,9 +118,6 @@ async def _handle_roll(event: FoundryRollEvent) -> JSONResponse:
         outcome=event.outcome,
         roll_total=event.roll_total,
         dc=event.dc,
-        model=model,
-        api_base=api_base,
-        profile=profile,
     )
     # D-13: LLM failure fallback — plain-text summary
     if not narrative:

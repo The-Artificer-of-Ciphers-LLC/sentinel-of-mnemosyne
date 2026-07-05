@@ -18,6 +18,8 @@ os.environ.setdefault("LITELLM_MODEL", "openai/local-model")
 os.environ.setdefault("LITELLM_API_BASE", "http://localhost:1234/v1")
 
 from unittest.mock import AsyncMock, patch
+
+import httpx
 from httpx import ASGITransport, AsyncClient
 
 
@@ -127,10 +129,15 @@ async def test_notify_dispatched():
 
 
 async def test_llm_fallback():
-    """LLM timeout → plain-text fallback text in notify payload; embed still dispatched (FVT-02, D-13)."""
+    """LLM timeout → plain-text fallback text in notify payload; embed still dispatched (FVT-02, D-13).
+
+    Phase 42-05 (D-09, SC-6): the roll-narration call site reaches the LLM via
+    `app.foundry._core_client.complete()`, not litellm directly — patch the
+    core client singleton instead of litellm.acompletion.
+    """
     from app.main import app
 
-    with patch("litellm.acompletion", new=AsyncMock(side_effect=Exception("timeout"))):
+    with patch("app.foundry._core_client.complete", new=AsyncMock(side_effect=Exception("timeout"))):
         with patch("app.foundry.notify_discord_bot", new=AsyncMock()) as mock_notify:
             async with AsyncClient(
                 transport=ASGITransport(app=app), base_url="http://test"
@@ -154,6 +161,64 @@ async def test_llm_fallback():
     notify_payload = mock_notify.call_args[0][0]
     # D-13: fallback text present — plain string not empty
     assert notify_payload.get("narrative")
+
+
+# ---------------------------------------------------------------------------
+# Phase 42-05 (D-09, SC-6) — generate_foundry_narrative core-client handoff
+# ---------------------------------------------------------------------------
+# Direct unit tests of app.foundry.generate_foundry_narrative, mirroring the
+# 42-04 test_llm_core_handoff.py pattern: patch the module-level _core_client
+# singleton's complete() method and assert (1) no model/api_base forwarded,
+# (2) result["content"] is consumed correctly, (3) complete() raising is
+# caught by the function's own try/except and degrades to "" (D-13 — never
+# raises), matching acompletion_with_profile's pre-migration failure posture.
+
+
+async def test_generate_foundry_narrative_consumes_core_client_content():
+    from app.foundry import generate_foundry_narrative
+
+    with patch(
+        "app.foundry._core_client.complete",
+        new=AsyncMock(return_value={"content": "Seraphina struck true.", "model": "test-model"}),
+    ) as mock_complete:
+        result = await generate_foundry_narrative(
+            actor_name="Seraphina",
+            target_name="Goblin Warchief",
+            item_name="Longsword +1",
+            outcome="criticalSuccess",
+            roll_total=28,
+            dc=14,
+        )
+
+    assert result == "Seraphina struck true."
+    mock_complete.assert_awaited_once()
+    kwargs = mock_complete.await_args.kwargs
+    assert "messages" in kwargs
+    assert "client" in kwargs
+    # SC-6/D-09: no model/api_base forwarded to core — core resolves both.
+    assert "model" not in kwargs
+    assert "api_base" not in kwargs
+
+
+async def test_generate_foundry_narrative_core_raise_degrades_to_empty_string():
+    """complete() raising is caught by generate_foundry_narrative's own
+    try/except (D-13 fallback policy) — never propagates, returns ""."""
+    from app.foundry import generate_foundry_narrative
+
+    with patch(
+        "app.foundry._core_client.complete",
+        new=AsyncMock(side_effect=httpx.ConnectError("core unreachable")),
+    ):
+        result = await generate_foundry_narrative(
+            actor_name="Sera",
+            target_name=None,
+            item_name=None,
+            outcome="success",
+            roll_total=18,
+            dc=14,
+        )
+
+    assert result == ""
 
 
 # ---------------------------------------------------------------------------

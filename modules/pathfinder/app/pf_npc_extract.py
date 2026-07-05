@@ -1,15 +1,24 @@
 """Cartosia NPC field extractor (260427-czb Task 2).
 
-Calls ``acompletion_with_profile`` from sentinel_shared.llm_call ONCE per NPC
-with strict ``json_schema`` mode. Per vl1 hotfix #4: LM Studio rejects
-``response_format={"type": "json_object"}`` — we MUST use json_schema.
+Phase 42 (D-09, SC-6): the archive-import NPC-extraction chat call site
+reaches the LLM through sentinel-core's POST /provider/complete via
+``SentinelCoreClient.complete()`` (core resolves provider/model — exo/LM
+Studio selection + fallback are centralized on the core side). This module
+no longer calls litellm directly, and no longer forwards a strict
+``json_schema`` ``response_format`` — ``SentinelCoreClient.complete()``'s
+contract is ``{messages, client, stop, temperature}`` only (per 42-03/42-04),
+so schema conformance is enforced by the system prompt below plus
+``_validate_payload()`` rather than by LM Studio's ``json_schema`` strict
+mode this module relied on pre-42-05 (vl1 hotfix #4: LM Studio rejects
+``response_format={"type": "json_object"}``, so a prior version of this
+module used ``json_schema`` strict mode instead).
 
 Per CLAUDE.md AI Deferral Ban + project memory `feedback_no_deferral`:
-the schema enforces enum on mood, integer 1–20 on level, all required
+the schema enforces enum on mood, integer 1-20 on level, all required
 Phase 29 fields. Defaults (level=1, ancestry=Human, mood=neutral, traits=[])
-are taught to the model via the system prompt — defense-in-depth runtime
-validation rejects out-of-schema responses (defensive, since strict mode
-should already catch them at the LM Studio layer).
+are taught to the model via the system prompt — ``_validate_payload`` is now
+the PRIMARY (not merely defensive) gate on schema conformance, since no
+server-side strict-schema enforcement backs it anymore.
 
 Returns a dict ready for inclusion in the NPC frontmatter. The caller
 (``cartosia_import.write_npc``) appends ``relationships=[]``,
@@ -20,12 +29,22 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Literal
 
-from sentinel_shared.llm_call import acompletion_with_profile
+import httpx
+
+from app.config import settings
+from sentinel_client import SentinelCoreClient
 
 logger = logging.getLogger(__name__)
+
+# pf2e -> sentinel-core chat handoff (D-09, SC-6). Single client instance built
+# from existing settings (no new URL literal) — mirrors the module-level
+# SentinelCoreClient singleton convention established in app/llm.py (42-04).
+_core_client = SentinelCoreClient(
+    base_url=settings.sentinel_core_url,
+    api_key=settings.sentinel_api_key,
+)
 
 
 class NpcExtractionError(Exception):
@@ -37,7 +56,11 @@ class NpcExtractionError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# JSON schema — sent to LM Studio under {"type": "json_schema", "strict": True}
+# JSON schema — documents the required NPC-field shape and backs
+# ``_validate_payload``'s enum/range/required-field checks below. Phase 42
+# (D-09): no longer forwarded to the LLM as a ``response_format`` constraint
+# (core's ``/provider/complete`` passthrough has no such parameter) — it is
+# now purely a local validation reference.
 # ---------------------------------------------------------------------------
 
 NPC_EXTRACTION_SCHEMA: dict = {
@@ -99,33 +122,6 @@ _REQUIRED_FIELDS = frozenset(NPC_EXTRACTION_SCHEMA["required"])
 
 
 # ---------------------------------------------------------------------------
-# Model resolver — uses LM Studio's loaded models if available, else falls
-# back to MODEL_PREFERRED env var (the canonical path used by every other
-# pathfinder LLM call site; we don't write a 4th prefix-handling site).
-# ---------------------------------------------------------------------------
-
-
-def _resolve_structured_model() -> tuple[str, str | None]:
-    """Return (model_id, api_base) for the 'structured' profile.
-
-    Honours MODEL_PREFERRED (operator override) and falls back to the
-    sentinel-core default. Adds the litellm 'openai/' prefix if missing.
-    """
-    api_base = os.environ.get("LMSTUDIO_BASE_URL") or "http://host.docker.internal:1234"
-    api_base_v1 = api_base.rstrip("/")
-    if not api_base_v1.endswith("/v1"):
-        api_base_v1 = f"{api_base_v1}/v1"
-    preferred = (
-        os.environ.get("MODEL_PREFERRED")
-        or os.environ.get("MODEL_NAME")
-        or "qwen3.6-35b-a3b"
-    )
-    if "/" not in preferred and not preferred.startswith("openai/"):
-        preferred = f"openai/{preferred}"
-    return preferred, api_base_v1
-
-
-# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -152,7 +148,6 @@ async def extract_npc(
       NpcExtractionError: response is not valid JSON, fails schema
         validation, or is missing required fields.
     """
-    model, api_base = _resolve_structured_model()
     user_prompt = _USER_PROMPT_TEMPLATE.format(
         filepath=source_path, format=format, raw_markdown=content
     )
@@ -161,24 +156,13 @@ async def extract_npc(
         {"role": "user", "content": user_prompt},
     ]
 
-    response = await acompletion_with_profile(
-        model=model,
-        messages=messages,
-        api_base=api_base,
-        api_key="lmstudio",  # litellm requires a non-empty key; LM Studio ignores it
-        timeout=60.0,
-        temperature=0.0,
-        response_format={
-            "type": "json_schema",
-            "json_schema": {
-                "name": "npc",
-                "strict": True,
-                "schema": NPC_EXTRACTION_SCHEMA,
-            },
-        },
-    )
-
-    raw = _extract_content(response)
+    async with httpx.AsyncClient() as client:
+        result = await _core_client.complete(
+            messages=messages,
+            client=client,
+            temperature=0.0,
+        )
+    raw = (result["content"] or "").strip()
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -188,26 +172,6 @@ async def extract_npc(
 
     _validate_payload(payload, raw=raw)
     return payload
-
-
-def _extract_content(response) -> str:
-    """Pull the message content from a litellm response (dict or pydantic).
-
-    Handles the qwen3 thinking-mode quirk where strict json_schema can land
-    in reasoning_content rather than content (note_classifier comment).
-    """
-    try:
-        if isinstance(response, dict):
-            msg = response["choices"][0]["message"]
-            return (msg.get("content") or msg.get("reasoning_content") or "").strip()
-        msg = response.choices[0].message  # type: ignore[attr-defined]
-        return (
-            getattr(msg, "content", None)
-            or getattr(msg, "reasoning_content", None)
-            or ""
-        ).strip()
-    except (KeyError, IndexError, AttributeError) as exc:
-        raise NpcExtractionError(f"unexpected LLM response shape: {exc}") from exc
 
 
 def _validate_payload(payload: dict, *, raw: str) -> None:

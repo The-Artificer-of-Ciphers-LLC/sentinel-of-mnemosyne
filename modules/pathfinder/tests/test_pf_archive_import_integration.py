@@ -64,6 +64,7 @@ class FakeObsidian:
 
 
 def _make_llm_response(name: str, level: int = 1, klass: str = "Commoner") -> dict:
+    """Build a core_client.complete()-shaped result: {content, model} (Phase 42-05)."""
     payload = {
         "name": name,
         "ancestry": "Human",
@@ -74,7 +75,7 @@ def _make_llm_response(name: str, level: int = 1, klass: str = "Commoner") -> di
         "backstory": f"{name} grew up in the Ember District.",
         "traits": [],
     }
-    return {"choices": [{"message": {"content": json.dumps(payload), "reasoning_content": ""}}]}
+    return {"content": json.dumps(payload), "model": "test-model"}
 
 
 def _llm_dispatcher(call_log: list[dict]):
@@ -107,7 +108,7 @@ def _llm_dispatcher(call_log: list[dict]):
 async def test_dry_run_writes_only_report_and_returns_bucket_counts():
     obs = FakeObsidian()
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile", new=AsyncMock(return_value=None)
+        "app.pf_npc_extract._core_client.complete", new=AsyncMock(return_value=None)
     ) as mock_llm:
         report = await run_import(
             archive_root=str(FIXTURES),
@@ -148,7 +149,7 @@ async def test_live_run_with_limit_caps_npc_writes():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
         "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
@@ -178,7 +179,7 @@ async def test_rerun_skips_existing_npcs_by_default():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
         "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
@@ -225,7 +226,7 @@ async def test_force_overwrites_existing_npcs():
 
     call_log: list = []
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
         "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
@@ -270,7 +271,7 @@ async def test_cost_guard_blocks_large_live_run_without_confirm(tmp_path):
 
     obs = FakeObsidian()
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile", new=AsyncMock()
+        "app.pf_npc_extract._core_client.complete", new=AsyncMock()
     ) as mock_llm, patch(
         "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
     ):
@@ -298,7 +299,7 @@ async def test_two_npc_file_imports_as_single_combined_record():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
         "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
@@ -331,7 +332,7 @@ async def test_format_b_secret_block_preserved_in_body():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
         "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
@@ -368,7 +369,7 @@ async def test_adventure_hooks_routes_to_lore_arcs_not_npcs():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
         "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
@@ -400,7 +401,7 @@ async def test_npc_frontmatter_includes_phase29_required_fields():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
         "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
@@ -454,7 +455,7 @@ async def test_dialogue_files_concatenate_per_owner():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
         "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)
@@ -490,7 +491,7 @@ async def test_homebrew_lands_at_sibling_of_rulings():
     obs = FakeObsidian()
     call_log: list = []
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(side_effect=_llm_dispatcher(call_log)),
     ), patch(
         "app.pf_archive_import.download_token", new=AsyncMock(return_value=None)

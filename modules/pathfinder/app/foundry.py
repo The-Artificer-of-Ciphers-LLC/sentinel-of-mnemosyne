@@ -1,6 +1,10 @@
 """Foundry VTT event helpers — LLM narration and Discord notification dispatch (Phase 35).
 
-Calls acompletion_with_profile() for roll narration (D-11).
+Phase 42 (D-09, SC-6): the roll-narration chat call site reaches the LLM through
+sentinel-core's POST /provider/complete via `SentinelCoreClient.complete()` (core
+resolves provider/model — exo/LM Studio selection + fallback are centralized on
+the core side). foundry.py no longer calls litellm directly for chat.
+
 POSTs to Discord bot internal endpoint via httpx.AsyncClient (D-14).
 
 Never raises on LLM or HTTP failure — D-13 fallback policy.
@@ -11,10 +15,18 @@ import logging
 
 import httpx
 
-from sentinel_shared.llm_call import acompletion_with_profile
-from sentinel_shared.model_profiles import ModelProfile
+from app.config import settings
+from sentinel_client import SentinelCoreClient
 
 logger = logging.getLogger(__name__)
+
+# pf2e -> sentinel-core chat handoff (D-09, SC-6). Single client instance built
+# from existing settings (no new URL literal) — mirrors the module-level
+# SentinelCoreClient singleton convention established in app/llm.py (42-04).
+_core_client = SentinelCoreClient(
+    base_url=settings.sentinel_core_url,
+    api_key=settings.sentinel_api_key,
+)
 
 
 # Outcome display maps (shared by generate_foundry_narrative and build_narrative_fallback)
@@ -45,14 +57,16 @@ async def generate_foundry_narrative(
     outcome: str | None,        # CR-02 fix: None for hidden-DC rolls
     roll_total: int,
     dc: int | None,
-    model: str,
-    api_base: str | None = None,
-    profile: ModelProfile | None = None,
 ) -> str:
     """Generate a max-20-word dramatic narrative for a PF2e roll result (D-11).
 
     Returns plain string. On failure, returns "" — caller uses build_narrative_fallback.
     Never raises (D-13 fallback policy).
+
+    Phase 42 (D-09, SC-6): no model/api_base/profile parameters — core resolves
+    provider+model itself. This is the sole call site for this helper
+    (app.routes.foundry._handle_roll), so the now-unused parameters were
+    dropped from the signature rather than kept as vestigial dead weight.
     """
     outcome_label = OUTCOME_LABELS.get(outcome or "", outcome.capitalize() if outcome else "unknown")
     dc_str = str(dc) if dc is not None else "hidden"
@@ -65,17 +79,15 @@ async def generate_foundry_narrative(
         f"DC: {dc_str}."
     )
     try:
-        response = await acompletion_with_profile(
-            model=model,
-            messages=[
-                {"role": "system", "content": _NARRATOR_SYSTEM_PROMPT},
-                {"role": "user", "content": user_content},
-            ],
-            profile=profile,
-            api_base=api_base,
-            timeout=15.0,
-        )
-        content = response.choices[0].message.content or ""
+        async with httpx.AsyncClient() as client:
+            result = await _core_client.complete(
+                messages=[
+                    {"role": "system", "content": _NARRATOR_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_content},
+                ],
+                client=client,
+            )
+        content = result["content"] or ""
         return content.strip()
     except Exception as exc:
         logger.warning("generate_foundry_narrative: LLM call failed: %s", exc)

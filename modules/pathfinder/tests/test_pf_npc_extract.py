@@ -1,11 +1,20 @@
 """Tests for the cartosia NPC field extractor (260427-czb Task 2).
 
-Mocks the LLM call. Asserts on:
-  * The actual structure of the request sent to acompletion_with_profile
-    (response_format must be json_schema strict, not json_object).
+Phase 42-05 (D-09, SC-6): extract_npc() now reaches the LLM through
+`app.pf_npc_extract._core_client.complete()` (POST /provider/complete on
+sentinel-core) instead of `acompletion_with_profile`/litellm directly, and no
+longer forwards a strict `json_schema` response_format (core's passthrough
+has no such parameter — see module docstring). These tests patch the
+module-level `_core_client` singleton's `complete()` method and assert:
+
+  * The migrated call site reaches core_client.complete() with no
+    model/api_base/response_format forwarded (core resolves provider+model
+    — SC-6, D-09).
   * The system prompt content (preserve names verbatim, do not invent stats).
   * The returned NpcFields dict shape and values.
   * Defensive errors on truncated / out-of-schema responses.
+  * complete() raising propagates unswallowed (extract_npc does not wrap the
+    invocation in its own try/except).
 
 No real network calls. Per Behavioral-Test-Only Rule, every test calls
 extract_npc() directly and asserts on its observable output.
@@ -15,6 +24,7 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from app.pf_npc_extract import (
@@ -29,13 +39,9 @@ from app.pf_npc_extract import (
 # ---------------------------------------------------------------------------
 
 
-def _mock_llm_response(payload: dict) -> dict:
-    """Shape a fake litellm response around the given JSON payload."""
-    return {
-        "choices": [
-            {"message": {"content": json.dumps(payload), "reasoning_content": ""}}
-        ]
-    }
+def _core_result(payload: dict, model: str = "test-model") -> dict:
+    """Build a core_client.complete()-shaped result: {content, model}."""
+    return {"content": json.dumps(payload), "model": model}
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +55,7 @@ async def test_format_a_extraction_returns_expected_fields():
         "# Fenn the Beggar — Level 4 NPC (Scout / Informant)\n\n"
         "**Creature 4** | XP: 200\n\n**AC** 18\n**HP** 42\n"
     )
-    fake = _mock_llm_response({
+    fake = _core_result({
         "name": "Fenn the Beggar",
         "ancestry": "Human",
         "class": "Scout",
@@ -60,7 +66,7 @@ async def test_format_a_extraction_returns_expected_fields():
         "traits": [],
     })
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(return_value=fake),
     ) as mock:
         fields = await extract_npc(fixture, "The NPCs/Fenn the Beggar.md", format="A")
@@ -75,10 +81,13 @@ async def test_format_a_extraction_returns_expected_fields():
     # request contents, not just call count.
     assert mock.await_count == 1
     kwargs = mock.await_args.kwargs
-    rf = kwargs["response_format"]
-    assert rf["type"] == "json_schema", "must use json_schema strict, not json_object (LM Studio rejects json_object)"
-    assert rf["json_schema"]["strict"] is True
-    assert rf["json_schema"]["schema"] == NPC_EXTRACTION_SCHEMA
+    assert "messages" in kwargs
+    assert "client" in kwargs
+    # SC-6/D-09: no model/api_base/response_format forwarded to core — core
+    # resolves provider+model itself, and the passthrough has no schema param.
+    assert "model" not in kwargs
+    assert "api_base" not in kwargs
+    assert "response_format" not in kwargs
 
     # System prompt must explicitly tell the model not to invent stats and
     # to preserve names verbatim.
@@ -101,7 +110,7 @@ async def test_format_b_extraction_preserves_default_level():
         "### Biography\n\nTrapper.\n\n### Appearance\n\nLong gray hair.\n\n"
         "**Age: 32**\n\n**Location**: Otari\n"
     )
-    fake = _mock_llm_response({
+    fake = _core_result({
         "name": "Alice Twoorb",
         "ancestry": "Human",
         "class": "Trapper",
@@ -112,7 +121,7 @@ async def test_format_b_extraction_preserves_default_level():
         "traits": [],
     })
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(return_value=fake),
     ):
         fields = await extract_npc(
@@ -131,9 +140,10 @@ async def test_format_b_extraction_preserves_default_level():
 
 @pytest.mark.asyncio
 async def test_out_of_schema_mood_raises_extraction_error():
-    """Strict json_schema should make this impossible at the LM Studio layer,
-    but the extractor must defend against it (vl1 hotfix #4 lesson)."""
-    fake = _mock_llm_response({
+    """No server-side strict-schema enforcement backs this call anymore
+    (Phase 42-05 dropped response_format) — _validate_payload is now the
+    PRIMARY, not merely defensive, gate (vl1 hotfix #4 lesson)."""
+    fake = _core_result({
         "name": "X",
         "ancestry": "Human",
         "class": "Y",
@@ -144,7 +154,7 @@ async def test_out_of_schema_mood_raises_extraction_error():
         "traits": [],
     })
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(return_value=fake),
     ):
         with pytest.raises(NpcExtractionError) as exc_info:
@@ -159,9 +169,9 @@ async def test_out_of_schema_mood_raises_extraction_error():
 
 @pytest.mark.asyncio
 async def test_truncated_json_raises_extraction_error_with_raw_response():
-    fake = {"choices": [{"message": {"content": '{"name": "X", "ance', "reasoning_content": ""}}]}
+    fake = {"content": '{"name": "X", "ance', "model": "test-model"}
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(return_value=fake),
     ):
         with pytest.raises(NpcExtractionError) as exc_info:
@@ -177,7 +187,7 @@ async def test_truncated_json_raises_extraction_error_with_raw_response():
 
 @pytest.mark.asyncio
 async def test_missing_required_field_raises_extraction_error():
-    fake = _mock_llm_response({
+    fake = _core_result({
         # missing 'name'
         "ancestry": "Human",
         "class": "Y",
@@ -188,10 +198,28 @@ async def test_missing_required_field_raises_extraction_error():
         "traits": [],
     })
     with patch(
-        "app.pf_npc_extract.acompletion_with_profile",
+        "app.pf_npc_extract._core_client.complete",
         new=AsyncMock(return_value=fake),
     ):
         with pytest.raises(NpcExtractionError):
+            await extract_npc("body", "p.md", format="A")
+
+
+# ---------------------------------------------------------------------------
+# complete() raises — propagates unswallowed (T-42-12 posture)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_core_client_raise_propagates_unswallowed():
+    """extract_npc does not wrap the core_client.complete() invocation in its
+    own try/except, so a transport error surfaces to the caller unswallowed —
+    same posture as acompletion_with_profile's transport errors pre-migration."""
+    with patch(
+        "app.pf_npc_extract._core_client.complete",
+        new=AsyncMock(side_effect=httpx.ConnectError("core unreachable")),
+    ):
+        with pytest.raises(httpx.ConnectError):
             await extract_npc("body", "p.md", format="A")
 
 
