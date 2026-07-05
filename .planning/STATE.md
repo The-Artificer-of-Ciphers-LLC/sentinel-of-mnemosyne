@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.5.1
 milestone_name: — The Second Brain
 status: verifying
-stopped_at: Completed 41-04-PLAN.md — typed sessions, recency wiring, carrier weighting
-last_updated: "2026-06-12T14:23:33.965Z"
+stopped_at: Phase 42 context gathered
+last_updated: "2026-07-05T16:14:01.663Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 3
@@ -217,8 +217,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-06-12T13:56:41.004Z
-Stopped at: Completed 41-04-PLAN.md — typed sessions, recency wiring, carrier weighting
+Last session: 2026-07-05T16:14:01.656Z
+Stopped at: Phase 42 context gathered
 Resume file: 
 
-None
+.planning/phases/42-first-class-exo-provider/42-CONTEXT.md
