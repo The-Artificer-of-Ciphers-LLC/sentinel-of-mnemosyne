@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.5.1
 milestone_name: — The Second Brain
 status: executing
-stopped_at: Completed 42-03-PLAN.md
-last_updated: "2026-07-05T17:59:45.087Z"
+stopped_at: Completed 42-04-PLAN.md
+last_updated: "2026-07-05T18:29:45.327Z"
 last_activity: 2026-07-05 -- Phase 42 execution started
 progress:
   total_phases: 3
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 42 (first-class-exo-provider) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-05 -- Phase 42 execution started
 
@@ -123,6 +123,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 42 P42-01 | 20min | 3 tasks | 8 files |
 | Phase 42 P02 | 15min | 3 tasks | 6 files |
 | Phase 42 P03 | 25min | 2 tasks | 5 files |
+| Phase 42 P04 | 25min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -196,6 +197,9 @@ Recent decisions affecting current work:
 - [Phase ?]: 42-02: exo context-window registry branch skips the LM-Studio-only /api/v0/models/{id} endpoint entirely, using model_profiles family inference instead (Pitfall 4)
 - [Phase 42]: Provider completion route caps messages list at 50 and per-message content at 32,000 chars (no prior codebase precedent for message-count cap; per-item cap mirrors MessageEnvelope.content exactly)
 - [Phase 42]: SentinelCoreClient.complete() mirrors post_to_module()'s raise-on-error posture exactly, not send_message()'s swallow-to-string posture, so pf2e call sites get real exceptions to react to
+- [Phase 42-04]: SentinelCoreClient imported bare as `from sentinel_client import SentinelCoreClient` in pf2e (not `shared.sentinel_client`) — matches pf2e's existing bare-import convention for shared/, since pf2e flattens shared/ contents into /app/ rather than preserving package structure
+- [Phase 42-04]: Dockerfile fix — sentinel_client.py was never copied into the pf2e container (only sentinel_shared/ was); added targeted COPY line mirroring the sentinel_shared/ flattening precedent
+- [Phase 42-04]: All 10 llm.py chat call sites use a short-lived httpx.AsyncClient per call (foundry.py convention) rather than a caller-owned injected client, since none of these functions had a client in scope and threading a new parameter through every route/caller was out of scope
 
 ### Pending Todos
 
@@ -229,8 +233,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-05T17:59:45.081Z
-Stopped at: Completed 42-03-PLAN.md
+Last session: 2026-07-05T18:29:45.319Z
+Stopped at: Completed 42-04-PLAN.md
 Resume file: 
 
 None
