@@ -1,24 +1,35 @@
 """
 ProviderRouter — transparent primary/fallback routing for AIProvider instances.
 
-Fallback trigger: httpx.ConnectError or httpx.TimeoutException ONLY.
-HTTP errors (RateLimitError, AuthenticationError, etc.) are NOT fallback triggers —
+Fallback trigger: httpx.ConnectError, httpx.TimeoutException, or litellm.NotFoundError.
+Other HTTP errors (RateLimitError, AuthenticationError, etc.) are NOT fallback triggers —
 they propagate to the caller unchanged.
 
 Both providers fail → raises ProviderUnavailableError (caller returns HTTP 503).
 
 Per CONTEXT.md Phase 4 decisions:
-  - Fallback triggers on ConnectError/timeout only (not HTTP 4xx/5xx)
+  - Fallback triggers on ConnectError/timeout (not HTTP 4xx/5xx in general)
   - Both fail → HTTP 503 with detail explaining both failed, log both at ERROR level
+
+Per Phase 42 decision D-06: litellm.NotFoundError (HTTP 404) is ALSO a fallback
+trigger — exo's real failure mode when zero instances are loaded is a 404, so a
+ConnectError-only fallback would never fire for it. NotFoundError is a fallback
+trigger ONLY — it is deliberately NOT added to app/clients/litellm_provider.py's
+retryable set (a 404 is not a transient error).
 """
 import logging
 
 import httpx
+import litellm
 
 from app.errors import ContextLengthError, ProviderUnavailableError
 
-# Errors that trigger fallback (connectivity failures only)
-_FALLBACK_TRIGGERS = (httpx.ConnectError, httpx.TimeoutException)
+# Errors that trigger fallback (connectivity failures + model-not-served)
+_FALLBACK_TRIGGERS = (
+    httpx.ConnectError,
+    httpx.TimeoutException,
+    litellm.NotFoundError,  # D-06: exo's real failure mode is a 404
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +41,9 @@ class ProviderRouter:
     """
     Routes complete() calls to primary provider, with optional fallback.
 
-    Fallback is triggered ONLY on httpx.ConnectError or httpx.TimeoutException.
-    All other exceptions (HTTP errors, auth failures, rate limits) propagate unchanged.
+    Fallback is triggered on httpx.ConnectError, httpx.TimeoutException, or
+    litellm.NotFoundError (D-06 — model-not-served, e.g. exo's 404). All other
+    exceptions (other HTTP errors, auth failures, rate limits) propagate unchanged.
     """
 
     def __init__(self, primary_provider, fallback_provider=None) -> None:

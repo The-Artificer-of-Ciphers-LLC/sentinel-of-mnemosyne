@@ -76,6 +76,31 @@ async def test_raises_unavailable_with_no_fallback(primary):
         await router.complete([{"role": "user", "content": "hi"}])
 
 
+async def test_falls_back_on_not_found_error(primary, fallback):
+    """D-06: litellm.NotFoundError (exo's real 404 failure mode) triggers fallback,
+    mirroring the existing ConnectError/TimeoutException behavior."""
+    primary.complete.side_effect = litellm.NotFoundError(
+        "no instance found", llm_provider="openai", model="mlx-community/x"
+    )
+    router = ProviderRouter(primary, fallback)
+    messages = [{"role": "user", "content": "hi"}]
+    result = await router.complete(messages, stop=["END"], temperature=0.4)
+    assert result == "fallback response"
+    primary.complete.assert_awaited_once_with(messages, stop=["END"], temperature=0.4)
+    fallback.complete.assert_awaited_once_with(messages, temperature=0.4)
+
+
+async def test_raises_unavailable_on_not_found_error_with_no_fallback(primary):
+    """D-06: NotFoundError with no fallback configured raises ProviderUnavailableError,
+    mirroring test_raises_unavailable_with_no_fallback."""
+    router = ProviderRouter(primary, fallback_provider=None)
+    primary.complete.side_effect = litellm.NotFoundError(
+        "no instance found", llm_provider="openai", model="mlx-community/x"
+    )
+    with pytest.raises(ProviderUnavailableError):
+        await router.complete([{"role": "user", "content": "hi"}])
+
+
 async def test_unavailable_error_message_mentions_both(primary, fallback):
     primary.complete.side_effect = httpx.ConnectError("refused")
     fallback.complete.side_effect = httpx.TimeoutException("timeout")
