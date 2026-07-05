@@ -144,6 +144,111 @@ async def test_build_provider_router_picks_primary_from_settings(http_client):
     assert bundle_lm.router is not bundle_ollama.router
 
 
+async def test_lmstudio_provider_construction_args_pinned_after_openai_compatible_refactor(
+    http_client, monkeypatch
+):
+    """D-02/Pitfall 5 regression: extends test_build_provider_router_picks_primary_from_settings's
+    LM Studio coverage by PINNING the exact LiteLLMProvider(model_string=...,
+    api_base=..., api_key=...) construction args — not just "a provider was
+    returned" — proving the openai_compatible table-driven refactor (Task 2)
+    did not silently change LM Studio's construction (e.g. dropping
+    api_key="lmstudio", a common AuthenticationError symptom)."""
+    captured: dict[str, "_CapturingProvider"] = {}
+
+    class _CapturingProvider:
+        def __init__(self, model_string, api_base=None, api_key=None):
+            self.model_string = model_string
+            self.api_base = api_base
+            self.api_key = api_key
+            captured[model_string] = self
+
+        async def complete(self, messages, stop=None, temperature=None):
+            return f"model={self.model_string}|api_base={self.api_base}|api_key={self.api_key}"
+
+    monkeypatch.setattr("app.composition.LiteLLMProvider", _CapturingProvider)
+
+    settings = _settings(
+        ai_provider="lmstudio",
+        ai_fallback_provider="none",
+        lmstudio_base_url="http://lmstudio.test/v1",
+    )
+    bundle = await build_provider_router(settings, http_client)
+
+    # model_auto_discover=False (see _settings()) short-circuits discovery to
+    # "openai/{model_name}" without touching the network.
+    lmstudio_key = "openai/test-model"
+    assert lmstudio_key in captured
+    result = await bundle.router.complete([{"role": "user", "content": "hi"}])
+    assert result == (
+        f"model={lmstudio_key}|api_base=http://lmstudio.test/v1|api_key=lmstudio"
+    )
+
+
+async def test_exo_primary_selection_uses_exo_provider_map_entry(http_client, monkeypatch):
+    """SC-2/D-01/D-02/D-04: ai_provider=exo selects the exo LiteLLMProvider
+    entry as primary — switching lmstudio<->exo is config-only, no code edit."""
+    captured: dict[str, "_CapturingProvider"] = {}
+
+    class _CapturingProvider:
+        def __init__(self, model_string, api_base=None, api_key=None):
+            self.model_string = model_string
+            self.api_base = api_base
+            self.api_key = api_key
+            captured[model_string] = self
+
+        async def complete(self, messages, stop=None, temperature=None):
+            return f"response-from:{self.model_string}"
+
+    monkeypatch.setattr("app.composition.LiteLLMProvider", _CapturingProvider)
+
+    settings = _settings(
+        ai_provider="exo",
+        ai_fallback_provider="none",
+        exo_base_url="http://exo.test/v1",
+        exo_model="mlx-community/Qwen3.5-27B-8bit",
+    )
+    bundle = await build_provider_router(settings, http_client)
+
+    assert bundle.ai_provider_name == "exo"
+    exo_key = "openai/mlx-community/Qwen3.5-27B-8bit"
+    assert exo_key in captured
+    assert captured[exo_key].api_base == "http://exo.test/v1"
+    # Prove (behaviorally, via .complete()) that the router's PRIMARY really
+    # is the exo-config-derived instance, not merely present in provider_map.
+    result = await bundle.router.complete([{"role": "user", "content": "hi"}])
+    assert result == f"response-from:{exo_key}"
+
+
+async def test_generalized_fallback_selects_exo_by_name(http_client, monkeypatch):
+    """D-05: ai_fallback_provider accepts ANY configured provider name (not
+    just claude) — exo can serve as the fallback for lmstudio."""
+
+    class _CapturingProvider:
+        def __init__(self, model_string, api_base=None, api_key=None):
+            self.model_string = model_string
+            self.api_base = api_base
+            self.api_key = api_key
+
+        async def complete(self, messages, stop=None, temperature=None):
+            if "exo" not in (self.api_base or ""):
+                raise httpx.ConnectError("primary down")
+            return f"fallback-response:{self.model_string}"
+
+    monkeypatch.setattr("app.composition.LiteLLMProvider", _CapturingProvider)
+
+    settings = _settings(
+        ai_provider="lmstudio",
+        ai_fallback_provider="exo",
+        lmstudio_base_url="http://lmstudio.test/v1",
+        exo_base_url="http://exo.test/v1",
+        exo_model="mlx-community/Qwen3.5-27B-8bit",
+    )
+    bundle = await build_provider_router(settings, http_client)
+
+    result = await bundle.router.complete([{"role": "user", "content": "hi"}])
+    assert result == "fallback-response:openai/mlx-community/Qwen3.5-27B-8bit"
+
+
 async def test_build_application_typo_kwarg_raises_typeerror(http_client):
     """Explicit-kwargs (W1) — a typo like ``vualt=`` must raise TypeError, not be swallowed."""
     settings = _settings()
