@@ -395,17 +395,21 @@ embedding_model_loaded = await probe_embedding_model_loaded(
 
 **If this table is empty:** N/A — three assumptions logged above; all are low-risk per their own notes.
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+Both resolved during `/gsd-plan-phase 43`; the recommendations below were adopted into the plans.
 
 1. **Should `embedding_api_key` default to `"lm-studio"` the way `lmstudio_api_key` implicitly does at the call site, or stay blank in Settings and rely on `Embeddings.__init__`'s existing `api_key or "lm-studio"` fallback?**
    - What we know: `Embeddings.__init__` (`embeddings.py:114`) already does `self._api_key = api_key or "lm-studio"` — a blank `embedding_api_key` setting flows through correctly today.
    - What's unclear: whether CONTEXT.md's "Claude's Discretion" bullet ("Whether `embedding_api_key` defaults to the existing `lm-studio` sentinel") wants the default expressed in `config.py` (visible in `.env.example`) or left implicit in the client.
    - Recommendation: leave `Settings.embedding_api_key: str = ""` (blank, matching `lmstudio_api_key`/`exo_api_key`'s existing pattern) and rely on the client-side fallback — consistent with every other provider triplet in the codebase.
+   - **RESOLVED (43-01):** adopted — the config triplet sets `embedding_api_key: str = ""`, relying on the client-side `"lm-studio"` fallback.
 
 2. **Does pf2e's rules corpus (148 chunks per the D-02-step-3 comment) fit under a reasonable `_MAX_TEXTS` cap on the new `/embeddings` route in one batch call?**
    - What we know: `build_rules_index()` calls `embed_fn(texts)` once with the full chunk list (`rules.py:363`).
    - What's unclear: exact current corpus size (comment says "148-chunk" as of Phase 33's docstring; may have grown).
    - Recommendation: set `_MAX_TEXTS` generously (200+) and verify against `len(load_rules_corpus(...))` during planning/execution; do not hardcode a cap below the actual corpus size or the startup rules-index build will 422 against its own gateway.
+   - **RESOLVED (43-02):** adopted — `_MAX_TEXTS = 200` (exceeds the ~148-chunk corpus); 43-02 verifies against `len(load_rules_corpus(...))` at execution.
 
 ## Environment Availability
 
