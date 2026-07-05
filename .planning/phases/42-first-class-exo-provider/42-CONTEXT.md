@@ -44,7 +44,7 @@ Restore the intended **"everything through Sentinel"** architecture for the LLM 
 - **D-08:** On **zero loaded instances**: trigger fallback per D-05/D-06; if no fallback is configured, raise a clear "exo has no loaded model" error. **Never guess a model / never pick `catalog[0]`.** (Preserves the `model_selector.select_model()` hardening.)
 
 ### pf2e-module (chat handoff)
-- **D-09:** pf2e-module delegates its **chat/completions** to a sentinel-core provider-completion endpoint (core = single AI gateway). Remove pf2e's own direct chat litellm config + hardcoded model default.
+- **D-09:** pf2e-module delegates its **chat/completions** to a sentinel-core provider-completion endpoint (core = single AI gateway). Remove pf2e's own direct chat litellm config + hardcoded model default. **Scope (resolved at plan-phase 2026-07-05):** ALL ~13 pf2e chat/completion call sites migrate in Phase 42 (full handoff, not a subset); a new narrow sentinel-core completion endpoint + `RouteContext` field are built to receive them. (Embeddings call sites stay out → Phase 43.)
 - **D-10:** Accept a pf2e→core runtime dependency for chat (largely already present via compose `depends_on: sentinel-core healthy`).
 
 ### Claude's Discretion
