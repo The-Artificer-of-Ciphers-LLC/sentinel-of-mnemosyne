@@ -16,19 +16,21 @@ class Settings(BaseSettings):
     obsidian_base_url: str = "http://host.docker.internal:27123"
     obsidian_api_key: str = ""  # blank if Obsidian REST API auth disabled
 
-    # LiteLLM — model and API base for NPC field extraction.
+    # LiteLLM — API base for the embeddings/rules-index path (Phase 33/43).
     # Local OpenAI-compatible inference backend (e.g. exo, LM Studio) reached via
     # Docker's host-gateway alias -- NOT "localhost", which inside this container
     # resolves to the container itself rather than the host machine running the
     # backend (T-lmstudio-provider-switch). Override via LITELLM_API_BASE in .env.
-    litellm_model: str = "openai/local-model"
+    #
+    # Phase 42 (D-09, SC-6): the chat-only default model field and the
+    # per-task-kind chat/structured/fast override fields are REMOVED — every
+    # pf2e chat/completion call site now reaches the LLM through
+    # sentinel-core's POST /provider/complete (SentinelCoreClient.complete()),
+    # which resolves provider+model itself. `litellm_api_base` is RETAINED
+    # because the embeddings path (embed_texts, below) still calls
+    # litellm.aembedding directly against it (Phase 43 scope; D-02 embeddings
+    # stay on litellm).
     litellm_api_base: str = "http://host.docker.internal:52415/v1"
-
-    # Task-kind preferences (optional) — used by app.resolve_model to pick the best
-    # loaded model for each task. If unset, the scorer falls back to litellm_model.
-    litellm_model_chat: str | None = None
-    litellm_model_structured: str | None = None
-    litellm_model_fast: str | None = None
 
     # Phase 33 rules engine — embedding model for corpus + query embeds, served from
     # litellm_api_base above. Stored as the BARE model id (no provider prefix). The
@@ -46,10 +48,8 @@ class Settings(BaseSettings):
     # Phase 34 session notes settings (D-10, D-13, D-37)
     session_auto_recap: bool = False  # SESSION_AUTO_RECAP env var (D-10)
     session_tz: str = "America/New_York"  # SESSION_TZ env var (D-13)
-    session_recap_model: str | None = None  # SESSION_RECAP_MODEL; None falls back to litellm_model (D-37)
 
     # Phase 35 Foundry VTT event ingest settings (D-12, D-14)
-    foundry_narration_model: str | None = None  # FOUNDRY_NARRATION_MODEL; None falls back to litellm_model
     discord_bot_internal_url: str = "http://discord-bot:8001"  # DISCORD_BOT_INTERNAL_URL
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}

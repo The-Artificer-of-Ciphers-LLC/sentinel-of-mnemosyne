@@ -1,10 +1,27 @@
 """Project-specific model resolution — wires pathfinder settings into the selector.
 
-Call sites (extract_npc_fields, update_npc_fields, generate_mj_description) invoke
-``await resolve_model("structured" | "fast")`` to get the best loaded model for
-their task kind. Discovery and scoring live in ``app.model_selector``; this module
-is the thin adapter that reads ``app.config.settings`` and normalises the return
-value for LiteLLM's ``provider/model`` naming convention.
+Call sites (extract_npc_fields, update_npc_fields, generate_mj_description, ...)
+invoke ``await resolve_model("structured" | "fast" | "chat")`` to satisfy their
+``model``/``api_base``/``profile`` parameters. Discovery and scoring live in
+``app.model_selector``; this module is the thin adapter that reads
+``app.config.settings`` and normalises the return value for LiteLLM's
+``provider/model`` naming convention.
+
+Phase 42 (D-09, SC-6): every pf2e chat/completion call site now routes through
+sentinel-core's ``SentinelCoreClient.complete()``, which resolves provider and
+model itself and does not accept a model/api_base override from pf2e — the
+value this module returns is discarded at every call site (grep-verified: no
+``core_client.complete(...)`` invocation anywhere in this codebase passes
+``model=`` or ``api_base=``). This module is kept only because
+``app/llm.py``'s migrated functions still accept (unused) ``model``/
+``api_base``/``profile`` parameters unchanged from pre-42-04 (42-04's explicit
+scoping decision — touching every ``app/routes/*.py`` caller was out of scope
+for that plan). It intentionally no longer reads a per-task-kind operator
+override or a hardcoded chat-model default from settings — both were removed
+from ``app/config.py`` in Phase 42-05 (SC-6: no module hardcodes a chat
+endpoint or model id). Discovery still probes ``settings.litellm_api_base``
+(retained — Phase 43 embeddings scope) so a real loaded-model id is returned
+whenever discovery succeeds.
 """
 
 from dataclasses import dataclass
@@ -21,6 +38,13 @@ _LITELLM_PROVIDER_PREFIX = "openai/"
 # Strip set used by strip_litellm_prefix(): the 3 provider tags that pathfinder
 # may see prepended to a discovered model id.
 _LITELLM_STRIP_PREFIXES: tuple[str, ...] = ("openai/", "ollama/", "anthropic/")
+
+# Fallback used ONLY when model discovery returns nothing loaded (e.g. an
+# unreachable backend). NEVER forwarded to a real LLM call — every pf2e chat
+# call site routes through SentinelCoreClient.complete(), which has no model
+# parameter at all (SC-6, D-09; Phase 42-05 removed the last hardcoded chat
+# model default, `litellm_model`, from app/config.py).
+_UNUSED_MODEL_PLACEHOLDER = "openai/unused-core-resolves-model"
 
 
 def strip_litellm_prefix(model_str: str) -> str:
@@ -42,27 +66,20 @@ class ResolvedModel:
 
 
 async def resolve_model(task_kind: TaskKind, *, force_refresh: bool = False) -> str:
-    """Return the best model id for ``task_kind`` in LiteLLM-compatible form.
+    """Return a model id for ``task_kind`` in LiteLLM-compatible form.
 
     Discovers loaded models at ``settings.litellm_api_base`` (cached after first
-    call per process), honors the ``LITELLM_MODEL_{CHAT,STRUCTURED,FAST}`` env
-    overrides, and falls back to ``settings.litellm_model`` if no scored match.
-    Always returns a ``provider/model`` string — prepends ``openai/`` if the
-    selected model name has no provider prefix (typical for bare names from
-    LM Studio's ``/v1/models``).
+    call per process). Falls back to a clearly-inert placeholder
+    (``_UNUSED_MODEL_PLACEHOLDER``) when discovery is empty — see module
+    docstring: this value is never forwarded to a real completion call (core
+    resolves provider+model itself per D-09). No per-task-kind operator
+    override or hardcoded chat-model default is read from settings anymore
+    (both removed in Phase 42-05 — SC-6). Always returns a ``provider/model``
+    string — prepends ``openai/`` if the selected model name has no provider
+    prefix (typical for bare names from LM Studio's ``/v1/models``).
     """
     loaded = await get_loaded_models(settings.litellm_api_base, force_refresh=force_refresh)
-    preferences = {
-        "chat": settings.litellm_model_chat,
-        "structured": settings.litellm_model_structured,
-        "fast": settings.litellm_model_fast,
-    }
-    chosen = select_model(
-        task_kind,
-        loaded,
-        preferences=preferences,
-        default=settings.litellm_model,
-    )
+    chosen = select_model(task_kind, loaded, default=_UNUSED_MODEL_PLACEHOLDER)
     if chosen.startswith(_LITELLM_PROVIDER_PREFIX):
         return chosen
     return f"{_LITELLM_PROVIDER_PREFIX}{chosen}"

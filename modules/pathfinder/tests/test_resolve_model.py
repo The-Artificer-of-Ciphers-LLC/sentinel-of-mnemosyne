@@ -43,13 +43,18 @@ async def test_resolve_model_preserves_existing_prefix():
     assert chosen == "openai/qwen2.5-14b-instruct"
 
 
-async def test_resolve_model_falls_back_to_default_with_prefix():
-    """When discovery returns empty, resolve_model returns settings.litellm_model verbatim (already prefixed)."""
+async def test_resolve_model_falls_back_to_placeholder_when_discovery_empty():
+    """When discovery returns empty, resolve_model falls back to the inert
+    placeholder — never forwarded to a real completion call (SC-6, D-09).
+
+    Phase 42-05 removed the last hardcoded chat-model default
+    (`settings.litellm_model`) from app/config.py; resolve_model() no longer
+    has a "real" default to fall back to, by design.
+    """
     with patch(
         "app.resolve_model.get_loaded_models",
         new=AsyncMock(return_value=[]),
     ):
         chosen = await resolve_model("fast")
 
-    # settings.litellm_model defaults to "openai/local-model" — already prefixed
-    assert chosen == "openai/local-model"
+    assert chosen == "openai/unused-core-resolves-model"

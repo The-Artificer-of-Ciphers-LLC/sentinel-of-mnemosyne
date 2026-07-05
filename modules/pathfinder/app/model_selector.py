@@ -10,10 +10,17 @@ Caveat (T-lmstudio-provider-switch): `/v1/models` membership does not necessaril
 mean a model has an active running instance on every backend. LM Studio's endpoint
 only ever lists the one model an operator has loaded, so the scoring/fallback chain
 below always lands on something serviceable. Backends like exo instead return their
-full downloadable catalog regardless of which model is actually placed/running —
-pin `preferences`/`default` explicitly (see app/config.py's `litellm_model*` settings)
-to the model you've confirmed is actually ready, rather than relying on discovery
-to pick a servable one.
+full downloadable catalog regardless of which model is actually placed/running.
+
+Phase 42 (D-09, SC-6): the `preferences`/`default` callers pass here are now
+resolved by `app.resolve_model` without reading any per-task-kind or
+hardcoded chat-model setting from `app/config.py` (both removed) — every
+pf2e chat/completion call site reaches the LLM through sentinel-core's
+`SentinelCoreClient.complete()`, which resolves provider+model itself. The
+selection this module still performs is vestigial (see `app/resolve_model.py`
+module docstring for the full rationale); it is kept only so callers that
+still thread an unused `model` parameter through unchanged function
+signatures have something to pass.
 
 Three task kinds map to the three LLM usage patterns in the codebase:
 
