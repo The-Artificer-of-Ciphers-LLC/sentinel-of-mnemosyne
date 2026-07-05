@@ -77,12 +77,26 @@ def content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
-def fresh_entry(rest: str, embedding: list[float], active_model: str) -> dict[str, Any]:
-    """Build a fresh index entry for a note body and embedding."""
+def fresh_entry(
+    rest: str,
+    embedding: list[float],
+    active_model: str,
+    *,
+    embedding_dim: int | None = None,
+) -> dict[str, Any]:
+    """Build a fresh index entry for a note body and embedding.
+
+    ``embedding_dim`` (D-08/EMB-04) is the resolved dimension of the
+    embedder's output for this sweep batch, threaded in by the caller
+    (mirrors ``active_model``). Falls back to ``len(embedding)`` when the
+    caller omits it, so this entry's own vector is always self-consistent
+    even if a batch-level dimension wasn't resolved.
+    """
     return {
         "embedding_b64": encode_embedding(embedding),
         "embedding_model": active_model,
         "content_hash": content_hash(rest),
+        "embedding_dim": embedding_dim if embedding_dim is not None else len(embedding),
     }
 
 
@@ -91,13 +105,21 @@ def stale_entry(
     *,
     rest: str,
     active_model: str,
+    embedding_dim: int | None = None,
 ) -> dict[str, Any]:
-    """Build the degraded entry for a changed body without a fresh vector."""
+    """Build the degraded entry for a changed body without a fresh vector.
+
+    ``embedding_dim`` carries forward the existing entry's persisted
+    dimension when present (mirrors the ``embedding_model`` fallback
+    pattern immediately below); otherwise falls back to the caller-supplied
+    ``embedding_dim`` (the active sweep's resolved dimension, if any).
+    """
     return {
         "embedding_b64": existing_entry.get("embedding_b64", ""),
         "embedding_model": existing_entry.get("embedding_model", active_model),
         "content_hash": content_hash(rest),
         "stale": True,
+        "embedding_dim": existing_entry.get("embedding_dim", embedding_dim),
     }
 
 
@@ -108,8 +130,18 @@ def build_embedding_index(
     embeddings: list[list[float]] | None,
     active_paths: set[str],
     active_model: str,
+    active_embedding_dim: int | None = None,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
-    """Build the next sidecar index from prior state and current sweep results."""
+    """Build the next sidecar index from prior state and current sweep results.
+
+    ``active_embedding_dim`` (D-08/EMB-04) is the resolved dimension of the
+    current sweep's embedder output (e.g. ``len(embeddings[0])``), threaded
+    into every ``fresh_entry``/``stale_entry`` call alongside ``active_model``
+    so the sidecar reader (``eligible_entries``) can skip-before-decode on a
+    stale-dimension entry. Optional and defaults to ``None`` for backward
+    compatibility with callers that don't resolve a batch-level dimension
+    (each ``fresh_entry`` still self-resolves from its own vector in that case).
+    """
     errors: list[str] = []
     new_index: dict[str, dict[str, Any]] = {}
 
@@ -139,6 +171,7 @@ def build_embedding_index(
                         existing_entry,
                         rest=rest,
                         active_model=active_model,
+                        embedding_dim=active_embedding_dim,
                     )
                 continue
 
@@ -148,7 +181,9 @@ def build_embedding_index(
             ):
                 new_index[path] = existing_entry
             else:
-                new_index[path] = fresh_entry(rest, embeddings[idx], active_model)
+                new_index[path] = fresh_entry(
+                    rest, embeddings[idx], active_model, embedding_dim=active_embedding_dim
+                )
 
         return new_index, errors
 
@@ -165,6 +200,7 @@ def build_embedding_index(
                 existing_entry,
                 rest=rest,
                 active_model=active_model,
+                embedding_dim=active_embedding_dim,
             )
 
     return new_index, errors

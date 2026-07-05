@@ -108,6 +108,22 @@ def _embedding_model_id() -> str:
     except Exception:
         return "text-embedding-nomic-embed-text-v1.5"
 
+
+def _resolve_embedding_dim(embeddings: "list[list[float]] | None") -> int | None:
+    """Resolve the embedding dimension actually produced by this sweep batch.
+
+    D-08 (EMB-04): the dimension is derived from the PRODUCED vectors
+    (``len(embeddings[0])``), never from config — this is what lets the
+    guard catch a cutover where the SAME ``embedding_model`` string starts
+    returning a different-dimension vector (e.g. a Matryoshka truncation
+    change). Returns ``None`` when no embeddings were produced this batch
+    (embedder failure / empty batch), in which case ``fresh_entry``/
+    ``stale_entry`` fall back to their own per-entry resolution.
+    """
+    if embeddings:
+        return len(embeddings[0])
+    return None
+
 class SweepReport(BaseModel):
     sweep_id: str
     status: str = "complete"  # idle | running | complete | error
@@ -242,6 +258,7 @@ async def _emit_embedding_index(
         embeddings=embeddings,
         active_paths=active_paths,
         active_model=_embedding_model_id(),
+        active_embedding_dim=_resolve_embedding_dim(embeddings),
     )
     for msg in index_errors:
         logger.warning("sweep: %s", msg)
@@ -291,6 +308,18 @@ async def rebuild_embedding_index(
 
     Reuses the existing sweep lock so a cold-start rebuild and an admin
     ``run_sweep`` cannot interleave writes (T-40-16).
+
+    D-09 (restart-is-cutover, EMB-04): this non-blocking startup rebuild
+    already runs on EVERY boot (wired via ``composition.initialize_startup``'s
+    ``_startup_rebuild`` task). Forcing a full re-embed/re-sweep after an
+    embeddings-backend cutover (e.g. the 43-01 exo -> LM Studio base_url fix)
+    requires NO new trigger, ops route, or CLI — a plain
+    ``docker compose restart sentinel-core`` IS the cutover mechanism: the
+    fresh boot re-walks the vault, re-embeds every note against the
+    newly-configured backend, and re-persists ``embedding_dim`` per entry so
+    the D-08 guard has fresh dimension data to compare against. pf2e's rules
+    index is rebuilt independently at its own container's startup and is out
+    of scope here.
     """
     sweep_id = _iso_utc()
     report = SweepReport(sweep_id=sweep_id, status="running")
