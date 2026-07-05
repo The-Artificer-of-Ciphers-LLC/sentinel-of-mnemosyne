@@ -31,6 +31,7 @@ from app.routes.message import router as message_router
 from app.runtime_config import runtime_config_from_settings
 from app.routes.modules import router as modules_router
 from app.routes.note import router as note_router
+from app.routes.provider import router as provider_router
 from app.routes.status import router as status_router
 from app.services.health_response import build_health_payload
 from app.services.model_selector import probe_embedding_model_loaded
@@ -98,6 +99,7 @@ app.include_router(message_router)
 app.include_router(status_router)
 app.include_router(modules_router)
 app.include_router(note_router)
+app.include_router(provider_router)
 
 
 @app.get("/health")
