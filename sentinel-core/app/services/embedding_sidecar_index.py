@@ -193,6 +193,35 @@ def eligible_entries(
             continue
         matched_model_count += 1
 
+        # D-08 (EMB-04): dimension-mismatch guard — the single source of
+        # truth for "never cosine across vectors of mismatched dimension".
+        # This is defense-in-depth beyond the MEM-05 model-string skip
+        # above: the LM Studio cutover can carry the SAME embedding_model
+        # string with a DIFFERENT output dimension (e.g. a Matryoshka
+        # truncation change), so the model-string match alone is not
+        # sufficient. Do not add a second guard elsewhere (e.g. in
+        # SemanticRecall) — this is the only place this invariant is
+        # enforced.
+        #
+        # Cheap fast path: if the sidecar entry carries a persisted
+        # ``embedding_dim`` (written by the sweeper — see vault_sweeper.py
+        # rebuild_embedding_index), compare it to query_dim BEFORE
+        # decoding the base64 vector, skipping the decode entirely on
+        # mismatch. Entries without a persisted embedding_dim (older,
+        # pre-D-08 indexes) fall through unchanged to the decode-time
+        # ``len(raw) != query_dim`` check below — fully backward
+        # compatible.
+        stored_dim = entry.get("embedding_dim")
+        if isinstance(stored_dim, int) and stored_dim > 0 and stored_dim != query_dim:
+            logger.warning(
+                "Embedding sidecar index: persisted embedding_dim mismatch for %r "
+                "(%d vs query %d), skipping before decode",
+                path,
+                stored_dim,
+                query_dim,
+            )
+            continue
+
         try:
             b64 = entry.get("embedding_b64", "")
             if len(b64) > max_b64_len:
@@ -212,6 +241,11 @@ def eligible_entries(
                 )
                 continue
 
+            # D-08 (EMB-04) decode-time fallback guard: hard-skip (log +
+            # continue, never raise) any entry whose decoded vector length
+            # differs from the live query vector's dimension. This is the
+            # backward-compatible path for entries lacking a persisted
+            # embedding_dim, and the final backstop for all entries.
             if len(raw) != query_dim:
                 logger.warning(
                     "Embedding sidecar index: dimension mismatch for %r (%d vs query %d), skipping",
