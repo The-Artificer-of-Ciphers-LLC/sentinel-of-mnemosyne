@@ -2,7 +2,7 @@
 phase: 42
 slug: first-class-exo-provider
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-07-05
 ---
@@ -51,6 +51,8 @@ created: 2026-07-05
 
 ## Wave 0 Requirements
 
+> Tests are embedded per-task (test-first via tdd="true") rather than pre-staged in a separate Wave 0 plan — no standalone Wave 0 needed.
+
 - [ ] `sentinel-core/tests/test_provider_router.py` — fallback + NotFound-trigger cases (extend if exists)
 - [ ] `sentinel-core/tests/test_model_selector.py` — /state discovery + zero-instance cases (extend the exo-model-notfound-502 tests)
 - [ ] `sentinel-core/tests/` — openai_compatible provider-map assembly + unknown-provider error
@@ -71,11 +73,11 @@ created: 2026-07-05
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-07-05 (plan-check passed)
