@@ -4,11 +4,18 @@ Phase 42 (D-09, SC-6): chat/completion call sites reach the LLM through
 sentinel-core's POST /provider/complete via `SentinelCoreClient.complete()`
 (core resolves provider/model — exo/LM Studio selection + fallback are
 centralized on the core side). pf2e no longer calls litellm directly for
-chat; embeddings (embed_texts, below) stay on litellm.aembedding — that path
-is untouched here (Phase 43 scope).
+chat.
+
+Phase 43-03 (EMB-01, D-06/D-07): embed_texts() now reaches vectors through
+sentinel-core's POST /embeddings via `SentinelCoreClient.embed()`, the
+embeddings mirror of the Phase 42 chat handoff. pf2e no longer calls a
+vendor embedding SDK directly for either chat or embeddings; `model`/
+`api_base` remain accepted-but-vestigial parameters on embed_texts() so its
+two call sites (main.py's _rule_embed_fn closure and rule_query.py's
+injected embed_texts) need zero changes (D-04, Pattern 3).
 
 Phase 33 (Wave 2) adds four rules-engine helpers:
-  - embed_texts           — litellm.aembedding batch call (D-02 step 3 retrieval)
+  - embed_texts           — POST /embeddings via SentinelCoreClient.embed() (D-02 step 3 retrieval)
   - classify_rule_topic   — topic-slug classifier with L-6 closed-vocab coerce
   - generate_ruling_from_passages — corpus-hit D-08 composer (marker='source')
   - generate_ruling_fallback      — corpus-miss D-08 composer (marker='generated')
@@ -53,7 +60,6 @@ litellm.suppress_debug_info = True
 _MAX_REPLY_CHARS = 1500  # leaves headroom under Discord's 2000-char limit once wrapped in "> " quote markdown across multi-NPC scenes
 
 # Phase 33 — ruling composer timeouts / output caps.
-_RULING_TIMEOUT_S = 60.0
 _TOPIC_CLASSIFIER_TIMEOUT_S = 30.0
 _RULING_MAX_ANSWER_CHARS = 2000
 _RULING_MAX_WHY_CHARS = 3000
@@ -412,25 +418,29 @@ async def embed_texts(
     model: str,
     api_base: str | None = None,
 ) -> list[list[float]]:
-    """Return a list of embedding vectors (one per input) via litellm.aembedding.
+    """Return a list of embedding vectors (one per input) via sentinel-core's
+    POST /embeddings gateway (Phase 43-03, EMB-01, D-06/D-07).
 
     Used at module startup to embed the 148-chunk Player-Core corpus, and
     per-query to embed user questions before RAG retrieval (D-02 step 3).
-    A single batch call is cheaper than N sequential calls; LiteLLM passes
-    the list through to the /v1/embeddings endpoint unchanged.
+    A single batch call is cheaper than N sequential calls; the request
+    carries the full text list and core returns one vector per input.
 
     Arguments:
       texts: list of raw strings — caller is responsible for HTML stripping
              (strip_rule_html in app.rules) and normalization.
-      model: the embedding model identifier (e.g. "text-embedding-nomic-embed-text-v1.5");
-             per settings.rules_embedding_model at call sites.
-      api_base: LM Studio base URL (settings.litellm_api_base); omitted for cloud providers.
+      model: vestigial — retained only so both existing call sites
+             (main.py's _rule_embed_fn closure and rule_query.py's
+             deps.embed_texts) compile unchanged this phase; core owns
+             backend/model selection (D-04) and this value is NOT forwarded.
+      api_base: vestigial for the same reason as `model` — NOT forwarded.
 
     Returns: list[list[float]] — one vector per input text, preserved in order.
 
     Raises:
       ValueError on empty input, on mismatched response length, or on non-list embeddings.
-      Any litellm-raised exception propagates (caller decides retry policy).
+      Any exception raised by SentinelCoreClient.embed() propagates unswallowed
+      (D-07) — pf2e's _build_rules_index_safely() catch-all degrades to 503.
     """
     if not isinstance(texts, list):
         raise ValueError(f"embed_texts: 'texts' must be a list, got {type(texts).__name__}")
@@ -442,51 +452,20 @@ async def embed_texts(
                 f"embed_texts: texts[{i}] must be a str, got {type(t).__name__}"
             )
 
-    # litellm requires a provider/model form. LM Studio exposes an
-    # OpenAI-compatible /v1/embeddings endpoint, so bare names from
-    # /v1/models must be prefixed with "openai/". Settings stores the bare
-    # name so it round-trips into cached-ruling frontmatter unchanged
-    # (see settings.rules_embedding_model).
-    litellm_model = model if "/" in model else f"openai/{model}"
+    async with httpx.AsyncClient() as client:
+        result = await _core_client.embed(texts, client)
 
-    kwargs: dict = {
-        "model": litellm_model,
-        "input": texts,
-        "timeout": _RULING_TIMEOUT_S,
-    }
-    if api_base:
-        kwargs["api_base"] = api_base
-
-    response = await litellm.aembedding(**kwargs)
-
-    # litellm.aembedding normalizes OpenAI-style responses; data is a list of
-    # {"object": "embedding", "embedding": [...], "index": N} dicts.
-    # Access via object attribute OR dict key — litellm returns a response
-    # object that supports both; normalize to list-of-lists.
-    try:
-        data = response["data"] if isinstance(response, dict) else response.data
-    except AttributeError as exc:
-        raise ValueError(f"embed_texts: response missing 'data' attr: {exc}") from exc
-
-    if not isinstance(data, list):
+    vectors = result["embeddings"]
+    if not isinstance(vectors, list):
         raise ValueError(
-            f"embed_texts: response 'data' not a list, got {type(data).__name__}"
+            f"embed_texts: response 'embeddings' not a list, got {type(vectors).__name__}"
         )
-    if len(data) != len(texts):
+    if len(vectors) != len(texts):
         raise ValueError(
-            f"embed_texts: expected {len(texts)} embeddings, got {len(data)}"
+            f"embed_texts: expected {len(texts)} embeddings, got {len(vectors)}"
         )
 
-    vectors: list[list[float]] = []
-    for i, item in enumerate(data):
-        vec = item["embedding"] if isinstance(item, dict) else item.embedding
-        if not isinstance(vec, list):
-            raise ValueError(
-                f"embed_texts: data[{i}].embedding is not a list (got {type(vec).__name__})"
-            )
-        # Preserve as float — LiteLLM returns floats already; coerce defensively.
-        vectors.append([float(x) for x in vec])
-    return vectors
+    return [[float(x) for x in vec] for vec in vectors]
 
 
 async def classify_rule_topic(
