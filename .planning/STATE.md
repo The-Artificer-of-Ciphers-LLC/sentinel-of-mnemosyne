@@ -4,12 +4,12 @@ milestone: v0.5.2
 milestone_name: — Provider Independence
 status: executing
 stopped_at: Phase 43 context gathered
-last_updated: "2026-07-05T21:32:27.863Z"
-last_activity: 2026-07-05 -- Phase 43 planning complete
+last_updated: "2026-07-05T21:39:39.445Z"
+last_activity: 2026-07-05 -- Phase 43 execution started
 progress:
   total_phases: 2
   completed_phases: 1
-  total_plans: 5
+  total_plans: 10
   completed_plans: 5
   percent: 50
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 42 — first-class-exo-provider
+**Current focus:** Phase 43 — embeddings-through-sentinel
 
 ## Current Position
 
-Phase: 42
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-05 -- Phase 43 planning complete
+Phase: 43 (embeddings-through-sentinel) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 43
+Last activity: 2026-07-05 -- Phase 43 execution started
 
 ## Milestone Progress
 
