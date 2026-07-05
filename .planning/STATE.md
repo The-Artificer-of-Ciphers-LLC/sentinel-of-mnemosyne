@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.5.1
 milestone_name: — The Second Brain
 status: executing
-stopped_at: Completed 42-01-PLAN.md
-last_updated: "2026-07-05T17:26:05.426Z"
+stopped_at: Completed 42-02-PLAN.md
+last_updated: "2026-07-05T17:45:29.019Z"
 last_activity: 2026-07-05 -- Phase 42 execution started
 progress:
   total_phases: 3
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 42 (first-class-exo-provider) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-05 -- Phase 42 execution started
 
@@ -121,6 +121,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 41-typed-sessionsummary-retention PP04 | 25min | 3 tasks | 4 files |
 | Phase 41-typed-sessionsummary-retention P05 | 2min | 3 tasks | 4 files |
 | Phase 42 P42-01 | 20min | 3 tasks | 8 files |
+| Phase 42 P02 | 15min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -188,6 +189,10 @@ Recent decisions affecting current work:
 - [Phase 42]: exo_model default is empty string (auto-discover via GET /state in 42-02); no hardcoded model id anywhere, per D-07/D-08 regression guard
 - [Phase 42]: litellm.NotFoundError added to provider_router.py's _FALLBACK_TRIGGERS only, never to litellm_provider.py's _RETRYABLE tuple (404 is not transient)
 - [Phase 42]: provider_router.py added to test_ai_agnostic_guardrail.py's excluded paths (mirrors existing model_selector.py precedent) since its litellm import is for the NotFoundError exception type only, not for making AI calls
+- [Phase ?]: 42-02: exo resolved independently via GET /state so its provider_map entry is correct whether exo is primary or fallback (D-05)
+- [Phase ?]: 42-02: table-driven active_model/base_url/provider_map/fallback resolution replaces three independently-drifted if/elif branch points in composition.py (Pitfalls 1-3)
+- [Phase ?]: 42-02: ai_fallback_provider generalized to provider_map.get(settings.ai_fallback_provider) for any configured provider name, not just claude (D-05)
+- [Phase ?]: 42-02: exo context-window registry branch skips the LM-Studio-only /api/v0/models/{id} endpoint entirely, using model_profiles family inference instead (Pitfall 4)
 
 ### Pending Todos
 
@@ -221,8 +226,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-05T17:26:05.419Z
-Stopped at: Completed 42-01-PLAN.md
+Last session: 2026-07-05T17:45:29.012Z
+Stopped at: Completed 42-02-PLAN.md
 Resume file: 
 
 None

@@ -849,12 +849,12 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 
 - [x] 42-01-PLAN.md — Wave 1: provider foundation — exo Settings fields, litellm.NotFoundError fallback trigger, RouteContext.ai_provider exposure (SC-1/SC-3, D-03/D-04/D-05/D-06)
-- [ ] 42-02-PLAN.md — Wave 2: table-driven openai_compatible provider registry — exo GET /state discovery + composition generalization (active_model/provider_map/fallback/stop-seq) + model_registry exo branch; LM Studio migrated with regression pin (SC-2/SC-4/SC-5, D-01/D-02/D-07/D-08)
+- [x] 42-02-PLAN.md — Wave 2: table-driven openai_compatible provider registry — exo GET /state discovery + composition generalization (active_model/provider_map/fallback/stop-seq) + model_registry exo branch; LM Studio migrated with regression pin (SC-2/SC-4/SC-5, D-01/D-02/D-07/D-08)
 - [ ] 42-03-PLAN.md — Wave 2: pf2e→core chat gateway (core side) — POST /provider/complete narrow route + main.py wiring + SentinelCoreClient.complete() (SC-6, D-09/D-10)
 - [ ] 42-04-PLAN.md — Wave 3: pf2e chat handoff — core-client wiring + migrate llm.py chat call sites off direct litellm (SC-6, D-09)
 - [ ] 42-05-PLAN.md — Wave 4: pf2e chat handoff — migrate foundry.py/pf_npc_extract.py call sites + remove chat-only litellm config + phase regression gate (SC-5/SC-6, D-02/D-09)
