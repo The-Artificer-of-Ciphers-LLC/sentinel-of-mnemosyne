@@ -41,6 +41,7 @@ import pytest
 
 from app.llm import (
     classify_rule_topic,
+    embed_texts,
     extract_npc_fields,
     generate_harvest_fallback,
     generate_mj_description,
@@ -327,3 +328,87 @@ async def test_generate_story_so_far_core_raise_degrades_gracefully():
         result = await generate_story_so_far(events_log="stuff happened", model="m")
 
     assert result == "_Story so far generation failed — events are in the Events Log below._"
+
+
+# ---------------------------------------------------------------------------
+# embed_texts — pf2e -> sentinel-core embeddings handoff (Phase 43-03, EMB-01,
+# D-06/D-07). Mirrors the complete()-delegation pattern above, patching
+# app.llm._core_client.embed instead of .complete.
+# ---------------------------------------------------------------------------
+
+
+def _core_embed_result(vectors: list[list[float]], model: str = "test-embed-model") -> dict:
+    """Build a minimal core_client.embed()-shaped result: {embeddings, model}."""
+    return {"embeddings": vectors, "model": model}
+
+
+async def test_embed_texts_delegates_to_core_client_and_returns_vectors():
+    vectors = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+    with patch(
+        "app.llm._core_client.embed",
+        new=AsyncMock(return_value=_core_embed_result(vectors)),
+    ) as mock_embed:
+        result = await embed_texts(["a", "b"], model="text-embedding-nomic-embed-text-v1.5")
+
+    assert result == vectors
+    mock_embed.assert_awaited_once()
+    args = mock_embed.await_args.args
+    kwargs = mock_embed.await_args.kwargs
+    # First positional/kwarg is the texts list; a client is also passed.
+    all_args = list(args) + list(kwargs.values())
+    assert ["a", "b"] in all_args
+    # D-04: model/api_base are vestigial — never forwarded to core.
+    assert "model" not in kwargs
+    assert "api_base" not in kwargs
+
+
+async def test_embed_texts_raises_valueerror_on_empty_list():
+    with pytest.raises(ValueError):
+        await embed_texts([], model="m")
+
+
+async def test_embed_texts_raises_valueerror_on_non_list():
+    with pytest.raises(ValueError):
+        await embed_texts("not-a-list", model="m")  # type: ignore[arg-type]
+
+
+async def test_embed_texts_raises_valueerror_on_non_string_item():
+    with pytest.raises(ValueError):
+        await embed_texts(["ok", 123], model="m")  # type: ignore[list-item]
+
+
+async def test_embed_texts_raises_valueerror_on_count_mismatch():
+    with patch(
+        "app.llm._core_client.embed",
+        new=AsyncMock(return_value=_core_embed_result([[0.1, 0.2]])),
+    ):
+        with pytest.raises(ValueError):
+            await embed_texts(["a", "b"], model="m")
+
+
+async def test_embed_texts_core_raise_propagates_unswallowed():
+    """embed() raises (D-07 mitigation posture) — embed_texts does not wrap the
+    invocation, so the exception surfaces unswallowed for
+    _build_rules_index_safely()'s 503-degrade to catch."""
+    with patch(
+        "app.llm._core_client.embed",
+        new=AsyncMock(side_effect=httpx.ConnectError("core unreachable")),
+    ):
+        with pytest.raises(httpx.ConnectError):
+            await embed_texts(["a"], model="m")
+
+
+def test_llm_module_has_no_direct_vendor_embedding_call():
+    """Guardrail: comment-stripped app/llm.py contains no direct vendor
+    embedding-call token (e.g. litellm.aembedding) — the leaf vector-compute
+    call has moved to core (EMB-01)."""
+    import inspect
+
+    import app.llm as llm_module
+
+    source = inspect.getsource(llm_module)
+    stripped_lines = [
+        line for line in source.splitlines() if not line.strip().startswith("#")
+    ]
+    stripped_source = "\n".join(stripped_lines)
+    assert "aembedding" not in stripped_source
