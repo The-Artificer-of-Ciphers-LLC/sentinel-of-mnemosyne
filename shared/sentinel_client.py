@@ -70,3 +70,39 @@ class SentinelCoreClient:
         )
         resp.raise_for_status()
         return resp.json()
+
+    async def complete(
+        self,
+        messages: list[dict],
+        client: httpx.AsyncClient,
+        stop: list[str] | None = None,
+        temperature: float | None = None,
+    ) -> dict:
+        """POST /provider/complete — thin chat/completion passthrough to core.
+
+        Mirrors post_to_module()'s raise-on-error posture EXACTLY (NOT
+        send_message()'s swallow-to-string posture) so pf2e call sites get
+        real exceptions to react to.
+
+        Args:
+            messages: list of {"role": ..., "content": ...} dicts.
+            client: Caller-owned httpx.AsyncClient (same pattern as send_message).
+            stop: optional stop sequences forwarded to core.
+            temperature: optional sampling temperature forwarded to core.
+
+        Returns:
+            Parsed JSON response dict: {"content": str, "model": str}.
+
+        Raises:
+            httpx.HTTPStatusError: On 4xx/5xx responses.
+            httpx.ConnectError: If sentinel-core is unreachable.
+            httpx.TimeoutException: If request exceeds self._timeout.
+        """
+        resp = await client.post(
+            f"{self._base_url}/provider/complete",
+            json={"messages": messages, "stop": stop, "temperature": temperature},
+            headers={"X-Sentinel-Key": self._api_key},
+            timeout=self._timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()

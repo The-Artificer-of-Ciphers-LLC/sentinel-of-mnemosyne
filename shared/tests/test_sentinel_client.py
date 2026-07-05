@@ -183,3 +183,94 @@ async def test_post_to_module_sends_sentinel_key_header(client):
     await client.post_to_module("modules/pathfinder/npc/show", {"name": "Varek"}, mock_http)
     call_kwargs = mock_http.post.call_args[1]
     assert call_kwargs["headers"]["X-Sentinel-Key"] == "test-secret-key"
+
+
+# ---------------------------------------------------------------------------
+# complete() tests (Phase 42-03, SC-6) — raise-on-error posture, like
+# post_to_module(), NOT send_message()'s swallow-to-string posture.
+# ---------------------------------------------------------------------------
+
+
+async def test_complete_success(client):
+    """200 response returns parsed {content, model} dict."""
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"content": "Hi there", "model": "exo"}
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(return_value=mock_resp)
+
+    messages = [{"role": "user", "content": "hello"}]
+    result = await client.complete(messages, mock_http)
+    assert result == {"content": "Hi there", "model": "exo"}
+    mock_http.post.assert_called_once()
+    assert mock_http.post.call_args.args == ("http://sentinel-core:8000/provider/complete",)
+    assert mock_http.post.call_args.kwargs == {
+        "json": {"messages": messages, "stop": None, "temperature": None},
+        "headers": {"X-Sentinel-Key": "test-secret-key"},
+        "timeout": 10.0,
+    }
+
+
+async def test_complete_forwards_stop_and_temperature(client):
+    """stop and temperature, when provided, are forwarded in the JSON body."""
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"content": "ok", "model": "exo"}
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(return_value=mock_resp)
+
+    messages = [{"role": "user", "content": "hello"}]
+    await client.complete(messages, mock_http, stop=["\n"], temperature=0.2)
+    assert mock_http.post.call_args.kwargs["json"] == {
+        "messages": messages,
+        "stop": ["\n"],
+        "temperature": 0.2,
+    }
+
+
+async def test_complete_raises_http_status_error(client):
+    """4xx/5xx HTTPStatusError propagates to caller (not swallowed into a string)."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 503
+
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(
+        side_effect=httpx.HTTPStatusError("503", request=MagicMock(), response=mock_resp)
+    )
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.complete([{"role": "user", "content": "hello"}], mock_http)
+
+
+async def test_complete_raises_connect_error(client):
+    """ConnectError propagates to caller (not swallowed)."""
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(side_effect=httpx.ConnectError("refused"))
+
+    with pytest.raises(httpx.ConnectError):
+        await client.complete([{"role": "user", "content": "hello"}], mock_http)
+
+
+async def test_complete_raises_timeout_exception(client):
+    """TimeoutException propagates to caller (not swallowed)."""
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(side_effect=httpx.TimeoutException("timed out"))
+
+    with pytest.raises(httpx.TimeoutException):
+        await client.complete([{"role": "user", "content": "hello"}], mock_http)
+
+
+async def test_complete_sends_sentinel_key_header(client):
+    """X-Sentinel-Key header is sent with correct value."""
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"content": "ok", "model": "exo"}
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(return_value=mock_resp)
+
+    await client.complete([{"role": "user", "content": "hello"}], mock_http)
+    call_kwargs = mock_http.post.call_args[1]
+    assert call_kwargs["headers"]["X-Sentinel-Key"] == "test-secret-key"
