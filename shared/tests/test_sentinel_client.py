@@ -274,3 +274,91 @@ async def test_complete_sends_sentinel_key_header(client):
     await client.complete([{"role": "user", "content": "hello"}], mock_http)
     call_kwargs = mock_http.post.call_args[1]
     assert call_kwargs["headers"]["X-Sentinel-Key"] == "test-secret-key"
+
+
+# ---------------------------------------------------------------------------
+# embed() tests (Phase 43-03, EMB-01/D-06/D-07) — raise-on-error posture,
+# mirrors complete() EXACTLY (not send_message()'s swallow-to-string posture),
+# so pf2e's _build_rules_index_safely() 503-degrade contract keeps working.
+# ---------------------------------------------------------------------------
+
+
+async def test_embed_success(client):
+    """200 response returns parsed {embeddings, model} dict."""
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"embeddings": [[0.1, 0.2], [0.3, 0.4]], "model": "nomic"}
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(return_value=mock_resp)
+
+    texts = ["a", "b"]
+    result = await client.embed(texts, mock_http)
+    assert result == {"embeddings": [[0.1, 0.2], [0.3, 0.4]], "model": "nomic"}
+    mock_http.post.assert_called_once()
+    assert mock_http.post.call_args.args == ("http://sentinel-core:8000/embeddings",)
+    assert mock_http.post.call_args.kwargs == {
+        "json": {"texts": texts},
+        "headers": {"X-Sentinel-Key": "test-secret-key"},
+        "timeout": 10.0,
+    }
+
+
+async def test_embed_sends_only_texts_no_model_or_base_url(client):
+    """D-04: request body carries ONLY texts — no model/api_base/base_url override."""
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"embeddings": [[0.1]], "model": "nomic"}
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(return_value=mock_resp)
+
+    await client.embed(["a"], mock_http)
+    assert mock_http.post.call_args.kwargs["json"] == {"texts": ["a"]}
+
+
+async def test_embed_raises_http_status_error(client):
+    """4xx/5xx HTTPStatusError propagates to caller (not swallowed into a string) —
+    pf2e's _build_rules_index_safely() 503-degrade path relies on a real exception."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 503
+
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(
+        side_effect=httpx.HTTPStatusError("503", request=MagicMock(), response=mock_resp)
+    )
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.embed(["a"], mock_http)
+
+
+async def test_embed_raises_connect_error(client):
+    """ConnectError propagates to caller (not swallowed)."""
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(side_effect=httpx.ConnectError("refused"))
+
+    with pytest.raises(httpx.ConnectError):
+        await client.embed(["a"], mock_http)
+
+
+async def test_embed_raises_timeout_exception(client):
+    """TimeoutException propagates to caller (not swallowed)."""
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(side_effect=httpx.TimeoutException("timed out"))
+
+    with pytest.raises(httpx.TimeoutException):
+        await client.embed(["a"], mock_http)
+
+
+async def test_embed_sends_sentinel_key_header(client):
+    """X-Sentinel-Key header is sent with correct value."""
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"embeddings": [[0.1]], "model": "nomic"}
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(return_value=mock_resp)
+
+    await client.embed(["a"], mock_http)
+    call_kwargs = mock_http.post.call_args[1]
+    assert call_kwargs["headers"]["X-Sentinel-Key"] == "test-secret-key"
