@@ -121,7 +121,7 @@ async def health(request: Request) -> JSONResponse:
     try:
         embedding_loaded = await probe_embedding_model_loaded(
             http_client,
-            settings.lmstudio_base_url,
+            settings.embedding_base_url,
             settings.embedding_model,
         )
     except Exception:

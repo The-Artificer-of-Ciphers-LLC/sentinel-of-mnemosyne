@@ -12,6 +12,7 @@ class RuntimeConfig:
     ai_provider: str
     lmstudio_base_url: str
     embedding_model: str
+    embedding_base_url: str
 
 
 def runtime_config_from_settings(settings: Any) -> RuntimeConfig:
@@ -20,4 +21,5 @@ def runtime_config_from_settings(settings: Any) -> RuntimeConfig:
         ai_provider=settings.ai_provider,
         lmstudio_base_url=settings.lmstudio_base_url,
         embedding_model=settings.embedding_model,
+        embedding_base_url=settings.embedding_base_url,
     )

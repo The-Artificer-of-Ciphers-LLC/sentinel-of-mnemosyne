@@ -9,6 +9,7 @@ def test_runtime_config_from_settings_maps_required_fields():
         ai_provider="lmstudio",
         lmstudio_base_url="http://lm",
         embedding_model="emb",
+        embedding_base_url="http://embed",
     )
 
     cfg = runtime_config_from_settings(settings)
@@ -18,3 +19,4 @@ def test_runtime_config_from_settings_maps_required_fields():
     assert cfg.ai_provider == "lmstudio"
     assert cfg.lmstudio_base_url == "http://lm"
     assert cfg.embedding_model == "emb"
+    assert cfg.embedding_base_url == "http://embed"

@@ -73,6 +73,42 @@ async def test_health_endpoint_reports_embedding_status_not_loaded(monkeypatch):
     assert body["embedding_model"] == "not_loaded"
 
 
+async def test_health_endpoint_probes_embedding_base_url_not_chat_base_url(monkeypatch):
+    """Regression (43-05 live cutover): the /health embedding probe MUST be
+    called with settings.embedding_base_url, NOT settings.lmstudio_base_url
+    (the chat provider's URL). Missing this assertion is what let a third
+    D-02 read-site regress to the chat URL undetected — the probe's return
+    value was mocked but its call arguments were never inspected."""
+    from app import main as main_module
+
+    # Guarantee the two URLs are distinct so the assertion below is meaningful.
+    monkeypatch.setattr(main_module.settings, "lmstudio_base_url", "http://chat-backend.test/v1")
+    monkeypatch.setattr(main_module.settings, "embedding_base_url", "http://embedding-backend.test/v1")
+    assert main_module.settings.embedding_base_url != main_module.settings.lmstudio_base_url
+
+    calls = []
+
+    async def _probe_spy(http_client, base_url, model_name):
+        calls.append(base_url)
+        return True
+
+    monkeypatch.setattr(main_module, "probe_embedding_model_loaded", _probe_spy)
+
+    app.state.http_client = object()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/health")
+
+    assert resp.status_code == 200
+    assert len(calls) == 1, "probe_embedding_model_loaded must be called exactly once"
+    assert calls[0] == main_module.settings.embedding_base_url, (
+        f"probe_embedding_model_loaded must be called with settings.embedding_base_url, "
+        f"got {calls[0]!r} (settings.lmstudio_base_url={main_module.settings.lmstudio_base_url!r})"
+    )
+
+
 async def test_health_endpoint_graceful_degrade_when_probe_raises(monkeypatch):
     """Even if the probe raises, /health must return 200 with
     embedding_model="not_loaded" — graceful degrade rule."""

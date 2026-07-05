@@ -36,7 +36,7 @@ async def probe_runtime(
         try:
             embedding_loaded = await probe_embedding_model_loaded(
                 http_client,
-                runtime_config.lmstudio_base_url,
+                runtime_config.embedding_base_url,
                 runtime_config.embedding_model,
             )
         except Exception:

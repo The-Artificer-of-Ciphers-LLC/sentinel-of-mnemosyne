@@ -161,7 +161,7 @@ async def vault_sweep_start(req: SweepStartRequest, request: Request):
                 return False
             embedding_ready = await probe_embedding_model_loaded(
                 ctx.http_client,
-                ctx.settings.lmstudio_base_url,
+                ctx.settings.embedding_base_url,
                 ctx.settings.embedding_model,
             )
             if not embedding_ready:
