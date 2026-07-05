@@ -874,14 +874,14 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 
 **Wave 1**
 
 - [x] 43-01-PLAN.md — Core embeddings backend config: `embedding_*` settings triplet + composition rewire (both call sites) + repoint client default off exo + correct the two bug-locking tests (EMB-02, EMB-04)
-- [ ] 43-02-PLAN.md — Core `POST /embeddings` narrow passthrough route (mirror of `/provider/complete`) + main.py wiring + route tests (auth/size-cap/503-non-leak) (EMB-01)
+- [x] 43-02-PLAN.md — Core `POST /embeddings` narrow passthrough route (mirror of `/provider/complete`) + main.py wiring + route tests (auth/size-cap/503-non-leak) (EMB-01)
 
 **Wave 2** *(43-03 blocked on 43-01+43-02; 43-04 blocked on 43-01)*
 

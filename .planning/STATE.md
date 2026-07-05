@@ -4,13 +4,13 @@ milestone: v0.5.2
 milestone_name: — Provider Independence
 status: executing
 stopped_at: Completed 43-01-PLAN.md
-last_updated: "2026-07-05T21:50:16.585Z"
+last_updated: "2026-07-05T21:58:17.147Z"
 last_activity: 2026-07-05 -- Phase 43 execution started
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 10
-  completed_plans: 6
+  completed_plans: 7
   percent: 50
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 43 (embeddings-through-sentinel) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-05 -- Phase 43 execution started
 
@@ -128,6 +128,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 42 P04 | 25min | 2 tasks | 8 files |
 | Phase 42 P05 | 35min | 2 tasks | 11 files |
 | Phase 43 P01 | 20min | 3 tasks | 5 files |
+| Phase 43 P02 | 15min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -207,6 +208,7 @@ Recent decisions affecting current work:
 - [Phase 42-05]: pf_npc_extract.py drops strict json_schema response_format (core's /provider/complete has no such param) — system prompt + _validate_payload become the primary schema-conformance gate
 - [Phase 42-05]: app/resolve_model.py falls back to an inert placeholder model id (never forwarded to a real completion call) instead of raising, when discovery is empty — avoids breaking 4+ untouched route callers after removing the hardcoded litellm_model config default
 - [Phase ?]: embedding_base_url defaults to LM Studio :1234/v1, independent of chat's lmstudio_base_url/exo_base_url (D-01/D-02/D-03/D-04); both composition.py embeddings call sites repointed onto embedding_*
+- [Phase 43]: 43-02: per-text length cap implemented as pydantic field_validator (not manual handler check) so 422 fires before ctx.embedder is called
 
 ### Pending Todos
 
@@ -240,6 +242,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-05T21:50:16.580Z
+Last session: 2026-07-05T21:56:20.821Z
 Stopped at: Completed 43-01-PLAN.md
 Resume file: 
+None
