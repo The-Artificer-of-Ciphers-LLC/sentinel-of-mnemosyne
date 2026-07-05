@@ -133,23 +133,28 @@ async def test_other_bad_request_passes_through(monkeypatch):
 
 
 def test_default_lmstudio_base_url_is_docker_reachable():
-    """T-lmstudio-provider-switch: the Embeddings() fallback constant (used when
-    a falsy base_url is supplied) must stay in sync with app.config.Settings'
-    lmstudio_base_url default -- both point at the Docker-reachable
-    host.docker.internal:52415 backend, not the old dead :1234 host or a bare
-    'localhost' that would resolve to the container itself."""
+    """D-01/D-02: the Embeddings() fallback constant (used when a falsy
+    base_url is supplied) must stay in sync with app.config.Settings'
+    embedding_base_url default -- both point at the Docker-reachable
+    LM Studio host.docker.internal:1234 backend (the real embeddings
+    backend, per D-01), not a bare 'localhost' that would resolve to the
+    container itself, and NOT exo's :52415 -- exo does not implement
+    POST /v1/embeddings (exo-explore/exo#1047), so that port must never be
+    reintroduced as the embeddings default (regression guard, Pitfall 2)."""
     from app.clients.embeddings import DEFAULT_LMSTUDIO_BASE_URL
 
-    assert DEFAULT_LMSTUDIO_BASE_URL == "http://host.docker.internal:52415"
+    assert DEFAULT_LMSTUDIO_BASE_URL == "http://host.docker.internal:1234"
     assert "localhost" not in DEFAULT_LMSTUDIO_BASE_URL
+    assert "52415" not in DEFAULT_LMSTUDIO_BASE_URL
 
 
 def test_embeddings_falls_back_to_default_base_url_when_falsy():
     """Embeddings(base_url="") uses DEFAULT_LMSTUDIO_BASE_URL + normalises the
     /v1 suffix exactly once, mirroring the production wiring in composition.py
-    (``settings.lmstudio_base_url or DEFAULT_LMSTUDIO_BASE_URL``)."""
+    (``settings.embedding_base_url or DEFAULT_LMSTUDIO_BASE_URL``)."""
     from app.clients.embeddings import DEFAULT_LMSTUDIO_BASE_URL, Embeddings
 
     client = Embeddings(http_client=object(), base_url="", model="some-model")
 
     assert client._api_base == f"{DEFAULT_LMSTUDIO_BASE_URL}/v1"
+    assert "52415" not in client._api_base
