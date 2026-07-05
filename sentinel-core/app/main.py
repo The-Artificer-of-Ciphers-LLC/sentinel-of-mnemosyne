@@ -29,6 +29,7 @@ from app.composition import initialize_startup
 from app.config import settings
 from app.routes.message import router as message_router
 from app.runtime_config import runtime_config_from_settings
+from app.routes.embeddings import router as embeddings_router
 from app.routes.modules import router as modules_router
 from app.routes.note import router as note_router
 from app.routes.provider import router as provider_router
@@ -100,6 +101,7 @@ app.include_router(status_router)
 app.include_router(modules_router)
 app.include_router(note_router)
 app.include_router(provider_router)
+app.include_router(embeddings_router)
 
 
 @app.get("/health")
