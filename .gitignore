@@ -1,0 +1,10 @@
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
