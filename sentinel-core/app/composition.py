@@ -28,7 +28,7 @@ from app.errors import ModelSelectorError
 from app.services.model_registry import build_model_registry
 from app.services.model_selector import (
     _ORIGINAL_PREFIXES,
-    discover_active_model,
+    discover_lmstudio_model,
     discover_via_exo_state,
     probe_embedding_model_loaded,
     select_model,
@@ -134,8 +134,14 @@ async def build_provider_router(
     # Build model registry (live fetch + seed fallback) — non-fatal if providers unavailable
     model_registry = await build_model_registry(settings, http_client)
 
-    # Discover active model for the configured provider (non-fatal)
-    lmstudio_model_str = await discover_active_model(settings, http_client)
+    # LM Studio model resolution — ALWAYS attempted independently via LM
+    # Studio's own discovery path (mirrors the exo resolution below), so LM
+    # Studio works correctly as either the primary OR the fallback provider
+    # (SC-3 bidirectional fallback). discover_active_model() would instead
+    # resolve whichever provider is currently ACTIVE (e.g. exo's model when
+    # ai_provider="exo"), which broke exo-primary -> lmstudio-fallback by
+    # pairing LM Studio's api_base with exo's discovered model id.
+    lmstudio_model_str = await discover_lmstudio_model(settings, http_client)
     # Strip ONLY the litellm provider tag — keep any HF-style namespace inside
     # the bare id (e.g. "qwen/qwen2.5-coder-14b" must round-trip verbatim).
     lmstudio_model_name = strip_litellm_prefix(

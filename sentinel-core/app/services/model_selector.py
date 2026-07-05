@@ -285,21 +285,14 @@ async def discover_active_model(
     Returns a LiteLLM-compatible model string (e.g. "openai/Qwen2.5-14B-Instruct").
     Falls back to _prefixed(settings.model_name) on any failure.
     Never raises — startup must not fail due to discovery issues.
+
+    Resolves the ACTIVE provider's own model (i.e. whichever backend
+    ``settings.ai_provider`` currently names). Callers that need a SPECIFIC
+    backend's model regardless of which provider is active (e.g. building a
+    fallback provider_map entry) must use a dedicated discovery function
+    instead, such as ``discover_lmstudio_model`` — see its docstring for the
+    exo<->lmstudio bidirectional-fallback rationale (SC-3).
     """
-    def _prefixed(name: str) -> str:
-        # Already provider-prefixed for LiteLLM — leave untouched.
-        # NOTE: a bare slash in the name (e.g. "qwen/qwen2.5-coder-14b") is a
-        # HuggingFace-style namespace, NOT a litellm provider tag. Returning it
-        # unchanged would cause litellm.BadRequestError("LLM Provider NOT provided").
-        if name.startswith(_LITELLM_PROVIDER_PREFIXES):
-            return name
-        if settings.ai_provider == "ollama":
-            return f"ollama/{name}"
-        return f"openai/{name}"
-
-    if not settings.model_auto_discover:
-        return _prefixed(settings.model_name)
-
     # Resolve base URL for the active provider — table-driven (Pitfall 2 fix).
     # An unrecognized ai_provider logs a WARNING rather than silently
     # defaulting to lmstudio_base_url (which could be a real, unrelated LM
@@ -322,9 +315,77 @@ async def discover_active_model(
         )
         base_url = settings.lmstudio_base_url
 
+    return await _discover_model_for_provider(
+        settings, http_client, provider=settings.ai_provider, base_url=base_url
+    )
+
+
+async def discover_lmstudio_model(
+    settings: "Settings",
+    http_client: httpx.AsyncClient,
+) -> str:
+    """Discover LM Studio's OWN active model — independent of settings.ai_provider.
+
+    ``discover_active_model`` is ai_provider-aware: when ``settings.ai_provider
+    == "exo"`` it queries exo (via ``discover_via_exo_state``), NOT LM Studio.
+    That is correct for resolving whichever provider is currently ACTIVE, but
+    it is WRONG for building the LM Studio entry in composition.py's
+    ``provider_map`` — that entry is unconditionally paired with
+    ``settings.lmstudio_base_url`` and must therefore always hold LM STUDIO's
+    own loaded model, so LM Studio works correctly as either the primary OR
+    the fallback provider (SC-3 bidirectional lmstudio<->exo fallback).
+
+    Mirrors ``discover_via_exo_state``'s existing unconditional independence
+    from ``settings.ai_provider`` (D-07) — that same independence was
+    previously missing on the LM Studio side: with ai_provider="exo", the LM
+    Studio provider_map entry got LM Studio's api_base paired with exo's
+    discovered model id, so a fallback to LM Studio would request a model LM
+    Studio doesn't serve.
+
+    Never raises — mirrors discover_active_model's non-fatal contract.
+    """
+    return await _discover_model_for_provider(
+        settings, http_client, provider="lmstudio", base_url=settings.lmstudio_base_url
+    )
+
+
+async def _discover_model_for_provider(
+    settings: "Settings",
+    http_client: httpx.AsyncClient,
+    *,
+    provider: str,
+    base_url: str,
+) -> str:
+    """Shared discovery + selection + prefixing pipeline.
+
+    ``provider`` decides both the fetch strategy (exo's GET /state vs the
+    generic OpenAI-compatible GET /models) and the litellm prefix (only
+    "ollama" gets "ollama/"; every other provider — including lmstudio — gets
+    "openai/", matching pre-refactor behavior). ``base_url`` is the
+    already-resolved endpoint to query.
+
+    Extracted from ``discover_active_model`` so the active-provider-selection
+    path (``discover_active_model``) and the LM-Studio-specific fallback-entry
+    path (``discover_lmstudio_model``) share one implementation instead of two
+    divergent copies. Never raises.
+    """
+    def _prefixed(name: str) -> str:
+        # Already provider-prefixed for LiteLLM — leave untouched.
+        # NOTE: a bare slash in the name (e.g. "qwen/qwen2.5-coder-14b") is a
+        # HuggingFace-style namespace, NOT a litellm provider tag. Returning it
+        # unchanged would cause litellm.BadRequestError("LLM Provider NOT provided").
+        if name.startswith(_LITELLM_PROVIDER_PREFIXES):
+            return name
+        if provider == "ollama":
+            return f"ollama/{name}"
+        return f"openai/{name}"
+
+    if not settings.model_auto_discover:
+        return _prefixed(settings.model_name)
+
     url = base_url.rstrip("/")
     try:
-        if settings.ai_provider == "exo":
+        if provider == "exo":
             # exo's /v1/models advertises ~120 servable-but-not-running
             # models; only GET /state reflects what's ACTUALLY loaded (D-07).
             loaded = await discover_via_exo_state(url, http_client)

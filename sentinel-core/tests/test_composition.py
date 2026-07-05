@@ -249,6 +249,91 @@ async def test_generalized_fallback_selects_exo_by_name(http_client, monkeypatch
     assert result == "fallback-response:openai/mlx-community/Qwen3.5-27B-8bit"
 
 
+async def test_exo_primary_lmstudio_fallback_resolves_lmstudios_own_model_with_auto_discover(
+    monkeypatch,
+):
+    """SC-3 bidirectional fallback regression (exo primary -> lmstudio fallback).
+
+    With model_auto_discover=True (the production default — the _settings()
+    helper otherwise forces False, which hides this bug) and ai_provider=
+    'exo' / ai_fallback_provider='lmstudio', the LM Studio provider_map entry
+    must resolve LM STUDIO's OWN discovered model (via its /v1/models) — NOT
+    exo's discovered model (via exo's GET /state).
+
+    Prior to the fix, composition.py resolved the lmstudio entry's model via
+    discover_active_model(settings, http_client), which is ai_provider-aware:
+    with ai_provider='exo' it queried exo's GET /state instead of LM Studio's
+    /v1/models, then paired that exo-discovered model id with
+    settings.lmstudio_base_url — a fallback to LM Studio would have requested
+    a model LM Studio doesn't serve.
+
+    Captured keyed by api_base (not model_string): the bug's whole symptom is
+    the two entries' model_strings colliding, so keying by model_string would
+    silently hide the regression (the second construction would overwrite the
+    first in the capture dict).
+    """
+    captured: dict[str, "_CapturingProvider"] = {}
+
+    class _CapturingProvider:
+        def __init__(self, model_string, api_base=None, api_key=None):
+            self.model_string = model_string
+            self.api_base = api_base
+            self.api_key = api_key
+            captured[api_base] = self
+
+        async def complete(self, messages, stop=None, temperature=None):
+            return f"response-from:{self.model_string}"
+
+    monkeypatch.setattr("app.composition.LiteLLMProvider", _CapturingProvider)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "exo.test" and request.url.path == "/state":
+            return httpx.Response(
+                200,
+                json={
+                    "instances": {
+                        "instance-1": {
+                            "MlxRingInstance": {
+                                "shardAssignments": {
+                                    "modelId": "mlx-community/EXO-MODEL",
+                                }
+                            }
+                        }
+                    }
+                },
+            )
+        if request.url.host == "lmstudio.test" and request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "lmstudio-real-model"}]})
+        # Anything else (model-profile arch lookups, etc.) degrades gracefully.
+        return httpx.Response(404, json={"error": "unmocked"})
+
+    scoped_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    settings = _settings(
+        model_auto_discover=True,
+        ai_provider="exo",
+        ai_fallback_provider="lmstudio",
+        lmstudio_base_url="http://lmstudio.test/v1",
+        exo_base_url="http://exo.test/v1",
+    )
+    await build_provider_router(settings, scoped_client)
+
+    assert "http://lmstudio.test/v1" in captured, "LM Studio provider_map entry was not constructed"
+    assert "http://exo.test/v1" in captured, "exo provider_map entry was not constructed"
+
+    lmstudio_entry = captured["http://lmstudio.test/v1"]
+    exo_entry = captured["http://exo.test/v1"]
+
+    # The bug: lmstudio_entry.model_string would be "openai/mlx-community/EXO-MODEL"
+    # (exo's model) instead of LM Studio's own "openai/lmstudio-real-model".
+    assert lmstudio_entry.model_string == "openai/lmstudio-real-model", (
+        "LM Studio fallback provider_map entry must resolve LM Studio's OWN "
+        f"discovered model, not exo's — got {lmstudio_entry.model_string!r}"
+    )
+    # The working direction (exo primary) must not regress.
+    assert exo_entry.model_string == "openai/mlx-community/EXO-MODEL"
+
+
 async def test_build_application_typo_kwarg_raises_typeerror(http_client):
     """Explicit-kwargs (W1) — a typo like ``vualt=`` must raise TypeError, not be swallowed."""
     settings = _settings()
