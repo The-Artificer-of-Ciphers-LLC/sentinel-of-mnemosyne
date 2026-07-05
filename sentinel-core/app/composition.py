@@ -395,9 +395,9 @@ async def build_application(
     if embeddings is None:
         embeddings = Embeddings(
             http_client,
-            settings.lmstudio_base_url or DEFAULT_LMSTUDIO_BASE_URL,
+            settings.embedding_base_url or DEFAULT_LMSTUDIO_BASE_URL,
             settings.embedding_model,
-            api_key=settings.lmstudio_api_key or "lm-studio",
+            api_key=settings.embedding_api_key or "lm-studio",
         )
 
     if recall is None:
@@ -440,7 +440,7 @@ async def build_application(
         # BadRequestError when the vault sweeper / note classifier first runs.
         embedding_model_loaded = await probe_embedding_model_loaded(
             http_client,
-            settings.lmstudio_base_url,
+            settings.embedding_base_url,
             settings.embedding_model,
         )
         if embedding_model_loaded:

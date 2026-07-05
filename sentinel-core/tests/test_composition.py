@@ -486,6 +486,59 @@ async def test_build_application_wires_semantic_recall_with_no_prefix_active_mod
     )
 
 
+async def test_build_application_wires_embeddings_from_embedding_base_url(
+    http_client, monkeypatch
+):
+    """D-02/D-04 (Pitfall 3): both embeddings call sites in build_application —
+    the Embeddings(...) construction AND the probe_embedding_model_loaded(...)
+    call — must read settings.embedding_base_url, NOT the chat backend's
+    lmstudio_base_url/exo_base_url. These are two independent reads; fixing
+    only one leaves the other silently wired to the wrong backend.
+    """
+    import app.composition as composition_module
+
+    settings = _settings(
+        embedding_base_url="http://embeddings.test/v1",
+        lmstudio_base_url="http://lmstudio.test/v1",
+        exo_base_url="http://exo.test/v1",
+    )
+    assert settings.embedding_base_url not in (
+        settings.lmstudio_base_url,
+        settings.exo_base_url,
+    )
+
+    construction_calls: list[dict] = []
+    probe_calls: list[tuple] = []
+
+    class _SpyEmbeddings:
+        def __init__(self, http_client, base_url, model, api_key=""):
+            construction_calls.append({"base_url": base_url, "model": model, "api_key": api_key})
+            self.embed = AsyncMock(return_value=[])
+
+    async def _spy_probe(http_client, base_url, model):
+        probe_calls.append((base_url, model))
+        return True
+
+    monkeypatch.setattr(composition_module, "Embeddings", _SpyEmbeddings)
+    monkeypatch.setattr(composition_module, "probe_embedding_model_loaded", _spy_probe)
+
+    graph = await build_application(settings, http_client, vault=_FakeVault())
+
+    assert len(construction_calls) == 1, "Embeddings(...) must be constructed exactly once"
+    assert construction_calls[0]["base_url"] == settings.embedding_base_url, (
+        f"Embeddings(...) construction must read settings.embedding_base_url, "
+        f"got {construction_calls[0]['base_url']!r}"
+    )
+
+    assert len(probe_calls) == 1, "probe_embedding_model_loaded(...) must be called exactly once"
+    assert probe_calls[0][0] == settings.embedding_base_url, (
+        f"probe_embedding_model_loaded(...) must read settings.embedding_base_url, "
+        f"got {probe_calls[0][0]!r}"
+    )
+
+    assert graph is not None
+
+
 # Suppress unused-import warning when running with json available
 _ = json
 
