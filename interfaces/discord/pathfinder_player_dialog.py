@@ -119,7 +119,7 @@ async def start_dialog(
         "step": STEPS[0],
         "thread_id": thread.id,
         "user_id": str(user_id),
-        "started_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "started_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     await save_draft(thread.id, str(user_id), draft, http_client=http_client)
     await thread.send(QUESTIONS[STEPS[0]])
