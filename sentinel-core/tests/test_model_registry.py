@@ -121,6 +121,80 @@ async def test_lmstudio_registry_fallback_when_discovery_fails(monkeypatch):
     assert "static-name" in registry
 
 
+async def test_exo_registry_skips_api_v0_models_endpoint_and_does_not_raise(
+    monkeypatch,
+):
+    """SC-5/Pitfall 4: with ai_provider=exo, build_model_registry() must NOT
+    attempt the LM-Studio-only /api/v0/models/{id} endpoint at all — it goes
+    straight to the model_profiles family fallback, keyed on the model
+    discovered via exo GET /state, and never raises even when that fallback
+    also fails to find a family match."""
+    monkeypatch.setenv("AI_PROVIDER", "exo")
+    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
+    monkeypatch.setenv("EXO_BASE_URL", "http://test-exo:52415/v1")
+    monkeypatch.setenv("EXO_MODEL", "mlx-community/Qwen3.5-27B-8bit")
+    from app.config import Settings
+    s = Settings()
+
+    requested_paths: list[str] = []
+
+    def handler(request):
+        requested_paths.append(request.url.path)
+        if request.url.path == "/state":
+            return httpx.Response(
+                200,
+                json={
+                    "instances": {
+                        "instance-1": {
+                            "MlxRingInstance": {
+                                "shardAssignments": {
+                                    "modelId": "mlx-community/Qwen3.5-27B-8bit",
+                                }
+                            }
+                        }
+                    }
+                },
+            )
+        # Any /api/v0/models/* call would be a bug — exo has no such endpoint.
+        return httpx.Response(404, json={"error": "unmocked"})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        registry = await build_model_registry(s, client)
+
+    assert not any("/api/v0/models" in p for p in requested_paths), (
+        f"exo registry fetch must never hit /api/v0/models — requested paths: {requested_paths}"
+    )
+    assert "mlx-community/Qwen3.5-27B-8bit" in registry
+    # model_profiles substring-matches "qwen" -> family-based context window,
+    # never a 404/exception from the LM-Studio-only endpoint.
+    assert registry["mlx-community/Qwen3.5-27B-8bit"].context_window > 0
+    assert registry["mlx-community/Qwen3.5-27B-8bit"].provider == "exo"
+
+
+async def test_exo_registry_zero_instances_non_fatal(monkeypatch):
+    """Zero exo instances (D-08's zero-case) during registry build must
+    degrade gracefully — never raise, never crash startup."""
+    monkeypatch.setenv("AI_PROVIDER", "exo")
+    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
+    monkeypatch.setenv("EXO_BASE_URL", "http://test-exo:52415/v1")
+    monkeypatch.setenv("EXO_MODEL", "")
+    monkeypatch.setenv("MODEL_NAME", "configured-fallback-model")
+    from app.config import Settings
+    s = Settings()
+
+    def handler(request):
+        return httpx.Response(200, json={"instances": {}})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        registry = await build_model_registry(s, client)
+
+    # discover_active_model falls back to settings.model_name on the
+    # zero-instances/no-default path — never raises.
+    assert "configured-fallback-model" in registry
+
+
 async def test_lmstudio_registry_no_discovery_when_disabled(monkeypatch):
     """When MODEL_AUTO_DISCOVER=false, registry uses MODEL_NAME key without attempting discovery."""
     monkeypatch.setenv("AI_PROVIDER", "lmstudio")
