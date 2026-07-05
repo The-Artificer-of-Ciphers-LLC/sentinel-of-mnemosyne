@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.5.1
 milestone_name: — The Second Brain
-status: verifying
-stopped_at: Phase 42 context gathered
-last_updated: "2026-07-05T16:14:01.663Z"
-last_activity: 2026-06-12
+status: executing
+stopped_at: Completed 42-01-PLAN.md
+last_updated: "2026-07-05T17:26:05.426Z"
+last_activity: 2026-07-05 -- Phase 42 execution started
 progress:
   total_phases: 3
   completed_phases: 3
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 41 — typed-sessionsummary-retention
+**Current focus:** Phase 42 — first-class-exo-provider
 
 ## Current Position
 
-Phase: 41
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-06-12
+Phase: 42 (first-class-exo-provider) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-07-05 -- Phase 42 execution started
 
 ## Milestone Progress
 
@@ -120,6 +120,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 41-typed-sessionsummary-retention P03 | 102s | 2 tasks | 3 files |
 | Phase 41-typed-sessionsummary-retention PP04 | 25min | 3 tasks | 4 files |
 | Phase 41-typed-sessionsummary-retention P05 | 2min | 3 tasks | 4 files |
+| Phase 42 P42-01 | 20min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -184,6 +185,9 @@ Recent decisions affecting current work:
 - [Phase ?]: OQ2 RESOLVED: RecallConfig.recent_session_limit REMOVED; hot_limit lives only on RetentionPolicy — single source of truth
 - [Phase ?]: OQ3 RESOLVED: RetentionPolicy injected as policy= kwarg into Recall.__init__, stored as self._policy; NOT threaded through RecallConfig
 - [Phase ?]: D-06 inbox/ gap DOCUMENT-AND-ACCEPT: low-confidence turns quarantined in inbox/ (sweep_skip_prefixes) are excluded from warm recall; inbox/ added to RecallConfig.exclude_prefixes default; characterized by test_inbox_gap_not_recalled
+- [Phase 42]: exo_model default is empty string (auto-discover via GET /state in 42-02); no hardcoded model id anywhere, per D-07/D-08 regression guard
+- [Phase 42]: litellm.NotFoundError added to provider_router.py's _FALLBACK_TRIGGERS only, never to litellm_provider.py's _RETRYABLE tuple (404 is not transient)
+- [Phase 42]: provider_router.py added to test_ai_agnostic_guardrail.py's excluded paths (mirrors existing model_selector.py precedent) since its litellm import is for the NotFoundError exception type only, not for making AI calls
 
 ### Pending Todos
 
@@ -217,8 +221,8 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-05T16:14:01.656Z
-Stopped at: Phase 42 context gathered
+Last session: 2026-07-05T17:26:05.419Z
+Stopped at: Completed 42-01-PLAN.md
 Resume file: 
 
-.planning/phases/42-first-class-exo-provider/42-CONTEXT.md
+None
