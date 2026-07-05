@@ -51,3 +51,63 @@ def test_lmstudio_base_url_default_is_docker_reachable(monkeypatch: pytest.Monke
 
     assert s.lmstudio_base_url == "http://host.docker.internal:52415/v1"
     assert "localhost" not in s.lmstudio_base_url
+
+
+def test_exo_fields_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """exo_* fields have safe defaults; exo_model defaults to empty string (no
+    hardcoded model id — auto-discover via GET /state, D-07/D-08)."""
+    monkeypatch.delenv("EXO_BASE_URL", raising=False)
+    monkeypatch.delenv("EXO_MODEL", raising=False)
+    monkeypatch.delenv("EXO_API_KEY", raising=False)
+    monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
+
+    s = Settings()
+
+    assert s.exo_base_url == "http://host.docker.internal:52415/v1"
+    assert s.exo_model == ""
+    assert s.exo_api_key == ""
+
+
+def test_exo_env_vars_populate_independently_of_lmstudio(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Setting EXO_* env vars populates exo_* fields without touching
+    lmstudio_base_url / model_name (SC-1, D-03)."""
+    monkeypatch.setenv("EXO_BASE_URL", "http://host.docker.internal:52415/v1")
+    monkeypatch.setenv("EXO_MODEL", "mlx-community/Qwen3.5-27B-8bit")
+    monkeypatch.setenv("EXO_API_KEY", "exo-secret")
+    monkeypatch.setenv("LMSTUDIO_BASE_URL", "http://host.docker.internal:1234/v1")
+    monkeypatch.setenv("MODEL_NAME", "some-lmstudio-model")
+    monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
+
+    s = Settings()
+
+    assert s.exo_base_url == "http://host.docker.internal:52415/v1"
+    assert s.exo_model == "mlx-community/Qwen3.5-27B-8bit"
+    assert s.exo_api_key == "exo-secret"
+    # independence: lmstudio_* fields hold their own values, unaffected
+    assert s.lmstudio_base_url == "http://host.docker.internal:1234/v1"
+    assert s.model_name == "some-lmstudio-model"
+
+
+def test_ai_provider_accepts_exo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AI_PROVIDER=exo parses successfully (D-04)."""
+    monkeypatch.setenv("AI_PROVIDER", "exo")
+    monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
+
+    s = Settings()
+
+    assert s.ai_provider == "exo"
+
+
+def test_ai_fallback_provider_accepts_any_provider_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AI_FALLBACK_PROVIDER accepts any configured provider name, not just
+    claude/none (D-05) — e.g. lmstudio."""
+    monkeypatch.setenv("AI_FALLBACK_PROVIDER", "lmstudio")
+    monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
+
+    s = Settings()
+
+    assert s.ai_fallback_provider == "lmstudio"

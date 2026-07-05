@@ -50,8 +50,8 @@ class Settings(BaseSettings):
     obsidian_api_key: str = ""  # blank = no Authorization header sent
 
     # AI provider selection (PROV-01, PROV-02)
-    ai_provider: str = "lmstudio"  # lmstudio | claude | ollama | llamacpp
-    ai_fallback_provider: str = "none"  # claude | none
+    ai_provider: str = "lmstudio"  # lmstudio | claude | ollama | llamacpp | exo
+    ai_fallback_provider: str = "none"  # any configured provider name, or "none" (D-05)
 
     # Claude / Anthropic (PROV-02)
     anthropic_api_key: str = ""  # blank = Claude provider disabled
@@ -67,6 +67,17 @@ class Settings(BaseSettings):
 
     # LM Studio API key (optional — only if LM Studio auth is enabled)
     lmstudio_api_key: str = ""
+
+    # exo (D-03) — dedicated config, independent of lmstudio_*. exo and LM Studio
+    # can be configured simultaneously; ai_provider selects which is active.
+    exo_base_url: str = "http://host.docker.internal:52415/v1"
+    # Blank = auto-discover the currently-loaded model via exo's GET /state
+    # (D-07/D-08). Deliberately NOT a hardcoded model id — exo advertises ~120
+    # catalog entries via /v1/models but serves only whatever instance is
+    # actually loaded (exo-model-notfound-502); guessing a default here would
+    # reproduce that bug.
+    exo_model: str = ""
+    exo_api_key: str = ""
 
     # Model auto-discovery (lcl-model-agnostic)
     model_auto_discover: bool = True
@@ -90,6 +101,7 @@ class Settings(BaseSettings):
             "sentinel_api_key": "sentinel_api_key",
             "obsidian_api_key": "obsidian_api_key",
             "lmstudio_api_key": "lmstudio_api_key",
+            "exo_api_key": "exo_api_key",
             "anthropic_api_key": "anthropic_api_key",
             "alpaca_paper_api_key": "alpaca_paper_api_key",
             "alpaca_paper_secret_key": "alpaca_paper_secret_key",
