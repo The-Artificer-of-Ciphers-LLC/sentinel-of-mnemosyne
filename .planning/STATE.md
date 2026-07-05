@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.5.2
 milestone_name: — Provider Independence
 status: executing
-stopped_at: Phase 43 context gathered
-last_updated: "2026-07-05T21:39:39.445Z"
+stopped_at: Completed 43-01-PLAN.md
+last_updated: "2026-07-05T21:50:16.585Z"
 last_activity: 2026-07-05 -- Phase 43 execution started
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 10
-  completed_plans: 5
+  completed_plans: 6
   percent: 50
 ---
 
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 43 (embeddings-through-sentinel) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 43
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-07-05 -- Phase 43 execution started
 
 ## Milestone Progress
@@ -127,6 +127,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 42 P03 | 25min | 2 tasks | 5 files |
 | Phase 42 P04 | 25min | 2 tasks | 8 files |
 | Phase 42 P05 | 35min | 2 tasks | 11 files |
+| Phase 43 P01 | 20min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -205,6 +206,7 @@ Recent decisions affecting current work:
 - [Phase 42-04]: All 10 llm.py chat call sites use a short-lived httpx.AsyncClient per call (foundry.py convention) rather than a caller-owned injected client, since none of these functions had a client in scope and threading a new parameter through every route/caller was out of scope
 - [Phase 42-05]: pf_npc_extract.py drops strict json_schema response_format (core's /provider/complete has no such param) — system prompt + _validate_payload become the primary schema-conformance gate
 - [Phase 42-05]: app/resolve_model.py falls back to an inert placeholder model id (never forwarded to a real completion call) instead of raising, when discovery is empty — avoids breaking 4+ untouched route callers after removing the hardcoded litellm_model config default
+- [Phase ?]: embedding_base_url defaults to LM Studio :1234/v1, independent of chat's lmstudio_base_url/exo_base_url (D-01/D-02/D-03/D-04); both composition.py embeddings call sites repointed onto embedding_*
 
 ### Pending Todos
 
@@ -238,8 +240,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-05T20:50:47.324Z
-Stopped at: Phase 43 context gathered
+Last session: 2026-07-05T21:50:16.580Z
+Stopped at: Completed 43-01-PLAN.md
 Resume file: 
-
-.planning/phases/43-embeddings-through-sentinel/43-CONTEXT.md
