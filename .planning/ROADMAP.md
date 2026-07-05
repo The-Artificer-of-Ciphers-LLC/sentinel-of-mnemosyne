@@ -64,7 +64,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 39: Extract the Recall Module** — Retrieval becomes a first-class `Recall` module returning `RecalledContext`; `MessageProcessor` and `GET /context/{user_id}` both delegate to it (completed 2026-06-11)
 - [x] **Phase 40: Semantic Recall** — `RetrievalStrategy` seam with `KeywordRecall` + `SemanticRecall`; sweeper embeddings become live retrieval data via RRF hybrid merge (completed 2026-06-11)
 - [x] **Phase 41: Typed SessionSummary + Retention** — Typed `SessionSummary` + tunable `RetentionPolicy`; sessions older than the hot window recalled via index instead of dropped (completed 2026-06-12)
-- [ ] **Phase 42: First-Class exo Provider** — Register exo as an independently-configured LLM provider alongside LM Studio in the Phase 4 framework (own env vars, explicit selection, LM-Studio↔exo fallback); retire the debug-time `LMSTUDIO_*` hijack and hardcoded exo model default
+- [x] **Phase 42: First-Class exo Provider** — Register exo as an independently-configured LLM provider alongside LM Studio in the Phase 4 framework (own env vars, explicit selection, LM-Studio↔exo fallback); retire the debug-time `LMSTUDIO_*` hijack and hardcoded exo model default (completed 2026-07-05)
 - [ ] **Phase 43: Embeddings Through Sentinel** — Route pf2e-module embeddings/RAG retrieval through core + wire a non-exo embeddings backend; also restores core's Phase-40 semantic recall (broken when embedding against exo)
 
 ## Phase Details
@@ -849,7 +849,7 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 
@@ -857,7 +857,7 @@ Plans:
 - [x] 42-02-PLAN.md — Wave 2: table-driven openai_compatible provider registry — exo GET /state discovery + composition generalization (active_model/provider_map/fallback/stop-seq) + model_registry exo branch; LM Studio migrated with regression pin (SC-2/SC-4/SC-5, D-01/D-02/D-07/D-08)
 - [x] 42-03-PLAN.md — Wave 2: pf2e→core chat gateway (core side) — POST /provider/complete narrow route + main.py wiring + SentinelCoreClient.complete() (SC-6, D-09/D-10)
 - [x] 42-04-PLAN.md — Wave 3: pf2e chat handoff — core-client wiring + migrate llm.py chat call sites off direct litellm (SC-6, D-09)
-- [ ] 42-05-PLAN.md — Wave 4: pf2e chat handoff — migrate foundry.py/pf_npc_extract.py call sites + remove chat-only litellm config + phase regression gate (SC-5/SC-6, D-02/D-09)
+- [x] 42-05-PLAN.md — Wave 4: pf2e chat handoff — migrate foundry.py/pf_npc_extract.py call sites + remove chat-only litellm config + phase regression gate (SC-5/SC-6, D-02/D-09)
 
 ### Phase 43: Embeddings Through Sentinel
 
