@@ -91,6 +91,13 @@
 - [x] **MEM-08**: Session data crosses the Recall interface as typed values, enabling recency-aware merging
 - [x] **MEM-09**: Recalled session summaries are weighted by recency in the merge (more recent sessions rank above older ones) using the typed `SessionSummary.date`; recency weighting applies to episodic Session summaries only, never to Self-namespace or authored notes
 
+## Embeddings Gateway (v0.5.2 — Provider Independence)
+
+- [ ] **EMB-01**: pf2e-module no longer calls an embeddings endpoint directly — embeddings for its rules index are obtained via sentinel-core (a narrow core embeddings endpoint + `SentinelCoreClient.embed()`); pf2e retains ownership of its rules index and retrieval
+- [ ] **EMB-02**: sentinel-core is configured with a non-exo embeddings backend that actually serves `/v1/embeddings` for the configured embedding model, selectable independently of the chat `ai_provider` (chat=exo and embeddings=LM Studio can coexist)
+- [ ] **EMB-03**: `:pf rule` semantic retrieval works end-to-end — the rules index builds and returns relevant rules with no 503 degradation when the embeddings backend is up
+- [ ] **EMB-04**: core's Phase-40 semantic recall produces/reads embeddings successfully against the same backend, with a dimension-mismatch guard that prevents stale/garbage cosine and no silent empty-index degradation
+
 ---
 
 ## Future Requirements (deferred)
@@ -174,3 +181,7 @@ _Filled by roadmapper. Maps each REQ-ID to its implementing phase._
 | MEM-07 | 41 | Typed SessionSummary + Retention |
 | MEM-08 | 41 | Typed SessionSummary + Retention |
 | MEM-09 | 41 | Typed SessionSummary + Retention |
+| EMB-01 | 43 | Embeddings Through Sentinel |
+| EMB-02 | 43 | Embeddings Through Sentinel |
+| EMB-03 | 43 | Embeddings Through Sentinel |
+| EMB-04 | 43 | Embeddings Through Sentinel |

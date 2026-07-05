@@ -863,7 +863,7 @@ Plans:
 
 **Goal:** Extend the "everything through Sentinel" restoration from Phase 42's chat path to the **embeddings** path. pf2e-module hands its rules-index embeddings/retrieval off to sentinel-core instead of embedding directly; core is wired to a real, non-exo embeddings-capable provider (LM Studio embed model / Ollama nomic / dedicated endpoint) so pf2e's `:pf rule` RAG index works again. The same embeddings backend also **restores core's own Phase-40 semantic recall**, which is currently broken when embedding against exo (exo returns 405 on `/v1/embeddings`).
 **Depends on:** Phase 42 (provider gateway + chat handoff), Phase 4, Phase 40 (semantic recall)
-**Requirements:** TBD (assigned during `/gsd-discuss-phase 43`)
+**Requirements:** EMB-01, EMB-02, EMB-03, EMB-04 (assigned during `/gsd-discuss-phase 43`; embeddings-gateway family, v0.5.2)
 **Canonical ref:** `.planning/phases/42-first-class-exo-provider/42-CONTEXT.md` (north-star + the embeddings split rationale); `docs/adr/0004-semantic-recall.md`
 **Success Criteria** (what must be TRUE):
 
