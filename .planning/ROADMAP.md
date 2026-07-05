@@ -64,6 +64,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 39: Extract the Recall Module** — Retrieval becomes a first-class `Recall` module returning `RecalledContext`; `MessageProcessor` and `GET /context/{user_id}` both delegate to it (completed 2026-06-11)
 - [x] **Phase 40: Semantic Recall** — `RetrievalStrategy` seam with `KeywordRecall` + `SemanticRecall`; sweeper embeddings become live retrieval data via RRF hybrid merge (completed 2026-06-11)
 - [x] **Phase 41: Typed SessionSummary + Retention** — Typed `SessionSummary` + tunable `RetentionPolicy`; sessions older than the hot window recalled via index instead of dropped (completed 2026-06-12)
+- [ ] **Phase 42: First-Class exo Provider** — Register exo as an independently-configured LLM provider alongside LM Studio in the Phase 4 framework (own env vars, explicit selection, LM-Studio↔exo fallback); retire the debug-time `LMSTUDIO_*` hijack and hardcoded exo model default
 
 ## Phase Details
 
@@ -825,3 +826,24 @@ Plans:
 **Wave 4** *(blocked on Wave 3 completion)*
 
 - [x] 41-05-PLAN.md — Consumer lockstep: retype message_processing/status consumers + ~19 test mock sites; full-suite integration gate
+
+---
+
+## Milestone v0.5.2 — Provider Independence
+
+### Phase 42: First-Class exo Provider
+
+**Goal:** Make exo a first-class, independently-configured LLM provider inside the existing Phase 4 multi-provider framework (`AIProvider` Protocol / `LiteLLMProvider` / `ProviderRouter` / `ModelRegistry`), coexisting with LM Studio rather than replacing it. Introduce dedicated exo configuration instead of the debug-time reuse of `LMSTUDIO_*` env vars, make provider selection explicit, support LM-Studio↔exo fallback, and remove the hardcoded exo model default so the model is resolved from config/catalog. This pays down the debt incurred by the reactive exo cutover (resolved debug sessions `lmstudio-provider-switch` and `exo-model-notfound-502`).
+**Depends on:** Phase 4 (AI Provider framework — env-var config, `LiteLLMProvider`, `ProviderRouter` ConnectError fallback, `ModelRegistry`)
+**Requirements:** TBD (new — provider-independence requirements assigned during `/gsd-discuss-phase 42`; propose a `PRV-*` family)
+**Canonical ref:** `.planning/debug/resolved/lmstudio-provider-switch.md`, `.planning/debug/exo-model-notfound-502.md` (exo runtime behavior + the debt this phase pays down); provider ADR TBD in discuss-phase
+**Success Criteria** (what must be TRUE):
+
+  1. exo is configured through its own dedicated env vars (e.g. `EXO_BASE_URL` / `EXO_MODEL` / `EXO_API_KEY`), not by overloading `LMSTUDIO_*` — LM Studio and exo can be configured simultaneously without collision
+  2. The active provider is selected explicitly via config/env; switching between LM Studio and exo requires only a config change, no code edit (parity with Phase 4's env-var switchability criterion)
+  3. When the selected provider is unreachable, `ProviderRouter` falls back to the other configured local provider (LM Studio ↔ exo) through the existing ConnectError-only fallback path
+  4. The debug-time hardcoded exo model default is removed; the model resolves from configuration and/or the provider's advertised catalog, and an unavailable/misconfigured model surfaces a clear error rather than silently selecting an unserveable `catalog[0]` (regression guard for `exo-model-notfound-502`)
+  5. exo's OpenAI-compatible quirks are handled: embeddings-dependent paths degrade gracefully where the provider has no `/v1/embeddings` (per the pathfinder `_build_rules_index_safely()` pattern), and the litellm model string uses the `openai/` prefix for the custom base
+  6. Both `sentinel-core` and `pf2e-module` resolve their provider and model through the unified configuration — no module hardcodes an endpoint or model id
+
+**UI hint**: no
