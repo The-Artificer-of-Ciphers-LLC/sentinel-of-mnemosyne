@@ -65,6 +65,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 40: Semantic Recall** — `RetrievalStrategy` seam with `KeywordRecall` + `SemanticRecall`; sweeper embeddings become live retrieval data via RRF hybrid merge (completed 2026-06-11)
 - [x] **Phase 41: Typed SessionSummary + Retention** — Typed `SessionSummary` + tunable `RetentionPolicy`; sessions older than the hot window recalled via index instead of dropped (completed 2026-06-12)
 - [ ] **Phase 42: First-Class exo Provider** — Register exo as an independently-configured LLM provider alongside LM Studio in the Phase 4 framework (own env vars, explicit selection, LM-Studio↔exo fallback); retire the debug-time `LMSTUDIO_*` hijack and hardcoded exo model default
+- [ ] **Phase 43: Embeddings Through Sentinel** — Route pf2e-module embeddings/RAG retrieval through core + wire a non-exo embeddings backend; also restores core's Phase-40 semantic recall (broken when embedding against exo)
 
 ## Phase Details
 
@@ -845,5 +846,20 @@ Plans:
   4. The debug-time hardcoded exo model default is removed; the model resolves from configuration and/or the provider's advertised catalog, and an unavailable/misconfigured model surfaces a clear error rather than silently selecting an unserveable `catalog[0]` (regression guard for `exo-model-notfound-502`)
   5. exo's OpenAI-compatible quirks are handled: embeddings-dependent paths degrade gracefully where the provider has no `/v1/embeddings` (per the pathfinder `_build_rules_index_safely()` pattern), and the litellm model string uses the `openai/` prefix for the custom base
   6. Both `sentinel-core` and `pf2e-module` resolve their provider and model through the unified configuration — no module hardcodes an endpoint or model id
+
+**UI hint**: no
+
+### Phase 43: Embeddings Through Sentinel
+
+**Goal:** Extend the "everything through Sentinel" restoration from Phase 42's chat path to the **embeddings** path. pf2e-module hands its rules-index embeddings/retrieval off to sentinel-core instead of embedding directly; core is wired to a real, non-exo embeddings-capable provider (LM Studio embed model / Ollama nomic / dedicated endpoint) so pf2e's `:pf rule` RAG index works again. The same embeddings backend also **restores core's own Phase-40 semantic recall**, which is currently broken when embedding against exo (exo returns 405 on `/v1/embeddings`).
+**Depends on:** Phase 42 (provider gateway + chat handoff), Phase 4, Phase 40 (semantic recall)
+**Requirements:** TBD (assigned during `/gsd-discuss-phase 43`)
+**Canonical ref:** `.planning/phases/42-first-class-exo-provider/42-CONTEXT.md` (north-star + the embeddings split rationale); `docs/adr/0004-semantic-recall.md`
+**Success Criteria** (what must be TRUE):
+
+  1. pf2e-module no longer calls an embeddings endpoint directly — embeddings/retrieval for its rules index are obtained via sentinel-core
+  2. sentinel-core is configured with a non-exo embeddings provider that actually serves `/v1/embeddings` for the configured `embedding_model`
+  3. `:pf rule` semantic retrieval works end-to-end (the rules index builds and returns relevant rules — no 503 degradation when the embeddings backend is up)
+  4. core's Phase-40 semantic recall produces/reads embeddings successfully against the same backend (no silent empty-index degradation caused by the exo cutover)
 
 **UI hint**: no
