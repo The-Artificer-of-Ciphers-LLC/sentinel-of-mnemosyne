@@ -231,3 +231,59 @@ def test_preference_skipped_when_not_in_loaded():
 
 def _raise():
     raise Exception("unknown model")
+
+
+# ---------------------------------------------------------------------------
+# T-lmstudio-provider-switch — preferences/default are stored provider-prefixed
+# (e.g. "openai/mlx-community/foo") per app/config.py's documented convention,
+# but `loaded` always holds bare ids from {api_base}/models. Regression coverage
+# for the prefix-mismatch bug found while switching pf2e-module off LM Studio.
+# ---------------------------------------------------------------------------
+
+
+def test_preference_matches_when_prefixed_but_loaded_is_bare():
+    """A provider-prefixed preference must match a bare entry in `loaded`."""
+    info_map = {"mlx-community/foo": {"max_tokens": 2_000}}
+    fc_map = {"mlx-community/foo": False}
+
+    with patch("app.model_selector.litellm.get_model_info", side_effect=lambda model, **_: info_map.get(model) or _raise()), \
+         patch("app.model_selector.litellm.supports_function_calling", side_effect=lambda model, **_: fc_map.get(model, False)):
+        chosen = select_model(
+            "fast",
+            ["mlx-community/foo", "mlx-community/other-big-model"],
+            preferences={"fast": "openai/mlx-community/foo"},
+        )
+
+    assert chosen == "openai/mlx-community/foo"
+
+
+def test_default_matches_when_prefixed_but_loaded_is_bare():
+    """A provider-prefixed default must match a bare entry in `loaded` (no scored candidates)."""
+    # Custom local model ids (mlx-community/*, LM Studio bare names, etc.) are never
+    # recognized by litellm.get_model_info — scoring always yields zero candidates
+    # in real usage, so this default-fallback path is the one that actually decides.
+    with patch("app.model_selector.litellm.get_model_info", side_effect=Exception("unknown")), \
+         patch("app.model_selector.litellm.supports_function_calling", side_effect=Exception("unknown")):
+        chosen = select_model(
+            "chat",
+            ["mlx-community/Qwen3.5-27B-8bit", "mlx-community/other-catalog-entry"],
+            default="openai/mlx-community/Qwen3.5-27B-8bit",
+        )
+
+    assert chosen == "openai/mlx-community/Qwen3.5-27B-8bit"
+
+
+def test_default_prefix_mismatch_previously_fell_through_to_arbitrary_first_loaded():
+    """Regression guard: without the bare-normalize fix, a prefixed default that IS
+    actually loaded would incorrectly fall through to `loaded[0]` instead of being
+    honored — exactly the failure mode that produces exo's 'No instance found' 404
+    when the catalog lists many models but only one has a running instance."""
+    with patch("app.model_selector.litellm.get_model_info", side_effect=Exception("unknown")), \
+         patch("app.model_selector.litellm.supports_function_calling", side_effect=Exception("unknown")):
+        chosen = select_model(
+            "chat",
+            ["the-one-running-instance", "arbitrary-catalog-entry-a", "arbitrary-catalog-entry-b"],
+            default="openai/the-one-running-instance",
+        )
+
+    assert chosen == "openai/the-one-running-instance"

@@ -11,7 +11,7 @@ import litellm
 
 from app.errors import EmbeddingModelUnavailable
 
-DEFAULT_LMSTUDIO_BASE_URL = "http://host.docker.internal:1234"
+DEFAULT_LMSTUDIO_BASE_URL = "http://host.docker.internal:52415"
 
 
 

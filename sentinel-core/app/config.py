@@ -24,7 +24,16 @@ def _read_secret(name: str, env_fallback: str = "") -> str:
 
 
 class Settings(BaseSettings):
-    lmstudio_base_url: str = "http://host.docker.internal:1234/v1"
+    # Local OpenAI-compatible inference backend (e.g. exo, LM Studio) reached via
+    # Docker's host-gateway alias -- NOT "localhost", which inside this container
+    # resolves to the container itself rather than the host machine running the
+    # backend (T-lmstudio-provider-switch). Override via LMSTUDIO_BASE_URL in .env.
+    # NOTE: not every OpenAI-compatible local backend implements POST /v1/embeddings
+    # (e.g. exo does not, as of this writing -- see exo-explore/exo#1047). If this
+    # points at a chat-only backend, embedding-dependent paths (vault sweeper, note
+    # classifier context probes) degrade gracefully rather than crashing startup --
+    # see app/composition.py's non-fatal probes and app/clients/embeddings.py.
+    lmstudio_base_url: str = "http://host.docker.internal:52415/v1"
     sentinel_api_key: str  # Required — no default. Startup fails fast if missing.
     model_name: str = "gemma-4-e4b-it-mlx"
     # LM Studio embedding model id (no provider prefix — `openai/` is added at

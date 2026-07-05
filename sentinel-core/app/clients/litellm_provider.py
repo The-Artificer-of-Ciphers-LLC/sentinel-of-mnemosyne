@@ -56,7 +56,7 @@ class LiteLLMProvider:
     """
     AI backend client wrapping litellm.acompletion().
 
-    LM Studio:  model_string="openai/<model_name>", api_base="http://host.docker.internal:1234/v1"
+    LM Studio:  model_string="openai/<model_name>", api_base="http://host.docker.internal:52415/v1"
     Claude:     model_string="claude-haiku-4-5" (or sonnet), api_key=anthropic_api_key
     Ollama:     model_string="ollama/<model_name>", api_base="http://<host>:11434"
     llama.cpp:  model_string="openai/<model_name>", api_base="http://<host>:8080/v1"

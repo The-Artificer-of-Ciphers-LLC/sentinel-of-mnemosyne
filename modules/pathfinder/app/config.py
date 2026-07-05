@@ -16,9 +16,13 @@ class Settings(BaseSettings):
     obsidian_base_url: str = "http://host.docker.internal:27123"
     obsidian_api_key: str = ""  # blank if Obsidian REST API auth disabled
 
-    # LiteLLM — model and API base for NPC field extraction
+    # LiteLLM — model and API base for NPC field extraction.
+    # Local OpenAI-compatible inference backend (e.g. exo, LM Studio) reached via
+    # Docker's host-gateway alias -- NOT "localhost", which inside this container
+    # resolves to the container itself rather than the host machine running the
+    # backend (T-lmstudio-provider-switch). Override via LITELLM_API_BASE in .env.
     litellm_model: str = "openai/local-model"
-    litellm_api_base: str = "http://host.docker.internal:1234/v1"
+    litellm_api_base: str = "http://host.docker.internal:52415/v1"
 
     # Task-kind preferences (optional) — used by app.resolve_model to pick the best
     # loaded model for each task. If unset, the scorer falls back to litellm_model.
@@ -26,11 +30,17 @@ class Settings(BaseSettings):
     litellm_model_structured: str | None = None
     litellm_model_fast: str | None = None
 
-    # Phase 33 rules engine — embedding model loaded in LM Studio for corpus + query embeds.
-    # Stored as the BARE model id (no provider prefix). The bare name is what
-    # gets persisted in cached-ruling frontmatter (D-13), so reuse-match cache
-    # comparisons work across processes. embed_texts() prepends "openai/" at
-    # the litellm call site — see _resolve_embed_provider in app/llm.py.
+    # Phase 33 rules engine — embedding model for corpus + query embeds, served from
+    # litellm_api_base above. Stored as the BARE model id (no provider prefix). The
+    # bare name is what gets persisted in cached-ruling frontmatter (D-13), so
+    # reuse-match cache comparisons work across processes. embed_texts() prepends
+    # "openai/" at the litellm call site — see _resolve_embed_provider in app/llm.py.
+    # NOTE (T-lmstudio-provider-switch): not every OpenAI-compatible local backend
+    # implements POST /v1/embeddings (e.g. exo does not, as of this writing — see
+    # exo-explore/exo#1047). If litellm_api_base points at a chat-only backend, the
+    # startup rules-index build degrades gracefully (see main.py lifespan) rather
+    # than crashing the module; /rule/query returns 503 until an embeddings-capable
+    # backend is configured.
     rules_embedding_model: str = "text-embedding-nomic-embed-text-v1.5"
 
     # Phase 34 session notes settings (D-10, D-13, D-37)

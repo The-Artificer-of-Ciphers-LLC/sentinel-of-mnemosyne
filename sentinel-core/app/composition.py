@@ -161,7 +161,7 @@ async def build_provider_router(
     # Fetch model profile for stop sequences — non-fatal; defaults to no stop sequences.
     # Only meaningful for lmstudio provider (local models need explicit stop tokens).
     # Cloud providers (Claude) manage termination via their own chat templates.
-    lmstudio_api_base = settings.lmstudio_base_url or "http://host.docker.internal:1234"
+    lmstudio_api_base = settings.lmstudio_base_url or "http://host.docker.internal:52415"
     lmstudio_stop_sequences: list[str]
     try:
         profile = await get_profile(

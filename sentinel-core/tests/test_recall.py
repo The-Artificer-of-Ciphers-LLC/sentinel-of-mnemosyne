@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -1398,9 +1398,17 @@ async def test_recency_order_hot():
 
     MEM-09 place (a): recency reorders, most-recent first.  Blend — neither session
     is dropped.
+
+    Dates are computed relative to the real wall clock (not hardcoded absolute
+    literals) — FakeVault.get_recent_sessions() filters candidates against
+    datetime.now(timezone.utc) (see test_retention_window_excludes_out_of_window_sessions),
+    so a fixed-literal "today" silently drifts out of the hot_window_days window
+    as real time passes and turns this into a time-bomb failure (T-lmstudio-provider-switch
+    regression found while running the full suite; not a flake -- root-caused and fixed here).
     """
-    today = "2026-06-12"
-    old_date = "2026-06-02"  # 10 days older
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    old_date = (now - timedelta(days=10)).strftime("%Y-%m-%d")
     notes = {
         f"ops/sessions/{old_date}/trekkie-10-00-00.md": f"---\ndate: {old_date}\nuser_id: trekkie\ntime: 10-00-00\n---\n## User\nOld message\n## Sentinel\nOld reply\n",
         f"ops/sessions/{today}/trekkie-10-00-00.md": f"---\ndate: {today}\nuser_id: trekkie\ntime: 10-00-00\n---\n## User\nNew message\n## Sentinel\nNew reply\n",
@@ -1428,9 +1436,15 @@ async def test_recency_order_is_blend_not_filter():
 
     MEM-09: a blend, not a hard override. An older session must still appear
     in the list even though it ranks after a more-recent one.
+
+    Dates are computed relative to the real wall clock — see
+    test_recency_order_hot's docstring for why a hardcoded absolute literal
+    would be a time-bomb here (FakeVault.get_recent_sessions filters by
+    datetime.now(timezone.utc) against hot_window_days).
     """
-    today = "2026-06-12"
-    old_date = "2026-06-02"
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    old_date = (now - timedelta(days=10)).strftime("%Y-%m-%d")
     notes = {
         f"ops/sessions/{old_date}/trekkie-10-00-00.md": f"---\ndate: {old_date}\nuser_id: trekkie\ntime: 10-00-00\n---\n## User\nOld message\n## Sentinel\nOld reply\n",
         f"ops/sessions/{today}/trekkie-10-00-00.md": f"---\ndate: {today}\nuser_id: trekkie\ntime: 10-00-00\n---\n## User\nNew message\n## Sentinel\nNew reply\n",
@@ -1695,8 +1709,12 @@ async def test_retention_window_tunable():
     """MEM-06: RetentionPolicy(hot_limit=1) returns at most 1 session; hot_limit=5 returns more.
 
     Proves hot_limit lives on RetentionPolicy (OQ2), not RecallConfig.recent_session_limit.
+
+    "today" is computed relative to the real wall clock rather than a hardcoded
+    literal -- see test_recency_order_hot's docstring for why a fixed absolute
+    date is a time-bomb against FakeVault.get_recent_sessions' real-clock window filter.
     """
-    today = "2026-06-12"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     notes = {}
     # Seed 3 distinct session notes for the user
     for i in range(3):

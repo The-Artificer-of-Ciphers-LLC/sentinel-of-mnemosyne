@@ -29,6 +29,10 @@ Startup:
   loads the harvest-tables.yaml seed into the harvest route's module-level singleton, and
   (Phase 33) loads rules-corpus.json + aon-url-map.json and builds the embedding index for
   the rule route's three module-level singletons (obsidian, rules_index, aon_url_map).
+  The embedding index build is non-fatal (T-lmstudio-provider-switch): if the configured
+  LITELLM_API_BASE is unreachable or doesn't implement POST /v1/embeddings,
+  rules_index stays None and POST /rule/query returns 503 — every other endpoint
+  still starts normally. See _build_rules_index_safely.
 
 Per D-15 through D-18 in Phase 28 CONTEXT.md; updated in Phase 29 for NPC CRUD,
 extended in Phase 30 for NPC outputs (OUT-01..OUT-04), Phase 31 for dialogue,
@@ -157,6 +161,34 @@ async def _register_with_retry(client: httpx.AsyncClient) -> None:
     raise SystemExit(1)
 
 
+async def _build_rules_index_safely(build_fn, chunks, embed_fn):
+    """Build the RAG rules-embedding index, degrading to ``None`` on failure.
+
+    T-lmstudio-provider-switch (revised L-10): embedding backends aren't always
+    reachable or embeddings-capable (e.g. a chat-only local backend with no
+    POST /v1/embeddings). A failure here previously propagated straight out of
+    ``lifespan``, crashing ASGI startup and crash-looping the ENTIRE module under
+    Docker's ``restart: unless-stopped`` policy — taking down every endpoint
+    (NPC, dialogue, harvest, session) for a failure in one optional RAG subsystem.
+
+    Now: log an ERROR (preserving the original operator-visibility intent — this
+    is still surfaced immediately in the container log) and return ``None`` so
+    the module keeps starting. ``routes/rule.py`` already returns HTTP 503 via
+    ``RuleQueryNotInitialized`` whenever ``rules_index is None``, so ``/rule/query``
+    degrades cleanly while every other route keeps working.
+    """
+    try:
+        return await build_fn(chunks, embed_fn)
+    except Exception:
+        logger.exception(
+            "Phase 33 rules engine: embedding index build failed — rules RAG is "
+            "disabled (POST /rule/query will return 503) but the rest of "
+            "pf2e-module is starting normally. Check LITELLM_API_BASE and confirm "
+            "the configured backend implements POST /v1/embeddings."
+        )
+        return None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup: register with Sentinel Core + create persistent ObsidianClient + load harvest + rules seeds."""
@@ -205,17 +237,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 model=settings.rules_embedding_model,
             )
 
-        # L-10 fail-fast: build_rules_index awaits _rule_embed_fn -> embed_texts, which
-        # raises if LM Studio is unreachable or the embedding model isn't loaded. The
-        # exception propagates to FastAPI startup -> SystemExit -> Docker restart-loop,
-        # so the operator sees the error in the container log instead of at first /query.
-        _rule_module.rules_index = await build_rules_index(
-            _rule_corpus_chunks, _rule_embed_fn
+        # L-10 (revised, T-lmstudio-provider-switch): build_rules_index awaits
+        # _rule_embed_fn -> embed_texts, which raises if the configured backend is
+        # unreachable OR doesn't implement POST /v1/embeddings. A failure here no
+        # longer crashes the whole module — see _build_rules_index_safely — it
+        # degrades to rules_index=None (RAG disabled, 503 on /rule/query) while
+        # every other endpoint keeps working.
+        _rule_module.rules_index = await _build_rules_index_safely(
+            build_rules_index, _rule_corpus_chunks, _rule_embed_fn
         )
-        logger.info(
-            "Phase 33 rules engine: loaded %d corpus chunks, embedding model=%s",
-            len(_rule_corpus_chunks), settings.rules_embedding_model,
-        )
+        if _rule_module.rules_index is not None:
+            logger.info(
+                "Phase 33 rules engine: loaded %d corpus chunks, embedding model=%s",
+                len(_rule_corpus_chunks), settings.rules_embedding_model,
+            )
         # Phase 34: wire the session route's module-level singletons.
         _session_module.obsidian = obsidian_client
         # NPC roster cache: load from vault at startup for fast-pass wikilink rewriting (D-22).

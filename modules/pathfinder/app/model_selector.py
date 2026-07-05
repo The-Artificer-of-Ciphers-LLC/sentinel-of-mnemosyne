@@ -1,9 +1,19 @@
-"""Registry-aware model selection for LM Studio-backed LiteLLM calls.
+"""Registry-aware model selection for LiteLLM calls against a local OpenAI-compatible
+backend (LM Studio, exo, etc.).
 
-Queries LM Studio's OpenAI-compatible `/v1/models` endpoint to discover loaded
+Queries the backend's OpenAI-compatible `/v1/models` endpoint to discover known
 models, then ranks each against a per-task-kind rubric using `litellm.get_model_info`
 capability metadata (`max_tokens`, `supports_function_calling`). Returns the best
 match or falls through to env-var preferences and a legacy default.
+
+Caveat (T-lmstudio-provider-switch): `/v1/models` membership does not necessarily
+mean a model has an active running instance on every backend. LM Studio's endpoint
+only ever lists the one model an operator has loaded, so the scoring/fallback chain
+below always lands on something serviceable. Backends like exo instead return their
+full downloadable catalog regardless of which model is actually placed/running —
+pin `preferences`/`default` explicitly (see app/config.py's `litellm_model*` settings)
+to the model you've confirmed is actually ready, rather than relying on discovery
+to pick a servable one.
 
 Three task kinds map to the three LLM usage patterns in the codebase:
 
@@ -32,6 +42,23 @@ TaskKind = Literal["chat", "structured", "fast"]
 
 _model_cache: dict[str, list[str]] = {}
 _cache_lock = asyncio.Lock()
+
+# litellm provider prefix this codebase's Settings values are conventionally stored
+# with (e.g. LITELLM_MODEL=openai/qwen2.5-14b-instruct — see app/config.py,
+# .env.example). `loaded` (below) always holds BARE ids as returned verbatim by
+# {api_base}/models, which never includes this prefix. Without stripping it here,
+# `preferred`/`default` can never match `loaded` by membership — silently masked
+# under backends that expose only one loaded model (LM Studio), but actively wrong
+# under backends whose /v1/models lists a full catalog regardless of which model
+# actually has a running instance (e.g. exo — T-lmstudio-provider-switch).
+_PROVIDER_PREFIX = "openai/"
+
+
+def _bare(model_id: str) -> str:
+    """Strip the litellm 'openai/' provider prefix for loaded-list comparisons."""
+    if model_id.startswith(_PROVIDER_PREFIX):
+        return model_id[len(_PROVIDER_PREFIX):]
+    return model_id
 
 
 class ModelSelectorError(RuntimeError):
@@ -89,7 +116,7 @@ def select_model(
     """
     prefs = dict(preferences or {})
     preferred = prefs.get(task_kind)
-    if preferred and preferred in loaded:
+    if preferred and (preferred in loaded or _bare(preferred) in loaded):
         return preferred
 
     if loaded:
@@ -102,7 +129,7 @@ def select_model(
             scored.sort(reverse=True)
             return scored[0][1]
 
-        if default and default in loaded:
+        if default and (default in loaded or _bare(default) in loaded):
             return default
         return loaded[0]
 

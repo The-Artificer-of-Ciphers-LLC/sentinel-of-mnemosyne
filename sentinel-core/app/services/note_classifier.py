@@ -190,7 +190,7 @@ async def _resolve_model_for_classification() -> tuple[str, object | None, str |
     model string from settings; the LLM call may still fail, in which case
     classify_note() coerces to ``unsure``.
     """
-    api_base = settings.lmstudio_base_url or "http://host.docker.internal:1234"
+    api_base = settings.lmstudio_base_url or "http://host.docker.internal:52415"
     api_base_v1 = f"{api_base.rstrip('/')}/v1" if not api_base.rstrip("/").endswith("/v1") else api_base
     try:
         loaded = await get_loaded_models(api_base_v1)

@@ -35,3 +35,19 @@ def test_retention_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.retention_hot_window_days == 4
     assert isinstance(s.retention_hot_limit, int)
     assert isinstance(s.retention_hot_window_days, int)
+
+
+def test_lmstudio_base_url_default_is_docker_reachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """T-lmstudio-provider-switch: the default must use host.docker.internal (Docker
+    host-gateway alias), not bare 'localhost' -- which resolves to the container
+    itself, not the host machine running the inference backend. Pinned at
+    host.docker.internal:52415 (the "exo" OpenAI-compatible endpoint that replaced
+    the previous dead LM Studio default at :1234) so a regression back to the old
+    dead host, or to an unreachable bare-localhost value, fails this test."""
+    monkeypatch.delenv("LMSTUDIO_BASE_URL", raising=False)
+    monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
+
+    s = Settings()
+
+    assert s.lmstudio_base_url == "http://host.docker.internal:52415/v1"
+    assert "localhost" not in s.lmstudio_base_url
