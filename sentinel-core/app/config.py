@@ -45,6 +45,15 @@ class Settings(BaseSettings):
     # hardcoded constants in app/clients/embeddings.py and
     # app/services/vault_sweeper.py (260502-1zv D-03).
     embedding_model: str = "text-embedding-nomic-embed-text-v1.5"
+    # Embeddings backend — fully independent of the chat `ai_provider` (D-04).
+    # Defaults to LM Studio's nomic endpoint on port 1234 (D-01), NOT exo's
+    # 52415 (exo does not implement POST /v1/embeddings as of this writing —
+    # see exo-explore/exo#1047, D-02). Setting `lmstudio_base_url` or
+    # `exo_base_url` (both chat-only) does NOT affect this field and vice
+    # versa — chat can run on exo while embeddings run on LM Studio
+    # simultaneously. Override via EMBEDDING_BASE_URL in .env (D-03).
+    embedding_base_url: str = "http://host.docker.internal:1234/v1"
+    embedding_api_key: str = ""  # optional — only if the embeddings backend requires auth
     log_level: str = "INFO"
     obsidian_api_url: str = "http://host.docker.internal:27123"  # HTTP mode (port 27123, not 27124)
     obsidian_api_key: str = ""  # blank = no Authorization header sent
@@ -102,6 +111,7 @@ class Settings(BaseSettings):
             "obsidian_api_key": "obsidian_api_key",
             "lmstudio_api_key": "lmstudio_api_key",
             "exo_api_key": "exo_api_key",
+            "embedding_api_key": "embedding_api_key",
             "anthropic_api_key": "anthropic_api_key",
             "alpaca_paper_api_key": "alpaca_paper_api_key",
             "alpaca_paper_secret_key": "alpaca_paper_secret_key",
