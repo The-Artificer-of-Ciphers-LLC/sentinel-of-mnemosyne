@@ -220,6 +220,63 @@ def _reset_cache_for_tests() -> None:
     _model_cache.clear()
 
 
+async def discover_via_exo_state(
+    base_url: str, http_client: httpx.AsyncClient
+) -> list[str]:
+    """Return the list of currently-loaded exo model ids via GET /state.
+
+    Unlike /v1/models (a ~120-entry static catalog of servable-but-not-
+    necessarily-running models), /state.instances reflects ONLY models with
+    an active running instance. Each instance value is a tagged union —
+    {"MlxRingInstance": {...}} or {"MlxJacclInstance": {...}} — with the
+    model id at <tag-value>.shardAssignments.modelId (camelCase on the wire,
+    per exo's alias_generator=to_camel). Since the exact wire format was not
+    live-curl-confirmed (RESEARCH.md Assumptions Log A1), the snake_case
+    shard_assignments/model_id spelling is also accepted defensively.
+
+    /state lives at exo's API root, not under /v1 — a trailing "/v1" on
+    base_url (exo_base_url's default shape, e.g.
+    "http://host.docker.internal:52415/v1") is stripped before appending
+    /state, mirroring get_context_window_from_lmstudio's existing /v1 ->
+    /api/v0 strip pattern (app/clients/litellm_provider.py).
+
+    A malformed/missing shardAssignments entry (or a non-dict instance/
+    tagged body) is skipped, not raised — a defensive structural walk that
+    survives exo API version bumps better than exact-schema parsing.
+
+    Zero running instances -> "instances": {} -> returns [] (the caller
+    feeds this into select_model(), which raises ModelSelectorError rather
+    than guessing when `loaded` is empty and no default is configured —
+    D-08; it never picks an arbitrary catalog[0] entry).
+    """
+    root = base_url.rstrip("/").removesuffix("/v1")
+    resp = await http_client.get(f"{root}/state", timeout=5.0)
+    resp.raise_for_status()
+    data = resp.json()
+    instances = data.get("instances", {}) if isinstance(data, dict) else {}
+
+    model_ids: list[str] = []
+    for instance_value in instances.values():
+        if not isinstance(instance_value, dict):
+            continue
+        # Tagged union: exactly one key, the class name
+        # (MlxRingInstance | MlxJacclInstance).
+        for tagged_body in instance_value.values():
+            if not isinstance(tagged_body, dict):
+                continue
+            shard = tagged_body.get("shardAssignments")
+            if not isinstance(shard, dict):
+                shard = tagged_body.get("shard_assignments")
+            if not isinstance(shard, dict):
+                continue
+            model_id = shard.get("modelId")
+            if not isinstance(model_id, str) or not model_id:
+                model_id = shard.get("model_id")
+            if isinstance(model_id, str) and model_id:
+                model_ids.append(model_id)
+    return model_ids
+
+
 async def discover_active_model(
     settings: "Settings",
     http_client: httpx.AsyncClient,
@@ -243,19 +300,39 @@ async def discover_active_model(
     if not settings.model_auto_discover:
         return _prefixed(settings.model_name)
 
-    # Resolve base URL for the active provider
-    base_url = {
+    # Resolve base URL for the active provider — table-driven (Pitfall 2 fix).
+    # An unrecognized ai_provider logs a WARNING rather than silently
+    # defaulting to lmstudio_base_url (which could be a real, unrelated LM
+    # Studio instance — querying it would silently discover the wrong
+    # backend's loaded model).
+    provider_base_urls = {
         "lmstudio": settings.lmstudio_base_url,
         "ollama": settings.ollama_base_url,
         "llamacpp": settings.llamacpp_base_url,
-    }.get(settings.ai_provider, settings.lmstudio_base_url)
+        "exo": settings.exo_base_url,
+    }
+    if settings.ai_provider in provider_base_urls:
+        base_url = provider_base_urls[settings.ai_provider]
+    else:
+        logger.warning(
+            "Unknown AI_PROVIDER=%r for model discovery base_url resolution — "
+            "defaulting to lmstudio_base_url (%s); this may query the wrong backend",
+            settings.ai_provider,
+            settings.lmstudio_base_url,
+        )
+        base_url = settings.lmstudio_base_url
 
     url = base_url.rstrip("/")
     try:
-        resp = await http_client.get(f"{url}/models", timeout=5.0)
-        resp.raise_for_status()
-        data = resp.json()
-        loaded = [e["id"] for e in data.get("data", []) if isinstance(e.get("id"), str)]
+        if settings.ai_provider == "exo":
+            # exo's /v1/models advertises ~120 servable-but-not-running
+            # models; only GET /state reflects what's ACTUALLY loaded (D-07).
+            loaded = await discover_via_exo_state(url, http_client)
+        else:
+            resp = await http_client.get(f"{url}/models", timeout=5.0)
+            resp.raise_for_status()
+            data = resp.json()
+            loaded = [e["id"] for e in data.get("data", []) if isinstance(e.get("id"), str)]
     except Exception as exc:
         logger.warning("Model discovery failed: %s — using MODEL_NAME=%s", exc, settings.model_name)
         return _prefixed(settings.model_name)

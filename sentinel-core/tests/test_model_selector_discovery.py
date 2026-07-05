@@ -8,6 +8,7 @@ from app.errors import ModelSelectorError
 from app.services.model_selector import (  # noqa: F401 — probe used in tests below
     _reset_cache_for_tests,
     discover_active_model,
+    discover_via_exo_state,
     probe_embedding_model_loaded,
     select_model,
 )
@@ -451,3 +452,236 @@ async def test_discovery_except_handler_falls_back_to_settings_model_name_not_lo
 
     assert result == "openai/configured-fallback-model"
     assert "MiniMax" not in result, "except-handler must never fall back to loaded[0]"
+
+
+# --- Task 1 (42-02): discover_via_exo_state — GET /state tagged-union discovery ---
+
+
+async def test_discover_via_exo_state_zero_instances_returns_empty_list():
+    """Zero running instances ({"instances": {}}) -> [] (D-08's zero-case)."""
+    def handler(request):
+        assert request.url.path == "/state"
+        return httpx.Response(200, json={"instances": {}})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await discover_via_exo_state("http://test-exo:52415/v1", client)
+
+    assert result == []
+
+
+async def test_discover_via_exo_state_mlx_ring_instance_unwraps_tagged_union():
+    """Single MlxRingInstance -> one model id via tagged-union unwrap."""
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "instances": {
+                    "instance-1": {
+                        "MlxRingInstance": {
+                            "shardAssignments": {
+                                "modelId": "mlx-community/Qwen3.5-27B-8bit",
+                            }
+                        }
+                    }
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await discover_via_exo_state("http://test-exo:52415/v1", client)
+
+    assert result == ["mlx-community/Qwen3.5-27B-8bit"]
+
+
+async def test_discover_via_exo_state_mlx_jaccl_instance_unwraps_tagged_union():
+    """Single MlxJacclInstance -> same tagged-union unwrap as MlxRingInstance."""
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "instances": {
+                    "instance-1": {
+                        "MlxJacclInstance": {
+                            "shardAssignments": {
+                                "modelId": "mlx-community/Other-Model-4bit",
+                            }
+                        }
+                    }
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await discover_via_exo_state("http://test-exo:52415/v1", client)
+
+    assert result == ["mlx-community/Other-Model-4bit"]
+
+
+async def test_discover_via_exo_state_malformed_shard_assignments_skipped_not_raised():
+    """A malformed/missing shardAssignments entry is skipped, not raised
+    (defensive structural walk) — a well-formed sibling instance is still
+    returned."""
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "instances": {
+                    "instance-bad-1": {
+                        "MlxRingInstance": {
+                            # shardAssignments missing entirely
+                        }
+                    },
+                    "instance-bad-2": {
+                        "MlxRingInstance": {
+                            "shardAssignments": "not-a-dict",
+                        }
+                    },
+                    "instance-bad-3": "not-a-dict-either",
+                    "instance-good": {
+                        "MlxJacclInstance": {
+                            "shardAssignments": {
+                                "modelId": "mlx-community/Good-Model-4bit",
+                            }
+                        }
+                    },
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await discover_via_exo_state("http://test-exo:52415/v1", client)
+
+    assert result == ["mlx-community/Good-Model-4bit"]
+
+
+async def test_discover_via_exo_state_accepts_snake_case_fallback():
+    """A1 defensive fallback: snake_case shard_assignments/model_id is also
+    accepted since the camelCase wire format was not live-curl-confirmed."""
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "instances": {
+                    "instance-1": {
+                        "MlxRingInstance": {
+                            "shard_assignments": {
+                                "model_id": "mlx-community/Snake-Case-Model",
+                            }
+                        }
+                    }
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await discover_via_exo_state("http://test-exo:52415/v1", client)
+
+    assert result == ["mlx-community/Snake-Case-Model"]
+
+
+async def test_discover_via_exo_state_strips_v1_suffix_before_state():
+    """base_url with a trailing /v1 (exo_base_url's default shape) must hit
+    {root}/state, not {root}/v1/state."""
+    captured: dict[str, str] = {}
+
+    def handler(request):
+        captured["path"] = request.url.path
+        return httpx.Response(200, json={"instances": {}})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        await discover_via_exo_state("http://test-exo:52415/v1", client)
+
+    assert captured["path"] == "/state"
+
+
+async def test_discovery_exo_provider_uses_state_not_v1_models(monkeypatch):
+    """discover_active_model with ai_provider='exo' routes through GET /state,
+    not the generic /v1/models GET (SC-4, D-07)."""
+    monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
+    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
+    monkeypatch.setenv("MODEL_NAME", "fallback-model")
+    monkeypatch.setenv("AI_PROVIDER", "exo")
+    monkeypatch.setenv("EXO_BASE_URL", "http://test-exo:52415/v1")
+    from app.config import Settings
+    s = Settings()
+
+    def handler(request):
+        assert request.url.path == "/state", "must query /state, not /v1/models"
+        return httpx.Response(
+            200,
+            json={
+                "instances": {
+                    "instance-1": {
+                        "MlxRingInstance": {
+                            "shardAssignments": {
+                                "modelId": "mlx-community/Qwen3.5-27B-8bit",
+                            }
+                        }
+                    }
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await discover_active_model(s, client)
+
+    assert result == "openai/mlx-community/Qwen3.5-27B-8bit"
+
+
+async def test_discovery_exo_zero_instances_never_guesses_falls_back_to_default(
+    monkeypatch,
+):
+    """D-08: zero exo instances must never yield a guessed model — falls back
+    to the configured MODEL_NAME default via select_model's documented
+    contract, exactly like get_loaded_models's [] result does for lmstudio."""
+    monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
+    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
+    monkeypatch.setenv("MODEL_NAME", "configured-default-model")
+    monkeypatch.setenv("AI_PROVIDER", "exo")
+    monkeypatch.setenv("EXO_BASE_URL", "http://test-exo:52415/v1")
+    from app.config import Settings
+    s = Settings()
+
+    def handler(request):
+        return httpx.Response(200, json={"instances": {}})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        result = await discover_active_model(s, client)
+
+    assert result == "openai/configured-default-model"
+
+
+async def test_discovery_unknown_provider_logs_warning_not_silent_lmstudio_default(
+    monkeypatch, caplog
+):
+    """An unrecognized ai_provider logs a WARNING rather than silently
+    querying lmstudio_base_url (Pitfall 2)."""
+    import logging
+
+    monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
+    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
+    monkeypatch.setenv("MODEL_NAME", "fallback-model")
+    monkeypatch.setenv("AI_PROVIDER", "totally-unknown-provider")
+    from app.config import Settings
+    s = Settings()
+
+    def raise_connect(request):
+        raise httpx.ConnectError("refused")
+
+    transport = httpx.MockTransport(raise_connect)
+    with caplog.at_level(logging.WARNING, logger="app.services.model_selector"):
+        async with httpx.AsyncClient(transport=transport) as client:
+            result = await discover_active_model(s, client)
+
+    assert result == "openai/fallback-model"
+    assert any(
+        "Unknown AI_PROVIDER" in record.message for record in caplog.records
+    ), "unrecognized ai_provider must log a WARNING, not silently default"
