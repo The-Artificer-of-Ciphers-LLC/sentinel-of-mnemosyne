@@ -4,7 +4,7 @@ milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
 status: completed
 stopped_at: Phase 44 context gathered
-last_updated: "2026-07-06T11:32:42.866Z"
+last_updated: "2026-07-06T12:32:27.049Z"
 last_activity: 2026-07-06 — v0.6.0 ROADMAP.md written (Phases 44-47, 19 requirements mapped)
 progress:
   total_phases: 4
