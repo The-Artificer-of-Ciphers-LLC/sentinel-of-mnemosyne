@@ -23,6 +23,8 @@ silent early-return/pass — see Phase 45 threat register T-45-01/T-45-02.
 """
 from __future__ import annotations
 
+import pytest
+
 from app.services.note_classifier import TOPIC_VAULT_PATH
 
 
@@ -44,3 +46,30 @@ def test_classifier_routes_learning_and_reference_to_inbox_not_notes():
             f"TOPIC_VAULT_PATH[{topic!r}] = {path!r} points at a notes/ root; "
             "Phase 45 assumes no notes/ write path exists yet (D-02)."
         )
+
+
+# --- Task 2: wikilink -> path resolution fixture (research Open Question 2) ---
+
+
+def test_wikilink_resolves_to_flat_notes_path_by_filename_stem():
+    """Pins the flat-notes filename-stem wikilink resolution rule.
+
+    SKIPS until Plan 45-03 lands app.services.graph_analysis. Once present,
+    resolve_wikilink(target, note_paths) must resolve a bare [[Member One]]
+    target to the flat notes path whose filename stem equals the target, and
+    return None when no path has a matching stem. Pattern 3 (flat notes/)
+    guarantees unique stems, so no ambiguity can arise.
+    """
+    graph_analysis = pytest.importorskip("app.services.graph_analysis")
+
+    note_paths = [
+        "notes/hub-concept.md",
+        "notes/member-one.md",
+        "notes/member-two.md",
+    ]
+
+    resolved = graph_analysis.resolve_wikilink("Member One", note_paths)
+    assert resolved == "notes/member-one.md"
+
+    missing = graph_analysis.resolve_wikilink("No Such Note", note_paths)
+    assert missing is None
