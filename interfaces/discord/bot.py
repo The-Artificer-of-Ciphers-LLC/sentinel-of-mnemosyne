@@ -182,11 +182,9 @@ _SUBCOMMAND_PROMPTS: dict[str, str] = {
     "ralph": "Process my inbox queue — work through items in inbox/ and move completed ones to notes/ following the 2nd brain pipeline.",
     "pipeline": "Run the full 6 Rs pipeline on my inbox queue: Record → Reduce → Reflect → Reweave → Verify → Rethink.",
     "reweave": "Run a reweave pass on my vault — identify notes that should be updated given recent additions. Update older notes with new context and connections.",
-    "check": "Validate _schema compliance across all notes/ files. Report FAIL items (missing description, missing topics, YAML errors) and WARN items (stale status, isolated notes).",
     "rethink": "Review accumulated observations and tensions in ops/observations/ and ops/tensions/. Triage each: PROMOTE, IMPLEMENT, METHODOLOGY, ARCHIVE, or KEEP PENDING.",
     "refactor": "Review vault organization and suggest restructuring improvements.",
     "tasks": "Show the ops/queue/ task queue. List pending items by status.",
-    "stats": "Report vault metrics: note count in notes/, orphan count, link density, hub sizes, inbox depth.",
 }
 
 # Map plugin subcommand names to the prompt sent to Core (plugin: prefix commands)
@@ -271,6 +269,30 @@ async def _call_core_sweep_start(
 
 async def _call_core_sweep_status(user_id: str) -> str:
     return await core_gateway.call_core_sweep_status(
+        user_id=user_id,
+        core_url=SENTINEL_CORE_URL,
+        api_key=SENTINEL_API_KEY,
+    )
+
+
+async def _call_core_graph(user_id: str) -> str:
+    return await core_gateway.call_core_graph(
+        user_id=user_id,
+        core_url=SENTINEL_CORE_URL,
+        api_key=SENTINEL_API_KEY,
+    )
+
+
+async def _call_core_stats(user_id: str) -> str:
+    return await core_gateway.call_core_stats(
+        user_id=user_id,
+        core_url=SENTINEL_CORE_URL,
+        api_key=SENTINEL_API_KEY,
+    )
+
+
+async def _call_core_check(user_id: str) -> str:
+    return await core_gateway.call_core_check(
         user_id=user_id,
         core_url=SENTINEL_CORE_URL,
         api_key=SENTINEL_API_KEY,
@@ -536,6 +558,9 @@ async def handle_sentask_subcommand(
             "call_core_inbox_discard": _call_core_inbox_discard,
             "call_core_sweep_start": _call_core_sweep_start,
             "call_core_sweep_status": _call_core_sweep_status,
+            "call_core_graph": _call_core_graph,
+            "call_core_stats": _call_core_stats,
+            "call_core_check": _call_core_check,
             "is_admin": _is_admin,
             "note_closed_vocab": _NOTE_CLOSED_VOCAB,
             "plugin_prompts": _PLUGIN_PROMPTS,

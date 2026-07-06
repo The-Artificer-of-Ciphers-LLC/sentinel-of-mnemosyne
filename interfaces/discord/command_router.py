@@ -51,6 +51,9 @@ async def handle_subcommand(
     call_core_inbox_discard,
     call_core_sweep_start,
     call_core_sweep_status,
+    call_core_graph,
+    call_core_stats,
+    call_core_check,
     is_admin,
     note_closed_vocab,
     plugin_prompts: dict[str, str],
@@ -112,9 +115,13 @@ async def handle_subcommand(
         )
 
     if subcmd == "graph":
-        query = args.strip() or "all"
-        prompt = f"Run graph analysis on my vault{': ' + query if query != 'all' else ''}. Report orphans, triangles, link density, and backlinks."
-        return await call_core(user_id, prompt)
+        return await call_core_graph(user_id)
+
+    if subcmd == "stats":
+        return await call_core_stats(user_id)
+
+    if subcmd == "check":
+        return await call_core_check(user_id)
 
     if subcmd == "learn":
         if not args.strip():

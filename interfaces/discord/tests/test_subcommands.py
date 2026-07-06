@@ -131,19 +131,49 @@ async def test_seed_subcommand_no_args_returns_usage():
     assert ":seed" in result, f"Expected ':seed' in usage hint, got: {result!r}"
 
 
-async def test_check_subcommand_calls_core():
-    """:check is a no-arg standard subcommand; it routes through _SUBCOMMAND_PROMPTS dict to _call_core."""
-    assert "check" in bot._SUBCOMMAND_PROMPTS, (
-        "':check' key missing from _SUBCOMMAND_PROMPTS — 2B-04 requirement not met"
+async def test_check_subcommand_calls_gateway_not_core():
+    """:check (NOTE-03) routes to the real /vault/check gateway fn, not the free-text call_core prompt."""
+    assert "check" not in bot._SUBCOMMAND_PROMPTS, (
+        "':check' should no longer have a fixed-prompt fallback — NOTE-03 rewire"
     )
-    with patch("bot._call_core", new=AsyncMock(return_value="Check complete.")) as mock_core:
+    with (
+        patch("bot._call_core_check", new=AsyncMock(return_value="Check: 2/3 notes compliant")) as mock_check,
+        patch("bot._call_core", new=AsyncMock()) as mock_core,
+    ):
         result = await bot.handle_sentask_subcommand("check", "", "user123")
 
-    mock_core.assert_called_once()
-    call_args = mock_core.call_args
-    assert call_args[0][0] == "user123"
-    assert isinstance(call_args[0][1], str) and len(call_args[0][1]) > 0
-    assert result == "Check complete."
+    mock_check.assert_awaited_once_with("user123")
+    mock_core.assert_not_called()
+    assert result == "Check: 2/3 notes compliant"
+
+
+async def test_stats_subcommand_calls_gateway_not_core():
+    """:stats (NOTE-03) routes to the real /vault/stats gateway fn, not the free-text call_core prompt."""
+    assert "stats" not in bot._SUBCOMMAND_PROMPTS, (
+        "':stats' should no longer have a fixed-prompt fallback — NOTE-03 rewire"
+    )
+    with (
+        patch("bot._call_core_stats", new=AsyncMock(return_value="Stats: 10 notes")) as mock_stats,
+        patch("bot._call_core", new=AsyncMock()) as mock_core,
+    ):
+        result = await bot.handle_sentask_subcommand("stats", "", "user123")
+
+    mock_stats.assert_awaited_once_with("user123")
+    mock_core.assert_not_called()
+    assert result == "Stats: 10 notes"
+
+
+async def test_graph_subcommand_calls_gateway_not_core():
+    """:graph (NOTE-03) routes to the real /vault/graph gateway fn, not the free-text call_core prompt."""
+    with (
+        patch("bot._call_core_graph", new=AsyncMock(return_value="Graph: 10 notes")) as mock_graph,
+        patch("bot._call_core", new=AsyncMock()) as mock_core,
+    ):
+        result = await bot.handle_sentask_subcommand("graph", "", "user123")
+
+    mock_graph.assert_awaited_once_with("user123")
+    mock_core.assert_not_called()
+    assert result == "Graph: 10 notes"
 
 
 async def test_pipeline_subcommand_calls_core():
