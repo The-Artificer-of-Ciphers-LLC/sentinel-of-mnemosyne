@@ -4,13 +4,13 @@ milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
 status: executing
 stopped_at: Phase 45 context gathered
-last_updated: "2026-07-06T16:02:26.352Z"
-last_activity: 2026-07-06 -- Phase 45 planning complete
+last_updated: "2026-07-06T16:19:56.370Z"
+last_activity: 2026-07-06 -- Phase 45 execution started
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 11
+  completed_plans: 5
   percent: 25
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 45 — note-quality-schema-+-graph-analysis (Phase 44 complete & verified)
+**Current focus:** Phase 45 — note-quality-schema-graph-analysis
 
 ## Current Position
 
-Phase: 45
-Plan: Not started
+Phase: 45 (note-quality-schema-graph-analysis) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-07-06 -- Phase 45 planning complete
+Last activity: 2026-07-06 -- Phase 45 execution started
 
 ## Milestone Progress
 
@@ -145,6 +145,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 44 P02 | 20min | 3 tasks | 5 files |
 | Phase 44 P03 | 15min | 1 tasks | 3 files |
 | Phase 44 P04 | 25min | 2 tasks | 4 files |
+| Phase 45 P01 | 15min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -241,6 +242,7 @@ Recent decisions affecting current work:
 - [Phase 44-04]: Stub-ensure composes read_note + conditional write_note directly at the Recall self-context call site, never inside read_self_context — keeps that method's read-only, graceful-404 contract stable for every other caller
 - [Phase 44-04]: _ensure_self_stub guards with isinstance(body, str) rather than bare truthiness — fixes a silent unawaited-coroutine leak against non-str test doubles and correctly treats any non-str read as missing
 - [Phase 44-04]: Only the four canonical self/ paths are stub-ensured via an explicit allowlist iterated in _hot_self — ops/reminders.md and self/learning-areas.md are never auto-created even though they are also in RecallConfig.self_paths
+- [Phase ?]: [Phase 45-01]: Wave 0 trailing-block fixture matches inserted member wikilink loosely (regex on member-two substring) since attach_to_hub's slug-to-display-text transformation is Plan 45-05's implementation detail, not specified in CONTEXT.md/RESEARCH.md
 
 ### Pending Todos
 
@@ -275,7 +277,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-06T15:18:45.686Z
+Last session: 2026-07-06T16:16:11.240Z
 Stopped at: Phase 45 context gathered
 Resume file: 
-.planning/phases/45-note-quality-schema-graph-analysis/45-CONTEXT.md
+None

@@ -947,10 +947,10 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 7 plans
+**Plans:** 1/7 plans executed
 **Wave 1**
 
-- [ ] 45-01-PLAN.md — Wave 0: characterizing + fixture invariant tests (classifier routing, wikilink resolution, trailing-_schema preservation)
+- [x] 45-01-PLAN.md — Wave 0: characterizing + fixture invariant tests (classifier routing, wikilink resolution, trailing-_schema preservation)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

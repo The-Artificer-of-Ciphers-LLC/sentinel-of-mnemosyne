@@ -108,9 +108,9 @@
 
 ## NOTE — note quality + graph (v0.6.0)
 
-- [ ] **NOTE-01**: Notes carry an `_schema` footer block (type + hub membership), a claim-style title, and wikilinks
-- [ ] **NOTE-02**: Maps of Content (MOC/hub notes) are created lazily and updated as notes join a hub
-- [ ] **NOTE-03**: The user can run graph analysis (`:graph`/`:stats`/`:check`) to see orphans, backlinks, link density, and `_schema` compliance, backed by a `links-index.json` sidecar
+- [x] **NOTE-01**: Notes carry an `_schema` footer block (type + hub membership), a claim-style title, and wikilinks
+- [x] **NOTE-02**: Maps of Content (MOC/hub notes) are created lazily and updated as notes join a hub
+- [x] **NOTE-03**: The user can run graph analysis (`:graph`/`:stats`/`:check`) to see orphans, backlinks, link density, and `_schema` compliance, backed by a `links-index.json` sidecar
 
 ## PIPE — the 6 Rs pipeline (v0.6.0)
 
