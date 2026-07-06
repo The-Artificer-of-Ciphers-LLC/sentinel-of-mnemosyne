@@ -33,6 +33,7 @@ from app.routes.embeddings import router as embeddings_router
 from app.routes.graph import router as graph_router
 from app.routes.modules import router as modules_router
 from app.routes.note import router as note_router
+from app.routes.pipeline import router as pipeline_router
 from app.routes.provider import router as provider_router
 from app.routes.status import router as status_router
 from app.services.health_response import build_health_payload
@@ -101,6 +102,7 @@ app.include_router(message_router)
 app.include_router(status_router)
 app.include_router(modules_router)
 app.include_router(note_router)
+app.include_router(pipeline_router)
 app.include_router(provider_router)
 app.include_router(embeddings_router)
 app.include_router(graph_router)
