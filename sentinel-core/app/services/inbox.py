@@ -54,6 +54,8 @@ class PendingEntry(BaseModel):
     confidence: float = 0.0
     reasoning: str = ""
     candidate_text: str = ""
+    retry_count: int = 0
+    needs_attention: bool = False
 
 
 def _iso_utc(now: datetime | None = None) -> str:
@@ -108,6 +110,13 @@ def _parse_entry_section(section_text: str, entry_n: int) -> PendingEntry:
     except ValueError:
         confidence = 0.0
 
+    try:
+        retry_count = int(fields.get("retry_count", "0") or 0)
+    except ValueError:
+        retry_count = 0
+
+    needs_attention = (fields.get("needs_attention", "false") or "false").strip().lower() == "true"
+
     return PendingEntry(
         entry_n=entry_n,
         timestamp=fields.get("timestamp", ""),
@@ -116,6 +125,8 @@ def _parse_entry_section(section_text: str, entry_n: int) -> PendingEntry:
         confidence=confidence,
         reasoning=fields.get("reasoning", ""),
         candidate_text="\n".join(candidate_lines).strip(),
+        retry_count=retry_count,
+        needs_attention=needs_attention,
     )
 
 
@@ -150,6 +161,8 @@ def _render_entry(e: PendingEntry) -> str:
         f"- suggested: {suggested}\n"
         f"- confidence: {e.confidence}\n"
         f"- reasoning: {e.reasoning}\n"
+        f"- retry_count: {e.retry_count}\n"
+        f"- needs_attention: {'true' if e.needs_attention else 'false'}\n"
         f"\n{quoted}\n"
     )
 
@@ -173,8 +186,15 @@ def append_entry(
     result: ClassificationResult,
     suggested: list[str] | None = None,
     now: datetime | None = None,
+    retry_count: int = 0,
+    needs_attention: bool = False,
 ) -> str:
-    """Append a new entry; renumber sequentially; refresh `updated:` frontmatter."""
+    """Append a new entry; renumber sequentially; refresh `updated:` frontmatter.
+
+    ``retry_count``/``needs_attention`` default to 0/False so the plain capture
+    path (Record) is completely unaffected (PIPE-01 frictionless capture) --
+    only a Verify-failure requeue call passes a non-default value.
+    """
     if not body or not body.strip():
         body = build_initial_inbox(now)
     fm, _ = split_frontmatter(body)
@@ -194,6 +214,8 @@ def append_entry(
         confidence=float(result.confidence),
         reasoning=(result.reasoning or "")[:300],
         candidate_text=candidate_text or "",
+        retry_count=retry_count,
+        needs_attention=needs_attention,
     )
     return _rebuild_body(fm, entries + [new_entry])
 
