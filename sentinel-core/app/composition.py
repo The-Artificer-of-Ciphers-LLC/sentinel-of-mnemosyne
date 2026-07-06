@@ -554,4 +554,28 @@ async def initialize_startup(
         lambda t: setattr(app.state, "startup_rebuild_task", None)
     )
 
+    # Phase 45 (NOTE-03 / D-04): non-blocking startup rebuild of the links
+    # sidecar (ops/graph/links-index.json), mirroring the embedding-index
+    # startup rebuild immediately above. rebuild_links_index() is
+    # INDEX-ONLY — it uses only list_under/read_note/write_note and never
+    # relocates or trashes a note — so a cold start becomes graph-queryable
+    # (:graph/:stats/:check) without operator action. A failure here is
+    # logged and non-fatal, exactly like the embedding-index rebuild.
+    from app.services.links_sidecar_index import rebuild_links_index as _rebuild_links_index
+
+    async def _startup_links_rebuild() -> None:
+        try:
+            await _rebuild_links_index(graph.vault)
+            logger.info("Startup links-index rebuild complete")
+        except Exception as exc:
+            logger.warning(
+                "Startup links-index rebuild failed (non-fatal): %r", exc
+            )
+
+    _links_rebuild_task = asyncio.create_task(_startup_links_rebuild())
+    app.state.startup_links_rebuild_task = _links_rebuild_task
+    _links_rebuild_task.add_done_callback(
+        lambda t: setattr(app.state, "startup_links_rebuild_task", None)
+    )
+
     return StartupResult(graph=graph, warnings=warnings)

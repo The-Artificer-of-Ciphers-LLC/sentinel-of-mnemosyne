@@ -353,6 +353,14 @@ async def test_initialize_startup_pins_route_context_and_minimal_state(
     """initialize_startup pins route_ctx + minimal non-route state onto app.state."""
     fake_vault = AsyncMock()
     fake_vault.read_persona = AsyncMock(return_value="persona")
+    # read_note must return a real str (not an unconfigured AsyncMock) —
+    # both startup rebuild background tasks (embedding-index + links-index)
+    # call vault.read_note(...).strip(); an unconfigured AsyncMock's default
+    # return_value is itself an AsyncMock, so `.strip()` on it silently
+    # creates and discards a coroutine (RuntimeWarning: coroutine
+    # 'AsyncMockMixin._execute_mock_call' was never awaited). Production
+    # Vault implementations (ObsidianVault/FakeVault) always return str.
+    fake_vault.read_note = AsyncMock(return_value="")
     fake_router = object()
     fake_graph = SimpleNamespace(
         vault=fake_vault,
@@ -392,6 +400,9 @@ async def test_initialize_startup_returns_warning_when_vault_unreachable(
     """Vault transport failures are non-fatal and surfaced as warnings."""
     fake_vault = AsyncMock()
     fake_vault.read_persona = AsyncMock(side_effect=VaultUnreachableError("down"))
+    # See test_initialize_startup_pins_route_context_and_minimal_state for
+    # why read_note must return a real str.
+    fake_vault.read_note = AsyncMock(return_value="")
     fake_graph = SimpleNamespace(
         vault=fake_vault,
         message_processor=object(),
@@ -572,6 +583,12 @@ async def test_initialize_startup_calls_rebuild_embedding_index_not_run_sweep(
 
     monkeypatch.setattr("app.services.vault_sweeper.run_sweep", _fake_run_sweep)
     monkeypatch.setattr("app.services.vault_sweeper.rebuild_embedding_index", _fake_rebuild)
+    # This test is scoped to the embedding-index startup wiring; stub out
+    # the (unrelated) links-index startup rebuild so it doesn't touch
+    # fake_vault's unconfigured attributes on a real code path.
+    monkeypatch.setattr(
+        "app.services.links_sidecar_index.rebuild_links_index", AsyncMock(return_value={})
+    )
 
     fake_vault = AsyncMock()
     fake_vault.read_persona = AsyncMock(return_value="persona")
@@ -632,6 +649,12 @@ async def test_initialize_startup_passes_embedding_model_loaded_from_graph(
 
     monkeypatch.setattr("app.services.vault_sweeper.run_sweep", AsyncMock())
     monkeypatch.setattr("app.services.vault_sweeper.rebuild_embedding_index", _fake_rebuild)
+    # This test is scoped to the embedding-index startup wiring; stub out
+    # the (unrelated) links-index startup rebuild so it doesn't touch
+    # fake_vault's unconfigured attributes on a real code path.
+    monkeypatch.setattr(
+        "app.services.links_sidecar_index.rebuild_links_index", AsyncMock(return_value={})
+    )
 
     fake_vault = AsyncMock()
     fake_vault.read_persona = AsyncMock(return_value="persona")
