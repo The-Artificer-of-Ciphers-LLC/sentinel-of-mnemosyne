@@ -23,9 +23,12 @@ silent early-return/pass — see Phase 45 threat register T-45-01/T-45-02.
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from app.services.note_classifier import TOPIC_VAULT_PATH
+from tests.fakes.vault import FakeVault
 
 
 # --- Task 1: D-02 inspect-only premise (live, unguarded) ---
@@ -73,3 +76,46 @@ def test_wikilink_resolves_to_flat_notes_path_by_filename_stem():
 
     missing = graph_analysis.resolve_wikilink("No Such Note", note_paths)
     assert missing is None
+
+
+# --- Task 3: trailing _schema block preservation fixture (RESEARCH Pitfall 1) ---
+
+
+@pytest.mark.asyncio
+async def test_attach_to_hub_preserves_trailing_schema_block_position():
+    """Pins the single highest-risk behavior in the phase.
+
+    SKIPS until Plan 45-05 lands app.services.moc_maintenance. Once present,
+    attach_to_hub(vault, hub_path, member_slug) adding a second member must
+    insert the member wikilink BEFORE the trailing fenced ``_schema`` block,
+    never after it (never via a blind patch_append) -- the block must stay
+    the terminal content of the file, and the member wikilink must appear
+    exactly once.
+    """
+    moc_maintenance = pytest.importorskip("app.services.moc_maintenance")
+
+    hub_path = "notes/hub-concept.md"
+    hub_body = (
+        "# Hub Concept\n\n"
+        "## Member Notes\n\n"
+        "- [[Member One]]\n\n"
+        "```_schema\n"
+        "type: hub\n"
+        "```\n"
+    )
+    vault = FakeVault(notes={hub_path: hub_body})
+
+    await moc_maintenance.attach_to_hub(vault, hub_path, "member-two")
+
+    result_body = vault.notes[hub_path]
+    assert result_body.rstrip().endswith("```"), (
+        "trailing _schema block is no longer the terminal content of the "
+        "hub note -- attach_to_hub must never call patch_append on a hub"
+    )
+    # Exact wikilink display text (slug vs. title-cased) is an attach_to_hub
+    # implementation detail Plan 45-05 owns; match loosely on the member
+    # reference itself so this fixture doesn't over-specify formatting while
+    # still proving the wikilink was inserted exactly once (append-never-
+    # duplicate, D-03d).
+    member_wikilink_re = re.compile(r"\[\[[^\]]*member[ -]two[^\]]*\]\]", re.IGNORECASE)
+    assert len(member_wikilink_re.findall(result_body)) == 1
