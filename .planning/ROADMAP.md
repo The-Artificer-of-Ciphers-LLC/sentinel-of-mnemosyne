@@ -947,7 +947,7 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 2/7 plans executed
+**Plans:** 3/7 plans executed
 **Wave 1**
 
 - [x] 45-01-PLAN.md — Wave 0: characterizing + fixture invariant tests (classifier routing, wikilink resolution, trailing-_schema preservation)
@@ -955,7 +955,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 45-02-PLAN.md — note_schema.py: trailing _schema block parser + structural claim-title/wikilink/compliance checks (NOTE-01)
-- [ ] 45-03-PLAN.md — graph_analysis.py: NOTES_ROOT + wikilink extraction/resolution + orphan/backlink/density report (NOTE-03)
+- [x] 45-03-PLAN.md — graph_analysis.py: NOTES_ROOT + wikilink extraction/resolution + orphan/backlink/density report (NOTE-03)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 

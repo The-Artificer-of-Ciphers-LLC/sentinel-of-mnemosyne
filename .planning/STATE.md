@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
 status: executing
-stopped_at: Completed 45-02-PLAN.md
-last_updated: "2026-07-06T16:32:06.670Z"
+stopped_at: Completed 45-03-PLAN.md
+last_updated: "2026-07-06T16:42:59.821Z"
 last_activity: 2026-07-06 -- Phase 45 execution started
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 11
-  completed_plans: 6
+  completed_plans: 7
   percent: 25
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 45 (note-quality-schema-graph-analysis) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-07-06 -- Phase 45 execution started
 
@@ -147,6 +147,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 44 P04 | 25min | 2 tasks | 4 files |
 | Phase 45 P01 | 15min | 3 tasks | 1 files |
 | Phase 45 P02 | 20min | 2 tasks | 2 files |
+| Phase 45 P03 | 10min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -246,6 +247,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 45-01]: Wave 0 trailing-block fixture matches inserted member wikilink loosely (regex on member-two substring) since attach_to_hub's slug-to-display-text transformation is Plan 45-05's implementation detail, not specified in CONTEXT.md/RESEARCH.md
 - [Phase ?]: [Phase 45-02]: _find_trailing_block_match uses multi-match-then-position-check (finditer over non-\Z-anchored self-contained fence pattern, require last match to end at string-end) rather than RESEARCH's literal single \Z-anchored regex, which would misparse a note containing a stray earlier same-tag block
 - [Phase ?]: [Phase 45-02]: check_note_compliance adds a has_type field beyond the plan's literal behavior spec, since D-01 defines the _schema block as carrying type + hub keys at minimum
+- [Phase 45-03]: graph_analysis.resolve_wikilink matches by slugified filename stem (spaces/underscores folded to hyphens), so a display-text wikilink target like [[Member One]] resolves to notes/member-one.md
 
 ### Pending Todos
 
@@ -280,7 +282,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-06T16:32:06.664Z
-Stopped at: Completed 45-02-PLAN.md
+Last session: 2026-07-06T16:42:59.815Z
+Stopped at: Completed 45-03-PLAN.md
 Resume file: 
 None
