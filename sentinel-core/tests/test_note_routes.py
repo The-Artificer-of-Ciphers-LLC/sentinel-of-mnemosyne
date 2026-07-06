@@ -70,7 +70,8 @@ def test_classify_filed_high_conf():
     data = resp.json()
     assert data["action"] == "filed"
     assert data["topic"] == "reference"
-    assert data["path"].startswith("references/some-fact-")
+    # D-03 reroute: reference queues to inbox/ pending Reduce (no longer references/)
+    assert data["path"].startswith("inbox/some-fact-")
     # Verify write_note called once with full frontmatter
     write_paths = [p for kind, p in obsidian.calls if kind == "write"]
     assert len(write_paths) == 1
@@ -136,7 +137,8 @@ def test_classify_explicit_user_topic_files_to_correct_dir():
         )
     assert resp.status_code == 200
     assert resp.json()["action"] == "filed"
-    assert resp.json()["path"].startswith("learning/finished-course-")
+    # D-03 reroute: learning queues to inbox/ pending Reduce (no longer learning/)
+    assert resp.json()["path"].startswith("inbox/finished-course-")
     # user_topic flowed through
     call_kwargs = mock_classifier.await_args.kwargs
     if "user_topic" in call_kwargs:
@@ -219,7 +221,8 @@ def test_inbox_classify_files_and_removes():
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["action"] == "filed"
-    assert data["path"].startswith("references/pi-constant-")
+    # D-03 reroute: reference queues to inbox/ pending Reduce (no longer references/)
+    assert data["path"].startswith("inbox/pi-constant-")
     # Inbox now empty (entry removed)
     from app.services.inbox import parse_inbox
 

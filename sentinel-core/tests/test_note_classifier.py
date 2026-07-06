@@ -22,6 +22,7 @@ from app.services.note_classifier import (
     _resolve_model_for_classification,
     _slugify,
     classify_note,
+    topic_dir_for,
 )
 
 
@@ -219,3 +220,22 @@ def test_slugify():
     assert _slugify("Sing-Better Course Completion Notes") == "sing-better-course-completion-notes"
     long = "a" * 100
     assert len(_slugify(long, max_len=60)) <= 60
+
+
+# --- taxonomy routing (D-03, Pitfall 1) ---
+
+
+def test_topic_dir_for_journal_derives_from_dict():
+    """topic_dir_for('journal') must derive its per-day path from the
+    TOPIC_VAULT_PATH dict value (base), not a hardcoded 'journal/' literal
+    (Pitfall 1 regression guard — editing the dict alone was a proven no-op)."""
+    assert topic_dir_for("journal", today="2026-07-06") == "ops/journal/2026-07-06"
+
+
+def test_topic_dir_for_para_reroute():
+    """D-03 AFTER table: accomplishment/observation file under ops/;
+    learning/reference queue to inbox/ pending Reduce."""
+    assert topic_dir_for("accomplishment") == "ops/accomplishments"
+    assert topic_dir_for("observation") == "ops/observations"
+    assert topic_dir_for("learning") == "inbox"
+    assert topic_dir_for("reference") == "inbox"

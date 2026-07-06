@@ -27,14 +27,25 @@ class SweepMovePlan:
 def is_in_topic_dir(path: str, topic_dir: str) -> bool:
     """True when ``path`` is already within ``topic_dir``.
 
-    Handles the journal nested-date case: ``journal/2026-04-27/foo.md`` is
-    considered in-dir for any ``journal/...`` topic_dir, not just exact
+    Handles the journal nested-date case: ``ops/journal/2026-04-27/foo.md`` is
+    considered in-dir for any ``ops/journal/...`` topic_dir, not just exact
     same-day match. The sweeper does not relocate journal entries between
     days, only flags a wrong-topic placement.
+
+    Taxonomy-aware family-root derivation (Pitfall 2 fix): under the PARA
+    taxonomy, ``journal``, ``accomplishment``, and ``observation`` all nest
+    under the shared ``ops/`` parent, so truncating to the first path segment
+    (the old single-segment heuristic) would collapse all three into one
+    indistinguishable ``ops/`` family. Only the nested-date journal family
+    uses a truncated (day-agnostic) root; every other topic dir must match
+    on its FULL path, not just its first segment.
     """
     if not topic_dir:
         return False
-    family_root = topic_dir.split("/", 1)[0] + "/"
+    if topic_dir.startswith("ops/journal/") or topic_dir == "ops/journal":
+        family_root = "ops/journal/"  # nested-date family, any day matches
+    else:
+        family_root = topic_dir.rstrip("/") + "/"  # exact-match family
     return path.startswith(family_root)
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.services.note_classifier import topic_dir_for
 from app.services.vault_sweep_plan import (
     is_in_topic_dir,
     plan_duplicate_trash,
@@ -21,8 +22,8 @@ def test_plan_noise_trash_matches_dry_run_report_shape():
 
 
 def test_plan_topic_move_skips_existing_topic_family():
-    assert is_in_topic_dir("journal/2026-06-16/a.md", "journal/2026-06-17")
-    assert propose_topic_move("accomplishments/a.md", "accomplishment") is None
+    assert is_in_topic_dir("ops/journal/2026-06-16/a.md", "ops/journal/2026-06-17")
+    assert propose_topic_move("ops/accomplishments/a.md", "accomplishment") is None
 
 
 def test_plan_topic_move_describes_destination_and_reason():
@@ -36,9 +37,20 @@ def test_plan_topic_move_describes_destination_and_reason():
     assert plan.asdict() == {
         "kind": "topic",
         "src": "random/a.md",
-        "dst": "accomplishments/a.md",
+        "dst": "ops/accomplishments/a.md",
         "reason": "topic=accomplishment (confidence=0.95)",
     }
+
+
+def test_is_in_topic_dir_does_not_conflate_ops_subdirs():
+    """Pitfall 2 regression: journal/accomplishment/observation must not collapse
+    into one indistinguishable ``ops/`` family under the shared parent."""
+    assert is_in_topic_dir("ops/observations/x.md", "ops/accomplishments") is False
+    assert is_in_topic_dir("ops/accomplishments/x.md", "ops/accomplishments") is True
+    # Nested-date journal family: any day matches the journal family root.
+    assert is_in_topic_dir(
+        "ops/journal/2026-07-06/x.md", topic_dir_for("journal", today="2026-06-01")
+    ) is True
 
 
 def test_plan_duplicate_trash_matches_dry_run_report_shape():

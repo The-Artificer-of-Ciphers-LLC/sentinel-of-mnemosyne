@@ -53,12 +53,15 @@ CLOSED_VOCAB: frozenset[str] = frozenset(
     {"learning", "accomplishment", "journal", "reference", "observation", "noise", "unsure"}
 )
 
-# Vault directory mapping per CONTEXT.md
+# Vault directory mapping per CONTEXT.md D-03 (PARA-aligned AFTER table).
+# learning/reference queue to inbox/ pending Reduce (durable-knowledge topics
+# are not yet directly filed); journal/accomplishment file under ops/ (episodic,
+# operational); observation stays under ops/observations (unchanged).
 TOPIC_VAULT_PATH: dict[str, str] = {
-    "learning": "learning",
-    "accomplishment": "accomplishments",
-    "journal": "journal",  # subdir per-day appended at file time
-    "reference": "references",
+    "learning": "inbox",  # queued; Reduce phase later produces notes/{slug}.md
+    "accomplishment": "ops/accomplishments",
+    "journal": "ops/journal",  # subdir per-day appended at file time
+    "reference": "inbox",  # queued; Reduce phase later produces notes/{slug}.md
     "observation": "ops/observations",
     "noise": "",  # never filed
     "unsure": "inbox",  # _pending-classification.md
@@ -77,8 +80,9 @@ def topic_dir_for(topic: str, *, today: str | None = None) -> str:
     location: ``noise`` (drop or trash) and ``unsure`` (handled via
     the pending-classification inbox, not a normal directory).
 
-    For ``journal``, returns ``journal/{YYYY-MM-DD}`` so each day's
-    entries are grouped. Pass ``today`` to override (used by tests).
+    For ``journal``, returns ``{base}/{YYYY-MM-DD}`` (derived from
+    ``TOPIC_VAULT_PATH["journal"]``, currently ``ops/journal``) so each
+    day's entries are grouped. Pass ``today`` to override (used by tests).
     """
     base = TOPIC_VAULT_PATH.get(topic, "")
     if not base:
@@ -87,7 +91,7 @@ def topic_dir_for(topic: str, *, today: str | None = None) -> str:
         if today is None:
             from datetime import datetime, timezone
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        return f"journal/{today}"
+        return f"{base}/{today}"
     return base
 
 

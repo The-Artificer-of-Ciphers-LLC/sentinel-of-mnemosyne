@@ -21,7 +21,6 @@ from app.services.inbox import (
     remove_entry,
 )
 from app.services.note_classifier import ClassificationResult, TOPIC_VAULT_PATH
-from app.services.recall import _WARM_TIER_EXCLUDE_PREFIXES
 from app.time_utils import _iso_utc, _today_str
 
 
@@ -72,15 +71,13 @@ class NoteIntake:
             result.topic, result.title_slug or "untitled"
         )
 
-        # For the chat-sourced filing path, guarantee the note lands on a
-        # warm-tier-searchable path.  If the resolved destination starts with
-        # any excluded prefix (e.g. "observation" → "ops/observations/…"),
-        # redirect to a journal entry for today so the content stays findable.
-        if searchable_only and target.startswith(_WARM_TIER_EXCLUDE_PREFIXES):
-            target = await self._resolve_target_with_collision_suffix(
-                "journal", result.title_slug or "untitled"
-            )
-
+        # D-06: the prior searchable_only redirect-to-journal fallback is
+        # retired — after the D-03 PARA reroute, every topic (including the
+        # former journal redirect target itself) resolves to an ops/- or
+        # inbox/-prefixed destination, so no redirect could ever produce a
+        # warm-tier-searchable result. The note always files to its
+        # classified destination; searchable_only is accepted for interface
+        # stability but no longer changes routing.
         body = self._build_filed_note_markdown(content, result)
         await self._vault.write_note(target, body)
         return {
@@ -148,7 +145,7 @@ class NoteIntake:
         if not base:
             return f"inbox/{slug}-{today}.md"
         if topic == "journal":
-            return f"journal/{today}/{slug}.md"
+            return f"{base}/{today}/{slug}.md"
         return f"{base}/{slug}-{today}.md"
 
     def _build_filed_note_markdown(self, content: str, result: ClassificationResult) -> str:

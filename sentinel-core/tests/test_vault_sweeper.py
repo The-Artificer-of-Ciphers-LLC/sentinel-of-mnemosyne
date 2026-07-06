@@ -214,8 +214,9 @@ async def test_run_sweep_embedder_failure_continues_classification():
         fake, classifier, _failing_embedder, force_reclassify=True,
         safe_to_mutate=_true_probe,
     )
-    # Classification did write back
-    body = fake.store["learning/x.md"]
+    # D-03 reroute: learning now queues to inbox/ (learning/ is no longer its
+    # topic-canonical home) so the sweeper relocates the note there.
+    body = fake.store["inbox/x.md"]
     assert "topic: learning" in body
     assert "embedding_b64" not in body  # embed was skipped
     assert report.duplicates_moved == 0
@@ -225,14 +226,18 @@ async def test_run_sweep_embedder_failure_continues_classification():
 @pytest.mark.asyncio
 async def test_run_sweep_dedup_moves_duplicate_to_trash():
     fake = FakeObsidian()
-    fake.dirs[""] = ["references/"]
-    fake.dirs["references"] = ["a.md", "b.md"]
-    fake.store["references/a.md"] = "shared content body shared shared shared"
-    fake.store["references/b.md"] = "shared content body shared shared"  # shorter
+    # Use observation/ops-observations (D-03: unchanged canonical dir) so the
+    # notes are already "at home" and the sweeper does not relocate them —
+    # keeps the dedup-survivor path check independent of the topic-move logic.
+    fake.dirs[""] = ["ops/"]
+    fake.dirs["ops"] = ["observations/"]
+    fake.dirs["ops/observations"] = ["a.md", "b.md"]
+    fake.store["ops/observations/a.md"] = "shared content body shared shared shared"
+    fake.store["ops/observations/b.md"] = "shared content body shared shared"  # shorter
 
     classifier = AsyncMock(
         return_value=ClassificationResult(
-            topic="reference", confidence=0.9, title_slug="x", reasoning="r"
+            topic="observation", confidence=0.9, title_slug="x", reasoning="r"
         )
     )
 
@@ -247,7 +252,7 @@ async def test_run_sweep_dedup_moves_duplicate_to_trash():
                              safe_to_mutate=_true_probe)
     assert report.duplicates_moved == 1
     # The shorter body's path should be gone (moved to trash); the longer kept.
-    surviving = [p for p in ("references/a.md", "references/b.md") if p in fake.store]
+    surviving = [p for p in ("ops/observations/a.md", "ops/observations/b.md") if p in fake.store]
     assert len(surviving) == 1
     # A trash file exists
     trash = [p for p in fake.store if p.startswith("_trash/")]
@@ -258,13 +263,16 @@ async def test_run_sweep_dedup_moves_duplicate_to_trash():
 async def test_run_sweep_idempotent_skips_marked():
     """Re-running on a fully-marked vault skips already-processed notes."""
     fake = FakeObsidian()
-    fake.dirs[""] = ["references/"]
-    fake.dirs["references"] = ["a.md"]
+    # observation/ops-observations (D-03: unchanged canonical dir) — note stays
+    # in place, isolating the idempotent-skip check from topic-move logic.
+    fake.dirs[""] = ["ops/"]
+    fake.dirs["ops"] = ["observations/"]
+    fake.dirs["ops/observations"] = ["a.md"]
 
     # First run
     classifier = AsyncMock(
         return_value=ClassificationResult(
-            topic="reference", confidence=0.9, title_slug="x", reasoning="r"
+            topic="observation", confidence=0.9, title_slug="x", reasoning="r"
         )
     )
 
@@ -274,13 +282,13 @@ async def test_run_sweep_idempotent_skips_marked():
     async def _true_probe():
         return True
 
-    fake.store["references/a.md"] = "content"
+    fake.store["ops/observations/a.md"] = "content"
     report1 = await run_sweep(fake, classifier, _emb, force_reclassify=True, safe_to_mutate=_true_probe)
     assert report1.files_processed == 1
     classifier.reset_mock()
 
     # Mark sweep_pass with the existing pass on the file (post-run)
-    body_after_first = fake.store["references/a.md"]
+    body_after_first = fake.store["ops/observations/a.md"]
     # Second run with same sweep_id behavior — but run_sweep generates a fresh
     # sweep_id, so we patch by re-running with force_reclassify=False AND
     # setting sweep_pass to whatever the file currently has.
@@ -292,10 +300,10 @@ async def test_run_sweep_idempotent_skips_marked():
     # an old sweep_pass != current sweep_id will still be re-processed.
     # Instead verify: when sweep_pass equals a string we craft, _should_skip is True.
     assert _should_skip(
-        "references/a.md",
+        "ops/observations/a.md",
         {
             "sweep_pass": "match",
-            "topic": "reference",
+            "topic": "observation",
             "embedding_b64": fm.get("embedding_b64", ""),
         },
         "match",
@@ -318,7 +326,7 @@ async def test_run_sweep_idempotent_skips_marked():
 @pytest.mark.asyncio
 async def test_sweep_moves_misplaced_note_to_topic_folder():
     """A note classified `accomplishment` but living at a non-accomplishment
-    path must be moved to ``accomplishments/<original-filename>``.
+    path must be moved to ``ops/accomplishments/<original-filename>`` (D-03).
 
     The original path must no longer exist in the store after the sweep,
     and the destination path must contain the note's body with updated
@@ -355,7 +363,7 @@ async def test_sweep_moves_misplaced_note_to_topic_folder():
     )
 
     # The note now lives under the topic folder, keeping its filename
-    expected_dst = "accomplishments/finished-bass-day-19.md"
+    expected_dst = "ops/accomplishments/finished-bass-day-19.md"
     assert expected_dst in fake.store, (
         f"expected the note to be moved to {expected_dst}; "
         f"current paths: {sorted(fake.store.keys())}"
@@ -445,7 +453,7 @@ async def test_sweep_dry_run_produces_proposed_moves_no_file_writes():
     topic_moves = [m for m in proposed if m.get("kind") == "topic"]
     assert any(
         m.get("src") == "random-folder/finished-bass-day-19.md"
-        and m.get("dst") == "accomplishments/finished-bass-day-19.md"
+        and m.get("dst") == "ops/accomplishments/finished-bass-day-19.md"
         for m in topic_moves
     ), f"expected misplaced→accomplishments move in proposed_moves; got {proposed}"
 
@@ -639,29 +647,27 @@ def _make_classifiable_note_vault(
 ) -> FakeObsidian:
     """Return a FakeVault pre-populated with notes at *paths* and a dir tree.
 
-    Notes are placed INSIDE their topic-canonical directory (``references/``)
-    so ``is_in_topic_dir`` returns True and the sweeper does NOT attempt to
-    relocate them. This keeps the post-sweep paths predictable for the index
-    emission tests.
+    Notes are placed INSIDE their topic-canonical directory (``ops/observations/``,
+    unchanged by the D-03 PARA reroute) so ``is_in_topic_dir`` returns True and
+    the sweeper does NOT attempt to relocate them. This keeps the post-sweep
+    paths predictable for the index emission tests.
     """
     fake = FakeObsidian()
-    # Populate root directory listing
-    top_dirs: set[str] = set()
+    # Build every intermediate directory level (not just the top level and the
+    # immediate parent) so nested topic dirs like "ops/observations/" (D-03:
+    # journal/accomplishment/observation all nest two levels under the vault
+    # root) are correctly discoverable by walk_vault's BFS.
+    dir_children: dict[str, set[str]] = {}
     for p in paths:
         parts = p.split("/")
-        if len(parts) > 1:
-            top_dirs.add(parts[0] + "/")
-        else:
-            top_dirs.add(p)
-    fake.dirs[""] = sorted(top_dirs)
-    for p in paths:
-        parts = p.split("/")
-        if len(parts) > 1:
-            dir_key = "/".join(parts[:-1])
-            fake.dirs.setdefault(dir_key, [])
-            if parts[-1] not in fake.dirs[dir_key]:
-                fake.dirs[dir_key].append(parts[-1])
+        for i in range(len(parts)):
+            parent = "/".join(parts[:i])
+            is_dir = i < len(parts) - 1
+            entry = f"{parts[i]}/" if is_dir else parts[i]
+            dir_children.setdefault(parent, set()).add(entry)
         fake.notes[p] = body
+    for parent, children in dir_children.items():
+        fake.dirs[parent] = sorted(children)
     return fake
 
 
@@ -672,13 +678,13 @@ async def test_sweep_emits_embedding_index():
     surviving note paths."""
     from app.services.vault_sweeper import EMBEDDING_INDEX_PATH  # must exist (RED: will NameError)
 
-    # Use references/ path so classifier topic="reference" keeps notes in-place
-    note_paths = ["references/alpha.md", "references/beta.md"]
+    # Use ops/observations/ path so classifier topic="observation" keeps notes in-place
+    note_paths = ["ops/observations/alpha.md", "ops/observations/beta.md"]
     fake = _make_classifiable_note_vault(note_paths)
 
     classifier = AsyncMock(
         return_value=ClassificationResult(
-            topic="reference", confidence=0.9, title_slug="x", reasoning="r"
+            topic="observation", confidence=0.9, title_slug="x", reasoning="r"
         )
     )
     embedder = _CallCountingEmbedder()
@@ -705,13 +711,13 @@ async def test_sweep_writes_embedding_model_to_index():
     no-prefix model id from _embedding_model_id()), and content_hash."""
     from app.services.vault_sweeper import EMBEDDING_INDEX_PATH  # RED: NameError
 
-    # Use references/ path so classifier topic="reference" keeps note in-place
-    note_paths = ["references/alpha.md"]
+    # Use ops/observations/ path so classifier topic="observation" keeps note in-place
+    note_paths = ["ops/observations/alpha.md"]
     fake = _make_classifiable_note_vault(note_paths)
 
     classifier = AsyncMock(
         return_value=ClassificationResult(
-            topic="reference", confidence=0.9, title_slug="x", reasoning="r"
+            topic="observation", confidence=0.9, title_slug="x", reasoning="r"
         )
     )
     embedder = _CallCountingEmbedder()
@@ -723,7 +729,7 @@ async def test_sweep_writes_embedding_model_to_index():
 
     raw = fake.notes[EMBEDDING_INDEX_PATH]
     index = _json.loads(raw)
-    entry = index["references/alpha.md"]
+    entry = index["ops/observations/alpha.md"]
 
     # Must carry all three required fields
     assert "embedding_b64" in entry, f"missing embedding_b64 in entry: {entry}"
@@ -749,12 +755,12 @@ async def test_sweep_index_incremental_carry_forward():
     A note whose body changed must get a new content_hash + fresh embedding."""
     from app.services.vault_sweeper import EMBEDDING_INDEX_PATH  # RED: NameError
 
-    # Use references/ paths so classifier topic="reference" keeps notes in-place
-    note_paths = ["references/stable.md", "references/changing.md"]
+    # Use ops/observations/ paths so classifier topic="observation" keeps notes in-place
+    note_paths = ["ops/observations/stable.md", "ops/observations/changing.md"]
     fake = _make_classifiable_note_vault(note_paths, body="original body")
     classifier = AsyncMock(
         return_value=ClassificationResult(
-            topic="reference", confidence=0.9, title_slug="x", reasoning="r"
+            topic="observation", confidence=0.9, title_slug="x", reasoning="r"
         )
     )
     embedder = _CallCountingEmbedder()
@@ -767,14 +773,14 @@ async def test_sweep_index_incremental_carry_forward():
 
     # Record the content_hash of the stable note from the first index
     index_after_first = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
-    stable_hash_first = index_after_first["references/stable.md"]["content_hash"]
-    stable_b64_first = index_after_first["references/stable.md"]["embedding_b64"]
+    stable_hash_first = index_after_first["ops/observations/stable.md"]["content_hash"]
+    stable_b64_first = index_after_first["ops/observations/stable.md"]["embedding_b64"]
 
     # Mutate the body of the changing note so it will need re-embedding
     # We need to write it directly to the vault (bypass frontmatter)
     # After the first sweep, the note has frontmatter — we must update the body part
     # For simplicity just set a fresh body without frontmatter
-    fake.notes["references/changing.md"] = "completely new body content"
+    fake.notes["ops/observations/changing.md"] = "completely new body content"
 
     # Second sweep
     embedder.calls.clear()
@@ -784,7 +790,7 @@ async def test_sweep_index_incremental_carry_forward():
     index_after_second = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
 
     # The stable note's entry must be carried forward unchanged (same hash + b64)
-    stable_entry = index_after_second["references/stable.md"]
+    stable_entry = index_after_second["ops/observations/stable.md"]
     assert stable_entry["content_hash"] == stable_hash_first, (
         "stable note content_hash must not change between sweeps when body is unchanged"
     )
@@ -805,8 +811,8 @@ async def test_sweep_index_incremental_carry_forward():
     )
 
     # And the changing note must have a DIFFERENT content_hash than in the first index
-    changing_hash_first = index_after_first["references/changing.md"]["content_hash"]
-    changing_hash_second = index_after_second["references/changing.md"]["content_hash"]
+    changing_hash_first = index_after_first["ops/observations/changing.md"]["content_hash"]
+    changing_hash_second = index_after_second["ops/observations/changing.md"]["content_hash"]
     assert changing_hash_second != changing_hash_first, (
         "changed note must have a new content_hash in the second index"
     )
@@ -818,12 +824,12 @@ async def test_sweep_index_prunes_trashed():
     must be removed (pruned) from the new index."""
     from app.services.vault_sweeper import EMBEDDING_INDEX_PATH  # RED: NameError
 
-    # Use references/ paths so classifier topic="reference" keeps notes in-place
-    note_paths = ["references/keeper.md", "references/goner.md"]
+    # Use ops/observations/ paths so classifier topic="observation" keeps notes in-place
+    note_paths = ["ops/observations/keeper.md", "ops/observations/goner.md"]
     fake = _make_classifiable_note_vault(note_paths, body="some body")
     classifier = AsyncMock(
         return_value=ClassificationResult(
-            topic="reference", confidence=0.9, title_slug="x", reasoning="r"
+            topic="observation", confidence=0.9, title_slug="x", reasoning="r"
         )
     )
     embedder = _CallCountingEmbedder()
@@ -834,12 +840,12 @@ async def test_sweep_index_prunes_trashed():
     # First sweep — both notes indexed
     await run_sweep(fake, classifier, embedder, force_reclassify=True, safe_to_mutate=_true_probe)
     index_first = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
-    assert "references/keeper.md" in index_first
-    assert "references/goner.md" in index_first
+    assert "ops/observations/keeper.md" in index_first
+    assert "ops/observations/goner.md" in index_first
 
-    # Remove "references/goner.md" from the vault entirely (simulate trash/delete)
-    del fake.notes["references/goner.md"]
-    refs_dir = fake.dirs.get("references", [])
+    # Remove "ops/observations/goner.md" from the vault entirely (simulate trash/delete)
+    del fake.notes["ops/observations/goner.md"]
+    refs_dir = fake.dirs.get("ops/observations", [])
     if "goner.md" in refs_dir:
         refs_dir.remove("goner.md")
 
@@ -849,8 +855,8 @@ async def test_sweep_index_prunes_trashed():
     await run_sweep(fake, classifier, embedder, force_reclassify=True, safe_to_mutate=_true_probe)
 
     index_second = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
-    assert "references/keeper.md" in index_second, "keeper note must remain in index after second sweep"
-    assert "references/goner.md" not in index_second, (
+    assert "ops/observations/keeper.md" in index_second, "keeper note must remain in index after second sweep"
+    assert "ops/observations/goner.md" not in index_second, (
         "goner note must be pruned from index because it no longer exists in the vault"
     )
 
@@ -1277,7 +1283,7 @@ async def test_run_sweep_degraded_index_invariant_mem05():
 
     from app.services.vault_sweeper import _content_hash
 
-    note_paths = ["references/alpha.md"]
+    note_paths = ["ops/observations/alpha.md"]
     fake = _make_classifiable_note_vault(note_paths, body="original body")
     embedder = _CallCountingEmbedder()
 
@@ -1286,14 +1292,14 @@ async def test_run_sweep_degraded_index_invariant_mem05():
         return True
 
     classifier = AsyncMock(
-        return_value=ClassificationResult(topic="reference", confidence=0.9, title_slug="x", reasoning="r")
+        return_value=ClassificationResult(topic="observation", confidence=0.9, title_slug="x", reasoning="r")
     )
     await run_sweep(fake, classifier, embedder, force_reclassify=True, safe_to_mutate=_true_probe)
     index_first = _j.loads(fake.notes[EMBEDDING_INDEX_PATH])
-    old_hash = index_first["references/alpha.md"]["content_hash"]
+    old_hash = index_first["ops/observations/alpha.md"]["content_hash"]
 
     # Simulate the note body changing
-    fake.notes["references/alpha.md"] = "---\ntopic: reference\n---\n\ncompletely new body"
+    fake.notes["ops/observations/alpha.md"] = "---\ntopic: observation\n---\n\ncompletely new body"
     new_body_hash = _content_hash("completely new body")
     assert new_body_hash != old_hash, "new body must produce a different hash"
 
@@ -1306,7 +1312,7 @@ async def test_run_sweep_degraded_index_invariant_mem05():
     await run_sweep(fake, classifier, embedder, force_reclassify=True, safe_to_mutate=_false_probe)
 
     index_second = _j.loads(fake.notes[EMBEDDING_INDEX_PATH])
-    entry = index_second.get("references/alpha.md", {})
+    entry = index_second.get("ops/observations/alpha.md", {})
 
     # MUST NOT carry the new content_hash with a stale/missing embedding_b64
     if entry.get("content_hash") == new_body_hash:
@@ -1347,7 +1353,7 @@ async def test_run_sweep_probe_true_preserves_shipped_behavior():
     )
 
     assert report.topic_moves == 1, f"expected 1 topic_moves with True probe; got {report.topic_moves}"
-    assert "accomplishments/misplaced.md" in fake.notes, (
+    assert "ops/accomplishments/misplaced.md" in fake.notes, (
         "misplaced note must be relocated with a True probe"
     )
 
