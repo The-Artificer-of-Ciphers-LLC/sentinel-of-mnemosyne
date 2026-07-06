@@ -824,7 +824,9 @@ async def vault_graph(request: Request):
 **If this table is empty:** N/A — see entries above; all are low-to-medium risk
 design-synthesis choices, not compliance/security/retention-policy claims.
 
-## Open Questions
+## Open Questions (RESOLVED during planning — 2026-07-06)
+
+> All three resolved by the Phase 45 plans (plan-checker confirmed): Q1 → plan `45-06` adopts one shared `GraphReport` computation with three thin renderers; Q2 → plan `45-03` uses filename-stem `resolve_wikilink` plus a Wave-0 fixture (`45-01`) pinning the rule; Q3 → plan `45-06` surfaces a "may be stale" caveat field on the response during an active sweep. Kept below for provenance.
 
 1. **Exact command surface shape — three distinct commands vs. facets of one `:vault` command**
    - What we know: CONTEXT.md explicitly leaves this to Claude's Discretion, grounded
