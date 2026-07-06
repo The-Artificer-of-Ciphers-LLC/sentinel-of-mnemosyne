@@ -67,6 +67,60 @@ _SEARCH_STOPWORDS = frozenset(
 # Queries longer than this many words switch to per-keyword parallel search.
 _KEYWORD_SEARCH_THRESHOLD = 5
 
+# ---------------------------------------------------------------------------
+# VAULT-01 / VAULT-05: self/ stub auto-creation (D-04, D-14 lazy-create)
+# ---------------------------------------------------------------------------
+
+# The four canonical self/ files that are lazily stub-created on first
+# read-miss. This is an explicit, fixed allowlist — NEVER iterate all of
+# RecallConfig.self_paths for stub creation. ops/reminders.md and
+# self/learning-areas.md are also in self_paths (hot-tier self-context) but
+# are intentionally excluded from stub-ensure (D-04 scope).
+_CANONICAL_SELF_STUB_PATHS: tuple[str, ...] = (
+    "self/identity.md",
+    "self/methodology.md",
+    "self/goals.md",
+    "self/relationships.md",
+)
+
+
+def build_self_stub(path: str) -> str:
+    """Return minimal, token-bounded, seeded guiding content for a canonical
+    self/ path (pure, no I/O — mirrors ``inbox.build_initial_inbox()``'s
+    pure-builder shape).
+
+    These stubs are read into every message (hot tier), so content is kept
+    deliberately short: a header plus a one-line prompt describing what the
+    file is for, not verbose prose. Callers write this via ``write_note`` only
+    when the existing read comes back empty (the lazy-create trigger).
+    """
+    stubs = {
+        "self/identity.md": (
+            "# Identity\n\n"
+            "Who I am — name, role, and working context. Edit this file "
+            "directly; it is read into every message as hot-tier self-context.\n"
+        ),
+        "self/methodology.md": (
+            "# Methodology\n\n"
+            "How I prefer to work — conventions, tools, decision-making style. "
+            "Edit this file directly; it is read into every message.\n"
+        ),
+        "self/goals.md": (
+            "# Goals\n\n"
+            "What I am currently working toward — short and long-term goals. "
+            "Edit this file directly; it is read into every message.\n"
+        ),
+        "self/relationships.md": (
+            "# Relationships\n\n"
+            "People, teams, or entities relevant to my context. Edit this "
+            "file directly; it is read into every message.\n"
+        ),
+    }
+    return stubs.get(
+        path,
+        f"# {path}\n\nMinimal seeded stub — edit this file directly.\n",
+    )
+
 
 def _extract_keywords(content: str) -> list[str]:
     """Return deduplicated non-stopword tokens from content, preserving order."""
@@ -270,6 +324,7 @@ __all__ = [
     "recency_weight",
     "SEARCH_SCORE_THRESHOLD",
     "NOMIC_QUERY_PREFIX",
+    "build_self_stub",
 ]
 
 # Nomic-embed-text-v1.5 instruction prefix for query embeddings.
@@ -660,17 +715,53 @@ class Recall:
             search_budget=int(budget * self._config.search_ratio),
         )
 
+    async def _ensure_self_stub(self, path: str) -> str:
+        """Read a canonical self/ path; if missing/empty, lazily create a
+        minimal seeded stub via the REST-only read-then-conditionally-write
+        pattern (D-04, D-14 lazy-create). Returns the (possibly
+        newly-created) body.
+
+        Composes ``read_note`` + conditional ``write_note`` directly at this
+        call site — does NOT touch ``read_self_context``'s contract, which
+        stays read-only and silently graceful-on-404 for every other caller.
+        The unconditional PUT in ``write_note`` is the entire lazy-create
+        mechanism (Obsidian REST creates-if-missing); there is no local-fs
+        existence check.
+
+        The ``isinstance(body, str)`` guard matters beyond defensiveness: an
+        un-configured test double (e.g. a bare ``AsyncMock``) can return a
+        non-str object whose ``.strip`` attribute is itself an awaitable
+        mock — calling it without ``await`` would silently leak an unawaited
+        coroutine (caught in review; matches the same guard already used by
+        ``_hot_self``'s filter and ``MessageProcessor``'s persona-swap check).
+        """
+        body = await self._vault.read_note(path)
+        if not isinstance(body, str) or not body.strip():
+            body = build_self_stub(path)
+            await self._vault.write_note(path, body)
+        return body
+
     async def _hot_self(self) -> list[str]:
-        """Read the 6 self-context paths in parallel; return non-empty strings only.
+        """Read the self-context paths in parallel; return non-empty strings only.
 
         Reads exactly ``self._config.self_paths`` (the 6-item allowlist).
         The system identity file (``sentinel/*.md``) is NOT in self_paths and
         is NOT read here — that stays in ``MessageProcessor`` per D-04.
+
+        The four canonical self/ paths (``_CANONICAL_SELF_STUB_PATHS``) are
+        read via ``_ensure_self_stub`` so a missing file self-heals into a
+        seeded stub (VAULT-01, VAULT-05, D-04). The two extras
+        (``ops/reminders.md``, ``self/learning-areas.md``) keep using the
+        existing read-only ``read_self_context`` path unchanged — they are
+        never stub-created (D-04 scope).
         """
-        self_results = await asyncio.gather(
-            *[self._vault.read_self_context(p) for p in self._config.self_paths],
-            return_exceptions=True,
-        )
+        tasks = [
+            self._ensure_self_stub(p)
+            if p in _CANONICAL_SELF_STUB_PATHS
+            else self._vault.read_self_context(p)
+            for p in self._config.self_paths
+        ]
+        self_results = await asyncio.gather(*tasks, return_exceptions=True)
         return [r for r in self_results if isinstance(r, str) and r.strip()]
 
     async def _hot_sessions(self, user_id: str) -> list[SessionSummary]:

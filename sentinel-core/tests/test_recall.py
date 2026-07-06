@@ -16,8 +16,28 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from tests.fakes.vault import FakeVault
-from app.services.recall import Recall, RecallConfig, RecalledContext, SearchResult, SessionSummary, RetentionPolicy, recency_weight
+from app.services.recall import (
+    Recall,
+    RecallConfig,
+    RecalledContext,
+    SearchResult,
+    SessionSummary,
+    RetentionPolicy,
+    recency_weight,
+    build_self_stub,
+)
 from app.services.message_processing import MessageRequest
+
+# The four canonical self/ paths that are lazily stub-created on first
+# read-miss (D-04, D-14). Kept local to the test file (not imported) so a
+# future accidental widening of the production allowlist is caught by a
+# failing assertion rather than silently mirrored here.
+_CANONICAL_SELF_STUB_PATHS = (
+    "self/identity.md",
+    "self/methodology.md",
+    "self/goals.md",
+    "self/relationships.md",
+)
 
 # ---------------------------------------------------------------------------
 # Fixture helpers for SemanticRecall tests (Task 2 + Task 3)
@@ -101,6 +121,12 @@ async def test_assemble_returns_self_context():
     the ops/reminders.md allowlist exception is preserved: ops/ is in
     exclude_prefixes (blocking warm search) but ops/reminders.md IS in
     self_paths and should be returned as self_context (Pitfall 2).
+
+    self/methodology.md and self/relationships.md are deliberately left
+    unseeded here — the D-04 stub-ensure lazily creates them on this
+    read-miss, so they also appear in self_context (5 total: 3 seeded +
+    2 stub-created canonical files). self/learning-areas.md is NOT
+    canonical and stays empty/absent.
     """
     notes = {
         "self/identity.md": "# I am the user",
@@ -111,7 +137,7 @@ async def test_assemble_returns_self_context():
     result = await recall.assemble(make_request(), budget=8192)
 
     assert isinstance(result, RecalledContext)
-    assert len(result.self_context) == 3
+    assert len(result.self_context) == 5
     assert all(isinstance(s, str) and s.strip() for s in result.self_context)
     # ops/reminders.md must appear — it is in self_paths despite ops/ being excluded from warm
     assert any("Remember to review PRs" in s for s in result.self_context)
@@ -179,6 +205,106 @@ async def test_warm_excludes_self_and_ops_prefixes():
     assert any(r.path == "notes/topic.md" for r in result.warm)
 
 
+# ---------------------------------------------------------------------------
+# VAULT-01 / VAULT-05: self/ stub auto-creation on first read-miss (D-04, D-14)
+# ---------------------------------------------------------------------------
+
+
+def test_build_self_stub_returns_nonempty_token_bounded_content():
+    """build_self_stub is a pure builder returning non-empty, token-bounded,
+    seeded guiding content for each of the four canonical self/ paths."""
+    for path in _CANONICAL_SELF_STUB_PATHS:
+        stub = build_self_stub(path)
+        assert isinstance(stub, str)
+        assert stub.strip(), f"stub for {path} must be non-empty"
+        # Token-bounded: a short header/prompt, not verbose prose. These files
+        # are read into every message, so keep the ceiling generous but real.
+        assert len(stub) < 1000, f"stub for {path} is not token-bounded: {len(stub)} chars"
+
+
+async def test_self_stub_creation_on_miss():
+    """When a canonical self/ path is missing, assemble() lazily creates a
+    minimal seeded stub via write_note exactly once per path (D-04, D-14).
+    """
+    vault = FakeVault(notes={})
+    write_calls: list[tuple[str, str]] = []
+    orig_write = vault.write_note
+
+    async def tracking_write(path: str, body: str) -> None:
+        write_calls.append((path, body))
+        await orig_write(path, body)
+
+    vault.write_note = tracking_write  # type: ignore[method-assign]
+
+    recall = Recall(vault=vault)
+    await recall.assemble(make_request(), budget=8192)
+
+    written_paths = [p for p, _ in write_calls]
+    for path in _CANONICAL_SELF_STUB_PATHS:
+        assert written_paths.count(path) == 1, (
+            f"{path} should be stub-written exactly once; write calls: {written_paths}"
+        )
+        assert vault.notes[path].strip(), f"{path} stub body should be non-empty"
+        assert vault.notes[path] == build_self_stub(path), (
+            f"written stub body for {path} should equal build_self_stub(path)"
+        )
+
+
+async def test_self_stub_no_overwrite_when_present():
+    """When a canonical self/ path already has content, no write_note occurs
+    for that path — existing content is never clobbered (D-04)."""
+    notes = {
+        "self/identity.md": "existing identity content",
+        "self/methodology.md": "existing methodology content",
+        "self/goals.md": "existing goals content",
+        "self/relationships.md": "existing relationships content",
+    }
+    vault = FakeVault(notes=dict(notes))
+    write_calls: list[tuple[str, str]] = []
+    orig_write = vault.write_note
+
+    async def tracking_write(path: str, body: str) -> None:
+        write_calls.append((path, body))
+        await orig_write(path, body)
+
+    vault.write_note = tracking_write  # type: ignore[method-assign]
+
+    recall = Recall(vault=vault)
+    result = await recall.assemble(make_request(), budget=8192)
+
+    assert write_calls == [], f"No writes expected when all canonical files exist; got: {write_calls}"
+    for path, body in notes.items():
+        assert vault.notes[path] == body, f"{path} content must be unchanged"
+    for path, body in notes.items():
+        assert any(body in s for s in result.self_context), (
+            f"existing content for {path} should still surface in self_context"
+        )
+
+
+async def test_self_stub_canonical_paths_only():
+    """Only the four canonical self/ paths are stub-ensured — ops/reminders.md
+    and self/learning-areas.md (also in self_paths) are NEVER auto-created,
+    even when missing."""
+    vault = FakeVault(notes={})
+    write_calls: list[tuple[str, str]] = []
+    orig_write = vault.write_note
+
+    async def tracking_write(path: str, body: str) -> None:
+        write_calls.append((path, body))
+        await orig_write(path, body)
+
+    vault.write_note = tracking_write  # type: ignore[method-assign]
+
+    recall = Recall(vault=vault)
+    await recall.assemble(make_request(), budget=8192)
+
+    written_paths = {p for p, _ in write_calls}
+    assert "ops/reminders.md" not in written_paths
+    assert "self/learning-areas.md" not in written_paths
+    assert "ops/reminders.md" not in vault.notes
+    assert "self/learning-areas.md" not in vault.notes
+
+
 async def test_warm_excludes_below_threshold():
     """Warm search excludes notes whose score is below relevance_threshold (-200.0)."""
     vault = FakeVault(notes={"notes/target.md": "below threshold content"})
@@ -196,11 +322,17 @@ async def test_warm_excludes_below_threshold():
 
 
 async def test_empty_vault_graceful_degrade():
-    """An empty vault results in all RecalledContext lists being empty."""
-    recall, _ = make_recall(notes={})
+    """An empty vault degrades gracefully: sessions and warm stay empty, but
+    self_context is now guaranteed non-empty (VAULT-05) — the D-04 stub-ensure
+    lazily creates all four canonical self/ files on this first read-miss.
+    """
+    recall, vault = make_recall(notes={})
     result = await recall.assemble(make_request(), budget=8192)
 
-    assert result.self_context == []
+    assert len(result.self_context) == 4
+    assert all(isinstance(s, str) and s.strip() for s in result.self_context)
+    for path in _CANONICAL_SELF_STUB_PATHS:
+        assert vault.notes.get(path, "").strip(), f"{path} should be stub-created"
     assert result.sessions == []
     assert result.warm == []
 

@@ -36,6 +36,14 @@ def setup_app_state():
     mock_obsidian.read_self_context.side_effect = lambda path: (
         KNOWN_IDENTITY if path == "self/identity.md" else ""
     )
+    # Phase 44-04 (D-04, VAULT-05): self/identity.md is one of the four
+    # canonical self/ paths now read via read_note + stub-ensure, not
+    # read_self_context — mirror the same content there so the LLM-injection
+    # assertion below reflects the current call site.
+    mock_obsidian.read_note = AsyncMock(return_value="")
+    mock_obsidian.read_note.side_effect = lambda path: (
+        KNOWN_IDENTITY if path == "self/identity.md" else ""
+    )
     mock_obsidian.get_recent_sessions = AsyncMock(
         return_value=[
             SessionSummary(
@@ -143,8 +151,9 @@ async def test_obsidian_context_injected_into_llm_prompt():
 
     assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
 
-    # Verify Obsidian context was called
-    app.state.vault.read_self_context.assert_any_call("self/identity.md")
+    # Verify Obsidian context was called (self/identity.md is read via
+    # read_note + stub-ensure as of Phase 44-04, D-04 — not read_self_context).
+    app.state.vault.read_note.assert_any_call("self/identity.md")
 
     # Verify known identity content reached the messages array
     all_content = " ".join(
