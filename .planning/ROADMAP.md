@@ -947,7 +947,14 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** TBD
+**Plans:** 7 plans
+- [ ] 45-01-PLAN.md — Wave 0: characterizing + fixture invariant tests (classifier routing, wikilink resolution, trailing-_schema preservation)
+- [ ] 45-02-PLAN.md — note_schema.py: trailing _schema block parser + structural claim-title/wikilink/compliance checks (NOTE-01)
+- [ ] 45-03-PLAN.md — graph_analysis.py: NOTES_ROOT + wikilink extraction/resolution + orphan/backlink/density report (NOTE-03)
+- [ ] 45-04-PLAN.md — links_sidecar_index.py: ops/graph/links-index.json self-healing sidecar + hybrid freshness + startup rebuild (NOTE-03)
+- [ ] 45-05-PLAN.md — moc_maintenance.py: embedding-first hub lookup + idempotent trailing-block-preserving hub write + concept-slug fallback (NOTE-02)
+- [ ] 45-06-PLAN.md — app/routes/graph.py: /vault/graph, /vault/stats, /vault/check (no admin gate) + main.py registration (NOTE-03)
+- [ ] 45-07-PLAN.md — Discord rewiring: call_core_graph/stats/check gateway fns + :graph/:stats/:check branches (NOTE-03)
 
 ### Phase 46: 6 Rs Pipeline Orchestrator
 
