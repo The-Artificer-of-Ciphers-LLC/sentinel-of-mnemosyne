@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
-status: executing
+status: verifying
 stopped_at: Completed 45-06-PLAN.md
-last_updated: "2026-07-06T17:35:07.433Z"
+last_updated: "2026-07-06T17:47:20.816Z"
 last_activity: 2026-07-06 -- Phase 45 execution started
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 11
-  completed_plans: 10
-  percent: 25
+  completed_plans: 11
+  percent: 50
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 Phase: 45 (note-quality-schema-graph-analysis) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-06 -- Phase 45 execution started
 
 ## Milestone Progress
@@ -151,6 +151,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 45 P04 | 15min | 3 tasks | 4 files |
 | Phase 45 P05 | 20min | 3 tasks | 2 files |
 | Phase 45-note-quality-schema-graph-analysis P06 | 12min | 2 tasks | 3 files |
+| Phase 45-note-quality-schema-graph-analysis P07 | 7min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -257,6 +258,8 @@ Recent decisions affecting current work:
 - [Phase 45-05]: attach_to_hub's trailing-block re-append always normalizes to exactly one trailing newline so a freshly-created hub and a subsequently re-attached hub converge to byte-identical content (idempotency requirement, D-03d).
 - [Phase 45-06]: graph.py derives hub_paths and a synthetic notes map directly from the links-index sidecar entries (wikilinks + schema), avoiding extra vault reads for /vault/graph and /vault/stats
 - [Phase 45-06]: /vault/check reads each note body individually via already-known sidecar paths (not a directory walk) since check_note_compliance's claim-title check requires raw text the sidecar does not store
+- [Phase ?]: [Phase 45-07]: call_core_graph/stats/check formatters emit only bounded summary keys (counts/density) + up to 10 failing paths for check, never raw route internals -- T-45-KEY mitigation
+- [Phase ?]: [Phase 45-07]: command_router graph/stats/check branches call the injected gateway callable positionally (call_core_graph(user_id)), matching call_core_sweep_status's convention; core_gateway's keyword surface is only used by bot.py's thin wrappers
 
 ### Pending Todos
 
@@ -291,7 +294,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-06T17:35:07.410Z
+Last session: 2026-07-06T17:43:28.835Z
 Stopped at: Completed 45-06-PLAN.md
 Resume file: 
 None

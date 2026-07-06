@@ -67,7 +67,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 42: First-Class exo Provider** — Register exo as an independently-configured LLM provider alongside LM Studio in the Phase 4 framework (own env vars, explicit selection, LM-Studio↔exo fallback); retire the debug-time `LMSTUDIO_*` hijack and hardcoded exo model default (completed 2026-07-05)
 - [ ] **Phase 43: Embeddings Through Sentinel** — Route pf2e-module embeddings/RAG retrieval through core + wire a non-exo embeddings backend; also restores core's Phase-40 semantic recall (broken when embedding against exo)
 - [x] **Phase 44: Vault Namespace + Taxonomy Foundation** — Three-space vault (self/notes/ops/inbox/templates/) + PARA taxonomy supersedes flat-7; fixes the recall carrier-allowlist and sweeper inbox-skip silent-regression traps in the same phase (completed 2026-07-06)
-- [ ] **Phase 45: Note-Quality Schema + Graph Analysis** — `_schema` footer blocks, claim titles, wikilinks, lazy MOC/hub notes; `:graph`/`:stats`/`:check` backed by a `links-index.json` sidecar
+- [x] **Phase 45: Note-Quality Schema + Graph Analysis** — `_schema` footer blocks, claim titles, wikilinks, lazy MOC/hub notes; `:graph`/`:stats`/`:check` backed by a `links-index.json` sidecar (completed 2026-07-06)
 - [ ] **Phase 46: 6 Rs Pipeline Orchestrator** — Real background orchestration (cloned from the sweeper's shape) for `:capture`/`:seed`/`:ralph`/`:pipeline`/`:reweave`/`:rethink`, with concurrency guard and explicit outcome reporting
 - [ ] **Phase 47: Migration Cutover + Hardening** — Backfill existing flat-7 notes into PARA/`_schema` with wikilinks intact; MEM-0x + command-surface regression ledger verified green; full 404+ suite stays green
 
@@ -947,7 +947,7 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 6/7 plans executed
+**Plans:** 7/7 plans complete
 **Wave 1**
 
 - [x] 45-01-PLAN.md — Wave 0: characterizing + fixture invariant tests (classifier routing, wikilink resolution, trailing-_schema preservation)
@@ -968,7 +968,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 45-07-PLAN.md — Discord rewiring: call_core_graph/stats/check gateway fns + :graph/:stats/:check branches (NOTE-03)
+- [x] 45-07-PLAN.md — Discord rewiring: call_core_graph/stats/check gateway fns + :graph/:stats/:check branches (NOTE-03)
 
 ### Phase 46: 6 Rs Pipeline Orchestrator
 
