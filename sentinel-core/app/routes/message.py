@@ -64,10 +64,11 @@ def _schedule_chat_note(
 ) -> None:
     """Schedule a best-effort Vault note write for substantive user content.
 
-    Uses NoteIntake.classify_and_apply() so the note lands in a topic-organised
-    path outside ops/ and is therefore reachable by warm-tier vault search on
-    future turns.  Trivially short content is skipped before NoteIntake is
-    constructed; NoteIntake's own cheap-filter drops noise/greetings.
+    Uses NoteIntake.classify_and_apply() to file the note at its
+    classifier-chosen destination (D-03 taxonomy: episodic topics under
+    ops/, durable-knowledge topics staged in inbox/ pending Reduce).
+    Trivially short content is skipped before NoteIntake is constructed;
+    NoteIntake's own cheap-filter drops noise/greetings.
     Any exception is caught and logged — this must never delay or fail the
     /message response.
     """
@@ -82,12 +83,16 @@ def _schedule_chat_note(
 async def _safe_file_chat_note(intake: NoteIntake, content: str) -> None:
     """Invoke NoteIntake.classify_and_apply(); swallow and log any exception.
 
-    Passes searchable_only=True so that notes whose classifier-chosen topic
-    maps to a warm-tier-excluded prefix (e.g. observation → ops/observations/)
-    are silently redirected to a searchable journal path instead.  The note
-    content is always preserved; only the destination changes.
+    D-06: the prior "guaranteed searchable" redirect-to-journal fallback is
+    retired — after the D-03 PARA reroute, every classifier topic (including
+    the former journal redirect target itself) resolves to an ops/- or
+    inbox/-prefixed destination, so no redirect target could ever produce a
+    warm-tier-searchable result. Chat-derived notes now file to their
+    classified destination and are recalled via the session/episodic path
+    (hot tier) rather than force-routed to warm-tier search — the same
+    latency trade-off already accepted for :capture/:seed (D-02/D-05).
     """
     try:
-        await intake.classify_and_apply(content, searchable_only=True)
+        await intake.classify_and_apply(content)
     except Exception as exc:
         logger.warning("chat note filing failed (best-effort): %s", exc)

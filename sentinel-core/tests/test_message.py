@@ -1166,12 +1166,21 @@ def _make_filing_classifier(topic: str = "journal", slug: str = "test-note"):
 
 
 async def test_substantive_chat_content_filed_as_vault_note(mock_ai_provider):
-    """Substantive user content (>=20 chars) is filed as a searchable Vault note.
+    """Substantive user content (>=20 chars) is filed as a Vault note at its
+    classified destination (D-06: no "guaranteed warm-searchable" redirect —
+    every classifier topic, including journal, now resolves to an ops/- or
+    inbox/-prefixed destination per the D-03 PARA reroute).
 
     The written note must:
-    - land at a non-ops/ path (so warm-tier search can reach it), and
+    - land at the classifier's canonical destination for its topic, and
     - contain the verbatim user content in its body.
+
+    Chat-derived notes are recalled via the session/episodic (hot-tier) path
+    rather than force-routed to warm-tier search — the same latency
+    trade-off already accepted for :capture/:seed (D-02/D-05).
     """
+    from app.services.note_classifier import topic_dir_for
+
     fake_vault = _CapturingFakeVault()
     classify_fn = _make_filing_classifier(topic="journal", slug="my-chat-note")
 
@@ -1190,11 +1199,13 @@ async def test_substantive_chat_content_filed_as_vault_note(mock_ai_provider):
     # A note write must have been attempted
     assert len(fake_vault.write_calls) >= 1, "Expected at least one vault note write"
 
-    # The written path must NOT be under any warm-tier excluded prefix
-    excluded = ("ops/", "_trash/", "self/")
+    expected_dir = topic_dir_for("journal")
     for path, body in fake_vault.write_calls:
-        assert not any(path.startswith(p) for p in excluded), (
-            f"Chat note was written to excluded path: {path!r}"
+        # The written path lands at the classifier's canonical journal directory
+        # (ops/journal/{today}/) — no redirect, per D-06.
+        assert path.startswith(expected_dir), (
+            f"Chat note {path!r} was not written under its classified destination "
+            f"{expected_dir!r}"
         )
         # The verbatim user content must be in the body
         assert "Today I finished the new song" in body, (
@@ -1262,13 +1273,13 @@ async def test_note_intake_exception_does_not_fail_response(mock_ai_provider):
 
 
 async def test_chat_note_path_passes_warm_tier_exclusion_filter(mock_ai_provider):
-    """The path written by chat-note filing is not excluded by _WARM_TIER_EXCLUDE_PREFIXES.
-
-    Integration-style assertion: confirms the note path written during chat
-    would NOT be filtered out by the warm-tier exclusion logic in
-    message_processing._append_warm_tier(), i.e. the memory fix actually works.
+    """D-06: chat-note filing writes to the classifier's canonical destination
+    with no redirect. A 'learning' verdict now queues to inbox/ (D-03 PARA
+    reroute) — itself warm-tier-excluded via RecallConfig.exclude_prefixes —
+    so this test asserts the real, current behavior (classified destination,
+    no guaranteed-searchable promise) rather than the retired guarantee.
     """
-    from app.services.message_processing import _WARM_TIER_EXCLUDE_PREFIXES
+    from app.services.note_classifier import topic_dir_for
 
     fake_vault = _CapturingFakeVault()
     classify_fn = _make_filing_classifier(topic="learning", slug="song-progress")
@@ -1286,32 +1297,23 @@ async def test_chat_note_path_passes_warm_tier_exclusion_filter(mock_ai_provider
     assert resp.status_code == 200
     assert len(fake_vault.write_calls) >= 1, "Expected a vault note write"
 
+    expected_dir = topic_dir_for("learning")
     for path, _body in fake_vault.write_calls:
-        excluded = any(path.startswith(p) for p in _WARM_TIER_EXCLUDE_PREFIXES)
-        assert not excluded, (
-            f"Chat note path {path!r} starts with an excluded prefix "
-            f"({_WARM_TIER_EXCLUDE_PREFIXES}) — it would be invisible to warm-tier search"
+        assert path.startswith(expected_dir), (
+            f"Chat note {path!r} must be written under its classified destination "
+            f"{expected_dir!r} (D-06: no redirect)"
         )
 
 
 async def test_observation_topic_chat_note_redirected_to_searchable_path(mock_ai_provider):
-    """Chat notes classified as 'observation' (→ ops/observations/) are redirected to a searchable path.
-
-    Regression guard for the ops/observations/ gap: a classifier verdict of
-    'observation' would previously land the note under ops/, which is excluded
-    from warm-tier retrieval by _WARM_TIER_EXCLUDE_PREFIXES.  The searchable_only
-    guard in _safe_file_chat_note must redirect such notes to a journal path so
-    the verbatim user content remains findable.
+    """Chat notes classified as 'observation' file to ops/observations/ directly —
+    no redirect (D-06). The prior "guaranteed searchable" redirect-to-journal
+    fallback is retired: after the D-03 PARA reroute, the journal redirect
+    target itself resolves to ops/journal/ (also warm-excluded), so no
+    redirect could ever produce a searchable result. The note still preserves
+    the verbatim user content; only the retired routing promise changes.
     """
-    from app.services.message_processing import _WARM_TIER_EXCLUDE_PREFIXES
     from app.services.note_classifier import TOPIC_VAULT_PATH
-
-    # Confirm the test precondition: observation maps to an excluded prefix
-    obs_path = TOPIC_VAULT_PATH["observation"]
-    assert any(obs_path.startswith(p.rstrip("/")) for p in _WARM_TIER_EXCLUDE_PREFIXES), (
-        f"Test precondition failed: TOPIC_VAULT_PATH['observation']={obs_path!r} "
-        f"does not start with any excluded prefix {_WARM_TIER_EXCLUDE_PREFIXES}"
-    )
 
     fake_vault = _CapturingFakeVault()
     classify_fn = _make_filing_classifier(topic="observation", slug="my-observation")
@@ -1331,11 +1333,13 @@ async def test_observation_topic_chat_note_redirected_to_searchable_path(mock_ai
     assert resp.status_code == 200
     assert len(fake_vault.write_calls) >= 1, "Expected at least one vault note write"
 
+    expected_dir = TOPIC_VAULT_PATH["observation"]
     for path, body in fake_vault.write_calls:
-        # The written path must NOT start with any warm-tier excluded prefix
-        assert not path.startswith(_WARM_TIER_EXCLUDE_PREFIXES), (
-            f"Observation chat note was written to excluded path {path!r}; "
-            "it would be invisible to warm-tier search"
+        # The written path is the classifier's canonical observation destination —
+        # no redirect (D-06).
+        assert path.startswith(expected_dir), (
+            f"Observation chat note {path!r} must be written under its classified "
+            f"destination {expected_dir!r} (D-06: no redirect)"
         )
         # The verbatim user content must be preserved in the note body
         assert user_content in body, (
