@@ -383,17 +383,19 @@ Apply the identical fix to `note_intake.py:150` (`return f"{base}/{today}/{slug}
 
 **If this table is empty:** N/A — two low-risk assumptions logged above; both are implementation-detail judgment calls, not open design questions requiring user re-confirmation of a locked decision.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `_safe_file_chat_note`'s redirect-to-journal special case be deleted, or repointed to some other still-searchable destination?**
    - What we know: every classifier topic now resolves to an excluded destination; the redirect currently has no valid target.
    - What's unclear: whether the phase owner wants an explicit compensating UX (e.g., surface a Discord note "this got queued, not immediately searchable") or considers silent latency acceptable (matching D-02's framing for `:capture`/`:seed`).
    - Recommendation: default to silent acceptance (matches existing precedent), record the decision explicitly in the phase's PROJECT.md/STATE.md decisions log so it isn't mistaken for an oversight later — this mirrors exactly how D-05 handled the analogous recency-weighting trade-off.
+   - RESOLVED: by D-06 (retire the redirect), implemented in plan 44-03 Task 2.
 
 2. **Does the merged `inbox/_pending-classification.md` file need a permanent skip from topic-move proposals, or is a one-time test sufficient?**
    - What we know: today's `is_in_topic_dir` accidentally protects it only for topics whose new directory IS `inbox/` (learning/reference); topics resolving elsewhere (journal/accomplishment/observation) have no such protection.
    - What's unclear: how likely the LLM classifier is to actually mis-classify this multi-entry administrative file as one of those three topics in practice.
    - Recommendation: add an explicit path-based guard in `run_sweep()` (skip topic-move proposals — but still allow embedding — for `path == INBOX_PATH` specifically) rather than relying on the classifier's behavior being "probably fine." Cheap, deterministic, and closes a real (if narrow) gap.
+   - RESOLVED: by D-07 (permanent relocation guard), implemented in plan 44-02 Task 2.
 
 ## Environment Availability
 
