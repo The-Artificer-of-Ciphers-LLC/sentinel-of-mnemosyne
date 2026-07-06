@@ -46,8 +46,13 @@ class _ImmediateTaskRunner:
         self._scheduled.clear()
 
 
-def _make_vault():
-    """FakeVault pre-populated with one pending inbox entry (Reduce input)."""
+def _make_vault(*, retry_count: int = 0):
+    """FakeVault pre-populated with one pending inbox entry (Reduce input).
+
+    ``retry_count`` lets Verify-failure tests seed an entry that is already
+    partway (or fully) through the bounded requeue cap (PIPE-07) without
+    inventing a second fixture-building helper.
+    """
     from app.services.inbox import append_entry
     from app.services.note_classifier import ClassificationResult
     from tests.fakes.vault import FakeVault
@@ -57,7 +62,9 @@ def _make_vault():
     result = ClassificationResult(
         topic="reference", confidence=0.8, title_slug="cosine-floor-note", reasoning="r"
     )
-    body = append_entry("", "raw captured text about the cosine floor", result)
+    body = append_entry(
+        "", "raw captured text about the cosine floor", result, retry_count=retry_count
+    )
     from app.services.inbox import INBOX_PATH
 
     vault.notes[INBOX_PATH] = body
@@ -149,6 +156,135 @@ async def test_pipeline_mode_full_sequence():
     assert report.verify_failed == 0
     # Rethink runs once per full-pipeline run (end-of-run), never per entry.
     rethink_mock.assert_awaited_once()
+
+
+async def test_pipeline_mode_verify_failure_below_cap_requeues_with_incremented_retry():
+    """Verify-failure with ``retry_count`` below ``VERIFY_RETRY_CAP`` deletes the
+    draft note and requeues the entry to inbox/ with ``retry_count`` incremented
+    by one (PIPE-07); ``verify_failed``/``verify_requeued`` both move.
+
+    Mirrors ``test_pipeline_mode_full_sequence``'s mocking style but makes
+    ``verify_note`` return a failing/below-cap outcome instead of the
+    happy-path ``passed=True`` used there.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import pipeline_orchestrator
+    from app.services.inbox import INBOX_PATH, parse_inbox
+    from app.services.six_rs.reduce import ReduceResult
+    from app.services.six_rs.verify import VERIFY_RETRY_CAP
+
+    fake_reduce_result = ReduceResult(
+        claim_title="Cosine Floor Governs Hub Attachment",
+        body="The hub-lookup floor is reused verbatim from RecallConfig.\n\n[[Recall Hub]]",
+        schema_type="permanent",
+    )
+
+    below_cap_retry_count = VERIFY_RETRY_CAP - 1
+    vault = _make_vault(retry_count=below_cap_retry_count)
+
+    failing_outcome = {
+        "passed": False,
+        "requeued": True,
+        "retry_count": below_cap_retry_count + 1,
+        "needs_attention": False,
+        "compliance": {"failures": ["missing wikilink"]},
+    }
+
+    with (
+        patch(
+            "app.services.pipeline_orchestrator.reduce_entry",
+            new=AsyncMock(return_value=fake_reduce_result),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.verify_note",
+            new=AsyncMock(return_value=failing_outcome),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.find_and_attach_hub",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.triage_observations",
+            new=AsyncMock(return_value=[]),
+        ),
+    ):
+        report = await pipeline_orchestrator.run(vault, mode="pipeline")
+
+    assert report.verify_failed == 1
+    assert report.verify_requeued == 1
+
+    # D-02: a failing note never stays in notes/.
+    written_note_paths = [p for p in vault.notes if p.startswith("notes/")]
+    assert not written_note_paths, "a Verify-failed note must be deleted from notes/"
+
+    entries = parse_inbox(vault.notes[INBOX_PATH])
+    assert len(entries) == 1, "the failed entry must be requeued, not dropped"
+    requeued_entry = entries[0]
+    assert requeued_entry.retry_count == below_cap_retry_count + 1
+    assert requeued_entry.needs_attention is False
+
+
+async def test_pipeline_mode_verify_failure_at_cap_flags_needs_attention():
+    """Verify-failure once ``retry_count`` has reached ``VERIFY_RETRY_CAP`` is
+    NOT requeued again -- the orchestrator stops incrementing and flags the
+    entry ``needs_attention`` instead (PIPE-07 bounded-retry discipline).
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import pipeline_orchestrator
+    from app.services.inbox import INBOX_PATH, parse_inbox
+    from app.services.six_rs.reduce import ReduceResult
+    from app.services.six_rs.verify import VERIFY_RETRY_CAP
+
+    fake_reduce_result = ReduceResult(
+        claim_title="Cosine Floor Governs Hub Attachment",
+        body="The hub-lookup floor is reused verbatim from RecallConfig.\n\n[[Recall Hub]]",
+        schema_type="permanent",
+    )
+
+    vault = _make_vault(retry_count=VERIFY_RETRY_CAP)
+
+    failing_outcome_at_cap = {
+        "passed": False,
+        "requeued": False,
+        "retry_count": VERIFY_RETRY_CAP,
+        "needs_attention": True,
+        "compliance": {"failures": ["missing wikilink"]},
+    }
+
+    with (
+        patch(
+            "app.services.pipeline_orchestrator.reduce_entry",
+            new=AsyncMock(return_value=fake_reduce_result),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.verify_note",
+            new=AsyncMock(return_value=failing_outcome_at_cap),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.find_and_attach_hub",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.triage_observations",
+            new=AsyncMock(return_value=[]),
+        ),
+    ):
+        report = await pipeline_orchestrator.run(vault, mode="pipeline")
+
+    assert report.verify_failed == 1
+    # requeued is False at the cap -- verify_requeued must NOT move.
+    assert report.verify_requeued == 0
+
+    written_note_paths = [p for p in vault.notes if p.startswith("notes/")]
+    assert not written_note_paths, "a Verify-failed note must be deleted from notes/"
+
+    entries = parse_inbox(vault.notes[INBOX_PATH])
+    assert len(entries) == 1, "an at-cap entry stays in inbox/ (never silently dropped)"
+    flagged_entry = entries[0]
+    assert flagged_entry.retry_count == VERIFY_RETRY_CAP
+    assert flagged_entry.needs_attention is True
 
 
 async def test_concurrent_pipeline_and_sweep_refused():
