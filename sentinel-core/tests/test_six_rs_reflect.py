@@ -114,3 +114,41 @@ async def test_reflect_no_wikilink_from_notes_into_self():
         assert self_path not in call.args
         assert self_path not in call.kwargs.values()
     assert vault.notes[self_path] == original_self_body
+
+
+async def test_reflect_fallback_creates_hub_when_no_candidate_clears_floor():
+    """D-07 fallback: when nothing clears the cosine floor, reflect proposes
+    a concept slug (LLM naming, propose_hub_slug) then create_or_update_hub
+    -- never a fresh cosine implementation, never silently skipping."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.six_rs.reflect import find_and_attach_hub
+    from tests.fakes.vault import FakeVault
+
+    note_path = "notes/member-note.md"
+    vault = FakeVault(notes={note_path: "# Member Note\n\nSome content.\n"})
+    index = {
+        "notes/off-topic-hub.md": _entry([0.0, 1.0]),  # cosine 0.0 -- below floor
+    }
+
+    with patch(
+        "app.services.six_rs.reflect.propose_hub_slug",
+        new=AsyncMock(return_value="new-concept"),
+    ) as propose_mock, patch(
+        "app.services.six_rs.reflect.create_or_update_hub",
+        new=AsyncMock(return_value="notes/new-concept.md"),
+    ) as create_mock:
+        result = await find_and_attach_hub(
+            vault,
+            note_path=note_path,
+            note_vector=np.asarray([1.0, 0.0], dtype=np.float32),
+            index=index,
+            active_model="test-model",
+        )
+
+    assert result == "notes/new-concept.md"
+    propose_mock.assert_awaited_once()
+    create_mock.assert_awaited_once()
+    _, create_kwargs = create_mock.await_args
+    assert create_kwargs["concept_slug"] == "new-concept"
+    assert create_kwargs["member_slug"] == "member-note"
