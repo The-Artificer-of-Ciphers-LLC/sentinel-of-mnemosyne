@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
 status: executing
-stopped_at: Completed 45-04-PLAN.md
-last_updated: "2026-07-06T17:05:25.302Z"
+stopped_at: Completed 45-05-PLAN.md
+last_updated: "2026-07-06T17:23:46.994Z"
 last_activity: 2026-07-06 -- Phase 45 execution started
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 9
   percent: 25
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 45 (note-quality-schema-graph-analysis) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-07-06 -- Phase 45 execution started
 
@@ -149,6 +149,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 45 P02 | 20min | 2 tasks | 2 files |
 | Phase 45 P03 | 10min | 2 tasks | 2 files |
 | Phase 45 P04 | 15min | 3 tasks | 4 files |
+| Phase 45 P05 | 20min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -251,6 +252,8 @@ Recent decisions affecting current work:
 - [Phase 45-03]: graph_analysis.resolve_wikilink matches by slugified filename stem (spaces/underscores folded to hyphens), so a display-text wikilink target like [[Member One]] resolves to notes/member-one.md
 - [Phase ?]: [Phase 45-04]: rebuild_links_index_if_stale uses a single list_under(NOTES_ROOT) path-set diff (not a full walk) for D-04a staleness signal; a body edit with no path-set change is a documented, accepted approximation gap (Pitfall 5)
 - [Phase ?]: [Phase 45-04]: rebuild_links_index propagates SweepInProgressError to direct callers (mirrors rebuild_embedding_index); only rebuild_links_index_if_stale catches it and degrades to the existing (stale) index for read-mostly :graph/:stats/:check callers (Pitfall 2)
+- [Phase 45-05]: HUB_COSINE_FLOOR is a direct class-attribute alias of RecallConfig.semantic_cosine_floor (no instantiation), asserted equal by test — never redeclared as a new literal (D-03).
+- [Phase 45-05]: attach_to_hub's trailing-block re-append always normalizes to exactly one trailing newline so a freshly-created hub and a subsequently re-attached hub converge to byte-identical content (idempotency requirement, D-03d).
 
 ### Pending Todos
 
@@ -285,7 +288,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-06T17:05:25.297Z
-Stopped at: Completed 45-04-PLAN.md
+Last session: 2026-07-06T17:23:46.988Z
+Stopped at: Completed 45-05-PLAN.md
 Resume file: 
 None

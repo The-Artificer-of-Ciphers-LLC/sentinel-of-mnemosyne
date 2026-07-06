@@ -947,7 +947,7 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 4/7 plans executed
+**Plans:** 5/7 plans executed
 **Wave 1**
 
 - [x] 45-01-PLAN.md — Wave 0: characterizing + fixture invariant tests (classifier routing, wikilink resolution, trailing-_schema preservation)
@@ -960,7 +960,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 45-04-PLAN.md — links_sidecar_index.py: ops/graph/links-index.json self-healing sidecar + hybrid freshness + startup rebuild (NOTE-03)
-- [ ] 45-05-PLAN.md — moc_maintenance.py: embedding-first hub lookup + idempotent trailing-block-preserving hub write + concept-slug fallback (NOTE-02)
+- [x] 45-05-PLAN.md — moc_maintenance.py: embedding-first hub lookup + idempotent trailing-block-preserving hub write + concept-slug fallback (NOTE-02)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
