@@ -113,3 +113,75 @@ async def call_core_sweep_status(*, user_id: str, core_url: str, api_key: str) -
         f"processed={data.get('files_processed', 0)}/{data.get('files_total', 0)}, "
         f"duplicates_moved={data.get('duplicates_moved', 0)}"
     )
+
+
+async def call_core_graph(*, user_id: str, core_url: str, api_key: str) -> str:
+    try:
+        async with httpx.AsyncClient() as http_client:
+            resp = await http_client.get(
+                f"{core_url.rstrip('/')}/vault/graph",
+                headers={"X-Sentinel-Key": api_key},
+                timeout=20.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("vault graph call failed: %s", exc)
+        return f"Vault graph fetch failed: {exc}"
+    orphans = data.get("orphans") or []
+    caveat = data.get("caveat")
+    caveat_s = f" ({caveat})" if caveat else ""
+    return (
+        f"Graph: {data.get('note_count', 0)} notes, {len(orphans)} orphans, "
+        f"{data.get('hub_count', 0)} hubs, link_density={data.get('link_density', 0):.2f}{caveat_s}"
+    )
+
+
+async def call_core_stats(*, user_id: str, core_url: str, api_key: str) -> str:
+    try:
+        async with httpx.AsyncClient() as http_client:
+            resp = await http_client.get(
+                f"{core_url.rstrip('/')}/vault/stats",
+                headers={"X-Sentinel-Key": api_key},
+                timeout=20.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("vault stats call failed: %s", exc)
+        return f"Vault stats fetch failed: {exc}"
+    caveat = data.get("caveat")
+    caveat_s = f" ({caveat})" if caveat else ""
+    return (
+        f"Stats: {data.get('note_count', 0)} notes, {data.get('hub_count', 0)} hubs, "
+        f"{data.get('orphan_count', 0)} orphans, "
+        f"avg_notes_per_hub={data.get('avg_notes_per_hub', 0):.1f}, "
+        f"link_density={data.get('link_density', 0):.2f}{caveat_s}"
+    )
+
+
+async def call_core_check(*, user_id: str, core_url: str, api_key: str) -> str:
+    try:
+        async with httpx.AsyncClient() as http_client:
+            resp = await http_client.get(
+                f"{core_url.rstrip('/')}/vault/check",
+                headers={"X-Sentinel-Key": api_key},
+                timeout=20.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("vault check call failed: %s", exc)
+        return f"Vault check fetch failed: {exc}"
+    note_count = data.get("note_count", 0)
+    compliant_count = data.get("compliant_count", 0)
+    results = data.get("results") or []
+    failing = [r for r in results if r.get("failures")]
+    caveat = data.get("caveat")
+    caveat_s = f" ({caveat})" if caveat else ""
+    lines = [f"Check: {compliant_count}/{note_count} notes compliant{caveat_s}"]
+    for entry in failing[:10]:
+        lines.append(f"  FAIL {entry.get('path', '?')}: {', '.join(entry.get('failures', []))}")
+    if len(failing) > 10:
+        lines.append(f"  ...and {len(failing) - 10} more")
+    return "\n".join(lines)
