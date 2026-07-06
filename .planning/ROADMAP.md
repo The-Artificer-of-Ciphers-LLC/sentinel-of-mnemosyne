@@ -66,7 +66,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 41: Typed SessionSummary + Retention** — Typed `SessionSummary` + tunable `RetentionPolicy`; sessions older than the hot window recalled via index instead of dropped (completed 2026-06-12)
 - [x] **Phase 42: First-Class exo Provider** — Register exo as an independently-configured LLM provider alongside LM Studio in the Phase 4 framework (own env vars, explicit selection, LM-Studio↔exo fallback); retire the debug-time `LMSTUDIO_*` hijack and hardcoded exo model default (completed 2026-07-05)
 - [ ] **Phase 43: Embeddings Through Sentinel** — Route pf2e-module embeddings/RAG retrieval through core + wire a non-exo embeddings backend; also restores core's Phase-40 semantic recall (broken when embedding against exo)
-- [ ] **Phase 44: Vault Namespace + Taxonomy Foundation** — Three-space vault (self/notes/ops/inbox/templates/) + PARA taxonomy supersedes flat-7; fixes the recall carrier-allowlist and sweeper inbox-skip silent-regression traps in the same phase
+- [x] **Phase 44: Vault Namespace + Taxonomy Foundation** — Three-space vault (self/notes/ops/inbox/templates/) + PARA taxonomy supersedes flat-7; fixes the recall carrier-allowlist and sweeper inbox-skip silent-regression traps in the same phase (completed 2026-07-06)
 - [ ] **Phase 45: Note-Quality Schema + Graph Analysis** — `_schema` footer blocks, claim titles, wikilinks, lazy MOC/hub notes; `:graph`/`:stats`/`:check` backed by a `links-index.json` sidecar
 - [ ] **Phase 46: 6 Rs Pipeline Orchestrator** — Real background orchestration (cloned from the sweeper's shape) for `:capture`/`:seed`/`:ralph`/`:pipeline`/`:reweave`/`:rethink`, with concurrency guard and explicit outcome reporting
 - [ ] **Phase 47: Migration Cutover + Hardening** — Backfill existing flat-7 notes into PARA/`_schema` with wikilinks intact; MEM-0x + command-surface regression ledger verified green; full 404+ suite stays green
@@ -914,7 +914,7 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 
@@ -929,7 +929,7 @@ Plans:
 
 **Wave 3** *(depends on 44-03 — recall.py/test_message.py ownership)*
 
-- [ ] 44-04-PLAN.md — self/ stub lazy-creation (D-04) via D-14 read-then-conditionally-write; guaranteed session-start self/ read (VAULT-01, VAULT-05)
+- [x] 44-04-PLAN.md — self/ stub lazy-creation (D-04) via D-14 read-then-conditionally-write; guaranteed session-start self/ read (VAULT-01, VAULT-05)
 
 ### Phase 45: Note-Quality Schema + Graph Analysis
 

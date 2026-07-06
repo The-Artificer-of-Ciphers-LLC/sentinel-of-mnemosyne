@@ -104,7 +104,7 @@
 - [x] **VAULT-02**: PARA taxonomy supersedes the flat-7 classifier — `learning`/`reference` route to `inbox/` for Reduce-phase transformation; `journal`/`accomplishment`/`observation` file under `ops/` subdirectories
 - [x] **VAULT-03**: Semantic recall recency-weighting recognizes the new namespaces (no silent recall degradation when `_CARRIER_NAMESPACE_PREFIXES` moves off flat-7 paths)
 - [x] **VAULT-04**: The vault sweeper no longer wholesale-skips `inbox/` — staged captures are embedded (`inbox/` removed from `SWEEP_SKIP_PREFIXES`) so it stops being an unconditional recall blind-spot, while remaining excluded from the keyword warm tier (`RecallConfig.exclude_prefixes`) until Reduce promotes them to `notes/`
-- [ ] **VAULT-05**: Every message reads the three-space `self/` files at session start (identity, methodology, goals, relationships)
+- [x] **VAULT-05**: Every message reads the three-space `self/` files at session start (identity, methodology, goals, relationships)
 
 ## NOTE — note quality + graph (v0.6.0)
 

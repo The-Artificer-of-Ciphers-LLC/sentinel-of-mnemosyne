@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
-status: executing
-stopped_at: Completed 44-01-PLAN.md
-last_updated: "2026-07-06T13:55:01.704Z"
+status: verifying
+stopped_at: Completed 44-04-PLAN.md
+last_updated: "2026-07-06T14:28:53.899Z"
 last_activity: 2026-07-06 -- Phase 44 execution started
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 0
+  completed_plans: 4
+  percent: 25
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 Phase: 44 (vault-namespace-taxonomy-foundation) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-06 -- Phase 44 execution started
 
 ## Milestone Progress
@@ -143,6 +143,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 44 P01 | 45min | 3 tasks | 11 files |
 | Phase 44 P02 | 20min | 3 tasks | 5 files |
 | Phase 44 P03 | 15min | 1 tasks | 3 files |
+| Phase 44 P04 | 25min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -236,6 +237,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 44-02]: templates/ added to PROTECTED_NAMESPACES and config.protected_namespaces (dual-maintenance, additive, VAULT-01 partial)
 - [Phase ?]: [Phase 44-03]: Deleted _WARM_TIER_EXCLUDE_PREFIXES entirely (preferred remediation) rather than aliasing -- zero remaining consumers of the bare symbol after 44-01's D-06 import removal
 - [Phase ?]: [Phase 44-03]: Task 2 (D-06 redirect retirement) verified as already fully satisfied by plan 44-01's pulled-forward deviation -- not redone
+- [Phase 44-04]: Stub-ensure composes read_note + conditional write_note directly at the Recall self-context call site, never inside read_self_context — keeps that method's read-only, graceful-404 contract stable for every other caller
+- [Phase 44-04]: _ensure_self_stub guards with isinstance(body, str) rather than bare truthiness — fixes a silent unawaited-coroutine leak against non-str test doubles and correctly treats any non-str read as missing
+- [Phase 44-04]: Only the four canonical self/ paths are stub-ensured via an explicit allowlist iterated in _hot_self — ops/reminders.md and self/learning-areas.md are never auto-created even though they are also in RecallConfig.self_paths
 
 ### Pending Todos
 
@@ -270,7 +274,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-06T13:51:11.953Z
-Stopped at: Completed 44-01-PLAN.md
+Last session: 2026-07-06T14:28:53.894Z
+Stopped at: Completed 44-04-PLAN.md
 Resume file: 
 None
