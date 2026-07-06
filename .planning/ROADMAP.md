@@ -947,7 +947,7 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 5/7 plans executed
+**Plans:** 6/7 plans executed
 **Wave 1**
 
 - [x] 45-01-PLAN.md — Wave 0: characterizing + fixture invariant tests (classifier routing, wikilink resolution, trailing-_schema preservation)
@@ -964,7 +964,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 45-06-PLAN.md — app/routes/graph.py: /vault/graph, /vault/stats, /vault/check (no admin gate) + main.py registration (NOTE-03)
+- [x] 45-06-PLAN.md — app/routes/graph.py: /vault/graph, /vault/stats, /vault/check (no admin gate) + main.py registration (NOTE-03)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
