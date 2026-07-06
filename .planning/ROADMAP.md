@@ -908,7 +908,7 @@ Plans:
 
   1. The vault has `self/`, `notes/`, `ops/`, `inbox/`, and `templates/` namespaces, with stub files auto-created wherever they don't already exist
   2. PARA taxonomy supersedes the flat-7 classifier: `learning`/`reference` content routes to `inbox/` for later Reduce-phase transformation instead of a flat topic directory; `journal`/`accomplishment`/`observation` content still files under `ops/` subdirectories
-  3. Semantic recall's recency weighting still applies correctly under the new namespaces — a carrier-namespace note filed under the new taxonomy is recency-weighted the same way its flat-7 equivalent was, with no silent loss of ranking quality
+  3. Semantic recall's recency weighting is Session-summary-only (D-01 "Sessions-only collapse"): the stale carrier-namespace allowlist (`_CARRIER_NAMESPACE_PREFIXES`) is retired rather than adapted — journal/accomplishment notes file under `ops/` (already warm-excluded via `RecallConfig.exclude_prefixes`) and learning/reference route to `inbox/` (pending Reduce), so no carrier-namespace note is recency-ranked. Not-yet-migrated legacy top-level notes lose recency weighting as an explicitly accepted, self-healing transient (D-05, `v0.6.0-REGRESSION-LEDGER.md`); no silent recall degradation. [SC-3 wording reconciled with the shipped D-01 decision, mirroring the D-02a correction applied to VAULT-04.]
   4. Content staged in `inbox/` is no longer wholesale excluded from the vault sweeper — it stops being an unconditional recall blind spot
   5. Every message reads the three-space `self/` files (identity, methodology, goals, relationships) at session start, and the full existing 404+ test suite plus MEM-01..MEM-09 stay green throughout this phase
 
