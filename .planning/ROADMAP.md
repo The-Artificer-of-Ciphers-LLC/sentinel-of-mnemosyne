@@ -939,7 +939,7 @@ Plans:
 **Canonical ref:** `.planning/research/ARCHITECTURE.md` (Phase B build order, Pattern 4: embedding-first hub lookup)
 **Success Criteria** (what must be TRUE):
 
-  1. Notes written to `notes/` carry a trailing `_schema` footer block (type + hub membership), a claim-style title, and at least one wikilink
+  1. Notes written to `notes/` carry a trailing `_schema` footer block (type + hub membership), a claim-style title, and at least one wikilink _(Phase 45 delivers the schema/parse/`:check`-inspect machinery; write-time "born-compliant" authoring is deferred to Phase 46's Reduce per CONTEXT.md D-02 — this criterion is closed across Phases 45+46, not by 45 alone)_
   2. A Map of Content / hub note is created the first time a note needs one and is updated (appended to), never duplicated, as further notes join that hub
   3. The user can run `:graph`/`:stats` and see orphan notes, backlink counts, and link density for the vault, backed by a `links-index.json` sidecar rather than a full vault walk on every call
   4. The user can run `:check` and see which notes are missing a `_schema` block, claim title, or wikilink
@@ -948,12 +948,26 @@ Plans:
 **UI hint**: no
 
 **Plans:** 7 plans
+**Wave 1**
+
 - [ ] 45-01-PLAN.md — Wave 0: characterizing + fixture invariant tests (classifier routing, wikilink resolution, trailing-_schema preservation)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 45-02-PLAN.md — note_schema.py: trailing _schema block parser + structural claim-title/wikilink/compliance checks (NOTE-01)
 - [ ] 45-03-PLAN.md — graph_analysis.py: NOTES_ROOT + wikilink extraction/resolution + orphan/backlink/density report (NOTE-03)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 45-04-PLAN.md — links_sidecar_index.py: ops/graph/links-index.json self-healing sidecar + hybrid freshness + startup rebuild (NOTE-03)
 - [ ] 45-05-PLAN.md — moc_maintenance.py: embedding-first hub lookup + idempotent trailing-block-preserving hub write + concept-slug fallback (NOTE-02)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 45-06-PLAN.md — app/routes/graph.py: /vault/graph, /vault/stats, /vault/check (no admin gate) + main.py registration (NOTE-03)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 45-07-PLAN.md — Discord rewiring: call_core_graph/stats/check gateway fns + :graph/:stats/:check branches (NOTE-03)
 
 ### Phase 46: 6 Rs Pipeline Orchestrator
