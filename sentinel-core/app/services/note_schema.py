@@ -48,11 +48,38 @@ def _find_trailing_block_match(stripped: str) -> re.Match | None:
     return last
 
 
-def parse_schema_block(body: str) -> dict | None:  # pragma: no cover - RED stub
-    """Parse the trailing ```_schema fenced block. Implemented in GREEN step."""
-    raise NotImplementedError
+def parse_schema_block(body: str) -> dict | None:
+    """Parse the trailing ```_schema fenced block.
+
+    Returns the parsed dict for a well-formed terminal block. Returns
+    None when the block is absent, not the terminal content of the body,
+    non-dict, or when the inner YAML fails to parse for any reason --
+    this function never raises (T-45-DOS1).
+    """
+    stripped = (body or "").rstrip()
+    match = _find_trailing_block_match(stripped)
+    if match is None:
+        return None
+    try:
+        parsed = yaml.safe_load(match.group(1))
+    except Exception:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
-def split_schema_block(body: str) -> tuple[str, str | None]:  # pragma: no cover - RED stub
-    """Split body into (pre_block_body, raw_block_text_or_None). GREEN step."""
-    raise NotImplementedError
+def split_schema_block(body: str) -> tuple[str, str | None]:
+    """Split ``body`` into ``(pre_block_body, raw_block_text_or_None)``.
+
+    ``pre_block_body`` preserves all content before the trailing block
+    byte-for-byte. When no terminal block is present, returns
+    ``(body, None)`` unchanged. Callers mutate ``pre_block_body`` and
+    re-append ``raw_block_text`` unchanged to preserve the block -- never
+    ``patch_append`` a hub note blindly (RESEARCH Pitfall 1). This is the
+    exact seam Plan 45-05's ``attach_to_hub`` depends on.
+    """
+    body = body or ""
+    stripped = body.rstrip()
+    match = _find_trailing_block_match(stripped)
+    if match is None:
+        return body, None
+    return body[: match.start()], match.group(0)
