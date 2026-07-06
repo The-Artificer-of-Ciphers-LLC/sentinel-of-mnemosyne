@@ -484,19 +484,24 @@ async def _fake_completion(**kwargs):
 
 **If this table is empty:** N/A — see rows above; all four are genuine gaps this research surfaced that need either a planner decision recorded explicitly or a follow-up confirmation, not silent assumptions baked into code.
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+All three were resolved in-plan during Phase 46 planning (recommendations adopted; see per-question `RESOLVED:` markers below and the cited plan decisions).
 
 1. **Does Reflect embed the just-Reduced note on-demand, or defer hub-lookup until the next sweep?**
+   - **RESOLVED (46-06 Task 1, ralph branch): on-demand single-note embed (option (a)).** The orchestrator embeds each note via `embedder` immediately after Reduce, before `find_and_attach_hub`.
    - What we know: the embedding sidecar (`ops/sweeps/embedding-index.json`) is populated by the sweeper's `run_sweep`/`rebuild_embedding_index`, not by the pipeline. A freshly-Reduced note has no vector in that index until a sweep runs.
    - What's unclear: whether an on-demand single-note embed call inside `six_rs/reflect.py` (bypassing the sweeper) is acceptable, or whether Reflect should simply skip hub-matching for notes reduced in the same pipeline run and rely on a later sweep + a later `:connect`/orphan-catch-up pass.
    - Recommendation: on-demand single-note embed (option (a) in Pattern 4) — cheap (one embedding call per Reduce output), closes the Pitfall-3 blind-spot window, and is exactly what Pitfall 3's own "How to avoid" section recommends. The planner should record this as an explicit phase decision, not leave it implicit.
 
 2. **What is the concrete "recently referenced elsewhere but stale" signal for Reweave candidate selection (PIPE-04)?**
+   - **RESOLVED (46-06 Task 2, pipeline branch): option (a) — self-contained, just-wikilinked candidates.** Reweave candidates are the notes/hubs an entry just wikilinked to in the current run; no persistent "last reweaved at" cursor and no unavailable mtime dependency.
    - What we know: CONTEXT.md explicitly leaves this to Claude's discretion; `graph_analysis.build_graph_report` computes backlinks/orphans but has no time dimension; the vault has no reliable mtime via REST.
    - What's unclear: the exact proxy for "recent" — candidates could be: (a) notes with fewer backlinks than a newly-added note that wikilinks to them (a "this note just got referenced, is the referenced note stale" signal derivable purely from the links sidecar), or (b) notes whose `sweep_pass`/`embedding_model` frontmatter timestamp is old relative to the most recent Reduce output.
    - Recommendation: use (a) — derive "recently referenced" directly from Reduce's own output for the current pipeline run (a note just wrote a wikilink to hub/note X → X is a reweave candidate for this run only), avoiding any dependency on unavailable mtime data. This keeps Reweave self-contained within a single `:pipeline`/`:reweave` invocation rather than requiring a persistent "last reweaved at" cursor.
 
 3. **Should `_is_admin_route` be imported from `routes/note.py` or duplicated in `routes/pipeline.py`?**
+   - **RESOLVED (46-06 Task 4, T-46-01): import it** — `from app.routes.note import _is_admin_route`; never a second copy (an auth gate must not drift).
    - What we know: it's a ~6-line pure function with no side effects, reading `SENTINEL_ADMIN_USER_IDS` from env.
    - What's unclear: whether `routes/note.py` intends to export it as a shared helper (it's not currently prefixed for re-export, nor listed in any `__all__`).
    - Recommendation: import it (`from app.routes.note import _is_admin_route`) rather than duplicate — a duplicated admin-gate function is a security-relevant piece of logic that must never drift between two copies (same class of risk as the carrier-allowlist drift in Pitfall 2, applied to an auth gate instead of a recall weight).
