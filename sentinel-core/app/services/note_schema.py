@@ -29,6 +29,14 @@ import yaml
 # backtracking -- see RESEARCH Pattern 1's trade-offs discussion).
 _SCHEMA_BLOCK_RE = re.compile(r"```_schema\s*\n(.*?)\n```", re.DOTALL)
 
+# Structural claim-title check: any Markdown H1 line, anywhere in the body.
+_H1_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+
+# Wikilink target extraction -- excludes the alias/heading-anchor portion
+# of [[Target|Alias]] / [[Target#Heading]]; mirrors graph_analysis.py's
+# extract_wikilinks (Plan 45-03) so both modules agree on wikilink shape.
+_WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)")
+
 
 def _find_trailing_block_match(stripped: str) -> re.Match | None:
     """Return the terminal ```_schema block match, or None if absent.
@@ -83,3 +91,18 @@ def split_schema_block(body: str) -> tuple[str, str | None]:
     if match is None:
         return body, None
     return body[: match.start()], match.group(0)
+
+
+def has_claim_title(body: str, filename_slug: str) -> bool:  # pragma: no cover - RED stub
+    """D-05 structural-only claim-title check. Implemented in GREEN step."""
+    raise NotImplementedError
+
+
+def has_wikilink(body: str) -> bool:  # pragma: no cover - RED stub
+    """True when at least one wikilink target is present. GREEN step."""
+    raise NotImplementedError
+
+
+def check_note_compliance(body: str, filename_slug: str) -> dict:  # pragma: no cover - RED stub
+    """Aggregate per-note NOTE-01 compliance. Implemented in GREEN step."""
+    raise NotImplementedError
