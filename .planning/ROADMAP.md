@@ -914,7 +914,22 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** TBD
+**Plans:** 4 plans
+
+Plans:
+
+**Wave 1** *(parallel — no file overlap)*
+
+- [ ] 44-01-PLAN.md — PARA reroute (D-03) + carrier-allowlist removal (D-01) + Pitfall 1/2 fixes + v0.6.0 regression ledger (VAULT-02, VAULT-03)
+- [ ] 44-02-PLAN.md — inbox/ sweeper embedding (D-02) + underscore control-file relocation guard (D-07) + templates/ protected namespace (VAULT-04, VAULT-01)
+
+**Wave 2** *(depends on 44-01)*
+
+- [ ] 44-03-PLAN.md — retire _safe_file_chat_note redirect (D-06) + reconcile _WARM_TIER_EXCLUDE_PREFIXES to the single source of truth (VAULT-02, VAULT-04)
+
+**Wave 3** *(depends on 44-03 — recall.py/test_message.py ownership)*
+
+- [ ] 44-04-PLAN.md — self/ stub lazy-creation (D-04) via D-14 read-then-conditionally-write; guaranteed session-start self/ read (VAULT-01, VAULT-05)
 
 ### Phase 45: Note-Quality Schema + Graph Analysis
 
