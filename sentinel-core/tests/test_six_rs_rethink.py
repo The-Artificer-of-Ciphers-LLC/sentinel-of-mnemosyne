@@ -79,3 +79,49 @@ async def test_rethink_tolerates_absent_tensions_dir():
 
     assert isinstance(results, list)
     assert any(item["path"] == obs_path for item in results)
+
+
+async def test_rethink_coerces_malformed_completion_to_keep():
+    """A malformed completion for one item coerces to KEEP and never aborts
+    the batch -- the well-formed sibling item still gets its real
+    disposition."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.six_rs.rethink import triage_observations
+    from tests.fakes.vault import FakeVault
+
+    good_path = "ops/observations/2026-07-06-good-observation.md"
+    bad_path = "ops/observations/2026-07-06-bad-observation.md"
+    vault = FakeVault(
+        notes={
+            good_path: "A well-formed observation.\n",
+            bad_path: "An observation whose completion comes back malformed.\n",
+        }
+    )
+    vault.dirs["ops/observations"] = [
+        "2026-07-06-good-observation.md",
+        "2026-07-06-bad-observation.md",
+    ]
+
+    good_canned = {"disposition": "PROMOTE", "reasoning": "durable knowledge"}
+    responses = {
+        good_path: {"choices": [{"message": {"content": json.dumps(good_canned)}}]},
+        bad_path: {"choices": [{"message": {"content": "not-json{{{"}}]},
+    }
+
+    async def _fake_completion(*, messages, **_kwargs):
+        item_text = messages[-1]["content"]
+        for path, body in vault.notes.items():
+            if body == item_text:
+                return responses[path]
+        raise AssertionError(f"unexpected item text: {item_text!r}")
+
+    with patch(
+        "app.services.six_rs.rethink.acompletion_with_profile",
+        new=AsyncMock(side_effect=_fake_completion),
+    ):
+        results = await triage_observations(vault)  # must not raise
+
+    by_path = {item["path"]: item["disposition"] for item in results}
+    assert by_path[good_path] == "PROMOTE"
+    assert by_path[bad_path] == "KEEP"
