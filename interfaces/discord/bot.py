@@ -178,12 +178,9 @@ _SUBCOMMAND_PROMPTS: dict[str, str] = {
     "health": "Run a health check on my vault and report orphan notes, stale goals, neglected gear.",
     "goals": "Show me my current active goals.",
     "reminders": "What are my current time-bound reminders?",
-    # New standard commands (D-03)
-    "ralph": "Process my inbox queue — work through items in inbox/ and move completed ones to notes/ following the 2nd brain pipeline.",
-    "pipeline": "Run the full 6 Rs pipeline on my inbox queue: Record → Reduce → Reflect → Reweave → Verify → Rethink.",
-    "reweave": "Run a reweave pass on my vault — identify notes that should be updated given recent additions. Update older notes with new context and connections.",
-    "rethink": "Review accumulated observations and tensions in ops/observations/ and ops/tensions/. Triage each: PROMOTE, IMPLEMENT, METHODOLOGY, ARCHIVE, or KEEP PENDING.",
-    "refactor": "Review vault organization and suggest restructuring improvements.",
+    # ralph/pipeline/reweave/rethink/refactor rewired to real /vault/pipeline/*
+    # endpoints in Phase 46-07 — dead fixed-prompt entries removed (Phase 45-07
+    # "drop dead prompts" precedent).
     "tasks": "Show the ops/queue/ task queue. List pending items by status.",
 }
 
@@ -269,6 +266,22 @@ async def _call_core_sweep_start(
 
 async def _call_core_sweep_status(user_id: str) -> str:
     return await core_gateway.call_core_sweep_status(
+        user_id=user_id,
+        core_url=SENTINEL_CORE_URL,
+        api_key=SENTINEL_API_KEY,
+    )
+
+
+async def _call_core_pipeline_start(user_id: str, mode: str) -> str:
+    return await core_gateway.call_core_pipeline_start(
+        user_id=user_id,
+        mode=mode,
+        sentinel_client=_sentinel_client,
+    )
+
+
+async def _call_core_pipeline_status(user_id: str) -> str:
+    return await core_gateway.call_core_pipeline_status(
         user_id=user_id,
         core_url=SENTINEL_CORE_URL,
         api_key=SENTINEL_API_KEY,
@@ -561,6 +574,8 @@ async def handle_sentask_subcommand(
             "call_core_graph": _call_core_graph,
             "call_core_stats": _call_core_stats,
             "call_core_check": _call_core_check,
+            "call_core_pipeline_start": _call_core_pipeline_start,
+            "call_core_pipeline_status": _call_core_pipeline_status,
             "is_admin": _is_admin,
             "note_closed_vocab": _NOTE_CLOSED_VOCAB,
             "plugin_prompts": _PLUGIN_PROMPTS,

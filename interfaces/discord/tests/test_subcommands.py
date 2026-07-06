@@ -177,18 +177,25 @@ async def test_graph_subcommand_calls_gateway_not_core():
 
 
 async def test_pipeline_subcommand_calls_core():
-    """:pipeline is a no-arg standard subcommand; it routes through _SUBCOMMAND_PROMPTS dict to _call_core."""
-    assert "pipeline" in bot._SUBCOMMAND_PROMPTS, (
-        "':pipeline' key missing from _SUBCOMMAND_PROMPTS — 2B-01 requirement not met"
-    )
-    with patch("bot._call_core", new=AsyncMock(return_value="Pipeline running.")) as mock_core:
+    """:pipeline (Phase 46-07) routes to the real /vault/pipeline/start gateway fn
+    with mode="pipeline", not the retired free-text call_core prompt — the five
+    pipeline verbs no longer have _SUBCOMMAND_PROMPTS entries (Phase 45-07 "drop
+    dead prompts" precedent, repeated for ralph/pipeline/reweave/rethink/refactor).
+    """
+    for verb in ("ralph", "pipeline", "reweave", "rethink", "refactor"):
+        assert verb not in bot._SUBCOMMAND_PROMPTS, (
+            f"':{verb}' should no longer have a fixed-prompt fallback — Phase 46-07 rewire"
+        )
+    with (
+        patch("bot._call_core_pipeline_start", new=AsyncMock(return_value="Pipeline started: `x`.")) as mock_start,
+        patch("bot._call_core", new=AsyncMock()) as mock_core,
+        patch("bot._is_admin", new=lambda _u: True),
+    ):
         result = await bot.handle_sentask_subcommand("pipeline", "", "user123")
 
-    mock_core.assert_called_once()
-    call_args = mock_core.call_args
-    assert call_args[0][0] == "user123"
-    assert isinstance(call_args[0][1], str) and len(call_args[0][1]) > 0
-    assert result == "Pipeline running."
+    mock_start.assert_awaited_once_with("user123", mode="pipeline")
+    mock_core.assert_not_called()
+    assert result == "Pipeline started: `x`."
 
 
 # ---------------------------------------------------------------------------
