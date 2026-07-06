@@ -51,12 +51,16 @@ logger = logging.getLogger(__name__)
 #   sentinel/ — non-negotiable; persona.md absence crash-loops boot.
 #   self/     — identity-critical; RecallConfig.self_paths depends on it.
 #   security/ — operator-curated security namespace; must never be swept.
+#   templates/ — note templates (VAULT-01, Plan 44-02); low-risk additive
+#               guard, verified safe alongside the three entries above.
 # ---------------------------------------------------------------------------
 
 PROTECTED_NAMESPACES: tuple[str, ...] = (
     "sentinel/",   # boot-critical: persona.md absence crash-loops composition.py:424
     "self/",       # identity-critical: self/identity.md is the operator identity context
     "security/",   # operator-curated security namespace: never swept, never moved
+    "templates/",  # VAULT-01 (Plan 44-02): note templates must never be moved/trashed —
+                   # additive, segment-boundary-matched; cannot weaken the above three.
 )
 """Module-level fallback default for the protected-namespace set.
 

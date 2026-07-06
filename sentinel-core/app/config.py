@@ -178,6 +178,8 @@ class Settings(BaseSettings):
         "sentinel/",   # boot-critical: persona.md absence crash-loops composition.py:424
         "self/",       # identity-critical: self/identity.md is the operator identity context
         "security/",   # operator-curated security namespace: never swept, never moved
+        "templates/",  # VAULT-01 (Plan 44-02): note templates must never be moved/trashed —
+                       # additive, segment-boundary-matched; cannot weaken the entries above.
     )
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}

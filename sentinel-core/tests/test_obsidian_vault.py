@@ -789,6 +789,20 @@ def test_is_protected_path_top_level_namespace_itself_is_protected():
     assert is_protected_path("sentinel/") is True
 
 
+def test_is_protected_path_templates_namespace():
+    """is_protected_path('templates/x.md') is True (VAULT-01, Plan 44-02).
+
+    Additive guard alongside sentinel/, self/, security/ — existing
+    protection for those three namespaces must remain intact.
+    """
+    from app.vault import is_protected_path
+    assert is_protected_path("templates/x.md") is True
+    # Pre-existing protections unaffected by the addition.
+    assert is_protected_path("sentinel/persona.md") is True
+    assert is_protected_path("self/identity.md") is True
+    assert is_protected_path("security/z.md") is True
+
+
 def test_is_protected_path_uses_settings_when_available(monkeypatch):
     """_active_protected_namespaces reads from settings.protected_namespaces."""
     import app.vault as vault_module
