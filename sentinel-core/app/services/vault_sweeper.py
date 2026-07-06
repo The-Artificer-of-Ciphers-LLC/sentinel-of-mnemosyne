@@ -160,6 +160,23 @@ class SweepReport(BaseModel):
 # --- Skip logic ---
 
 
+def _is_inbox_control_file(path: str) -> bool:
+    """True when ``path`` is an underscore-prefixed inbox/ control file
+    (e.g. ``inbox/_pending-classification.md``, the merged "unsure" queue).
+
+    D-07: a queue is not a note — relocating it into a topic folder would
+    corrupt the queue. This check is path/pattern based (inbox/ prefix +
+    leading-underscore filename), NOT ``is_in_topic_dir`` dependent, so any
+    future ``inbox/_*`` control file is covered too. The guard suppresses
+    only the topic-move relocation proposal; embedding of the path still
+    proceeds normally.
+    """
+    if not path.startswith("inbox/"):
+        return False
+    filename = path.rsplit("/", 1)[-1]
+    return filename.startswith("_")
+
+
 def _should_skip(path: str, frontmatter: dict, current_pass: str) -> bool:
     """True when this path should be left alone in the current pass."""
     if any(path.startswith(p) for p in _active_skip_prefixes()):
@@ -519,7 +536,7 @@ async def run_sweep(
                         topic,
                         confidence=float(result.confidence),
                     )
-                    if topic
+                    if topic and not _is_inbox_control_file(path)
                     else None
                 )
                 proposed_dst = topic_plan.dst if topic_plan is not None else None

@@ -191,6 +191,68 @@ async def test_acquire_lock_stale_takeover():
     assert await fake.acquire_sweep_lock(now=now) is True
 
 
+@pytest.mark.asyncio
+async def test_sweep_never_relocates_pending_classification_file():
+    """D-07: underscore-prefixed inbox control files (the merged 'unsure'
+    queue) must never be proposed for a topic-move relocation, even when
+    the classifier assigns them an ops-bound topic. Ordinary inbox/ notes
+    are unaffected — the guard is control-file-specific, not a blanket
+    inbox/ relocation ban.
+    """
+    fake = FakeObsidian()
+    fake.dirs[""] = ["inbox/"]
+    fake.dirs["inbox"] = ["_pending-classification.md", "real-note.md"]
+    fake.store["inbox/_pending-classification.md"] = "queued unsure captures"
+    fake.store["inbox/real-note.md"] = "A real captured note body"
+
+    async def _classifier(text: str) -> ClassificationResult:
+        # Every swept note — including the merged queue file — is
+        # classified into an ops-bound topic. The guard must still
+        # suppress relocation for the control file specifically.
+        return ClassificationResult(
+            topic="journal", confidence=0.9, title_slug="x", reasoning="r"
+        )
+
+    async def _emb(texts):
+        # Distinct, orthogonal vectors per text — avoids the dedup pass
+        # (cosine>=0.92) from also trashing one of the two notes, which
+        # would confound this test's relocation-only assertions.
+        return [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]][: len(texts)]
+
+    async def _true_probe():
+        return True
+
+    report = await run_sweep(
+        fake, _classifier, _emb, force_reclassify=True,
+        safe_to_mutate=_true_probe,
+    )
+
+    # Control file was NEVER relocated — stays at its original path.
+    assert "inbox/_pending-classification.md" in fake.store
+    assert not any(
+        p.endswith("_pending-classification.md")
+        and p != "inbox/_pending-classification.md"
+        for p in fake.store
+    ), f"control file must never be relocated; store paths: {sorted(fake.store)}"
+    # Embedding of the control file still proceeds (guard suppresses only
+    # the relocation proposal, not processing).
+    assert "embedding_b64" in fake.store["inbox/_pending-classification.md"]
+
+    # Ordinary inbox/ note WAS relocated per normal topic-move behavior,
+    # proving the guard is control-file-specific.
+    from app.time_utils import _today_str
+
+    relocated = f"ops/journal/{_today_str()}/real-note.md"
+    assert relocated in fake.store, (
+        f"expected ordinary inbox/ note relocated to {relocated}; "
+        f"store paths: {sorted(fake.store)}"
+    )
+    assert "embedding_b64" in fake.store[relocated]
+
+    # Exactly one relocation happened (the real note, not the control file).
+    assert report.topic_moves == 1
+
+
 # --- End-to-end run_sweep with embedding-failure degrade ---
 
 
