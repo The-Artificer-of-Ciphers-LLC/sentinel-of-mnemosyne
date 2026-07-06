@@ -215,6 +215,9 @@ model: {model}
 #   message_processing imports MessageRequest-dependent recall.py;
 #   recall.py imports MessageRequest from this module.
 # By the time Python reaches this line, MessageRequest is already defined.
+#
+# NOTE (D-03b, 44-03): the former ``_WARM_TIER_EXCLUDE_PREFIXES`` re-export
+# is dropped here — recall.py no longer defines that stale duplicate tuple.
+# The single source of truth is ``RecallConfig.exclude_prefixes``.
 # ---------------------------------------------------------------------------
 from app.services.recall import SEARCH_SCORE_THRESHOLD as SEARCH_SCORE_THRESHOLD  # noqa: E402
-from app.services.recall import _WARM_TIER_EXCLUDE_PREFIXES as _WARM_TIER_EXCLUDE_PREFIXES  # noqa: E402

@@ -43,12 +43,12 @@ logger = logging.getLogger(__name__)
 # noise lands around -202. A floor of -200 correctly admits the former and rejects the latter.
 SEARCH_SCORE_THRESHOLD = -200.0
 
-# Paths excluded from warm-tier injection: session summaries are already in the hot tier,
-# and sweep reports are operational noise with no user-knowledge value.
-# All ops/ content is operational Sentinel state (sessions, sweeps, observations, reminders).
-# self/ is already injected by the hot tier. _trash/ is archived files.
-# None of these belong in warm-tier knowledge retrieval.
-_WARM_TIER_EXCLUDE_PREFIXES = ("ops/", "_trash/", "self/")
+# NOTE (D-03b, 44-03): the warm-tier exclusion prefixes previously duplicated
+# here as a module-level ``_WARM_TIER_EXCLUDE_PREFIXES`` tuple are now
+# single-sourced from ``RecallConfig.exclude_prefixes`` below -- that tuple
+# had drifted (missing "inbox/") from the canonical value. KeywordRecall and
+# SemanticRecall both already consult ``self._config.exclude_prefixes``;
+# no code path consults a separate module-level constant anymore.
 
 # Common English function words stripped before keyword-mode vault search.
 # Obsidian /search/simple/ is conjunctive: every term must appear in the document.
