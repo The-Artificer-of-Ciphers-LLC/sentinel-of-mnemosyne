@@ -98,6 +98,37 @@
 - [x] **EMB-03**: `:pf rule` semantic retrieval works end-to-end — the rules index builds and returns relevant rules with no 503 degradation when the embeddings backend is up
 - [x] **EMB-04**: core's Phase-40 semantic recall produces/reads embeddings successfully against the same backend, with a dimension-mismatch guard that prevents stale/garbage cosine and no silent empty-index degradation
 
+## VAULT — three-space vault + taxonomy (v0.6.0 — Restore the Second-Brain Core)
+
+- [ ] **VAULT-01**: The vault has the three-space arscontexta structure (`self/ notes/ ops/ inbox/ templates/`) with stub files auto-created where missing
+- [ ] **VAULT-02**: PARA taxonomy supersedes the flat-7 classifier — `learning`/`reference` route to `inbox/` for Reduce-phase transformation; `journal`/`accomplishment`/`observation` file under `ops/` subdirectories
+- [ ] **VAULT-03**: Semantic recall recency-weighting recognizes the new namespaces (no silent recall degradation when `_CARRIER_NAMESPACE_PREFIXES` moves off flat-7 paths)
+- [ ] **VAULT-04**: The vault sweeper skips `inbox/` so staged captures are not treated as a recall blind-spot
+- [ ] **VAULT-05**: Every message reads the three-space `self/` files at session start (identity, methodology, goals, relationships)
+
+## NOTE — note quality + graph (v0.6.0)
+
+- [ ] **NOTE-01**: Notes carry an `_schema` footer block (type + hub membership), a claim-style title, and wikilinks
+- [ ] **NOTE-02**: Maps of Content (MOC/hub notes) are created lazily and updated as notes join a hub
+- [ ] **NOTE-03**: The user can run graph analysis (`:graph`/`:stats`/`:check`) to see orphans, backlinks, link density, and `_schema` compliance, backed by a `links-index.json` sidecar
+
+## PIPE — the 6 Rs pipeline (v0.6.0)
+
+- [ ] **PIPE-01**: The user can capture with zero friction — `:capture`/`:seed` drop raw content into `inbox/`
+- [ ] **PIPE-02**: `:ralph` batch-processes the `inbox/` queue (Reduce + Reflect) via single-prompt orchestration, writing `notes/` with `_schema`, wikilinks, and MOC updates
+- [ ] **PIPE-03**: `:pipeline` runs the full 6 Rs sequence (Record → Reduce → Reflect → Reweave → Verify → Rethink)
+- [ ] **PIPE-04**: `:reweave` runs a backward pass that updates older notes given recent vault additions (reusing SemanticRecall for candidate discovery)
+- [ ] **PIPE-05**: `:rethink`/`:refactor` triage accumulated observations and tensions
+- [ ] **PIPE-06**: Pipeline commands are guarded against concurrent runs (lockfile precedent from the sweeper) and expose run status
+- [ ] **PIPE-07**: `_schema` quality enforcement happens at the Verify stage, not at capture/Reduce (capture stays frictionless)
+
+## MIG — migration + safety (v0.6.0)
+
+- [ ] **MIG-01**: Existing flat-7-classified notes are backfilled into the PARA/`_schema` structure with wikilinks
+- [ ] **MIG-02**: The embedding sidecar index and wikilink integrity are preserved through migration (no recall regression)
+- [ ] **MIG-03**: A MEM-0x + command-surface regression ledger is verified at every phase boundary to prevent the core being gutted again
+- [ ] **MIG-04**: Pathfinder module and recall/embeddings remain intact post-migration (existing 404+ test suite stays green)
+
 ---
 
 ## Future Requirements (deferred)
@@ -108,6 +139,7 @@
 - Encounter builder (balanced encounter by party level) — deferred to future module milestone
 - Loot generator (non-harvest) — deferred; harvesting covers monster-specific loot
 - Persistent ANN vector index when the vault grows past ~10k notes (RetrievalStrategy adapter swap)
+- Per-stage isolated 6 Rs calls ("fresh context per phase" with separate LLM completions per stage) — deferred to a later milestone; v0.6.0 starts with single-prompt orchestration pending a local-model latency benchmark
 
 ## Out of Scope
 
@@ -120,6 +152,7 @@
 - **Persistent ANN vector index (hnswlib/faiss/sqlite-vec/chroma)** — an in-memory numpy cosine scan is sufficient at personal-vault scale; the RetrievalStrategy seam allows a later swap without architectural change
 - **Operator-tunable RecallConfig via a vault file** — v0.5.1 keeps recall config as code; vault-file tuning is deferred
 - **Cross-encoder reranking of recall results** — deferred; RRF hybrid merge is sufficient for v0.5.1
+- **Reverting the phase-27 modular architecture or the `pi` removal (v0.6.0)** — we build ON TOP of current architecture
 
 ---
 
