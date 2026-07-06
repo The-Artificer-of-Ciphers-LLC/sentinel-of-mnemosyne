@@ -35,6 +35,11 @@ context on every message — so conversations are always informed by history, ne
 - ✓ MEM-07: Sessions older than the hot window are recalled via the index (warm tier) instead of dropped — Validated in Phase 41: Typed SessionSummary + Retention
 - ✓ MEM-08: Typed `SessionSummary` value flows end-to-end (vault → Recall → `RecalledContext.sessions` → consumers) — Validated in Phase 41: Typed SessionSummary + Retention
 - ✓ MEM-09: Recency weighting applied to episodic/carrier namespaces only — Validated in Phase 41: Typed SessionSummary + Retention
+- ✓ VAULT-01: Three-space arscontexta vault structure (`self/ notes/ ops/ inbox/ templates/`) with stub files auto-created where missing (`self/` identity·methodology·goals·relationships lazily seeded; `templates/` protected namespace) — Validated in Phase 44: Vault Namespace + Taxonomy Foundation
+- ✓ VAULT-02: PARA taxonomy supersedes the flat-7 classifier as the routing table — `learning`/`reference` route to `inbox/` for Reduce-phase transformation; `journal`/`accomplishment`/`observation` file under `ops/` subdirectories — Validated in Phase 44: Vault Namespace + Taxonomy Foundation
+- ✓ VAULT-03: Semantic recall recency weighting reconciled to the new namespaces via the D-01 "Sessions-only collapse" — the stale `_CARRIER_NAMESPACE_PREFIXES` allowlist is retired and recency is Session-summary-only; no silent recall degradation — Validated in Phase 44: Vault Namespace + Taxonomy Foundation
+- ✓ VAULT-04: The vault sweeper no longer wholesale-skips `inbox/` — staged captures are embedded, while remaining excluded from the keyword warm tier (`RecallConfig.exclude_prefixes`) until Reduce promotes them to `notes/` — Validated in Phase 44: Vault Namespace + Taxonomy Foundation
+- ✓ VAULT-05: Every message reads the three-space `self/` files at session start (identity, methodology, goals, relationships) — Validated in Phase 44: Vault Namespace + Taxonomy Foundation
 
 See `.planning/REQUIREMENTS.md` for the full validated requirement history across phases 1–38.
 
@@ -66,6 +71,8 @@ Phase 39 complete — retrieval extracted into a first-class `Recall` module (`R
 Phase 40 complete — semantic recall implemented (ADR-0004); `SemanticRecall` strategy activates the vault sweeper's `embedding_b64` frontmatter as live retrieval data; hybrid BM25+vector merge via RRF; sweeper maintains the embedding index at index time with no per-note HTTP calls at query time; model-mismatch notes skipped gracefully. MEM-03, MEM-04, and MEM-05 validated.
 
 Phase 41 complete — typed `SessionSummary` and `RetentionPolicy` implemented (ADR-0005); older sessions recalled via the index (warm tier) instead of dropped past the hot window; `RetentionPolicy` is operator-tunable via env; recency weighting applied to episodic/carrier namespaces. MEM-06, MEM-07, MEM-08, and MEM-09 validated. v0.5.1 "The Second Brain" milestone complete (all 3 phases). 20/20 must-haves, full suite 404 passed / 12 skipped.
+
+Phase 44 complete — three-space vault namespace (`self/ notes/ ops/ inbox/ templates/`) + PARA taxonomy replaces the flat-7 classifier as the routing table (D-03); the two research-flagged silent-regression traps fixed in-phase — `recall.py`'s carrier-namespace recency allowlist collapsed to Sessions-only (D-01) and `vault_sweeper.py`'s `inbox/` wholesale-skip removed so staged captures embed (D-02); underscore-prefixed `inbox/` control files guarded from relocation (D-07); `self/` stubs lazily auto-created and read every message (D-04, D-04a). VAULT-01..05 validated; SC-3 reconciled to shipped behavior via accepted override. v0.6.0 "Restore the Second-Brain Core" milestone underway (1/4 phases). Full suite 473 passed / 12 skipped.
 
 **Domain vocabulary** (canonical terms — see `CONTEXT.md` for full glossary):
 - **Vault**: the Obsidian vault; the `Vault` Protocol in `app/vault.py` is the sole persistence seam
@@ -136,4 +143,4 @@ PROJECT.md evolves throughout the project lifecycle.
 
 ---
 
-*Last updated: 2026-07-05*
+*Last updated: 2026-07-06*
