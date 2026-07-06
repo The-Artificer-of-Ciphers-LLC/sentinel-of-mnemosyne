@@ -18,6 +18,7 @@ fixture in ``tests/test_p45_invariants.py``.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from typing import Iterable
 
 # Single canonical definition site for the flat notes/ root — Pitfall 3 SPOT.
@@ -69,3 +70,59 @@ def resolve_wikilink(target: str, note_paths: Iterable[str]) -> str | None:
         if _slugify(stem) == target_slug:
             return path
     return None
+
+
+@dataclass
+class GraphReport:
+    """Computed wikilink-graph report over an in-memory notes map."""
+
+    note_count: int = 0
+    orphans: list[str] = field(default_factory=list)
+    backlinks: dict[str, list[str]] = field(default_factory=dict)
+    hub_count: int = 0
+    link_density: float = 0.0
+
+
+def build_graph_report(notes: dict[str, str], hub_paths: set[str]) -> GraphReport:
+    """Compute the ``GraphReport`` over an in-memory notes map.
+
+    Pure computation — no vault I/O of its own. For each note, extracts and
+    resolves its outbound wikilinks (via ``extract_wikilinks`` +
+    ``resolve_wikilink``, self-links excluded), builds the backlinks map
+    from resolved edges, marks a note an orphan when it has neither
+    resolved inbound nor outbound edges (D-03b: a hub-pending singleton with
+    no links yet is reported as an orphan — there is no separate pending
+    state), sets ``hub_count`` from ``hub_paths``, and computes
+    ``link_density`` as total resolved edges over ``note_count`` (0.0 for an
+    empty vault, guarding the divide).
+    """
+    note_paths = list(notes.keys())
+    outlinks: dict[str, set[str]] = {}
+    backlinks: dict[str, list[str]] = {path: [] for path in notes}
+
+    for path, body in notes.items():
+        resolved: set[str] = set()
+        for target in extract_wikilinks(body):
+            resolved_path = resolve_wikilink(target, note_paths)
+            if resolved_path is not None and resolved_path != path:
+                resolved.add(resolved_path)
+        outlinks[path] = resolved
+
+    for src, targets in outlinks.items():
+        for target_path in targets:
+            backlinks[target_path].append(src)
+
+    orphans = [
+        path for path in notes if not outlinks[path] and not backlinks[path]
+    ]
+
+    total_edges = sum(len(v) for v in outlinks.values())
+    note_count = len(notes)
+
+    return GraphReport(
+        note_count=note_count,
+        orphans=orphans,
+        backlinks=backlinks,
+        hub_count=len(hub_paths),
+        link_density=(total_edges / note_count) if note_count else 0.0,
+    )
