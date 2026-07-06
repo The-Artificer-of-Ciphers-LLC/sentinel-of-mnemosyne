@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: Restore the Second-Brain Core
 status: planning
-last_updated: "2026-07-06T03:30:45.849Z"
+last_updated: "2026-07-06T04:06:58.000Z"
 last_activity: 2026-07-06
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 43 — embeddings-through-sentinel
+**Current focus:** v0.6.0 roadmap created (Phases 44-47); Phase 44 — Vault Namespace + Taxonomy Foundation is next up once Phase 43's operator cutover checkpoint closes
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 44 — Vault Namespace + Taxonomy Foundation (roadmap created, not yet planned)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-06 — Milestone v0.6.0 started
+Status: Roadmap complete; ready for /gsd-plan-phase 44
+Last activity: 2026-07-06 — v0.6.0 ROADMAP.md written (Phases 44-47, 19 requirements mapped)
 
 ## Milestone Progress
 
@@ -41,7 +41,7 @@ Last activity: 2026-07-06 — Milestone v0.6.0 started
 | v0.5 | The Dungeon | 28–36 | 🔜 IN PROGRESS |
 | v0.5.1 | The Second Brain | 39–41 | ✅ COMPLETE |
 | v0.5.2 | Provider Independence | 42–43 | 🔜 IN PROGRESS |
-| v0.6 | The Practice Room | TBD | — |
+| v0.6.0 | Restore the Second-Brain Core | 44–47 | 🔜 IN PROGRESS |
 | v0.7 | The Workshop | TBD | — |
 | v0.8 | The Ledger | TBD | — |
 | v0.9 | The Trader (paper) | TBD | — |
@@ -71,6 +71,15 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | 39 | Extract the Recall Module | MEM-01, MEM-02 | Phase 38 | ○ Not started |
 | 40 | Semantic Recall | MEM-03, MEM-04, MEM-05 | Phase 39 | ○ Not started |
 | 41 | Typed SessionSummary + Retention | MEM-06, MEM-07, MEM-08 | Phase 39, Phase 40 | ○ Not started |
+
+## v0.6.0 Phase Map
+
+| Phase | Name | Requirements | Depends on | Status |
+|-------|------|--------------|------------|--------|
+| 44 | Vault Namespace + Taxonomy Foundation | VAULT-01..05 | Phase 43 | ○ Not started |
+| 45 | Note-Quality Schema + Graph Analysis | NOTE-01..03 | Phase 44 | ○ Not started |
+| 46 | 6 Rs Pipeline Orchestrator | PIPE-01..07 | Phase 44, Phase 45 | ○ Not started |
+| 47 | Migration Cutover + Hardening | MIG-01..04 | Phase 44, Phase 45, Phase 46 | ○ Not started |
 
 ## Performance Metrics
 
@@ -138,6 +147,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 - Phase 25 added: V0.40 pre-beta refactoring — eliminate duplicates (DUP-01–05), complete stubs (STUB-01–08), fix architecture contradictions (CONTRA-01–04), implement RD-01 through RD-10
 - v0.5 Phases 28–36 added: 9-phase Pathfinder 2e module roadmap (31 requirements)
 - v0.5.1 Phases 39–41 added: 3-phase Second Brain roadmap (8 requirements: MEM-01..08; ADRs 0003/0004/0005)
+- v0.6.0 Phases 44–47 added: 4-phase Restore-the-Second-Brain-Core roadmap (19 requirements: VAULT-01..05, NOTE-01..03, PIPE-01..07, MIG-01..04); derived from research/ARCHITECTURE.md's convergent Phase A→B→C→D build order (taxonomy foundation → schema/graph → 6 Rs orchestrator → migration cutover)
 
 ### Decisions
 

@@ -66,6 +66,10 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 41: Typed SessionSummary + Retention** — Typed `SessionSummary` + tunable `RetentionPolicy`; sessions older than the hot window recalled via index instead of dropped (completed 2026-06-12)
 - [x] **Phase 42: First-Class exo Provider** — Register exo as an independently-configured LLM provider alongside LM Studio in the Phase 4 framework (own env vars, explicit selection, LM-Studio↔exo fallback); retire the debug-time `LMSTUDIO_*` hijack and hardcoded exo model default (completed 2026-07-05)
 - [ ] **Phase 43: Embeddings Through Sentinel** — Route pf2e-module embeddings/RAG retrieval through core + wire a non-exo embeddings backend; also restores core's Phase-40 semantic recall (broken when embedding against exo)
+- [ ] **Phase 44: Vault Namespace + Taxonomy Foundation** — Three-space vault (self/notes/ops/inbox/templates/) + PARA taxonomy supersedes flat-7; fixes the recall carrier-allowlist and sweeper inbox-skip silent-regression traps in the same phase
+- [ ] **Phase 45: Note-Quality Schema + Graph Analysis** — `_schema` footer blocks, claim titles, wikilinks, lazy MOC/hub notes; `:graph`/`:stats`/`:check` backed by a `links-index.json` sidecar
+- [ ] **Phase 46: 6 Rs Pipeline Orchestrator** — Real background orchestration (cloned from the sweeper's shape) for `:capture`/`:seed`/`:ralph`/`:pipeline`/`:reweave`/`:rethink`, with concurrency guard and explicit outcome reporting
+- [ ] **Phase 47: Migration Cutover + Hardening** — Backfill existing flat-7 notes into PARA/`_schema` with wikilinks intact; MEM-0x + command-surface regression ledger verified green; full 404+ suite stays green
 
 ## Phase Details
 
@@ -891,3 +895,76 @@ Plans:
 **Wave 3** *(blocked on all of Wave 1+2)*
 
 - [ ] 43-05-PLAN.md — Cutover + live verification gate (autonomous: false): phase regression suites + operator LM Studio cutover + human-verify EMB-03/EMB-04 (EMB-03, EMB-04)
+
+## Milestone v0.6.0 — Restore the Second-Brain Core
+
+### Phase 44: Vault Namespace + Taxonomy Foundation
+
+**Goal:** The vault has the three-space arscontexta structure (`self/ notes/ ops/ inbox/ templates/`) with PARA taxonomy replacing the flat-7 classifier as the routing table. The two silent-regression traps identified in research — `recall.py`'s hardcoded `_CARRIER_NAMESPACE_PREFIXES` allowlist and `vault_sweeper.py`'s `SWEEP_SKIP_PREFIXES` never covering `inbox/` — are fixed in this same phase, not deferred. Build on top of the current post-pi modular architecture; do not revert. Recall, semantic recall, embeddings-through-Sentinel, and Pathfinder must remain fully functional throughout.
+**Depends on:** Phase 43 (embeddings-through-sentinel; current architecture baseline)
+**Requirements:** VAULT-01, VAULT-02, VAULT-03, VAULT-04, VAULT-05
+**Canonical ref:** `.planning/research/ARCHITECTURE.md` (Phase A build order), `.planning/research/PITFALLS.md` (Pitfalls 1, 2, 3, 7)
+**Success Criteria** (what must be TRUE):
+
+  1. The vault has `self/`, `notes/`, `ops/`, `inbox/`, and `templates/` namespaces, with stub files auto-created wherever they don't already exist
+  2. PARA taxonomy supersedes the flat-7 classifier: `learning`/`reference` content routes to `inbox/` for later Reduce-phase transformation instead of a flat topic directory; `journal`/`accomplishment`/`observation` content still files under `ops/` subdirectories
+  3. Semantic recall's recency weighting still applies correctly under the new namespaces — a carrier-namespace note filed under the new taxonomy is recency-weighted the same way its flat-7 equivalent was, with no silent loss of ranking quality
+  4. Content staged in `inbox/` is no longer wholesale excluded from the vault sweeper — it stops being an unconditional recall blind spot
+  5. Every message reads the three-space `self/` files (identity, methodology, goals, relationships) at session start, and the full existing 404+ test suite plus MEM-01..MEM-09 stay green throughout this phase
+
+**UI hint**: no
+
+**Plans:** TBD
+
+### Phase 45: Note-Quality Schema + Graph Analysis
+
+**Goal:** Notes carry a durable quality standard — a trailing `_schema` footer block, a claim-style title, and wikilinks — and the user can inspect the vault's knowledge graph (orphans, backlinks, link density, `_schema` compliance) through new read-only commands. Maps of Content (MOC/hub notes) are created lazily as notes join a hub, never upfront. This phase is additive and read-mostly: no change to `POST /message`, `Recall`, or existing test coverage.
+**Depends on:** Phase 44
+**Requirements:** NOTE-01, NOTE-02, NOTE-03
+**Canonical ref:** `.planning/research/ARCHITECTURE.md` (Phase B build order, Pattern 4: embedding-first hub lookup)
+**Success Criteria** (what must be TRUE):
+
+  1. Notes written to `notes/` carry a trailing `_schema` footer block (type + hub membership), a claim-style title, and at least one wikilink
+  2. A Map of Content / hub note is created the first time a note needs one and is updated (appended to), never duplicated, as further notes join that hub
+  3. The user can run `:graph`/`:stats` and see orphan notes, backlink counts, and link density for the vault, backed by a `links-index.json` sidecar rather than a full vault walk on every call
+  4. The user can run `:check` and see which notes are missing a `_schema` block, claim title, or wikilink
+  5. These additions are read-mostly — the full existing 404+ test suite, `Recall`, and semantic recall remain unaffected
+
+**UI hint**: no
+
+**Plans:** TBD
+
+### Phase 46: 6 Rs Pipeline Orchestrator
+
+**Goal:** The 6 Rs pipeline (Record → Reduce → Reflect → Reweave → Verify → Rethink) becomes real background orchestration, cloned from the `vault_sweeper.py`/`task_runner.py`/`sweep_status_store.py` shape — not the single fixed-text prompt it resolves to today. `:capture`/`:seed` land content in `inbox/` with zero friction; `:ralph` and `:pipeline` actually mutate the vault (write `_schema`-bearing notes, update MOCs); runs are guarded against concurrent execution and report their real outcome. This milestone starts with single-prompt orchestration per stage — per-stage context isolation is deferred pending a local-model latency benchmark.
+**Depends on:** Phase 44, Phase 45
+**Requirements:** PIPE-01, PIPE-02, PIPE-03, PIPE-04, PIPE-05, PIPE-06, PIPE-07
+**Canonical ref:** `.planning/research/ARCHITECTURE.md` (Phase C build order, Patterns 1-2), `.planning/research/PITFALLS.md` (Pitfalls 4, 5, 6, 8, 9, 10)
+**Success Criteria** (what must be TRUE):
+
+  1. `:capture`/`:seed` drop raw content into `inbox/` with zero friction — no validation blocks capture
+  2. `:ralph` batch-processes the `inbox/` queue (Reduce + Reflect) via single-prompt orchestration and produces real `notes/` files with `_schema`, wikilinks, and MOC updates — not just a Discord reply describing what supposedly happened
+  3. `:pipeline` runs the full 6 Rs sequence end-to-end, and `:reweave` runs a backward pass updating older notes given recent vault additions, reusing `SemanticRecall` for candidate discovery
+  4. `:rethink`/`:refactor` triage accumulated `ops/observations` and `ops/tensions` into an actionable disposition (promote / implement / methodology / archive / keep)
+  5. Two concurrent pipeline invocations cannot double-process the same inbox entry (lockfile guard mirroring the sweeper), every run reports its actual success/partial/failure outcome to the user instead of a silent "done", and `_schema` quality enforcement happens only at Verify — Reduce always files a note (as draft if imperfect), never stalling capture
+
+**UI hint**: no
+
+**Plans:** TBD
+
+### Phase 47: Migration Cutover + Hardening
+
+**Goal:** Existing flat-7-classified notes are backfilled into the PARA/`_schema` structure with wikilinks — not grandfathered — and the embedding sidecar plus wikilink integrity survive the move. The MEM-0x + command-surface regression ledger standing since Phase 44 is verified green at this final phase boundary, confirming Pathfinder and Recall/embeddings remain intact and the existing 404+ test suite stays green.
+**Depends on:** Phase 44, Phase 45, Phase 46
+**Requirements:** MIG-01, MIG-02, MIG-03, MIG-04
+**Canonical ref:** `.planning/research/ARCHITECTURE.md` (Phase D build order), `.planning/research/PITFALLS.md` (Pitfall-to-Phase Mapping, "Looks Done But Isn't" Checklist)
+**Success Criteria** (what must be TRUE):
+
+  1. Every existing flat-7 note (`learning/`, `accomplishments/`, `journal/`, `references/`) is backfilled into its PARA `notes/` or `ops/` location with a `_schema` block and at least one wikilink — no note is grandfathered or left behind
+  2. Post-migration, every migrated note's embedding sidecar entry survives (a frontmatter-preserving move, not delete+recreate) and every pre-existing wikilink still resolves — a pre/post `:graph` dangling-link count diff shows no new orphans introduced by migration
+  3. The MEM-0x + command-surface regression ledger established in Phase 44 is checked and green at this phase boundary, confirming it was checked at every phase boundary since
+  4. Pathfinder and Recall/embeddings remain fully intact — the full existing 404+ test suite stays green after migration completes
+
+**UI hint**: no
+
+**Plans:** TBD

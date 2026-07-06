@@ -218,3 +218,22 @@ _Filled by roadmapper. Maps each REQ-ID to its implementing phase._
 | EMB-02 | 43 | Embeddings Through Sentinel |
 | EMB-03 | 43 | Embeddings Through Sentinel |
 | EMB-04 | 43 | Embeddings Through Sentinel |
+| VAULT-01 | 44 | Vault Namespace + Taxonomy Foundation |
+| VAULT-02 | 44 | Vault Namespace + Taxonomy Foundation |
+| VAULT-03 | 44 | Vault Namespace + Taxonomy Foundation |
+| VAULT-04 | 44 | Vault Namespace + Taxonomy Foundation |
+| VAULT-05 | 44 | Vault Namespace + Taxonomy Foundation |
+| NOTE-01 | 45 | Note-Quality Schema + Graph Analysis |
+| NOTE-02 | 45 | Note-Quality Schema + Graph Analysis |
+| NOTE-03 | 45 | Note-Quality Schema + Graph Analysis |
+| PIPE-01 | 46 | 6 Rs Pipeline Orchestrator |
+| PIPE-02 | 46 | 6 Rs Pipeline Orchestrator |
+| PIPE-03 | 46 | 6 Rs Pipeline Orchestrator |
+| PIPE-04 | 46 | 6 Rs Pipeline Orchestrator |
+| PIPE-05 | 46 | 6 Rs Pipeline Orchestrator |
+| PIPE-06 | 46 | 6 Rs Pipeline Orchestrator |
+| PIPE-07 | 46 | 6 Rs Pipeline Orchestrator |
+| MIG-01 | 47 | Migration Cutover + Hardening |
+| MIG-02 | 47 | Migration Cutover + Hardening |
+| MIG-03 | 47 | Migration Cutover + Hardening |
+| MIG-04 | 47 | Migration Cutover + Hardening |
