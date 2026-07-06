@@ -9,7 +9,7 @@ from typing import Awaitable, Callable
 from app.errors import SweepInProgressError
 from app.services.sweep_status_store import patch_sweep_status
 from app.services.task_runner import AsyncioTaskRunner, TaskRunner
-from app.services.vault_sweeper import _set_status, get_status, run_sweep
+from app.services.vault_sweeper import _set_status, run_sweep
 
 logger = logging.getLogger(__name__)
 
@@ -142,10 +142,10 @@ async def start_sweep(
             )
             _set_status(report)
         except SweepInProgressError:
-            get_status()["status"] = "blocked"
+            patch_sweep_status(status="blocked")
         except Exception as exc:
             logger.exception("vault sweep crashed: %s", exc)
-            get_status()["status"] = "error"
+            patch_sweep_status(status="error")
 
     runner.schedule(_runner())
     return {"sweep_id": sweep_id, "status": "running"}

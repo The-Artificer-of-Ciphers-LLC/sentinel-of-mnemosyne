@@ -12,7 +12,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.errors import SweepInProgressError
 from app.services.note_sweep_runner import start_sweep
+from app.services.sweep_status_store import get_sweep_status, reset_sweep_status
 from app.services.task_runner import TaskRunner
 from tests.fakes.vault import FakeVault
 
@@ -227,3 +229,67 @@ async def test_start_sweep_dry_run_does_not_forward_probe():
     assert probe is None, (
         f"dry_run path must NOT forward safe_to_mutate into run_sweep; got {probe}"
     )
+
+
+@pytest.mark.asyncio
+async def test_start_sweep_live_path_sweep_in_progress_persists_blocked_status():
+    """Regression: SweepInProgressError on the live path must persist status='blocked'.
+
+    Previously the handler wrote to get_status()["status"], which mutates a
+    throwaway copy returned by sweep_status_store.get_sweep_status() and is a
+    no-op. The fix uses patch_sweep_status(status="blocked") to mutate the
+    live status dict.
+    """
+    reset_sweep_status()
+
+    async def _raise_in_progress(*args, **kwargs):
+        raise SweepInProgressError("sweep already running")
+
+    vault = _make_vault()
+    runner = _ImmediateTaskRunner()
+
+    with patch("app.services.note_sweep_runner.run_sweep", side_effect=_raise_in_progress):
+        await start_sweep(
+            vault=vault,
+            classifier=_classifier,
+            embedder=_embedder,
+            force_reclassify=False,
+            dry_run=False,
+            safe_to_mutate=AsyncMock(return_value=True),
+            task_runner=runner,
+        )
+        await runner.run_all()
+
+    assert get_sweep_status()["status"] == "blocked"
+
+
+@pytest.mark.asyncio
+async def test_start_sweep_live_path_generic_exception_persists_error_status():
+    """Regression: a generic Exception on the live path must persist status='error'.
+
+    Previously the handler wrote to get_status()["status"], which mutates a
+    throwaway copy returned by sweep_status_store.get_sweep_status() and is a
+    no-op. The fix uses patch_sweep_status(status="error") to mutate the live
+    status dict.
+    """
+    reset_sweep_status()
+
+    async def _raise_generic(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    vault = _make_vault()
+    runner = _ImmediateTaskRunner()
+
+    with patch("app.services.note_sweep_runner.run_sweep", side_effect=_raise_generic):
+        await start_sweep(
+            vault=vault,
+            classifier=_classifier,
+            embedder=_embedder,
+            force_reclassify=False,
+            dry_run=False,
+            safe_to_mutate=AsyncMock(return_value=True),
+            task_runner=runner,
+        )
+        await runner.run_all()
+
+    assert get_sweep_status()["status"] == "error"
