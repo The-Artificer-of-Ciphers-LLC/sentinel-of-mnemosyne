@@ -54,6 +54,8 @@ async def handle_subcommand(
     call_core_graph,
     call_core_stats,
     call_core_check,
+    call_core_pipeline_start,
+    call_core_pipeline_status,
     is_admin,
     note_closed_vocab,
     plugin_prompts: dict[str, str],
@@ -151,6 +153,21 @@ async def handle_subcommand(
             return await call_core_sweep_start(user_id, force_reclassify=False, dry_run=True)
         force = verb == "force"
         return await call_core_sweep_start(user_id, force_reclassify=force)
+
+    if subcmd in ("ralph", "pipeline", "reweave", "rethink", "refactor"):
+        if not is_admin(user_id):
+            return "Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command."
+        verb = (args.strip().split(maxsplit=1) or [""])[0]
+        mode = {
+            "ralph": "ralph",
+            "pipeline": "pipeline",
+            "reweave": "reweave",
+            "rethink": "rethink",
+            "refactor": "rethink",  # D-09 synonym for :rethink
+        }[subcmd]
+        if verb == "status":
+            return await call_core_pipeline_status(user_id)
+        return await call_core_pipeline_start(user_id, mode=mode)
 
     if subcmd == "inbox":
         parts = args.strip().split(maxsplit=2)

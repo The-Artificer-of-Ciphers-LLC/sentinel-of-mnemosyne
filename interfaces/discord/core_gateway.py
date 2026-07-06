@@ -8,6 +8,12 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+# D-04a: concurrency refusal wording surfaced when the shared vault-mutation
+# lock (sweep/pipeline mutex) is already held.
+_PIPELINE_BLOCKED_MESSAGE = (
+    "A vault operation is already in progress — please try again shortly."
+)
+
 
 def format_classify_response(data: dict) -> str:
     action = data.get("action")
@@ -112,6 +118,48 @@ async def call_core_sweep_status(*, user_id: str, core_url: str, api_key: str) -
         f"sweep `{data.get('sweep_id', '-')}`: status={data.get('status', '-')}, "
         f"processed={data.get('files_processed', 0)}/{data.get('files_total', 0)}, "
         f"duplicates_moved={data.get('duplicates_moved', 0)}"
+    )
+
+
+async def call_core_pipeline_start(*, user_id: str, mode: str, sentinel_client) -> str:
+    payload = {"user_id": user_id, "mode": mode}
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as http_client:
+            data = await sentinel_client.post_to_module("vault/pipeline/start", payload, http_client)
+    except Exception as exc:
+        logger.warning("vault pipeline start failed: %s", exc)
+        return f"Pipeline failed to start: {exc}"
+    if data.get("status") == "blocked":
+        return _PIPELINE_BLOCKED_MESSAGE
+    pipeline_id = data.get("pipeline_id", "?")
+    return (
+        f"Pipeline started: `{pipeline_id}` (mode={mode}). "
+        f"Use `:{mode} status` to check progress."
+    )
+
+
+async def call_core_pipeline_status(*, user_id: str, core_url: str, api_key: str) -> str:
+    try:
+        async with httpx.AsyncClient() as http_client:
+            resp = await http_client.get(
+                f"{core_url.rstrip('/')}/vault/pipeline/status",
+                headers={"X-Sentinel-Key": api_key},
+                timeout=20.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("vault pipeline status failed: %s", exc)
+        return f"Pipeline status fetch failed: {exc}"
+    if data.get("status") == "blocked":
+        return _PIPELINE_BLOCKED_MESSAGE
+    return (
+        f"pipeline `{data.get('pipeline_id', '-')}`: status={data.get('status', '-')}, "
+        f"mode={data.get('mode', '-')}, "
+        f"processed={data.get('entries_processed', 0)}/{data.get('entries_total', 0)}, "
+        f"reduced={data.get('reduced', 0)}, hubs_touched={data.get('hubs_touched', 0)}, "
+        f"reweave_edits={data.get('reweave_edits', 0)}, "
+        f"verify_failed={data.get('verify_failed', 0)}, verify_requeued={data.get('verify_requeued', 0)}"
     )
 
 
