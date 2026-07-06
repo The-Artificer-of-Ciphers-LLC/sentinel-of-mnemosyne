@@ -914,7 +914,7 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 
@@ -925,7 +925,7 @@ Plans:
 
 **Wave 2** *(depends on 44-01)*
 
-- [ ] 44-03-PLAN.md — retire _safe_file_chat_note redirect (D-06) + reconcile _WARM_TIER_EXCLUDE_PREFIXES to the single source of truth (VAULT-02, VAULT-04)
+- [x] 44-03-PLAN.md — retire _safe_file_chat_note redirect (D-06) + reconcile _WARM_TIER_EXCLUDE_PREFIXES to the single source of truth (VAULT-02, VAULT-04)
 
 **Wave 3** *(depends on 44-03 — recall.py/test_message.py ownership)*
 
