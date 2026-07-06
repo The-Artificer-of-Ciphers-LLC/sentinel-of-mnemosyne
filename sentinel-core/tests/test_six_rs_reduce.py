@@ -89,3 +89,47 @@ async def test_reduce_malformed_completion_still_filed_as_draft():
     assert result is not None
     assert result.body
     assert result.schema_type in {"permanent", "literature", "fleeting"}
+
+
+def test_build_schema_block_round_trips_through_check_note_compliance():
+    """Net-new build_schema_block() (Plan 46-04): the ONLY constructor for a
+    trailing ```_schema fence -- Phase 45 shipped only parsers
+    (parse_schema_block / check_note_compliance). A note composed with an H1
+    claim title + a wikilink + this builder's output as terminal content must
+    satisfy check_note_compliance's has_schema/has_type (the exact gate
+    Verify, 46-06, checks against)."""
+    from app.services.note_schema import check_note_compliance
+    from app.services.six_rs.reduce import build_schema_block
+
+    block = build_schema_block(type="permanent", status="draft")
+    body = (
+        "# Cosine Floor Governs Hub Attachment\n\n"
+        "See [[Other Note]] for the shared threshold.\n\n"
+        f"{block}\n"
+    )
+
+    result = check_note_compliance(body, filename_slug="cosine-floor-governs-hub-attachment")
+
+    assert result["has_schema"] is True
+    assert result["has_type"] is True
+    assert "missing _schema block" not in result["failures"]
+    assert "missing type key in _schema block" not in result["failures"]
+
+
+def test_build_schema_block_hub_kwarg_included_only_when_provided():
+    """hub kwarg round-trips into the parsed dict when provided; omitted
+    entirely (not merely null) when absent -- both cases still has_type True."""
+    from app.services.note_schema import parse_schema_block
+    from app.services.six_rs.reduce import build_schema_block
+
+    with_hub = build_schema_block(type="permanent", status="draft", hub="Some Hub")
+    parsed_with_hub = parse_schema_block(with_hub)
+    assert parsed_with_hub is not None
+    assert parsed_with_hub["hub"] == "Some Hub"
+    assert parsed_with_hub["type"] == "permanent"
+
+    without_hub = build_schema_block(type="permanent", status="draft")
+    parsed_without_hub = parse_schema_block(without_hub)
+    assert parsed_without_hub is not None
+    assert "hub" not in parsed_without_hub
+    assert parsed_without_hub["type"] == "permanent"
