@@ -1780,3 +1780,26 @@ async def test_inbox_gap_not_recalled():
         f"found {inbox_path!r} in warm paths: {warm_paths}. "
         f"Fix: ensure 'inbox/' is in RecallConfig.exclude_prefixes default."
     )
+
+
+def test_no_stale_warm_tier_exclude_prefixes_duplicate():
+    """D-03b (44-03 Task 1): _WARM_TIER_EXCLUDE_PREFIXES must not survive as a
+    second, drifting duplicate of RecallConfig.exclude_prefixes.
+
+    Before this fix, recall.py defines a module-level
+    ``_WARM_TIER_EXCLUDE_PREFIXES = ("ops/", "_trash/", "self/")`` that is
+    missing "inbox/" -- a stale copy of the single source of truth,
+    RecallConfig.exclude_prefixes (which already includes "inbox/", D-06).
+
+    Preferred remediation is deletion (44-PATTERNS.md); if a same-named
+    symbol survives for import stability it must be value-equal to the
+    canonical RecallConfig() default, never a second literal tuple.
+    """
+    import app.services.recall as recall_module
+
+    if hasattr(recall_module, "_WARM_TIER_EXCLUDE_PREFIXES"):
+        assert recall_module._WARM_TIER_EXCLUDE_PREFIXES == RecallConfig().exclude_prefixes, (
+            "_WARM_TIER_EXCLUDE_PREFIXES survives as a stale duplicate missing 'inbox/'; "
+            "it must equal RecallConfig().exclude_prefixes (single source of truth) "
+            "or be deleted entirely."
+        )
