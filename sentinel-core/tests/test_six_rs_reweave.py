@@ -59,3 +59,52 @@ async def test_reweave_append_idempotent():
     )
     # Original prose is never rewritten or deleted (append-only, D-01).
     assert "Some durable prose that must survive untouched." in twice
+
+
+async def test_reweave_preserves_trailing_schema_block():
+    """The appended section lands BEFORE the trailing _schema block, and the
+    block is re-appended unchanged and last in the file (note_schema's
+    terminal-block invariant)."""
+    from app.services.six_rs.reweave import reweave_note
+    from tests.fakes.vault import FakeVault
+
+    target_path = "notes/schema-note.md"
+    original_body = (
+        "# Schema Note\n\nDurable prose.\n\n```_schema\ntype: permanent\nstatus: final\n```\n"
+    )
+    vault = FakeVault(notes={target_path: original_body})
+
+    await reweave_note(
+        vault,
+        target_path=target_path,
+        addition_text="See [[Other Note]] for related context.",
+        date="2026-07-07",
+    )
+    updated = vault.notes[target_path]
+
+    assert "Durable prose." in updated
+    assert "## Reweave — 2026-07-07" in updated
+    assert updated.rstrip().endswith("```")
+    # The dated section must precede the trailing _schema block, not follow it.
+    section_idx = updated.index("## Reweave — 2026-07-07")
+    schema_idx = updated.rindex("```_schema")
+    assert section_idx < schema_idx
+
+
+async def test_reweave_rejects_target_outside_notes():
+    """T-46-03: reweave must never write to a self/ or ops/ protected path."""
+    from app.services.six_rs.reweave import reweave_note
+    from tests.fakes.vault import FakeVault
+
+    vault = FakeVault(notes={"self/identity.md": "# I am ...\n"})
+
+    import pytest
+
+    with pytest.raises(ValueError):
+        await reweave_note(
+            vault,
+            target_path="self/identity.md",
+            addition_text="should never be written",
+            date="2026-07-06",
+        )
+    assert vault.notes["self/identity.md"] == "# I am ...\n"
