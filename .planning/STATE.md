@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
-status: completed
-stopped_at: Phase 44 context gathered
-last_updated: "2026-07-06T12:32:27.049Z"
-last_activity: 2026-07-06 — v0.6.0 ROADMAP.md written (Phases 44-47, 19 requirements mapped)
+status: executing
+stopped_at: Completed 44-01-PLAN.md
+last_updated: "2026-07-06T13:29:24.197Z"
+last_activity: 2026-07-06 -- Phase 44 execution started
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 4
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** v0.6.0 roadmap created (Phases 44-47); Phase 44 — Vault Namespace + Taxonomy Foundation is next up once Phase 43's operator cutover checkpoint closes
+**Current focus:** Phase 44 — vault-namespace-taxonomy-foundation
 
 ## Current Position
 
-Phase: 44 — Vault Namespace + Taxonomy Foundation (roadmap created, not yet planned)
-Plan: —
-Status: Roadmap complete; ready for /gsd-plan-phase 44
-Last activity: 2026-07-06 — v0.6.0 ROADMAP.md written (Phases 44-47, 19 requirements mapped)
+Phase: 44 (vault-namespace-taxonomy-foundation) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-07-06 -- Phase 44 execution started
 
 ## Milestone Progress
 
@@ -140,6 +140,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 43 P02 | 15min | 2 tasks | 3 files |
 | Phase 43 P03 | 12min | 2 tasks | 4 files |
 | Phase 43 P04 | 15min | 2 tasks | 4 files |
+| Phase 44 P01 | 45min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -225,6 +226,9 @@ Recent decisions affecting current work:
 - [Phase ?]: 43-03: embed_texts()'s model/api_base params remain accepted but vestigial so both call sites (main.py _rule_embed_fn, rule_query.py deps.embed_texts) need zero changes (Pattern 3)
 - [Phase 43-04]: D-08 dimension guard extended with persisted embedding_dim fast path (skip-before-decode); backward compatible with pre-existing indexes lacking the field — catches same-embedding_model-string/different-dimension cutover case beyond the MEM-05 model-string check
 - [Phase 43-04]: D-09 restart-is-cutover documented in rebuild_embedding_index docstring: existing non-blocking startup rebuild + container restart IS the cutover mechanism; no new trigger/route/CLI added
+- [Phase ?]: [Phase 44-01]: PARA reroute + both journal literals + is_in_topic_dir family fix landed in same commit (D-03, Pitfall 1, Pitfall 2)
+- [Phase ?]: [Phase 44-01]: Carrier-namespace recency allowlist removed from recall.py; recency weighting is Session-summary-only (D-01, MEM-09 end state)
+- [Phase ?]: [Phase 44-01]: D-06 (_safe_file_chat_note redirect retirement) pulled forward from plan 44-03 to keep the full suite green at this plan's boundary
 
 ### Pending Todos
 
@@ -259,7 +263,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-06T11:32:42.855Z
-Stopped at: Phase 44 context gathered
+Last session: 2026-07-06T13:29:24.192Z
+Stopped at: Completed 44-01-PLAN.md
 Resume file: 
-.planning/phases/44-vault-namespace-taxonomy-foundation/44-CONTEXT.md
+None
