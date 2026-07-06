@@ -1,10 +1,11 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.6.0
-milestone_name: Restore the Second-Brain Core
-status: planning
-last_updated: "2026-07-06T04:06:58.000Z"
-last_activity: 2026-07-06
+milestone_name: — Restore the Second-Brain Core
+status: completed
+stopped_at: Phase 44 context gathered
+last_updated: "2026-07-06T11:32:42.866Z"
+last_activity: 2026-07-06 — v0.6.0 ROADMAP.md written (Phases 44-47, 19 requirements mapped)
 progress:
   total_phases: 4
   completed_phases: 0
@@ -258,7 +259,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-05T22:30:09.704Z
-Stopped at: 43-05 Task 1 complete (regression gate green); paused at Task 2 checkpoint (operator cutover)
+Last session: 2026-07-06T11:32:42.855Z
+Stopped at: Phase 44 context gathered
 Resume file: 
-None
+.planning/phases/44-vault-namespace-taxonomy-foundation/44-CONTEXT.md
