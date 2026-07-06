@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.5.2
-milestone_name: — Provider Independence
-status: executing
-stopped_at: 43-05 Task 1 complete (regression gate green); paused at Task 2 checkpoint (operator cutover)
-last_updated: "2026-07-05T22:30:09.713Z"
-last_activity: 2026-07-05 -- Phase 43 execution started
+milestone: v0.6.0
+milestone_name: Restore the Second-Brain Core
+status: planning
+last_updated: "2026-07-06T03:30:45.849Z"
+last_activity: 2026-07-06
 progress:
-  total_phases: 2
-  completed_phases: 1
-  total_plans: 10
-  completed_plans: 9
-  percent: 50
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 43 (embeddings-through-sentinel) — EXECUTING
-Plan: 5 of 5
-Status: Paused — awaiting operator checkpoint (Task 2 of 3: LM Studio cutover)
-Last activity: 2026-07-05 -- 43-05 Task 1 (regression gate) green; paused at operator checkpoint
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-07-06 — Milestone v0.6.0 started
 
 ## Milestone Progress
 

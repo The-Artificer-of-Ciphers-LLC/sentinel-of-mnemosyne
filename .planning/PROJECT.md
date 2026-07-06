@@ -102,21 +102,18 @@ Phase 41 complete — typed `SessionSummary` and `RetentionPolicy` implemented (
 
 ---
 
-## Current Milestone: v0.5.1 The Second Brain
+## Current Milestone: v0.6.0 Restore the Second-Brain Core (arscontexta + BASB)
 
-**Goal:** Make recalled memory real — retrieval becomes a first-class module that actually surfaces
-past content across conversations, instead of "write to Obsidian, never look again after three."
-
-**Progress: 3 of 3 phases complete (Phase 39 + Phase 40 + Phase 41 done). Milestone complete.**
+**Goal:** Rebuild the Sentinel core as the arscontexta+BASB agentic note-taking engine that the phase-27 "Path B" pivot unintentionally gutted — with Pathfinder demoted back to just one module alongside it. Build ON TOP of the current post-pi modular architecture; do NOT revert (keep the recall module, semantic recall, embeddings-through-sentinel, and Pathfinder work).
 
 **Target features:**
-- ✓ Extract the Recall module (ADR-0003) — retrieval becomes a deep module above the Vault seam,
-  returning `RecalledContext`; the Sentinel persona and prompt-injection defense stay in prompt assembly. — Phase 39 complete
-- ✓ Semantic recall (ADR-0004) — a `RetrievalStrategy` seam inside Recall (`KeywordRecall` +
-  `SemanticRecall`); the vault sweeper's per-note embeddings (`embedding_b64`) become live retrieval
-  data instead of dead frontmatter. — Phase 40 complete
-- ✓ Typed `SessionSummary` + retention (ADR-0005) — typed sessions and a `RetentionPolicy`; older
-  turns are recalled via the index instead of dropped past the 3-turn / today+yesterday hot window. Recalled sessions are recency-weighted so recent sessions rank above older ones. — Phase 41 complete
+- Three-space vault + BASB structure (`self/ notes/ ops/ inbox/ templates/`, PARA taxonomy replacing the flat-7 classifier)
+- The 27-command system (`:capture :seed :ralph :pipeline :reweave :connect :graph :learn` …)
+- The 6 Rs pipeline (Record → Reduce → Reflect → Reweave → Verify → Rethink)
+- Note-quality standard (`_schema` blocks, claim titles, wikilinks) + MOC/hub notes
+- Pathfinder preserved as a module (not reverted)
+
+**Key context:** The full original design is recovered at `docs/2nd-brain-original-design/10-CONTEXT-master-spec.md` (phase-10 master spec, commit 4c8f1c2). The pre-pivot boundary is tagged `pre-27-pivot` (d6a0242). Reference: arscontexta = https://github.com/agenticnotetaking/arscontexta fused with Tiago Forte's Building a Second Brain (PARA/CODE).
 
 ---
 
@@ -139,4 +136,4 @@ PROJECT.md evolves throughout the project lifecycle.
 
 ---
 
-*Last updated: 2026-06-12*
+*Last updated: 2026-07-05*
