@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock
 
+import pytest
+
 import command_router
 
 
@@ -52,6 +54,8 @@ async def test_handle_subcommand_note_parses_explicit_topic():
         call_core_graph=AsyncMock(),
         call_core_stats=AsyncMock(),
         call_core_check=AsyncMock(),
+        call_core_pipeline_start=AsyncMock(),
+        call_core_pipeline_status=AsyncMock(),
         is_admin=lambda _u: False,
         note_closed_vocab=frozenset({"learning", "reference"}),
         plugin_prompts={},
@@ -80,6 +84,8 @@ async def _call_handle_subcommand(subcmd: str, *, call_core=None, call_core_grap
         call_core_graph=call_core_graph or AsyncMock(return_value="GRAPH"),
         call_core_stats=call_core_stats or AsyncMock(return_value="STATS"),
         call_core_check=call_core_check or AsyncMock(return_value="CHECK"),
+        call_core_pipeline_start=AsyncMock(),
+        call_core_pipeline_status=AsyncMock(),
         is_admin=lambda _u: False,
         note_closed_vocab=frozenset(),
         plugin_prompts={},
@@ -113,3 +119,90 @@ async def test_check_subcommand_invokes_gateway_not_call_core():
     call_core_check.assert_awaited_once_with("u1")
     call_core.assert_not_called()
     assert res == "CHECK-REPORT"
+
+
+# --- pipeline verbs: :ralph / :pipeline / :reweave / :rethink / :refactor (Phase 46-07) ---
+
+
+async def _call_pipeline_subcommand(
+    subcmd: str,
+    args: str = "",
+    *,
+    is_admin=None,
+    call_core_pipeline_start=None,
+    call_core_pipeline_status=None,
+):
+    return await command_router.handle_subcommand(
+        subcmd=subcmd,
+        args=args,
+        user_id="u1",
+        attachments=None,
+        channel=None,
+        pf_dispatch=AsyncMock(),
+        call_core=AsyncMock(return_value="core-fallback"),
+        call_core_note=AsyncMock(),
+        call_core_inbox_list=AsyncMock(),
+        call_core_inbox_classify=AsyncMock(),
+        call_core_inbox_discard=AsyncMock(),
+        call_core_sweep_start=AsyncMock(),
+        call_core_sweep_status=AsyncMock(),
+        call_core_graph=AsyncMock(),
+        call_core_stats=AsyncMock(),
+        call_core_check=AsyncMock(),
+        call_core_pipeline_start=call_core_pipeline_start or AsyncMock(return_value="PIPELINE-STARTED"),
+        call_core_pipeline_status=call_core_pipeline_status or AsyncMock(return_value="PIPELINE-STATUS"),
+        is_admin=is_admin or (lambda _u: True),
+        note_closed_vocab=frozenset(),
+        plugin_prompts={},
+        subcommand_prompts={},
+        subcommand_help="HELP",
+    )
+
+
+@pytest.mark.parametrize(
+    "subcmd,expected_mode",
+    [
+        ("ralph", "ralph"),
+        ("pipeline", "pipeline"),
+        ("reweave", "reweave"),
+        ("rethink", "rethink"),
+        ("refactor", "rethink"),  # D-09 synonym
+    ],
+)
+async def test_pipeline_verb_starts_with_correct_mode(subcmd, expected_mode):
+    call_core_pipeline_start = AsyncMock(return_value="PIPELINE-STARTED")
+    res = await _call_pipeline_subcommand(subcmd, call_core_pipeline_start=call_core_pipeline_start)
+    call_core_pipeline_start.assert_awaited_once_with("u1", mode=expected_mode)
+    assert res == "PIPELINE-STARTED"
+
+
+@pytest.mark.parametrize("subcmd", ["ralph", "pipeline", "reweave", "rethink", "refactor"])
+async def test_pipeline_verb_status_invokes_status_gateway(subcmd):
+    call_core_pipeline_status = AsyncMock(return_value="PIPELINE-STATUS")
+    call_core_pipeline_start = AsyncMock()
+    res = await _call_pipeline_subcommand(
+        subcmd,
+        "status",
+        call_core_pipeline_start=call_core_pipeline_start,
+        call_core_pipeline_status=call_core_pipeline_status,
+    )
+    call_core_pipeline_status.assert_awaited_once_with("u1")
+    call_core_pipeline_start.assert_not_called()
+    assert res == "PIPELINE-STATUS"
+
+
+async def test_pipeline_verb_non_admin_refused():
+    call_core_pipeline_start = AsyncMock()
+    res = await _call_pipeline_subcommand(
+        "pipeline",
+        is_admin=lambda _u: False,
+        call_core_pipeline_start=call_core_pipeline_start,
+    )
+    assert "admin only" in res.lower()
+    call_core_pipeline_start.assert_not_called()
+
+
+async def test_pipeline_verb_concurrency_message_passed_through():
+    call_core_pipeline_start = AsyncMock(return_value="A vault operation is already in progress.")
+    res = await _call_pipeline_subcommand("pipeline", call_core_pipeline_start=call_core_pipeline_start)
+    assert "already in progress" in res.lower()

@@ -7,6 +7,16 @@ import httpx
 import core_gateway
 
 
+def _mock_sentinel_client(return_value=None, exc=None):
+    """Build a mock sentinel_client whose post_to_module() returns/raises as configured."""
+    client = AsyncMock()
+    if exc is not None:
+        client.post_to_module = AsyncMock(side_effect=exc)
+    else:
+        client.post_to_module = AsyncMock(return_value=return_value)
+    return client
+
+
 def test_format_classify_response_filed_with_confidence():
     out = core_gateway.format_classify_response({"action": "filed", "path": "x.md", "confidence": 0.9})
     assert "x.md" in out
@@ -133,3 +143,96 @@ async def test_call_core_check_transport_error_returns_friendly_string():
 
     assert "failed" in out.lower()
     assert "boom" in out
+
+
+# --- call_core_pipeline_start / call_core_pipeline_status (Phase 46-07) ---
+
+
+async def test_call_core_pipeline_start_posts_and_formats_response():
+    client = _mock_sentinel_client(return_value={"pipeline_id": "2026-07-06T00:00:00Z", "status": "running", "mode": "pipeline"})
+    out = await core_gateway.call_core_pipeline_start(user_id="u1", mode="pipeline", sentinel_client=client)
+
+    client.post_to_module.assert_awaited_once()
+    call_args = client.post_to_module.await_args
+    assert call_args.args[0] == "vault/pipeline/start"
+    assert call_args.args[1] == {"user_id": "u1", "mode": "pipeline"}
+    assert "2026-07-06T00:00:00Z" in out
+    assert "pipeline" in out
+    assert "status" in out.lower()
+
+
+async def test_call_core_pipeline_start_transport_error_returns_friendly_string():
+    client = _mock_sentinel_client(exc=httpx.ConnectError("boom"))
+    out = await core_gateway.call_core_pipeline_start(user_id="u1", mode="ralph", sentinel_client=client)
+
+    assert "failed" in out.lower()
+    assert "boom" in out
+
+
+async def test_call_core_pipeline_start_blocked_surfaces_concurrency_message():
+    client = _mock_sentinel_client(return_value={"pipeline_id": None, "status": "blocked", "mode": "pipeline"})
+    out = await core_gateway.call_core_pipeline_start(user_id="u1", mode="pipeline", sentinel_client=client)
+
+    assert "already in progress" in out.lower()
+
+
+async def test_call_core_pipeline_status_formats_per_phase_counts():
+    body = {
+        "pipeline_id": "2026-07-06T00:00:00Z",
+        "status": "complete",
+        "mode": "pipeline",
+        "entries_total": 5,
+        "entries_processed": 5,
+        "reduced": 4,
+        "hubs_touched": 2,
+        "reweave_edits": 1,
+        "verify_failed": 1,
+        "verify_requeued": 1,
+        "errors": [],
+    }
+    with patch("core_gateway.httpx") as mock_httpx:
+        mock_httpx.AsyncClient.return_value = _mock_get_client(
+            response=httpx.Response(200, json=body, request=httpx.Request("GET", "http://core/vault/pipeline/status"))
+        )
+        out = await core_gateway.call_core_pipeline_status(user_id="u1", core_url="http://core", api_key="k")
+
+    assert "complete" in out
+    assert "pipeline" in out
+    assert "5/5" in out or ("5" in out and "5" in out)
+    assert "reduced=4" in out
+    assert "hubs_touched=2" in out
+    assert "reweave_edits=1" in out
+    assert "verify_failed=1" in out
+    assert "verify_requeued=1" in out
+
+
+async def test_call_core_pipeline_status_transport_error_returns_friendly_string():
+    with patch("core_gateway.httpx") as mock_httpx:
+        mock_httpx.AsyncClient.return_value = _mock_get_client(exc=httpx.ConnectError("boom"))
+        out = await core_gateway.call_core_pipeline_status(user_id="u1", core_url="http://core", api_key="k")
+
+    assert "failed" in out.lower()
+    assert "boom" in out
+
+
+async def test_call_core_pipeline_status_blocked_surfaces_concurrency_message():
+    body = {
+        "pipeline_id": "2026-07-06T00:00:00Z",
+        "status": "blocked",
+        "mode": "pipeline",
+        "entries_total": 0,
+        "entries_processed": 0,
+        "reduced": 0,
+        "hubs_touched": 0,
+        "reweave_edits": 0,
+        "verify_failed": 0,
+        "verify_requeued": 0,
+        "errors": [],
+    }
+    with patch("core_gateway.httpx") as mock_httpx:
+        mock_httpx.AsyncClient.return_value = _mock_get_client(
+            response=httpx.Response(200, json=body, request=httpx.Request("GET", "http://core/vault/pipeline/status"))
+        )
+        out = await core_gateway.call_core_pipeline_status(user_id="u1", core_url="http://core", api_key="k")
+
+    assert "already in progress" in out.lower()
