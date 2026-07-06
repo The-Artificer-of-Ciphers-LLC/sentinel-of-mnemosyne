@@ -986,7 +986,14 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** TBD
+**Plans:** 7 plans (5 waves)
+- [ ] 46-01-PLAN.md — Wave 0: RED test scaffolds (all six_rs + orchestrator/route/status) + six_rs package stub
+- [ ] 46-02-PLAN.md — Wave 1: shared `model_resolution` helper (D-05) + note_classifier refactor
+- [ ] 46-03-PLAN.md — Wave 1: inbox `retry_count`/`needs_attention` (D-02b) + `pipeline_status_store` (D-03a)
+- [ ] 46-04-PLAN.md — Wave 2: `six_rs/reduce` (PIPE-02) + `six_rs/verify` (PIPE-07, D-02a)
+- [ ] 46-05-PLAN.md — Wave 2: `six_rs/reflect` (D-07) + `reweave` (D-01, PIPE-04) + `rethink` (PIPE-05)
+- [ ] 46-06-PLAN.md — Wave 3: `pipeline_orchestrator` + `routes/pipeline` + registration (D-03/D-04/D-06, PIPE-06)
+- [ ] 46-07-PLAN.md — Wave 4: Discord rewire of `:ralph`/`:pipeline`/`:reweave`/`:rethink`/`:refactor` (D-04a)
 
 ### Phase 47: Migration Cutover + Hardening
 
