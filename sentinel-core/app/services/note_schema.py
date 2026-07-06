@@ -93,16 +93,62 @@ def split_schema_block(body: str) -> tuple[str, str | None]:
     return body[: match.start()], match.group(0)
 
 
-def has_claim_title(body: str, filename_slug: str) -> bool:  # pragma: no cover - RED stub
-    """D-05 structural-only claim-title check. Implemented in GREEN step."""
-    raise NotImplementedError
+def has_claim_title(body: str, filename_slug: str) -> bool:
+    """D-05 structural-only claim-title check -- zero LLM calls.
+
+    True when an H1 line exists, its normalized text differs from the
+    normalized filename slug, and the title has more than one word.
+    Deliberately narrow: this does not judge whether the title is
+    genuinely claim-shaped (a topic label like "Notes on X" passes) --
+    that nuance is out of scope for this cheap, deterministic check and
+    is left to a future, separately-gated, opt-in pass with different
+    tooling than this structural check.
+    """
+    match = _H1_RE.search(body or "")
+    if not match:
+        return False
+    title = match.group(1).strip()
+    normalized = title.lower().replace(" ", "-").replace("_", "-")
+    bare_slug = (filename_slug or "").lower().replace("_", "-")
+    return normalized != bare_slug and len(title.split()) > 1
 
 
-def has_wikilink(body: str) -> bool:  # pragma: no cover - RED stub
-    """True when at least one wikilink target is present. GREEN step."""
-    raise NotImplementedError
+def has_wikilink(body: str) -> bool:
+    """True when at least one wikilink target is present in ``body``."""
+    return _WIKILINK_RE.search(body or "") is not None
 
 
-def check_note_compliance(body: str, filename_slug: str) -> dict:  # pragma: no cover - RED stub
-    """Aggregate per-note NOTE-01 compliance. Implemented in GREEN step."""
-    raise NotImplementedError
+def check_note_compliance(body: str, filename_slug: str) -> dict:
+    """Aggregate per-note NOTE-01 compliance into a deterministic report.
+
+    Never raises -- any internal error is caught and recorded as a FAIL
+    entry rather than propagating (T-45-DOS1). Makes zero network/LLM/
+    embedding calls (T-45-DET / D-05).
+    """
+    result: dict = {
+        "has_schema": False,
+        "has_type": False,
+        "has_claim_title": False,
+        "has_wikilink": False,
+        "failures": [],
+    }
+    try:
+        schema = parse_schema_block(body)
+        result["has_schema"] = schema is not None
+        if not result["has_schema"]:
+            result["failures"].append("missing _schema block")
+
+        result["has_type"] = schema is not None and "type" in schema
+        if result["has_schema"] and not result["has_type"]:
+            result["failures"].append("missing type key in _schema block")
+
+        result["has_claim_title"] = has_claim_title(body, filename_slug)
+        if not result["has_claim_title"]:
+            result["failures"].append("missing claim-style title")
+
+        result["has_wikilink"] = has_wikilink(body)
+        if not result["has_wikilink"]:
+            result["failures"].append("missing wikilink")
+    except Exception as exc:  # pragma: no cover - defensive, never expected
+        result["failures"].append(f"compliance check error: {exc}")
+    return result
