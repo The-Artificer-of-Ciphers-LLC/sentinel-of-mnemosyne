@@ -147,7 +147,9 @@ class Settings(BaseSettings):
         "security/",
         "ops/sessions/",
         "ops/sweeps/",
-        "inbox/",
+        # D-02 (VAULT-04): inbox/ intentionally REMOVED — first-class embedded
+        # staging area; kept out of warm recall via RecallConfig.exclude_prefixes
+        # instead. Do NOT re-add "for symmetry" with the module constant.
         ".obsidian/",
     )
 

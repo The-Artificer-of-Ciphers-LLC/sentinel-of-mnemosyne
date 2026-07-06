@@ -86,7 +86,10 @@ def test_should_skip_prefixes():
     assert _should_skip("pf2e/x.md", {}, "now") is True
     assert _should_skip("ops/sessions/2026-04-27/x.md", {}, "now") is True
     assert _should_skip("ops/sweeps/2026-04-27.md", {}, "now") is True
-    assert _should_skip("inbox/_pending-classification.md", {}, "now") is True
+    # D-02: inbox/ is no longer prefix-skipped — a fresh inbox/ note (no
+    # matching sweep_pass frontmatter) is now a processing/embedding
+    # candidate, not skipped by path prefix.
+    assert _should_skip("inbox/_pending-classification.md", {}, "now") is False
 
 
 def test_should_skip_by_sweep_pass():
@@ -472,7 +475,26 @@ def test_sweep_skip_prefixes_constant():
     assert "pf2e/" in SWEEP_SKIP_PREFIXES
     assert "ops/sessions/" in SWEEP_SKIP_PREFIXES
     assert "ops/sweeps/" in SWEEP_SKIP_PREFIXES
-    assert "inbox/" in SWEEP_SKIP_PREFIXES
+    # D-02 (VAULT-04): inbox/ is now a first-class embedded staging area —
+    # it must be walked and embedded by the sweeper, so it is REMOVED from
+    # the skip set (it stays out of warm recall via RecallConfig.exclude_prefixes
+    # instead, not via this denylist).
+    assert "inbox/" not in SWEEP_SKIP_PREFIXES
+
+
+@pytest.mark.asyncio
+async def test_walk_vault_includes_inbox_notes():
+    """D-02 (VAULT-04): inbox/ is no longer skip-prefixed — the sweeper must
+    walk into it so staged captures become embedding candidates."""
+    fake = FakeObsidian()
+    fake.dirs[""] = ["inbox/"]
+    fake.dirs["inbox"] = ["capture.md"]
+
+    paths: list[str] = []
+    async for p in walk_vault(fake):
+        paths.append(p)
+
+    assert "inbox/capture.md" in paths
 
 
 # --- 260427-cza tests: structural-awareness skip-prefix expansion +

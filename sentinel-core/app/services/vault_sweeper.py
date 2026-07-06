@@ -2,7 +2,9 @@
 
 Idempotent via `sweep_pass` frontmatter. Never deletes — moves to
 ``_trash/{YYYY-MM-DD}/``. Skips ``_trash/``, ``pf2e/``, ``ops/sessions/``,
-``ops/sweeps/``, and ``inbox/`` subtrees (RESEARCH Pitfall 5).
+and ``ops/sweeps/`` subtrees (RESEARCH Pitfall 5). ``inbox/`` is
+INTENTIONALLY walked and embedded (D-02, VAULT-04) — it stays out of warm
+recall via ``RecallConfig.exclude_prefixes`` instead of this skip set.
 
 Embedding similarity de-dup: cosine ≥ 0.92 → connected components → keep
 the older + longer note in each cluster.
@@ -71,7 +73,10 @@ SWEEP_SKIP_PREFIXES: tuple[str, ...] = (
     "pf2e/",
     "ops/sessions/",
     "ops/sweeps/",
-    "inbox/",
+    # D-02 (VAULT-04): inbox/ intentionally REMOVED — it is now a
+    # first-class embedded staging area (walked + embedded by the sweeper).
+    # It stays out of warm recall via RecallConfig.exclude_prefixes instead
+    # of this denylist. Do NOT re-add "for symmetry".
 )
 """Module-level fallback default. The runtime denylist is read from
 ``settings.sweep_skip_prefixes`` via ``_active_skip_prefixes()`` so operators
