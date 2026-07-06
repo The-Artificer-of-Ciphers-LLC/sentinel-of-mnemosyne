@@ -337,7 +337,10 @@ async def test_context_injected_messages_shape(obsidian_with_context, mock_ai_pr
 
 
 async def test_no_injection_when_user_file_missing(obsidian_no_context, mock_ai_provider):
-    """When Obsidian returns None (no user file), ai_provider receives 2-message array (system + user)."""
+    """When Obsidian has no self/ content, hot tier now self-heals into seeded
+    canonical stubs instead of staying empty (VAULT-05, D-04): ai_provider
+    receives a 4-message array (system + hot-tier self-heal pair + user).
+    """
     captured_messages = []
 
     async def capturing_complete(messages):
@@ -357,9 +360,12 @@ async def test_no_injection_when_user_file_missing(obsidian_no_context, mock_ai_
         )
 
     assert resp.status_code == 200
-    assert len(captured_messages) == 2
+    assert len(captured_messages) == 4
     assert captured_messages[0]["role"] == "system"
-    assert captured_messages[1]["content"] == "hello"
+    assert captured_messages[1]["role"] == "user"  # hot tier: self-heal stub content
+    assert captured_messages[2]["role"] == "assistant"
+    assert captured_messages[2]["content"] == "Understood."
+    assert captured_messages[3]["content"] == "hello"
 
 
 async def test_no_injection_when_obsidian_down():
@@ -680,7 +686,15 @@ async def test_output_scanner_clean_response_passes(mock_ai_provider, mock_injec
 
 @pytest.fixture
 def obsidian_with_search_results():
-    """Mock ObsidianVault that returns vault search results and no hot-tier context."""
+    """Mock ObsidianVault that returns vault search results and no seeded self/ content.
+
+    Phase 44-04 (D-04, VAULT-05): the four canonical self/ paths self-heal
+    into seeded stubs via read_note + write_note, so a hot-tier pair IS now
+    always injected (the stub content) even though no self/ content was
+    seeded here — read_note is path-aware so only the warm-tier target note
+    returns the canned body; canonical self/ paths fall through to "" and
+    self-heal.
+    """
     mock = AsyncMock()
     mock.get_user_context.return_value = None
     mock.get_recent_sessions.return_value = []
@@ -692,8 +706,16 @@ def obsidian_with_search_results():
             "matches": [{"match": {"start": 0, "end": 17}, "context": "I am a developer."}],
         }
     ]
+
     # Recall._warm_search reads bodies post-RRF; provide a real string so WR-01 doesn't skip.
-    mock.read_note.return_value = "# trekkie\n\nI am a developer."
+    # Path-aware so canonical self/ paths fall through to "" (triggering self-heal)
+    # instead of picking up this warm-tier body via the old blanket return_value.
+    async def _read_note(path: str) -> str:
+        if path == "core/users/trekkie.md":
+            return "# trekkie\n\nI am a developer."
+        return ""
+
+    mock.read_note.side_effect = _read_note
     return mock
 
 
@@ -738,20 +760,26 @@ async def test_warm_tier_injected_when_results_present(obsidian_with_search_resu
         app.state.ai_provider = mock_ai_provider
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
     assert resp.status_code == 200
-    # system + no hot tier + vault pair + user message = 4 messages
-    assert len(captured_messages) == 4
+    # system + hot tier (self-heal stub, D-04) + vault pair + user message = 6 messages
+    assert len(captured_messages) == 6
     assert captured_messages[0]["role"] == "system"
-    assert captured_messages[1]["role"] == "user"
-    assert "[BEGIN RETRIEVED CONTEXT" in captured_messages[1]["content"]
-    assert "trekkie.md" in captured_messages[1]["content"] or "developer" in captured_messages[1]["content"]
+    assert captured_messages[1]["role"] == "user"  # hot tier: self-heal stub content
     assert captured_messages[2]["role"] == "assistant"
     assert captured_messages[2]["content"] == "Understood."
-    assert captured_messages[3]["role"] == "user"
-    assert captured_messages[3]["content"] == "hello"
+    assert captured_messages[3]["role"] == "user"  # vault (warm) context
+    assert "[BEGIN RETRIEVED CONTEXT" in captured_messages[3]["content"]
+    assert "trekkie.md" in captured_messages[3]["content"] or "developer" in captured_messages[3]["content"]
+    assert captured_messages[4]["role"] == "assistant"
+    assert captured_messages[4]["content"] == "Understood."
+    assert captured_messages[5]["role"] == "user"
+    assert captured_messages[5]["content"] == "hello"
 
 
 async def test_warm_tier_skipped_when_empty(mock_ai_provider):
-    """When find() returns [], no vault pair is injected (D-05)."""
+    """When find() returns [], no vault (warm) pair is injected (D-05) — but
+    the hot tier now self-heals into seeded canonical stubs regardless
+    (VAULT-05, D-04), so a hot-tier pair is still present.
+    """
     # default_app_state already sets find.return_value = []
     captured_messages = []
     async def capturing_complete(messages):
@@ -762,10 +790,13 @@ async def test_warm_tier_skipped_when_empty(mock_ai_provider):
         app.state.ai_provider = mock_ai_provider
         resp = await client.post("/message", json={"content": "hello", "user_id": "trekkie"}, headers=AUTH_HEADER)
     assert resp.status_code == 200
-    # system + no hot tier, empty vault → system + user message only
-    assert len(captured_messages) == 2
+    # system + hot tier (self-heal stub, D-04) + user message; no vault pair
+    assert len(captured_messages) == 4
     assert captured_messages[0]["role"] == "system"
-    assert captured_messages[1]["content"] == "hello"
+    assert captured_messages[1]["role"] == "user"  # hot tier: self-heal stub content
+    assert captured_messages[2]["role"] == "assistant"
+    assert captured_messages[2]["content"] == "Understood."
+    assert captured_messages[3]["content"] == "hello"
 
 
 async def test_warm_tier_truncated_independently(mock_ai_provider):
@@ -860,10 +891,14 @@ async def test_warm_tier_skipped_when_all_results_below_threshold(mock_ai_provid
         )
 
     assert resp.status_code == 200
-    # Only system + user message — no vault pair injected
-    assert len(captured_messages) == 2
+    # system + hot tier (self-heal stub, D-04) + user message — no vault
+    # (warm) pair injected, since all results are below threshold
+    assert len(captured_messages) == 4
     assert captured_messages[0]["role"] == "system"
-    assert captured_messages[1]["content"] == "Finished the sing better course"
+    assert captured_messages[1]["role"] == "user"  # hot tier: self-heal stub content
+    assert captured_messages[2]["role"] == "assistant"
+    assert captured_messages[2]["content"] == "Understood."
+    assert captured_messages[3]["content"] == "Finished the sing better course"
     # Confirm no garbled pf2e content leaked into context
     all_content = " ".join(m["content"] for m in captured_messages)
     assert "You Are Not Yourself" not in all_content
@@ -891,7 +926,14 @@ async def test_warm_tier_injected_when_score_meets_threshold(mock_ai_provider):
         },
     ]
     # Recall._warm_search reads bodies post-RRF; provide a real string so WR-01 doesn't skip.
-    mixed_score_obsidian.read_note.return_value = "# Sing Better\n\nCompleted the Sing Better course."
+    # Path-aware so canonical self/ paths fall through to "" (triggering the
+    # Phase 44-04 self-heal) instead of picking up this warm-tier body.
+    async def _read_note(path: str) -> str:
+        if path == "memory/courses/sing-better.md":
+            return "# Sing Better\n\nCompleted the Sing Better course."
+        return ""
+
+    mixed_score_obsidian.read_note.side_effect = _read_note
     captured_messages = []
 
     async def capturing_complete(messages):
@@ -910,10 +952,11 @@ async def test_warm_tier_injected_when_score_meets_threshold(mock_ai_provider):
         )
 
     assert resp.status_code == 200
-    # system + vault pair (only high-score result) + user message = 4
-    assert len(captured_messages) == 4
-    # The high-score result should be in the injected context
-    vault_content = captured_messages[1]["content"]
+    # system + hot tier (self-heal stub, D-04) + vault pair (only high-score
+    # result) + user message = 6
+    assert len(captured_messages) == 6
+    # The high-score result should be in the injected context (vault pair is now at index 3)
+    vault_content = captured_messages[3]["content"]
     assert "sing-better.md" in vault_content or "Completed the Sing Better" in vault_content
     # The low-score pf2e result should NOT be in the context
     assert "wolf-lord.md" not in vault_content
@@ -952,9 +995,11 @@ async def test_warm_tier_result_missing_score_defaults_to_negative_infinity(mock
         )
 
     assert resp.status_code == 200
-    # No vault pair injected — missing score treated as -inf, below threshold
-    assert len(captured_messages) == 2
-    assert captured_messages[1]["content"] == "test query"
+    # No vault (warm) pair injected — missing score treated as -inf, below
+    # threshold. Hot tier still self-heals into seeded stubs (VAULT-05, D-04).
+    assert len(captured_messages) == 4
+    assert captured_messages[1]["role"] == "user"  # hot tier: self-heal stub content
+    assert captured_messages[3]["content"] == "test query"
 
 
 async def test_warm_tier_excludes_ops_session_and_sweep_paths(mock_ai_provider):
@@ -990,7 +1035,14 @@ async def test_warm_tier_excludes_ops_session_and_sweep_paths(mock_ai_provider):
             "matches": [{"match": {"start": 0, "end": 20}, "context": "Omie Wise lyrics"}],
         },
     ]
-    ops_heavy_vault.read_note.return_value = "# Omie Wise\n\nFull lyrics here."
+    # Path-aware so canonical self/ paths fall through to "" (triggering the
+    # Phase 44-04 self-heal) instead of picking up this warm-tier body.
+    async def _read_note(path: str) -> str:
+        if path == "learning/omie-wise.md":
+            return "# Omie Wise\n\nFull lyrics here."
+        return ""
+
+    ops_heavy_vault.read_note.side_effect = _read_note
 
     captured_messages = []
 
@@ -1010,9 +1062,10 @@ async def test_warm_tier_excludes_ops_session_and_sweep_paths(mock_ai_provider):
         )
 
     assert resp.status_code == 200
-    # Vault pair should be injected (learning note passes all filters)
-    assert len(captured_messages) == 4
-    vault_content = captured_messages[1]["content"]
+    # system + hot tier (self-heal stub, D-04) + vault pair (learning note
+    # passes all filters) + user message = 6
+    assert len(captured_messages) == 6
+    vault_content = captured_messages[3]["content"]
     # Ops paths must not appear
     assert "ops/sessions" not in vault_content
     assert "ops/sweeps" not in vault_content
@@ -1020,8 +1073,13 @@ async def test_warm_tier_excludes_ops_session_and_sweep_paths(mock_ai_provider):
     assert "sweep report" not in vault_content
     # The knowledge note content must appear
     assert "Omie Wise" in vault_content or "Full lyrics here" in vault_content
-    # read_note called only for the learning note (ops paths never reached)
-    ops_heavy_vault.read_note.assert_called_once_with("learning/omie-wise.md")
+    # read_note is also called for the four self-heal paths every message now
+    # (D-04); the important invariant this test guards is that the excluded
+    # ops/sessions and ops/sweeps paths never reach read_note.
+    called_paths = [c.args[0] for c in ops_heavy_vault.read_note.call_args_list]
+    assert "learning/omie-wise.md" in called_paths
+    assert "ops/sessions/2026-05-11/user-12-00-00.md" not in called_paths
+    assert "ops/sweeps/dry-run-2026-05-11.md" not in called_paths
 
 
 async def test_warm_tier_injects_full_note_content_not_snippet(mock_ai_provider):
@@ -1044,7 +1102,14 @@ async def test_warm_tier_injects_full_note_content_not_snippet(mock_ai_provider)
             "matches": [{"match": {"start": 0, "end": 20}, "context": "Omie Wise Production"}],
         }
     ]
-    full_content_vault.read_note.return_value = full_note_body
+    # Path-aware so canonical self/ paths fall through to "" (triggering the
+    # Phase 44-04 self-heal) instead of picking up this warm-tier body.
+    async def _read_note(path: str) -> str:
+        if path == "learning/omie-wise.md":
+            return full_note_body
+        return ""
+
+    full_content_vault.read_note.side_effect = _read_note
 
     captured_messages = []
 
@@ -1064,12 +1129,15 @@ async def test_warm_tier_injects_full_note_content_not_snippet(mock_ai_provider)
         )
 
     assert resp.status_code == 200
-    # Full note body must appear in injected context — not just the snippet
-    vault_content = captured_messages[1]["content"]
+    # Full note body must appear in injected context — not just the snippet.
+    # Vault (warm) pair is now at index 3: system + hot tier (self-heal stub,
+    # D-04) pair + vault pair + user message.
+    vault_content = captured_messages[3]["content"]
     assert "Down by the river where the willows weep" in vault_content
     assert "Bass patch: filter cutoff 80Hz" in vault_content
-    # Confirm read_note was called with the matched filename
-    full_content_vault.read_note.assert_called_once_with("learning/omie-wise.md")
+    # Confirm read_note was called with the matched filename (also called for
+    # the four self-heal paths every message now, D-04)
+    full_content_vault.read_note.assert_any_call("learning/omie-wise.md")
 
 
 # ---------------------------------------------------------------------------
@@ -1150,6 +1218,24 @@ class _CapturingFakeVault:
         return []
 
 
+# Phase 44-04 (D-04, VAULT-05): these four self/ paths self-heal into seeded
+# stubs on first read-miss via Recall._ensure_self_stub — every message now
+# writes to them once when they're absent (in addition to any note-filing
+# write under test). Filter these out of write_call assertions below so the
+# note-filing tests keep asserting their original, narrower intent.
+_SELF_HEAL_STUB_PATHS = (
+    "self/identity.md",
+    "self/methodology.md",
+    "self/goals.md",
+    "self/relationships.md",
+)
+
+
+def _filing_writes(write_calls: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Return write_calls excluding the Phase 44-04 self-heal stub writes."""
+    return [(p, b) for p, b in write_calls if p not in _SELF_HEAL_STUB_PATHS]
+
+
 def _make_filing_classifier(topic: str = "journal", slug: str = "test-note"):
     """Return an async classify function that returns a real-topic result."""
     from app.services.note_classifier import ClassificationResult
@@ -1196,11 +1282,13 @@ async def test_substantive_chat_content_filed_as_vault_note(mock_ai_provider):
 
     assert resp.status_code == 200
 
-    # A note write must have been attempted
-    assert len(fake_vault.write_calls) >= 1, "Expected at least one vault note write"
+    # A note write must have been attempted (excluding the Phase 44-04
+    # self-heal stub writes, which are not what this test targets)
+    filing_writes = _filing_writes(fake_vault.write_calls)
+    assert len(filing_writes) >= 1, "Expected at least one vault note write"
 
     expected_dir = topic_dir_for("journal")
-    for path, body in fake_vault.write_calls:
+    for path, body in filing_writes:
         # The written path lands at the classifier's canonical journal directory
         # (ops/journal/{today}/) — no redirect, per D-06.
         assert path.startswith(expected_dir), (
@@ -1241,9 +1329,12 @@ async def test_trivial_content_not_filed(mock_ai_provider):
         assert len(trivial.strip()) < _CHAT_NOTE_MIN_LENGTH, (
             f"Test input {trivial!r} is not actually below the min-length gate"
         )
-        assert len(fake_vault.write_calls) == 0, (
-            f"Expected no vault writes for trivial content {trivial!r}, "
-            f"got writes to: {[p for p, _ in fake_vault.write_calls]}"
+        # Excludes the Phase 44-04 self-heal stub writes (which happen once,
+        # regardless of content length, and are not what this test targets).
+        filing_writes = _filing_writes(fake_vault.write_calls)
+        assert filing_writes == [], (
+            f"Expected no vault note-filing writes for trivial content {trivial!r}, "
+            f"got writes to: {[p for p, _ in filing_writes]}"
         )
 
 
@@ -1295,10 +1386,11 @@ async def test_chat_note_path_passes_warm_tier_exclusion_filter(mock_ai_provider
         )
 
     assert resp.status_code == 200
-    assert len(fake_vault.write_calls) >= 1, "Expected a vault note write"
+    filing_writes = _filing_writes(fake_vault.write_calls)
+    assert len(filing_writes) >= 1, "Expected a vault note write"
 
     expected_dir = topic_dir_for("learning")
-    for path, _body in fake_vault.write_calls:
+    for path, _body in filing_writes:
         assert path.startswith(expected_dir), (
             f"Chat note {path!r} must be written under its classified destination "
             f"{expected_dir!r} (D-06: no redirect)"
@@ -1331,10 +1423,11 @@ async def test_observation_topic_chat_note_redirected_to_searchable_path(mock_ai
         )
 
     assert resp.status_code == 200
-    assert len(fake_vault.write_calls) >= 1, "Expected at least one vault note write"
+    filing_writes = _filing_writes(fake_vault.write_calls)
+    assert len(filing_writes) >= 1, "Expected at least one vault note write"
 
     expected_dir = TOPIC_VAULT_PATH["observation"]
-    for path, body in fake_vault.write_calls:
+    for path, body in filing_writes:
         # The written path is the classifier's canonical observation destination —
         # no redirect (D-06).
         assert path.startswith(expected_dir), (
@@ -1345,3 +1438,80 @@ async def test_observation_topic_chat_note_redirected_to_searchable_path(mock_ai
         assert user_content in body, (
             f"Verbatim user content not found in note body at {path!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Wave 8 tests — Phase 44-04 (VAULT-05): first-message self-heal integration.
+# Proves the D-04 stub-ensure guarantee end-to-end through the production
+# message path (not just the Recall unit boundary in test_recall.py).
+# ---------------------------------------------------------------------------
+
+
+async def test_first_message_self_heals_missing_self_files(mock_ai_provider):
+    """On the first message against a vault with no self/ content, VAULT-05's
+    self-heal creates the four canonical self/ stubs via the vault seam and
+    context assembly still succeeds (200). ops/reminders.md and
+    self/learning-areas.md are never auto-created by the message path
+    (VAULT-01 scope — only the four canonical paths are stub-ensured).
+    """
+    fake_vault = _CapturingFakeVault()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.vault = fake_vault
+
+        resp = await client.post(
+            "/message",
+            json={"content": "hello there, first message", "user_id": "trekkie"},
+            headers=AUTH_HEADER,
+        )
+
+    assert resp.status_code == 200
+
+    written_paths = [p for p, _ in fake_vault.write_calls]
+    for path in _SELF_HEAL_STUB_PATHS:
+        assert written_paths.count(path) == 1, (
+            f"Expected exactly one stub write for {path!r}, got "
+            f"{written_paths.count(path)}; all writes: {written_paths}"
+        )
+        assert fake_vault.store.get(path, "").strip(), f"{path} stub must be non-empty"
+
+    # Extras (also in RecallConfig.self_paths, but not canonical) are never
+    # auto-created by the message path.
+    assert "ops/reminders.md" not in fake_vault.store
+    assert "self/learning-areas.md" not in fake_vault.store
+
+
+async def test_second_message_does_not_rewrite_existing_self_files(mock_ai_provider):
+    """Once the canonical self/ files exist (created on the first message),
+    a subsequent message reads them but does not re-create or overwrite them
+    (idempotency of the D-04 stub-ensure)."""
+    fake_vault = _CapturingFakeVault()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        app.state.vault = fake_vault
+
+        resp1 = await client.post(
+            "/message",
+            json={"content": "hello there, first message", "user_id": "trekkie"},
+            headers=AUTH_HEADER,
+        )
+        assert resp1.status_code == 200
+
+        # All four canonical paths must now exist from the first message.
+        for path in _SELF_HEAL_STUB_PATHS:
+            assert fake_vault.store.get(path, "").strip(), f"{path} should exist after first message"
+
+        fake_vault.write_calls.clear()
+
+        resp2 = await client.post(
+            "/message",
+            json={"content": "hello again, second message", "user_id": "trekkie"},
+            headers=AUTH_HEADER,
+        )
+        assert resp2.status_code == 200
+
+    rewritten = [p for p, _ in fake_vault.write_calls if p in _SELF_HEAL_STUB_PATHS]
+    assert rewritten == [], (
+        f"Canonical self/ files must not be re-written on a subsequent "
+        f"message once they exist; got writes to: {rewritten}"
+    )
