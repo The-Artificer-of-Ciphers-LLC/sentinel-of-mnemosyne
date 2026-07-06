@@ -294,7 +294,7 @@ class ObsidianVault:
             return await coro
         except Exception as exc:
             if not silent:
-                logger.warning("%s failed: %s", operation, exc)
+                logger.warning("%s failed: %r", operation, exc, exc_info=True)
             return default
 
     async def check_health(self) -> bool:
