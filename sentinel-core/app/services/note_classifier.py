@@ -25,13 +25,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.config import settings
-from app.services.model_selector import (
-    ensure_litellm_prefix,
-    get_loaded_models,
-    select_model,
-    strip_litellm_prefix,
-)
+from app.services.model_resolution import resolve_structured_model
+from app.services.model_selector import get_loaded_models, select_model
 from sentinel_shared.llm_call import acompletion_with_profile
 from sentinel_shared.model_profiles import get_profile
 
@@ -190,60 +185,24 @@ with confidence < 0.5. Do not invent new slugs.
 async def _resolve_model_for_classification() -> tuple[str, object | None, str | None]:
     """Resolve (model_id, profile, api_base) for a structured-output classification call.
 
+    Thin delegation to the shared ``model_resolution.resolve_structured_model``
+    helper (Phase 46 Plan 02) — kept as a named module-level wrapper, not a
+    bare alias, so this module's own ``get_loaded_models`` / ``select_model`` /
+    ``get_profile`` bindings (and any ``mock.patch`` overrides of them) are
+    forwarded into the single shared implementation. This preserves the
+    pre-refactor patch surface for existing tests and any external callers
+    patching by name, while there is exactly ONE implementation of the
+    resolution logic itself (in ``model_resolution.py``).
+
     Falls back gracefully when LM Studio is unreachable — returns a best-effort
     model string from settings; the LLM call may still fail, in which case
     classify_note() coerces to ``unsure``.
     """
-    api_base = settings.lmstudio_base_url or "http://host.docker.internal:52415"
-    api_base_v1 = f"{api_base.rstrip('/')}/v1" if not api_base.rstrip("/").endswith("/v1") else api_base
-    try:
-        loaded = await get_loaded_models(api_base_v1)
-    except Exception as exc:  # pragma: no cover — defensive
-        logger.warning("note_classifier: get_loaded_models failed: %s", exc)
-        loaded = []
-
-    # Honor MODEL_PREFERRED for the structured task kind too — operators set
-    # this when they want one specific model for everything (avoids LM Studio
-    # TTL-unloading multiple models, pinning to known-working ones).
-    preferences: dict[str, str] = {}
-    preferred = settings.model_preferred or settings.model_name
-    if preferred:
-        preferences["structured"] = preferred
-
-    try:
-        model_id = select_model(
-            "structured",
-            loaded,
-            preferences=preferences,
-            default=settings.model_name or None,
-        )
-    except Exception as exc:
-        # select_model only raises when there's no configured default AND the loaded/catalog
-        # set is ambiguous (0 or 2+ unscored/unmatched entries). Falling back to `loaded[0]`
-        # here would reintroduce the unsound "guess a catalog entry" behavior select_model
-        # just refused to do (exo-model-notfound-502) — prefer the configured model_name
-        # (even if unconfirmed) over an arbitrary catalog pick.
-        logger.warning(
-            "note_classifier: select_model failed (%s); falling back to configured MODEL_NAME",
-            exc,
-        )
-        model_id = settings.model_name or "openai/local-model"
-
-    # Ensure litellm provider prefix — HF-style namespaces (qwen/qwen2.5-coder-14b)
-    # are NOT litellm provider tags, so '/' alone is not a sufficient guard.
-    prefixed_model_id = ensure_litellm_prefix(model_id)
-
-    # get_profile hits LM Studio's /api/v0/models/{id} which needs the BARE id,
-    # not the litellm-prefixed form. Strip the openai/ prefix back off.
-    bare_model_id = strip_litellm_prefix(prefixed_model_id)
-
-    try:
-        profile = await get_profile(bare_model_id, api_base=api_base)
-    except Exception as exc:
-        logger.warning("note_classifier: get_profile failed (%s); using None", exc)
-        profile = None
-
-    return prefixed_model_id, profile, api_base
+    return await resolve_structured_model(
+        get_loaded_models=get_loaded_models,
+        select_model=select_model,
+        get_profile=get_profile,
+    )
 
 
 async def classify_note(
