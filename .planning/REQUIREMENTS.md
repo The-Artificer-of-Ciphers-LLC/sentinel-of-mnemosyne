@@ -103,7 +103,7 @@
 - [ ] **VAULT-01**: The vault has the three-space arscontexta structure (`self/ notes/ ops/ inbox/ templates/`) with stub files auto-created where missing
 - [ ] **VAULT-02**: PARA taxonomy supersedes the flat-7 classifier — `learning`/`reference` route to `inbox/` for Reduce-phase transformation; `journal`/`accomplishment`/`observation` file under `ops/` subdirectories
 - [ ] **VAULT-03**: Semantic recall recency-weighting recognizes the new namespaces (no silent recall degradation when `_CARRIER_NAMESPACE_PREFIXES` moves off flat-7 paths)
-- [ ] **VAULT-04**: The vault sweeper skips `inbox/` so staged captures are not treated as a recall blind-spot
+- [ ] **VAULT-04**: The vault sweeper no longer wholesale-skips `inbox/` — staged captures are embedded (`inbox/` removed from `SWEEP_SKIP_PREFIXES`) so it stops being an unconditional recall blind-spot, while remaining excluded from the keyword warm tier (`RecallConfig.exclude_prefixes`) until Reduce promotes them to `notes/`
 - [ ] **VAULT-05**: Every message reads the three-space `self/` files at session start (identity, methodology, goals, relationships)
 
 ## NOTE — note quality + graph (v0.6.0)
