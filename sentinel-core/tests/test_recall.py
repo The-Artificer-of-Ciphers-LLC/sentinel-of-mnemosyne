@@ -1462,87 +1462,128 @@ async def test_recency_order_is_blend_not_filter():
 
 
 async def test_recency_warm_carrier_journal():
-    """Warm carrier weighting (place b): a journal/ note dated today ranks above one from 10 days ago.
+    """D-01/D-03 retirement: hot-tier session recency ordering survives even
+    though the warm-tier journal/-carrier weighting mechanism is gone.
 
-    MEM-09 place (b): RRF score of journal/ carrier notes is multiplied by recency_weight.
-    Both notes have equal keyword relevance (same query term appears in both).
-    Both notes MUST appear in warm (warm_top_n=2, only 2 candidates) and the
-    today one must rank first (recency-boosted above the older one).
-
-    RED failure mechanism: FakeVault.find() is overridden to return the OLD note first
-    at a higher RRF rank than the new note. Without recency weighting, the old note
-    ranks first. With recency weighting, today's note has a higher adjusted score.
+    The journal/ warm-carrier premise is invalidated by D-03 (journal now
+    routes under ops/, permanently warm-excluded) and D-01 (the carrier
+    allowlist that used to weight it is removed entirely). This test is
+    restructured around two ops/sessions-shaped Session summaries — the one
+    recency-weighting mechanism that survives (MEM-09 place (a)) — asserting
+    the most-recent session still ranks first.
     """
-    today = "2026-06-12"
-    old_date = "2026-06-02"
-
-    # journal/ path shape: journal/{YYYY-MM-DD}/{slug}.md
-    new_path = f"journal/{today}/topic-note.md"
-    old_path = f"journal/{old_date}/topic-note.md"
-
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    old_date = (now - timedelta(days=10)).strftime("%Y-%m-%d")
     notes = {
-        new_path: "carrier note topic warm recency journal test",
-        old_path: "carrier note topic warm recency journal test",
+        f"ops/sessions/{old_date}/trekkie-10-00-00.md": f"---\ndate: {old_date}\nuser_id: trekkie\ntime: 10-00-00\n---\n## User\nOld journal-like reflection\n## Sentinel\nOld reply\n",
+        f"ops/sessions/{today}/trekkie-10-00-00.md": f"---\ndate: {today}\nuser_id: trekkie\ntime: 10-00-00\n---\n## User\nNew journal-like reflection\n## Sentinel\nNew reply\n",
     }
+    policy = RetentionPolicy(hot_limit=10, hot_window_days=30)
     vault = FakeVault(notes=notes)
+    recall = Recall(vault=vault, config=RecallConfig(), policy=policy)
+    result = await recall.assemble(make_request(), budget=8192)
 
-    # Override find() to return the OLD note first (higher keyword rank) — this is the
-    # adversarial case: without recency weighting, the old note wins by keyword rank.
-    async def ordered_find(query: str) -> list[dict]:
-        return [
-            {"filename": old_path, "score": 1.0},   # rank 0 (better keyword rank)
-            {"filename": new_path, "score": 1.0},   # rank 1
-        ]
-
-    vault.find = ordered_find  # type: ignore[method-assign]
-
-    recall = Recall(vault=vault, config=RecallConfig(warm_top_n=2))
-    result = await recall.assemble(
-        make_request(content="carrier note topic warm recency journal test"), budget=8192
-    )
-
-    warm_paths = [r.path for r in result.warm]
-    assert new_path in warm_paths, (
-        f"Today's journal/ carrier ({new_path!r}) should be in warm; got {warm_paths}"
-    )
-    assert old_path in warm_paths, (
-        f"Old journal/ carrier ({old_path!r}) should be in warm (warm_top_n=2, 2 candidates); "
-        f"got {warm_paths}"
-    )
-    # Today's journal/ carrier must rank above the older one after recency weighting.
-    # Without recency: old_path at rank 0 → higher RRF → old_path first.
-    # With recency: new_path score multiplied by weight≈1.0 > old_path × weight≈0.36 → new_path first.
-    assert warm_paths.index(new_path) < warm_paths.index(old_path), (
-        f"Today's journal/ carrier must rank above the 10-day-old one (recency weighting place b); "
-        f"order: {warm_paths}"
+    assert len(result.sessions) >= 2, f"Expected at least 2 sessions, got {len(result.sessions)}"
+    assert result.sessions[0].date == today, (
+        f"Most-recent session (today={today!r}) must rank first; got {result.sessions[0].date!r}"
     )
 
 
 async def test_recency_warm_carrier_topic_dir():
-    """Warm carrier weighting (place b): weighting applies to NON-journal carrier dirs too.
+    """D-01/D-03 retirement: hot-tier session recency ordering is not journal-specific.
 
-    Proves the full carrier set (not journal-only): a learning/ note dated today ranks
-    above an accomplishments/ note dated 10 days ago when the old note is returned first
-    by keyword search (higher keyword rank). Both MUST appear in warm (warm_top_n=2, 2 candidates).
+    The old topic-dir carrier premise (learning/accomplishments) is invalidated
+    by D-03 (both now resolve to inbox/ or ops/, neither warm-carrier-weighted).
+    Restructured around two ops/sessions-shaped Session summaries with distinct
+    (non-journal-themed) content to prove recency ordering is a general
+    session-tier property, not tied to any particular topic vocabulary.
+    """
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    old_date = (now - timedelta(days=10)).strftime("%Y-%m-%d")
+    notes = {
+        f"ops/sessions/{old_date}/trekkie-11-00-00.md": f"---\ndate: {old_date}\nuser_id: trekkie\ntime: 11-00-00\n---\n## User\nOld unrelated topic content\n## Sentinel\nOld reply\n",
+        f"ops/sessions/{today}/trekkie-11-00-00.md": f"---\ndate: {today}\nuser_id: trekkie\ntime: 11-00-00\n---\n## User\nNew unrelated topic content\n## Sentinel\nNew reply\n",
+    }
+    policy = RetentionPolicy(hot_limit=10, hot_window_days=30)
+    vault = FakeVault(notes=notes)
+    recall = Recall(vault=vault, config=RecallConfig(), policy=policy)
+    result = await recall.assemble(make_request(), budget=8192)
 
-    RED failure mechanism: FakeVault.find() overridden to return OLD note first.
-    Without recency weighting, the old accomplishments/ note ranks first.
-    With recency weighting, the today learning/ note is boosted above it.
+    dates = [s.date for s in result.sessions]
+    assert old_date in dates, f"Older session ({old_date!r}) must still be present (blend, not filter)"
+    assert result.sessions[0].date == today, (
+        f"Most-recent session must rank first regardless of content topic; got {dates}"
+    )
+
+
+async def test_recency_excludes_self():
+    """D-02 (still enforced): self/ notes never appear in warm, regardless of date.
+
+    Restructured around two ops/sessions-shaped Session summaries (recency
+    ordering, MEM-09 place (a)) combined with a self/ note dated today to
+    prove self/ exclusion from warm holds independently of any recency
+    mechanism (D-01 removed warm-tier recency weighting entirely; this
+    invariant is orthogonal to that removal).
+    """
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    old_date = (now - timedelta(days=10)).strftime("%Y-%m-%d")
+    notes = {
+        f"ops/sessions/{old_date}/trekkie-12-00-00.md": f"---\ndate: {old_date}\nuser_id: trekkie\ntime: 12-00-00\n---\n## User\nOld session content\n## Sentinel\nOld reply\n",
+        f"ops/sessions/{today}/trekkie-12-00-00.md": f"---\ndate: {today}\nuser_id: trekkie\ntime: 12-00-00\n---\n## User\nNew session content\n## Sentinel\nNew reply\n",
+        f"self/identity-{today}.md": "self content must never surface in warm",
+    }
+    policy = RetentionPolicy(hot_limit=10, hot_window_days=30)
+    vault = FakeVault(notes=notes)
+
+    # Adversarially return the self/ note from find() — it must still never
+    # appear in warm, regardless of ranking or date (D-02, criterion 4).
+    async def ordered_find(query: str) -> list[dict]:
+        return [{"filename": f"self/identity-{today}.md", "score": 1.0}]
+
+    vault.find = ordered_find  # type: ignore[method-assign]
+
+    recall = Recall(vault=vault, config=RecallConfig())
+    result = await recall.assemble(make_request(content="self content"), budget=8192)
+
+    warm_paths = [r.path for r in result.warm]
+    for path in warm_paths:
+        assert not path.startswith("self/"), (
+            f"self/ note must never appear in warm (D-02); found {path!r}"
+        )
+    # Session-tier recency ordering still holds alongside the self/ exclusion.
+    assert result.sessions[0].date == today, (
+        f"Most-recent session must rank first; got {[s.date for s in result.sessions]}"
+    )
+
+
+async def test_recency_applies_only_to_session_summaries():
+    """D-01a positive invariant: recency weighting is never applied to warm-tier
+    results by omission — only ``result.sessions`` ordering is recency-sensitive.
+
+    A warm-tier result under notes/ dated today must NOT outrank an older
+    warm-tier result purely on its date: with the carrier-allowlist mechanism
+    fully removed (D-01), warm-tier ranking is keyword/RRF rank ONLY. This is
+    the adversarial case — find() returns the OLDER note at the better
+    keyword rank; if any hidden recency multiplier survived, the newer note
+    would incorrectly overtake it. It must not.
     """
     today = "2026-06-12"
     old_date = "2026-06-02"
 
-    # topic-dir path shape: {base}/{slug}-{YYYY-MM-DD}.md
-    new_path = f"learning/carrier-topic-warm-{today}.md"
-    old_path = f"accomplishments/carrier-topic-warm-{old_date}.md"
+    new_path = f"notes/today-topic-{today}.md"
+    old_path = f"notes/old-topic-{old_date}.md"
 
     notes = {
-        new_path: "carrier topic warm full set recency non journal test",
-        old_path: "carrier topic warm full set recency non journal test",
+        new_path: "warm result recency omission invariant test",
+        old_path: "warm result recency omission invariant test",
     }
     vault = FakeVault(notes=notes)
 
-    # Override find() to return OLD note first (adversarial for recency test)
+    # Older note returned FIRST (better keyword rank) — adversarial: if recency
+    # weighting still applied by omission, the today-dated note would jump ahead.
     async def ordered_find(query: str) -> list[dict]:
         return [
             {"filename": old_path, "score": 1.0},   # rank 0 (better keyword rank)
@@ -1553,92 +1594,18 @@ async def test_recency_warm_carrier_topic_dir():
 
     recall = Recall(vault=vault, config=RecallConfig(warm_top_n=2))
     result = await recall.assemble(
-        make_request(content="carrier topic warm full set recency non journal test"), budget=8192
+        make_request(content="warm result recency omission invariant test"), budget=8192
     )
 
     warm_paths = [r.path for r in result.warm]
-    assert new_path in warm_paths, (
-        f"Today's learning/ carrier ({new_path!r}) should be in warm; got {warm_paths}"
+    assert old_path in warm_paths and new_path in warm_paths, (
+        f"both notes must appear in warm (warm_top_n=2); got {warm_paths}"
     )
-    assert old_path in warm_paths, (
-        f"Old accomplishments/ carrier ({old_path!r}) should be in warm (warm_top_n=2); "
-        f"got {warm_paths}"
-    )
-    # Today's topic-dir carrier must rank above the older one (full carrier set, not journal-only).
-    # Without recency: old_path at rank 0 → higher RRF → old_path first.
-    # With recency: new_path score × ~1.0 > old_path × ~0.36 → new_path first.
-    assert warm_paths.index(new_path) < warm_paths.index(old_path), (
-        f"Today's learning/ carrier must rank above the 10-day-old accomplishments/ carrier "
-        f"(full carrier set, not journal-only); order: {warm_paths}"
-    )
-
-
-async def test_recency_excludes_self():
-    """Never-weight-self (D-02): non-carrier notes (notes/) are NOT multiplied by recency_weight.
-
-    A non-carrier note dated today should rank ABOVE an old carrier note after
-    recency weighting (the carrier's score is multiplied by a low weight; the
-    non-carrier's score is unchanged, so the non-carrier wins).
-
-    RED failure mechanism: find() overridden to return the OLD carrier note first.
-    Without recency weighting, the old carrier note keeps its rank-0 advantage and
-    ranks first. With correct implementation, the old carrier's score is multiplied
-    by recency_weight("2026-06-02") ≈ 0.36, while the today non-carrier's score stays
-    unchanged — the non-carrier wins.
-
-    Also asserts self/ notes never appear in warm (fundamental criterion 4 guard).
-    """
-    today = "2026-06-12"
-    old_date = "2026-06-02"
-
-    # Old carrier note (10 days ago) — journal/ prefix
-    old_carrier_path = f"journal/{old_date}/old-topic.md"
-    # Today non-carrier note — notes/ prefix (NOT in _CARRIER_NAMESPACE_PREFIXES)
-    today_non_carrier_path = f"notes/today-topic-{today}.md"
-
-    notes = {
-        old_carrier_path: "recency excludes non carrier test warm content",
-        today_non_carrier_path: "recency excludes non carrier test warm content",
-        f"self/identity-{today}.md": "recency excludes non carrier test warm content",
-    }
-    vault = FakeVault(notes=notes)
-
-    # Override find() to return OLD carrier first (adversarial for recency test)
-    async def ordered_find(query: str) -> list[dict]:
-        return [
-            {"filename": old_carrier_path, "score": 1.0},     # rank 0 (higher keyword rank)
-            {"filename": today_non_carrier_path, "score": 1.0},  # rank 1
-            {"filename": f"self/identity-{today}.md", "score": 1.0},  # excluded by exclude_prefixes
-        ]
-
-    vault.find = ordered_find  # type: ignore[method-assign]
-
-    recall = Recall(vault=vault, config=RecallConfig(warm_top_n=2))
-    result = await recall.assemble(
-        make_request(content="recency excludes non carrier test warm content"), budget=8192
-    )
-
-    warm_paths = [r.path for r in result.warm]
-
-    # self/ must never appear in warm (criterion 4 — always, regardless of recency)
-    for path in warm_paths:
-        assert not path.startswith("self/"), (
-            f"self/ note must never appear in warm (D-02); found {path!r}"
-        )
-
-    # Both non-self notes must be in warm (warm_top_n=2)
-    assert old_carrier_path in warm_paths, (
-        f"Old carrier ({old_carrier_path!r}) must be in warm; got {warm_paths}"
-    )
-    assert today_non_carrier_path in warm_paths, (
-        f"Today's non-carrier ({today_non_carrier_path!r}) must be in warm; got {warm_paths}"
-    )
-    # The today non-carrier must rank above the old carrier:
-    # carrier is recency-weighted DOWN (× ≈ 0.36); non-carrier unchanged (D-02 positive allowlist).
-    assert warm_paths.index(today_non_carrier_path) < warm_paths.index(old_carrier_path), (
-        f"Today's non-carrier note must rank above the 10-day-old carrier note "
-        f"(carrier is recency-weighted DOWN, non-carrier is unchanged per D-02); "
-        f"order: {warm_paths}"
+    # No hidden recency multiplier: keyword/RRF rank order is preserved exactly —
+    # the older note (better keyword rank) stays first, unaffected by its date.
+    assert warm_paths.index(old_path) < warm_paths.index(new_path), (
+        f"warm-tier order must follow keyword/RRF rank only, never a namespace's date "
+        f"(D-01a: no recency weighting by omission); order: {warm_paths}"
     )
 
 

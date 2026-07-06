@@ -50,58 +50,6 @@ SEARCH_SCORE_THRESHOLD = -200.0
 # None of these belong in warm-tier knowledge retrieval.
 _WARM_TIER_EXCLUDE_PREFIXES = ("ops/", "_trash/", "self/")
 
-# Positive allowlist for warm-tier recency weighting (MEM-09 place b, D-02, OQ1).
-# These are the FULL conversation-carrier directories that NoteIntake.classify_and_apply
-# files conversation turns into — every non-ops/, non-empty, non-inbox/ value in
-# TOPIC_VAULT_PATH (note_classifier.py:57-65):
-#   journal      → journal/    (per-day subdirs)
-#   learning     → learning/
-#   accomplishment → accomplishments/
-#   reference    → references/
-# EXCLUDED on purpose (never weighted, D-02 episodic-only):
-#   observation  → ops/observations (under ops/ exclusion)
-#   noise        → "" (never filed)
-#   unsure       → inbox/ (sweep_skip_prefixes; documented MEM-07 gap, D-06)
-# This is a POSITIVE allowlist — NOT derived by negating _WARM_TIER_EXCLUDE_PREFIXES.
-# A future non-carrier namespace is never silently weighted (T-41-08).
-_CARRIER_NAMESPACE_PREFIXES: tuple[str, ...] = (
-    "journal/",
-    "learning/",
-    "accomplishments/",
-    "references/",
-)
-
-
-def _path_date(path: str) -> str | None:
-    """Extract the YYYY-MM-DD date from a carrier note's vault path.
-
-    Two shapes from note_intake.py:_topic_target_path:
-    - journal/{YYYY-MM-DD}/{slug}.md  → the path segment at position 1
-    - {base}/{slug}-{YYYY-MM-DD}.md   → the trailing YYYY-MM-DD in the filename stem
-
-    Returns None (→ recency_weight fail-open returns 1.0) when the date
-    cannot be parsed, so a malformed path never raises into the recall path (T-41-10).
-    """
-    import re as _re
-
-    # journal/ shape: second segment is the date
-    if path.startswith("journal/"):
-        parts = path.split("/")
-        if len(parts) >= 2:
-            candidate = parts[1]
-            if _re.fullmatch(r"\d{4}-\d{2}-\d{2}", candidate):
-                return candidate
-        return None
-
-    # topic-dir shape: filename stem ends in -{YYYY-MM-DD}
-    filename = path.rsplit("/", 1)[-1]
-    stem = filename[:-3] if filename.endswith(".md") else filename
-    m = _re.search(r"(\d{4}-\d{2}-\d{2})$", stem)
-    if m:
-        return m.group(1)
-    return None
-
-
 # Common English function words stripped before keyword-mode vault search.
 # Obsidian /search/simple/ is conjunctive: every term must appear in the document.
 # For long conversational queries (>5 words) this kills recall — session summaries
@@ -792,31 +740,18 @@ class Recall:
         if not merged:
             return []
 
-        # MEM-09 place (b), D-03, D-02, OQ1 — warm-tier recency weighting (episodic-only).
-        # OQ1 resolution: carrier = the FULL conversation-carrier set
-        #   ("journal/", "learning/", "accomplishments/", "references/") — all non-ops/,
-        #   non-inbox/ TOPIC_VAULT_PATH values NoteIntake files conversation turns into.
-        # D-02 episodic-only: NEVER weight self/ or ops/ results.
-        # D-03 blend: recency multiplies score, never hard-filters results.
-        # Gate is a POSITIVE allowlist (_CARRIER_NAMESPACE_PREFIXES), NOT a negation of
-        # _WARM_TIER_EXCLUDE_PREFIXES — T-41-08 mitigation: future namespaces are never
-        # silently weighted by omission.
-        # Fail-open: unparseable date → _path_date() returns None → recency_weight(None)
-        # returns 1.0 → no-op multiplier (T-41-10).
-        now = datetime.now(timezone.utc)
-        reweighted: list[SearchResult] = []
-        for r in merged:
-            if r.path.startswith(_CARRIER_NAMESPACE_PREFIXES):
-                # place (b): episodic-only; carrier-namespace note gets recency multiplier
-                date_str = _path_date(r.path)
-                w = recency_weight(date_str if date_str is not None else "", now=now)
-                reweighted.append(SearchResult(path=r.path, score=r.score * w, body=r.body))
-            else:
-                # Not a carrier — score unchanged (D-02, positive allowlist guard)
-                reweighted.append(r)
-
-        # Re-sort by adjusted score descending; tie-break on path for determinism
-        reweighted.sort(key=lambda r: (-r.score, r.path))
+        # D-01 (VAULT-03, MEM-09 end state): the carrier-namespace allowlist is
+        # retired — after the D-03 PARA reroute, every path it used to weight
+        # is gone (learning/reference → notes/ authored knowledge with no
+        # recency decay per the locked out-of-scope rule; journal/accomplishment
+        # → ops/, warm-excluded). Recency weighting now applies ONLY to
+        # episodic Session summaries via _hot_sessions (MEM-09 place (a)).
+        # The merged RRF output flows straight through, unweighted.
+        reweighted = merged
+        # Re-sort by score descending; tie-break on path for determinism
+        # (score is unchanged from RRF here, but the sort stays explicit for
+        # stability/documentation — matches the pre-D-01 shape).
+        reweighted = sorted(reweighted, key=lambda r: (-r.score, r.path))
 
         # Read real bodies for the post-RRF survivors (A5: ≤ warm_top_n reads)
         survivor_paths = [r.path for r in reweighted]
