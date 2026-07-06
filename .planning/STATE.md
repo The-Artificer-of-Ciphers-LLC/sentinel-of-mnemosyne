@@ -4,13 +4,13 @@ milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
 status: executing
 stopped_at: Completed 44-01-PLAN.md
-last_updated: "2026-07-06T13:29:24.197Z"
+last_updated: "2026-07-06T13:42:50.658Z"
 last_activity: 2026-07-06 -- Phase 44 execution started
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 44 (vault-namespace-taxonomy-foundation) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-07-06 -- Phase 44 execution started
 
@@ -141,6 +141,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 43 P03 | 12min | 2 tasks | 4 files |
 | Phase 43 P04 | 15min | 2 tasks | 4 files |
 | Phase 44 P01 | 45min | 3 tasks | 11 files |
+| Phase 44 P02 | 20min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -229,6 +230,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 44-01]: PARA reroute + both journal literals + is_in_topic_dir family fix landed in same commit (D-03, Pitfall 1, Pitfall 2)
 - [Phase ?]: [Phase 44-01]: Carrier-namespace recency allowlist removed from recall.py; recency weighting is Session-summary-only (D-01, MEM-09 end state)
 - [Phase ?]: [Phase 44-01]: D-06 (_safe_file_chat_note redirect retirement) pulled forward from plan 44-03 to keep the full suite green at this plan's boundary
+- [Phase ?]: [Phase 44-02]: inbox/ removed from both SWEEP_SKIP_PREFIXES and config.sweep_skip_prefixes (D-02) -- sweeper now walks/embeds inbox/ content; RecallConfig.exclude_prefixes (unchanged) keeps it out of warm recall
+- [Phase ?]: [Phase 44-02]: D-07 relocation guard (_is_inbox_control_file) is path/pattern-based (inbox/ prefix + leading-underscore filename), not is_in_topic_dir dependent
+- [Phase ?]: [Phase 44-02]: templates/ added to PROTECTED_NAMESPACES and config.protected_namespaces (dual-maintenance, additive, VAULT-01 partial)
 
 ### Pending Todos
 
@@ -263,7 +267,7 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-06T13:29:24.192Z
+Last session: 2026-07-06T13:41:23.707Z
 Stopped at: Completed 44-01-PLAN.md
 Resume file: 
 None
