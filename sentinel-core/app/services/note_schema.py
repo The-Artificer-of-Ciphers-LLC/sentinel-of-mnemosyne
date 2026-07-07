@@ -96,21 +96,26 @@ def split_schema_block(body: str) -> tuple[str, str | None]:
 def has_claim_title(body: str, filename_slug: str) -> bool:
     """D-05 structural-only claim-title check -- zero LLM calls.
 
-    True when an H1 line exists, its normalized text differs from the
-    normalized filename slug, and the title has more than one word.
+    True when an H1 line exists AND the title has more than one word.
     Deliberately narrow: this does not judge whether the title is
     genuinely claim-shaped (a topic label like "Notes on X" passes) --
     that nuance is out of scope for this cheap, deterministic check and
     is left to a future, separately-gated, opt-in pass with different
     tooling than this structural check.
+
+    ``filename_slug`` is accepted for signature/call-site stability but is
+    no longer used to reject titles that echo their filename slug. This
+    module's callers (the 6 Rs pipeline's ``moc_maintenance._slugify``)
+    derive a note's filename FROM its claim title, so a legitimate
+    multi-word claim's H1 slugifying to its own filename is the NORMAL
+    case, not a degenerate one -- rejecting on that basis produced a
+    false negative for every claim-derived filename (see 46-06 forensics).
     """
     match = _H1_RE.search(body or "")
     if not match:
         return False
     title = match.group(1).strip()
-    normalized = title.lower().replace(" ", "-").replace("_", "-")
-    bare_slug = (filename_slug or "").lower().replace("_", "-")
-    return normalized != bare_slug and len(title.split()) > 1
+    return len(title.split()) > 1
 
 
 def has_wikilink(body: str) -> bool:

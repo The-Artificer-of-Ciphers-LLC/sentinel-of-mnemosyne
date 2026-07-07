@@ -110,9 +110,9 @@ async def claim_title_assist(title: str) -> bool:
 
     Implemented as a cheap, pure-Python heuristic rather than an LLM call
     (documented choice — see SUMMARY): ``check_note_compliance``'s
-    ``has_claim_title`` already performs the mandatory structural check (H1
-    present, differs from the filename slug, more than one word). This
-    function adds one more permissive signal — whether the title contains a
+    ``has_claim_title`` already performs the mandatory structural check
+    (H1 present, more than one word). This function adds one more
+    permissive signal — whether the title contains a
     verb-like word, which a bare topic label ("Notes on X") usually lacks —
     without introducing an LLM round-trip, network dependency, or any
     possibility of raising. Never used to FAIL a note on its own; it is

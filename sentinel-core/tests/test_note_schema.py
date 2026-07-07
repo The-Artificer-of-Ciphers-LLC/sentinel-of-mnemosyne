@@ -147,9 +147,22 @@ def test_has_claim_title_accepts_real_multiword_claim():
     assert note_schema.has_claim_title(body, "some-other-slug") is True
 
 
-def test_has_claim_title_rejects_bare_slug_title():
+def test_has_claim_title_accepts_multiword_title_matching_its_slug():
+    # A multi-word H1 that slugifies to its own filename is the NORMAL
+    # case in this system (filenames are derived from titles), not a
+    # degenerate echo -- it must pass.
     body = "# concept hub\n\nProse.\n"
-    assert note_schema.has_claim_title(body, "concept_hub") is False
+    assert note_schema.has_claim_title(body, "concept_hub") is True
+
+
+def test_has_claim_title_accepts_short_punctuation_free_claim():
+    # Exact pipeline false-negative case: a short multi-word claim whose
+    # H1 slugifies to precisely its own filename slug.
+    body = "# Mitochondria Produce Cellular Energy\n\nbody\n"
+    assert (
+        note_schema.has_claim_title(body, "mitochondria-produce-cellular-energy")
+        is True
+    )
 
 
 def test_has_claim_title_rejects_single_word_title():
