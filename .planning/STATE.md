@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
 status: executing
-stopped_at: Completed 47-03-PLAN.md
-last_updated: "2026-07-07T02:36:44.408Z"
+stopped_at: Completed 47-04-PLAN.md
+last_updated: "2026-07-07T03:07:16.543Z"
 last_activity: 2026-07-07 -- Phase 47 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 25
-  completed_plans: 21
+  completed_plans: 22
   percent: 75
 current_phase: 47
 current_phase_name: Migration Cutover + Hardening
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 47 (migration-cutover-hardening) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-07-07 -- Phase 47 execution started
 
@@ -158,6 +158,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 47 P01 | 20min | 3 tasks | 4 files |
 | Phase 47 P02 | 15min | 2 tasks | 2 files |
 | Phase 47 P03 | 20min | 2 tasks | 2 files |
+| Phase 47 P04 | 30min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -270,6 +271,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 47-02]: RollbackLedger inverse-op descriptors are frozen dataclasses dispatched via isinstance (not a runtime type-union alias) -- version-safe; record_ops_move's idempotency guard reads current vault state at dst before relocating back
 - [Phase ?]: [Phase 47-02]: scan_for_title_refs kept to a single vault.find() call + len(), zero normalization -- RED tests assert exact literal query string and raw hit count, not a normalized/filtered count
 - [Phase ?]: [Phase 47-03]: MigrationReport.planned_moves (not plan-text's 'planned') and ops-bound title extraction via H1 (not filename stem) both corrected to match the Plan 01 Wave 0 RED test contracts, which are authoritative over plan prose
+- [Phase ?]: 47-04: release/reacquire migration's shared sweep lock around Track B (pipeline_orchestrator.run) and any graph-diff rebuild call, since both acquire the same lock internally -- holding it across either is a guaranteed nested-lock deadlock
+- [Phase ?]: 47-04: run() never re-raises a live-run failure -- captures the exception, evaluates the locked rollback-trigger predicate, always returns a MigrationReport
+- [Phase ?]: 47-04: RollbackLedger.record_ops_move gained optional original_body for byte-exact restore -- relocate() unconditionally overwrites original_path/topic_moved_at frontmatter, so a naive relocate-back inverse polluted restored notes
 
 ### Pending Todos
 
@@ -304,6 +308,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-07T02:36:44.402Z
-Stopped at: Completed 47-03-PLAN.md
+Last session: 2026-07-07T03:07:16.538Z
+Stopped at: Completed 47-04-PLAN.md
 Resume file: None

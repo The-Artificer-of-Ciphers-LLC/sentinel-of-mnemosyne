@@ -1012,7 +1012,7 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 3/7 plans executed
+**Plans:** 4/7 plans executed
 **Wave 1**
 
 - [x] 47-01-PLAN.md — Wave 0: RED Nyquist test scaffolds (rollback-ledger, ops-backlink-scan, orchestrator, routes)
@@ -1024,7 +1024,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 47-04-PLAN.md — Wave 3: Track B notes-bound Reduce backfill (reuse pipeline) + active backlink rewrite (D-03) + :graph gate (D-03a) + locked rollback trigger
+- [x] 47-04-PLAN.md — Wave 3: Track B notes-bound Reduce backfill (reuse pipeline) + active backlink rewrite (D-03) + :graph gate (D-03a) + locked rollback trigger
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
