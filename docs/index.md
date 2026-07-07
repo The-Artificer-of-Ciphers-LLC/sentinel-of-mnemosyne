@@ -63,3 +63,4 @@ Architectural decision records (ADRs) capture the reasoning behind key design ch
 | [ADR-0003](adr/0003-recall-module.md) | Recall module |
 | [ADR-0004](adr/0004-semantic-recall.md) | Semantic recall |
 | [ADR-0005](adr/0005-typed-session-summary.md) | Typed session summary |
+| [ADR-0006](adr/0006-pathfinder-command-contracts.md) | Pathfinder command contracts |

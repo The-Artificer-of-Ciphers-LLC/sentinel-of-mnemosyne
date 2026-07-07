@@ -1,7 +1,7 @@
 # Obsidian vault reference
 
 **Type:** Reference (Diataxis)
-**Version audit:** Sentinel Core `v0.51.1`, Pathfinder module `v1.1.2`
+**Version audit:** Sentinel Core `v0.52.0`, Pathfinder module `v1.1.2`
 
 Sentinel uses an Obsidian vault as its system of record. The vault remains plain markdown owned by the operator. Sentinel Core and modules access it through the Obsidian Local REST API, and Pathfinder also mounts the vault at `/vault` for archive and Foundry import flows.
 
@@ -21,9 +21,14 @@ All paths are relative to the vault root.
 | `ops/reminders.md` | Operator/Core | Time-bound reminders |
 | `ops/sessions/{YYYY-MM-DD}/{user_id}-{HH-MM-SS}.md` | Core | Session summaries written after exchanges |
 | `ops/sweeps/` | Core | Vault sweep reports |
-| `ops/observations/` | Core/Discord command prompts | Operational observations |
+| `ops/observations/` | Core/pipeline | Operational observations |
+| `ops/journal/{YYYY-MM-DD}/` | Core | Migrated/filed journal entries |
+| `ops/accomplishments/` | Core | Filed accomplishment entries |
+| `ops/tensions/` | Pipeline | Accumulated tensions surfaced for triage |
 | `inbox/` | Core | Low-confidence or raw captures awaiting classification |
 | `notes/` | Core/operator | Classified knowledge notes |
+| `notes/{claim-slug}.md` | Core/pipeline | Born-compliant claim notes |
+| `templates/` | Operator | Protected, non-relocatable namespace |
 | `core/users/{user_id}.md` | Core compatibility | Legacy per-user context path read by `get_user_context` |
 
 ---
@@ -56,7 +61,7 @@ On each `/message` request, Core assembles recall context from:
 | Recent sessions | Hot window defaults to the most recent 3 sessions over 2 days |
 | Warm recall | Semantic recall over searchable notes within the context budget |
 
-The assembled context is budgeted against the active model's context window before the provider call.
+The assembled context is budgeted against the active model's context window before the provider call. Recency weighting applies to episodic Session summaries only; the prior carrier-namespace (journal/learning/accomplishments/references) recency allowlist was retired. Warm recall still excludes the `ops/` and `inbox/` prefixes.
 
 ---
 
@@ -114,6 +119,18 @@ The Discord inbox commands call Core's `/inbox`, `/inbox/classify`, and `/inbox/
 
 ---
 
+## PARA Taxonomy & Note Schema
+
+Raw capture lands in `inbox/`. The 6 Rs pipeline Reduces inbox content into born-compliant notes at `notes/{claim-slug}.md`. A born-compliant note carries a claim-style H1 title, at least one `[[wikilink]]`, and a trailing fenced ```` ```_schema ```` block declaring its type and hub membership. MOC/hub notes also live under `notes/` and are materialised lazily as the graph grows; `hub_count` is reported by `GET /vault/graph` and the `:graph` verb.
+
+Operational and temporal content — journal entries, accomplishments, observations, and tensions — lives under `ops/`: `ops/journal/{YYYY-MM-DD}/`, `ops/accomplishments/`, `ops/observations/`, and `ops/tensions/`, alongside the existing `ops/sessions/`, `ops/sweeps/`, and `ops/reminders.md`. `ops/` content is excluded from warm recall.
+
+## Migration Cutover
+
+The Phase 47 one-shot `:migrate` command physically relocated any pre-existing flat-7 vault content into the PARA/ops structure: `journal/` and `accomplishments/` moved directly into `ops/` with embeddings preserved, and `learning/` and `references/` were folded into born-compliant `notes/{claim-slug}.md` via the Reduce pipeline. Wikilinks were rewritten to match, and the migration rolls back atomically on failure. There is zero grandfathering — a vault that has run the live migration has no flat-7 `journal/`, `accomplishments/`, `learning/`, or `references/` note content remaining at the top level.
+
+---
+
 ## Sweep Safety
 
 Vault sweep flows skip or protect operator-critical namespaces.
@@ -131,9 +148,10 @@ archive/
 security/
 ops/sessions/
 ops/sweeps/
-inbox/
 .obsidian/
 ```
+
+`inbox/` is no longer in the skip list — staged captures are swept and embedded like other vault content. They remain excluded from warm recall, so sweeping `inbox/` makes captures searchable without surfacing them in recency-weighted recall.
 
 Protected namespaces that Core refuses to move or trash:
 

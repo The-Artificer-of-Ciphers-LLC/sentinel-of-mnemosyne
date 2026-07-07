@@ -1,7 +1,7 @@
 # Sentinel API and contracts reference
 
 **Type:** Reference (Diataxis)
-**Version audit:** Sentinel Core `v0.51.1`, Discord interface `v0.2.1`, Pathfinder module `v1.1.2`
+**Version audit:** Sentinel Core `v0.52.0`, Discord interface `v0.2.1`, Pathfinder module `v1.1.2`
 **Scope:** HTTP APIs, message envelopes, module registration, container contracts, deployment files, and route inventory.
 
 For rationale, see [Architecture](../explanation/architecture.md). For vault paths, see [Obsidian Vault Layout](obsidian-vault.md). For feature coverage, see [Feature Reference](features.md).
@@ -55,12 +55,14 @@ Response:
 
 ## Sentinel Core Endpoints
 
-Memtrace currently maps 44 HTTP endpoints across the repository, including Core and Pathfinder routes. Sentinel Core exposes the public gateway surface below.
+Memtrace maps the HTTP endpoints across the repository, including Core and Pathfinder routes. Sentinel Core exposes the public gateway surface below.
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | `GET` | `/health` | no | Container health and non-blocking runtime probes |
 | `POST` | `/message` | yes | Process a standard message envelope |
+| `POST` | `/embeddings` | yes | Embeddings passthrough gateway mirroring the provider path |
+| `POST` | `/provider/complete` | yes | Narrow chat-completion gateway used by modules |
 | `GET` | `/status` | yes | Report runtime status for Obsidian and active AI provider |
 | `GET` | `/context/{user_id}` | yes | Debug recall context for a user |
 | `POST` | `/note/classify` | yes | Classify content and file, inbox, or drop it |
@@ -69,6 +71,13 @@ Memtrace currently maps 44 HTTP endpoints across the repository, including Core 
 | `POST` | `/inbox/discard` | yes | Remove an inbox entry without filing |
 | `POST` | `/vault/sweep/start` | yes | Admin-gated vault sweep start; supports dry-run and force reclassify |
 | `GET` | `/vault/sweep/status` | yes | Return current or last sweep status |
+| `GET` | `/vault/graph` | yes | Wikilink-graph report: note count, orphans, hub count, link density |
+| `GET` | `/vault/stats` | yes | Vault metrics |
+| `GET` | `/vault/check` | yes | Per-note `_schema` compliance report |
+| `POST` | `/vault/pipeline/start` | yes | Admin-gated; start a 6 Rs pipeline background run |
+| `GET` | `/vault/pipeline/status` | yes | Report 6 Rs pipeline run status |
+| `POST` | `/vault/migrate/start` | yes | Admin-gated; start the one-shot flat-7 → PARA/ops migration |
+| `GET` | `/vault/migrate/status` | yes | Report migration status |
 | `POST` | `/modules/register` | yes | Module startup registration |
 | `GET` | `/modules` | yes | List registered modules |
 | `GET` | `/modules/{name}/{path:path}` | yes | Proxy a GET request to a registered module |
@@ -129,6 +138,26 @@ The message route:
 ```
 
 Live sweep requests fail closed unless the runtime can confirm both the embedding model and classifier model are ready.
+
+`POST /vault/migrate/start` (admin-gated):
+
+```json
+{
+  "user_id": "discord-user-id",
+  "dry_run": true
+}
+```
+
+`POST /vault/pipeline/start` (admin-gated):
+
+```json
+{
+  "user_id": "discord-user-id",
+  "mode": "pipeline"
+}
+```
+
+`mode` is required and must be one of `ralph`, `pipeline`, `reweave`, or `rethink` (an invalid mode returns `422`). The Discord `:refactor` verb maps to `rethink`. Pipeline runs are always asynchronous background jobs — there is no dry-run mode; poll `GET /vault/pipeline/status` for progress.
 
 ---
 

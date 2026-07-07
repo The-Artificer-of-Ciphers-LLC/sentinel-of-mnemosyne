@@ -1,7 +1,7 @@
 # Sentinel of Mnemosyne — Architecture Explanation
 
 **Type:** Explanation (Diataxis)
-**Version audit:** Sentinel Core `v0.51.1`, Discord interface `v0.2.1`, Pathfinder module `v1.1.2`
+**Version audit:** Sentinel Core `v0.52.0`, Discord interface `v0.2.1`, Pathfinder module `v1.1.2`
 **Date:** 2026-06-16
 **Scope:** Core system (Path B) — interface layer, Sentinel Core container, AI provider layer, module API gateway, Obsidian vault, and current Pathfinder integration.
 
@@ -47,11 +47,12 @@ The Sentinel of Mnemosyne is a self-hosted, containerised AI assistant platform.
               └──────────────────────────┘
 ```
 
-**v0.51.1 release snapshot:**
+**v0.52.0 release snapshot:**
 - Core route seam uses `RouteContext` (`app.state.route_ctx`) with strict access.
 - Startup wiring/policy centralised in `initialize_startup()`.
 - Runtime probe, health formatting, message request mapping, module gateway/registry, and sweep orchestration are extracted as deep modules behind thin route adapters.
 - Pathfinder module integration is operational via module registry + proxy.
+- The second-brain memory subsystem — recall, note-quality schema + wikilink graph, the 6 Rs pipeline, and PARA taxonomy + migration cutover — is operational.
 
 **Chat path:** `POST /message → APIKeyMiddleware → InjectionFilter → LiteLLMProvider → OutputScanner → response`
 
@@ -188,7 +189,19 @@ docker compose up
 
 ---
 
-## 10. Build Sequence History (v0.1 → v0.51.1)
+## The Second-Brain Memory Subsystem
+
+Notes in `notes/` are required to be born-compliant — a claim-style H1 title, at least one `[[wikilink]]`, and a trailing `_schema` block — because a graph is only as navigable as its weakest node. A note with no claim and no link is a dead end: nothing points to it with intent, and it points nowhere. Enforcing the contract at write time, rather than trying to clean up an unstructured pile later, keeps the wikilink graph a genuinely traversable structure rather than a folder of prose that happens to live in Obsidian.
+
+The split between `ops/` and `notes/` follows from the same instinct. Operational and temporal content — journal entries, accomplishments, observations, tensions, sessions, sweeps — is valuable as a record of what happened, but it is not itself the durable claim graph the Sentinel reasons over, and its usefulness decays with time. Excluding it from warm recall keeps semantic search focused on the claims and connections meant to persist, while `ops/` still exists for anyone (or anything) that wants to look at the operational history directly.
+
+The 6 Rs pipeline — Record, Reduce, Reflect, Reweave, Verify, Rethink — is the background process that turns raw inbox capture into that durable graph: it reduces inbox content into born-compliant notes, reflects and reweaves links between them, verifies schema compliance, and periodically rethinks accumulated observations and tensions. It runs as a background orchestration cloned from the existing sweeper because the sweeper already solved the hard problem of running a long, potentially destructive vault-wide pass safely — admin-gating, dry-run-by-default, status polling, and rollback discipline. Reusing that shape for the pipeline avoided re-deriving the same safety guarantees from scratch.
+
+The flat-7 → PARA migration was designed as a one-shot cutover with atomic rollback rather than a gradual, dual-write migration because a vault's note graph is not easily reconciled between two schemas at once — a wikilink either points at the old flat layout or the new PARA layout, not both. Attempting incremental migration would have meant maintaining two valid vault shapes simultaneously and rewriting links twice. A single dry-run-previewed, admin-gated, all-or-nothing move (with embeddings preserved and wikilinks rewritten in the same pass) made the before/after state unambiguous and left the rollback path simple: fail atomically, or don't move at all.
+
+---
+
+## 10. Build Sequence History (v0.1 → v0.52.0)
 
 ### Phases 1–4: Core Loop, Memory, Voice, AI Layer
 
@@ -197,6 +210,10 @@ The foundation was built incrementally across the first four phases. Phase 1 est
 ### Phase 11: First Path B Module (v0.50 — Pathfinder 2e)
 
 Phase 11 delivered the first module under the Path B contract. The Pathfinder module container was scaffolded as a standalone FastAPI service exposing NPC management, session capture, and dialogue generation endpoints. The module registered itself with sentinel-core at container startup by calling `POST /modules/register`, which populated the in-memory `ModuleRegistry` with the module's name, reachable URL, and declared routes. A compose fragment (`modules/pathfinder/docker-compose.yml`) was added for the module, and the `sentinel.sh` wrapper was extended with a `--pf2e` flag that maps to the Docker Compose profile `pf2e`. The distinction between the Docker profile name (`pf2e`) and the module registry name (`pathfinder`) was deliberate: profile names are short compose identifiers; registry names are the logical keys used by the proxy router. Proxy correctness was verified by confirming that `POST /modules/pathfinder/npcs` reached the pathfinder container transparently. The phase concluded with `./sentinel.sh --discord --pf2e up -d` bringing up the full stack.
+
+### Phases 39–41 and v0.6.0 Phases 44–47: The Second-Brain Arc
+
+Phases 39–41 laid the groundwork for the memory subsystem: Phase 39 extracted recall into its own module, Phase 40 added semantic (embedding-backed) recall alongside the existing keyword/recency paths, and Phase 41 introduced typed session summaries so episodic history could be recalled with the same structure the rest of the system relies on. v0.6.0 then built the second-brain proper across four phases: Phase 44 established the PARA taxonomy foundation (`inbox/`, `notes/`, `ops/`); Phase 45 added the note-quality schema and wikilink graph (`_schema`, born-compliant notes, `GET /vault/graph`); Phase 46 shipped the 6 Rs pipeline orchestrator as a background process; and Phase 47 executed the one-shot migration cutover that moved legacy flat-7 vault content into the new structure.
 
 ---
 

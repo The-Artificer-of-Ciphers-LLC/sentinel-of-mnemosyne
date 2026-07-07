@@ -2,7 +2,7 @@
 
 Current shipped baseline:
 
-- Sentinel Core `v0.51.1`
+- Sentinel Core `v0.52.0`
 - Discord interface `v0.2.1`
 - Pathfinder module `v1.1.2`
 
@@ -26,6 +26,11 @@ This is a reference list of shipped capabilities. For setup steps, see [Install 
 | Module gateway | Module registration, module listing, and authenticated GET/POST proxying under `/modules/{name}/{path}` |
 | Runtime status | `/health`, `/status`, and `/context/{user_id}` diagnostic endpoints |
 | Browser access | CORS and Private Network Access support for Foundry and browser-based integrations |
+| Note-quality schema + graph | `_schema`/claim-title/wikilink checks and `GET /vault/graph`, `/stats`, `/check` |
+| 6 Rs pipeline | Background Record → Reduce → Reflect → Reweave → Verify → Rethink orchestration via `POST /vault/pipeline/*` |
+| Vault migration | Admin-gated one-shot flat-7 → PARA/ops cutover via `POST /vault/migrate/*` with atomic rollback |
+| Embeddings gateway | `POST /embeddings` passthrough |
+| Provider completion gateway | `POST /provider/complete` for modules |
 
 ---
 
@@ -38,7 +43,7 @@ This is a reference list of shipped capabilities. For setup steps, see [Install 
 | Help routing | Short natural-language help requests return local command help without calling Core |
 | Second-brain verbs | `:capture`, `:seed`, `:next`, `:health`, `:goals`, `:reminders`, `:ralph`, `:pipeline`, `:reweave`, `:check`, `:rethink`, `:refactor`, `:tasks`, `:stats`, `:graph`, `:learn`, `:remember`, `:connect`, `:review`, `:revisit` |
 | Note intake verbs | `:note`, `:inbox`, `:inbox classify`, and `:inbox discard` |
-| Admin verbs | `:vault-sweep`, `:vault-sweep dry-run`, `:vault-sweep force`, and `:vault-sweep status` gated by `SENTINEL_ADMIN_USER_IDS` |
+| Admin verbs | `:vault-sweep`, `:vault-sweep dry-run`, `:vault-sweep force`, `:vault-sweep status`, `:migrate`, `:migrate dry-run`, `:migrate status`, and `:migrate live` gated by `SENTINEL_ADMIN_USER_IDS` |
 | Plugin verbs | `:plugin:help`, `:plugin:health`, `:plugin:ask`, `:plugin:architect`, `:plugin:setup`, `:plugin:tutorial`, `:plugin:upgrade`, `:plugin:reseed`, `:plugin:add-domain`, `:plugin:recommend` |
 | Pathfinder dispatch | Registry-backed `:pf <noun> <verb>` dispatch with typed text/embed/file outcomes |
 | Foundry notifications | Internal notification endpoint used by the Pathfinder Foundry event bridge |
@@ -93,6 +98,8 @@ The Pathfinder module registers with Sentinel Core as `pathfinder` and is normal
 | Sweep safety | Protected namespaces prevent identity/security files from being moved by sweep flows |
 | Pathfinder namespace | Pathfinder writes under `mnemosyne/pf2e/` |
 | Import state | Foundry chat import dedupe state stays beside the imported inbox at `.foundry_chat_import_state.json` |
+| PARA taxonomy | Captures land in `inbox/`, Reduce into born-compliant `notes/`, operational content under `ops/` |
+| Note schema | `notes/` carry claim titles, wikilinks, and a trailing `_schema` block; lazy MOC/hub notes |
 
 ---
 

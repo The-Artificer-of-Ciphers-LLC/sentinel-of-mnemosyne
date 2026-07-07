@@ -37,7 +37,7 @@ Special verb: `:pf <noun> <verb> ...` is documented separately under [Pathfinder
 | `:reweave` | — | Backward pass: update older notes with recent vault additions |
 | `:check` | — | Validate `_schema` compliance across all `notes/` files |
 | `:rethink` | — | Review accumulated observations and tensions; triage each |
-| `:refactor` | — | Suggest vault restructuring improvements |
+| `:refactor` | — | Alias for `:rethink` (D-09 synonym) — review accumulated observations and tensions; triage each |
 | `:tasks` | — | Show the `ops/queue/` task queue |
 | `:stats` | — | Vault metrics: note count, orphan count, link density, hub sizes |
 | `:graph [query]` | optional | Graph analysis — orphans, triangles, density, backlinks |
@@ -54,6 +54,11 @@ Special verb: `:pf <noun> <verb> ...` is documented separately under [Pathfinder
 | `:vault-sweep status` | admin | Show in-flight or last sweep status |
 | `:vault-sweep dry-run` | admin | Sweep without persisting changes |
 | `:vault-sweep force` | admin | Sweep and force reclassification of everything |
+| `:migrate` | admin | Preview the flat-7 → PARA/ops data migration (dry-run; default) |
+| `:migrate status` | admin | Show in-flight or last migration status |
+| `:migrate live` | admin | Execute the one-shot live cutover (requires the explicit `live` verb) |
+
+`:migrate` mirrors `:vault-sweep` and is gated by `SENTINEL_ADMIN_USER_IDS`. Bare `:migrate` and `:migrate dry-run` both preview the migration with zero vault writes; only `:migrate live` mutates the vault, and it requires the explicit `live` verb — stricter than `:vault-sweep`, whose bare form is already live. A live run backfills existing `journal/` and `accomplishments/` content into `ops/` and folds `learning/` and `references/` into born-compliant `notes/` files, preserving wikilinks and rolling back atomically on failure. It is a one-shot cutover, not a routine command.
 
 **Usage patterns**
 
