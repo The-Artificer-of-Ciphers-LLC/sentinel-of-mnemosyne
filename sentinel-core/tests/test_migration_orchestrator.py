@@ -181,6 +181,39 @@ async def test_embedding_and_wikilink_preservation():
     assert report.status == "complete"
 
 
+async def test_journal_date_subdir_entries_are_migrated():
+    """MIG-01: a vault whose journal/ is already date-organized (entries
+    nested one level down as journal/{YYYY-MM-DD}/foo.md, no loose top-level
+    files) must still be fully backfilled -- the flat top-level scan alone
+    would silently grandfather these real journal notes, violating the
+    "journal/ contains zero remaining notes" post-condition. The original
+    date subdir must be preserved under ops/journal/{subdir}/, not replaced
+    with today's date."""
+    from app.services import migration_orchestrator
+
+    src = "journal/2026-06-06/nested-entry.md"
+    vault = FakeVault(
+        notes={
+            src: (
+                "---\ntopic: journal\n---\n\n"
+                "# Nested Journal Entry\n\nAn entry filed under a date subdir.\n"
+            ),
+        }
+    )
+    vault.dirs[""] = ["journal/"]
+    vault.dirs["journal"] = ["2026-06-06/"]
+    vault.dirs["journal/2026-06-06"] = ["nested-entry.md"]
+
+    report = await migration_orchestrator.run(vault, dry_run=False)
+
+    assert src not in vault.notes, "nested journal original must be gone post-migration"
+
+    moved_paths = [p for p in vault.notes if p.startswith("ops/journal/2026-06-06/")]
+    assert moved_paths, "expected the nested entry under ops/journal/2026-06-06/, preserving its original date subdir"
+
+    assert report.status == "complete"
+
+
 async def test_dry_run_writes_nothing():
     """D-02: ``dry_run=True`` performs zero vault mutations; the returned
     report enumerates the planned moves for operator preview."""

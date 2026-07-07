@@ -127,6 +127,27 @@ async def _discover_flat7(vault: Any) -> list[dict[str, str]]:
             {"src": src, "dst": f"{dst_dir}/{filename}", "track": "ops", "category": "journal"}
         )
 
+    # A vault whose journal is already date-organized nests entries one level
+    # down (journal/2026-07-06/foo.md); the flat top-level scan above misses
+    # them, which would grandfather real journal notes (violates MIG-01 /
+    # the "journal/ contains zero remaining notes" post-condition). Recurse
+    # exactly one level into journal subdirs, preserving the original subdir
+    # (its date) under ops/journal/{subdir}/ so the journal's existing
+    # temporal organization survives the move.
+    for entry in await vault.list_under(_JOURNAL_DIR):
+        if not entry.endswith("/"):
+            continue
+        subdir = entry.rstrip("/").rsplit("/", 1)[-1]
+        if not subdir:
+            continue
+        subpath = f"{_JOURNAL_DIR}/{subdir}"
+        for filename in await _list_dir_files(vault, subpath):
+            src = f"{subpath}/{filename}"
+            dst_dir = topic_dir_for("journal", today=subdir)
+            discovered.append(
+                {"src": src, "dst": f"{dst_dir}/{filename}", "track": "ops", "category": "journal"}
+            )
+
     for dirname in _ACCOMPLISHMENT_DIRS:
         for filename in await _list_dir_files(vault, dirname):
             src = f"{dirname}/{filename}"
