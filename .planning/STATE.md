@@ -2,19 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
-current_phase: 47
-current_phase_name: Migration Cutover + Hardening
 status: executing
-stopped_at: Phase 47 context gathered
-last_updated: "2026-07-07T01:46:49.937Z"
-last_activity: 2026-07-06
-last_activity_desc: Phase 46 complete (deployed + UAT passed)
+stopped_at: Completed 47-01-PLAN.md
+last_updated: "2026-07-07T02:18:43.952Z"
+last_activity: 2026-07-07 -- Phase 47 execution started
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 18
-  completed_plans: 18
+  total_plans: 25
+  completed_plans: 19
   percent: 75
+current_phase: 47
+current_phase_name: Migration Cutover + Hardening
 ---
 
 # Project State
@@ -24,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 47 — Migration Cutover + Hardening (Phase 46 complete & verified)
+**Current focus:** Phase 47 — migration-cutover-hardening
 
 ## Current Position
 
-Phase: 47 (Migration Cutover + Hardening) — NOT STARTED
-Plan: Not started
+Phase: 47 (migration-cutover-hardening) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-07-06 -- Phase 46 complete (deployed + UAT passed)
+Last activity: 2026-07-07 -- Phase 47 execution started
 
 ## Milestone Progress
 
@@ -156,6 +155,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 45 P05 | 20min | 3 tasks | 2 files |
 | Phase 45-note-quality-schema-graph-analysis P06 | 12min | 2 tasks | 3 files |
 | Phase 45-note-quality-schema-graph-analysis P07 | 7min | 2 tasks | 6 files |
+| Phase 47 P01 | 20min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -264,6 +264,7 @@ Recent decisions affecting current work:
 - [Phase 45-06]: /vault/check reads each note body individually via already-known sidecar paths (not a directory walk) since check_note_compliance's claim-title check requires raw text the sidecar does not store
 - [Phase ?]: [Phase 45-07]: call_core_graph/stats/check formatters emit only bounded summary keys (counts/density) + up to 10 failing paths for check, never raw route internals -- T-45-KEY mitigation
 - [Phase ?]: [Phase 45-07]: command_router graph/stats/check branches call the injected gateway callable positionally (call_core_graph(user_id)), matching call_core_sweep_status's convention; core_gateway's keyword surface is only used by bot.py's thin wrappers
+- [Phase ?]: [Phase 47-01]: Wave 0 RED test-authoring pins RollbackLedger/ops_backlink_scan/migration_orchestrator/routes.migration contracts before implementation; ledger tests use a minimal local FakeVault (test_graph_analysis.py precedent), orchestrator tests reuse tests/fakes/vault.py's full-protocol FakeVault (test_pipeline_orchestrator.py precedent); record_inbox_write's inverse is delete-if-absent
 
 ### Pending Todos
 
@@ -298,6 +299,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-07T01:06:27.428Z
-Stopped at: Phase 47 context gathered
-Resume file: .planning/phases/47-migration-cutover-hardening/47-CONTEXT.md
+Last session: 2026-07-07T02:18:43.947Z
+Stopped at: Completed 47-01-PLAN.md
+Resume file: None

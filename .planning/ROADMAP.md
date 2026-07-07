@@ -1012,10 +1012,10 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 7 plans
+**Plans:** 1/7 plans executed
 **Wave 1**
 
-- [ ] 47-01-PLAN.md — Wave 0: RED Nyquist test scaffolds (rollback-ledger, ops-backlink-scan, orchestrator, routes)
+- [x] 47-01-PLAN.md — Wave 0: RED Nyquist test scaffolds (rollback-ledger, ops-backlink-scan, orchestrator, routes)
 - [ ] 47-02-PLAN.md — Wave 1: `migration_rollback_ledger` (D-02/D-02a) + `ops_backlink_scan` (Pattern 3, D-03)
 
 **Wave 2** *(blocked on Wave 1 completion)*
