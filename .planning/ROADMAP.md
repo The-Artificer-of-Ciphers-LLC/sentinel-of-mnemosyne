@@ -68,7 +68,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [ ] **Phase 43: Embeddings Through Sentinel** — Route pf2e-module embeddings/RAG retrieval through core + wire a non-exo embeddings backend; also restores core's Phase-40 semantic recall (broken when embedding against exo)
 - [x] **Phase 44: Vault Namespace + Taxonomy Foundation** — Three-space vault (self/notes/ops/inbox/templates/) + PARA taxonomy supersedes flat-7; fixes the recall carrier-allowlist and sweeper inbox-skip silent-regression traps in the same phase (completed 2026-07-06)
 - [x] **Phase 45: Note-Quality Schema + Graph Analysis** — `_schema` footer blocks, claim titles, wikilinks, lazy MOC/hub notes; `:graph`/`:stats`/`:check` backed by a `links-index.json` sidecar (completed 2026-07-06)
-- [ ] **Phase 46: 6 Rs Pipeline Orchestrator** — Real background orchestration (cloned from the sweeper's shape) for `:capture`/`:seed`/`:ralph`/`:pipeline`/`:reweave`/`:rethink`, with concurrency guard and explicit outcome reporting
+- [x] **Phase 46: 6 Rs Pipeline Orchestrator** — Real background orchestration (cloned from the sweeper's shape) for `:capture`/`:seed`/`:ralph`/`:pipeline`/`:reweave`/`:rethink`, with concurrency guard and explicit outcome reporting (completed 2026-07-07)
 - [ ] **Phase 47: Migration Cutover + Hardening** — Backfill existing flat-7 notes into PARA/`_schema` with wikilinks intact; MEM-0x + command-surface regression ledger verified green; full 404+ suite stays green
 
 ## Phase Details
@@ -986,14 +986,15 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 7 plans (5 waves)
-- [ ] 46-01-PLAN.md — Wave 0: RED test scaffolds (all six_rs + orchestrator/route/status) + six_rs package stub
-- [ ] 46-02-PLAN.md — Wave 1: shared `model_resolution` helper (D-05) + note_classifier refactor
-- [ ] 46-03-PLAN.md — Wave 1: inbox `retry_count`/`needs_attention` (D-02b) + `pipeline_status_store` (D-03a)
-- [ ] 46-04-PLAN.md — Wave 2: `six_rs/reduce` (PIPE-02) + `six_rs/verify` (PIPE-07, D-02a)
-- [ ] 46-05-PLAN.md — Wave 2: `six_rs/reflect` (D-07) + `reweave` (D-01, PIPE-04) + `rethink` (PIPE-05)
-- [ ] 46-06-PLAN.md — Wave 3: `pipeline_orchestrator` + `routes/pipeline` + registration (D-03/D-04/D-06, PIPE-06)
-- [ ] 46-07-PLAN.md — Wave 4: Discord rewire of `:ralph`/`:pipeline`/`:reweave`/`:rethink`/`:refactor` (D-04a)
+**Status:** COMPLETE (verified 2026-07-07, 5/5 must-haves, human UAT passed)
+**Plans:** 7/7 plans complete
+- [x] 46-01-PLAN.md — Wave 0: RED test scaffolds (all six_rs + orchestrator/route/status) + six_rs package stub
+- [x] 46-02-PLAN.md — Wave 1: shared `model_resolution` helper (D-05) + note_classifier refactor
+- [x] 46-03-PLAN.md — Wave 1: inbox `retry_count`/`needs_attention` (D-02b) + `pipeline_status_store` (D-03a)
+- [x] 46-04-PLAN.md — Wave 2: `six_rs/reduce` (PIPE-02) + `six_rs/verify` (PIPE-07, D-02a)
+- [x] 46-05-PLAN.md — Wave 2: `six_rs/reflect` (D-07) + `reweave` (D-01, PIPE-04) + `rethink` (PIPE-05)
+- [x] 46-06-PLAN.md — Wave 3: `pipeline_orchestrator` + `routes/pipeline` + registration (D-03/D-04/D-06, PIPE-06)
+- [x] 46-07-PLAN.md — Wave 4: Discord rewire of `:ralph`/`:pipeline`/`:reweave`/`:rethink`/`:refactor` (D-04a)
 
 ### Phase 47: Migration Cutover + Hardening
 

@@ -114,13 +114,13 @@
 
 ## PIPE — the 6 Rs pipeline (v0.6.0)
 
-- [ ] **PIPE-01**: The user can capture with zero friction — `:capture`/`:seed` drop raw content into `inbox/`
-- [ ] **PIPE-02**: `:ralph` batch-processes the `inbox/` queue (Reduce + Reflect) via single-prompt orchestration, writing `notes/` with `_schema`, wikilinks, and MOC updates
-- [ ] **PIPE-03**: `:pipeline` runs the full 6 Rs sequence (Record → Reduce → Reflect → Reweave → Verify → Rethink)
-- [ ] **PIPE-04**: `:reweave` runs a backward pass that updates older notes given recent vault additions (reusing SemanticRecall for candidate discovery)
-- [ ] **PIPE-05**: `:rethink`/`:refactor` triage accumulated observations and tensions
-- [ ] **PIPE-06**: Pipeline commands are guarded against concurrent runs (lockfile precedent from the sweeper) and expose run status
-- [ ] **PIPE-07**: `_schema` quality enforcement happens at the Verify stage, not at capture/Reduce (capture stays frictionless)
+- [x] **PIPE-01**: The user can capture with zero friction — `:capture`/`:seed` drop raw content into `inbox/`
+- [x] **PIPE-02**: `:ralph` batch-processes the `inbox/` queue (Reduce + Reflect) via single-prompt orchestration, writing `notes/` with `_schema`, wikilinks, and MOC updates
+- [x] **PIPE-03**: `:pipeline` runs the full 6 Rs sequence (Record → Reduce → Reflect → Reweave → Verify → Rethink)
+- [x] **PIPE-04**: `:reweave` runs a backward pass that updates older notes given recent vault additions (reusing SemanticRecall for candidate discovery)
+- [x] **PIPE-05**: `:rethink`/`:refactor` triage accumulated observations and tensions
+- [x] **PIPE-06**: Pipeline commands are guarded against concurrent runs (lockfile precedent from the sweeper) and expose run status
+- [x] **PIPE-07**: `_schema` quality enforcement happens at the Verify stage, not at capture/Reduce (capture stays frictionless)
 
 ## MIG — migration + safety (v0.6.0)
 
