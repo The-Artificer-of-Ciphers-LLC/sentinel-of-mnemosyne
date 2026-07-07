@@ -226,15 +226,28 @@ async def test_verify_failed_entry_does_not_rollback():
     the reused pipeline run (a dead-lettered entry, no hard exception) does
     NOT trigger rollback -- already-successful ops-bound moves are RETAINED
     and ``report.rolled_back`` is False. Drives a genuine dead-letter
-    outcome (a Reduce result carrying no wikilink, so the REAL Verify gate
-    fails it) -- never mocks ``verify_note``/``check_note_compliance`` to
-    force the outcome."""
+    outcome via a single-word claim title (fails ``has_claim_title``,
+    independent of the wikilink check -- see below) -- never mocks
+    ``verify_note``/``check_note_compliance`` to force the outcome.
+
+    NOTE (Phase 47 Plan 04 fix, Rule 1): the reused pipeline's Reflect stage
+    (``six_rs.reflect.find_and_attach_hub`` -> ``add_hub_backlink_to_member``)
+    UNCONDITIONALLY writes a ``[[hub]]`` backlink into every successfully
+    Reflected note, on both the cosine-match AND the LLM-naming-fallback
+    path (this is the Phase 46 UAT-bug fix documented in
+    ``reflect.py``'s own module docstring). A Reduce result whose ``body``
+    merely lacks a wikilink therefore never reaches Verify without one --
+    Reflect always adds it first, so ``has_wikilink`` always passes.
+    ``has_claim_title`` (single-word title fails, independent of Reflect)
+    is the only compliance check Reflect cannot silently satisfy, so this
+    fixture uses a single-word claim title to drive a REAL, organic Verify
+    failure without touching ``verify_note``/``find_and_attach_hub`` mocks."""
     from app.services import migration_orchestrator
     from app.services.six_rs.reduce import ReduceResult
 
     fake_reduce_result = ReduceResult(
-        claim_title="A Claim With No Wikilink",
-        body="This note deliberately carries no wikilink, so real Verify fails it.",
+        claim_title="Untitled",
+        body="This note deliberately carries a single-word title, so real Verify fails it.",
         schema_type="permanent",
     )
 

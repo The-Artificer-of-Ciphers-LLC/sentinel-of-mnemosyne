@@ -32,7 +32,9 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 from app.errors import SweepInProgressError
-from app.services import pipeline_orchestrator
+from app.routes.graph import _hub_paths as _graph_hub_paths
+from app.routes.graph import _notes_map_from_index as _graph_notes_map
+from app.services import graph_analysis, pipeline_orchestrator
 from app.services.embedding_sidecar_index import (
     EMBEDDING_INDEX_PATH,
     NOMIC_DOCUMENT_PREFIX,
@@ -42,6 +44,7 @@ from app.services.embedding_sidecar_index import (
 )
 from app.services.graph_analysis import NOTES_ROOT
 from app.services.inbox import INBOX_PATH, append_entry
+from app.services.links_sidecar_index import rebuild_links_index_if_stale
 from app.services.migration_rollback_ledger import RollbackLedger
 from app.services.migration_status_store import (
     new_status as _new_status,
@@ -213,7 +216,9 @@ async def _move_ops_bound(
 
     actual_dst = await vault.relocate(src, dst)
     sidecar_key_moved = await _patch_sidecar_key(vault, src, actual_dst)
-    rollback.record_ops_move(src, actual_dst, sidecar_key_moved=sidecar_key_moved)
+    rollback.record_ops_move(
+        src, actual_dst, sidecar_key_moved=sidecar_key_moved, original_body=body
+    )
 
     post = await scan_for_title_refs(vault, title)
     if post < pre:
@@ -366,6 +371,101 @@ async def _enqueue_notes_bound(
     return old_titles, new_notes_paths
 
 
+def _build_rewrite_mapping(old_titles: list[str], new_notes_paths: list[str]) -> dict[str, str]:
+    """Best-effort old-title -> new-claim-title correspondence for D-03.
+
+    The reused ``pipeline_orchestrator.run(mode="pipeline")`` processes
+    queued entries in REVERSE entry_n order (last-enqueued first,
+    ``pipeline_orchestrator._run_pipeline``) and its ``PipelineReport``
+    carries no per-entry old->new path mapping; deriving an exact trace
+    would require modifying Phase 46 code, which is explicitly out of
+    scope ("reused verbatim", RESEARCH "Don't Hand-Roll"). Migration's own
+    entries are enqueued as a contiguous, highest-entry_n block, so pairing
+    ``reversed(old_titles)`` against the newly-created ``notes/`` slugs is
+    the best available approximation.
+
+    This is deliberately NOT relied upon for correctness: the D-03a graph
+    orphan-diff (``_graph_orphan_diff``) is the hard backstop -- any
+    backlink this mapping mispairs or misses still surfaces as a new orphan
+    under ``notes/`` and forces a full rollback, per the Locked Decision.
+    """
+    return {
+        old: new for old, new in zip(reversed(old_titles), new_notes_paths) if old and new
+    }
+
+
+async def _rewrite_backlinks_after_reduce(
+    vault: Any,
+    mapping: dict[str, str],
+    rollback: RollbackLedger,
+) -> None:
+    """D-03 active backlink rewrite: for each ``old_title -> new_claim_title``
+    pair, find vault-wide ``[[old_title]]`` references and rewrite them to
+    ``[[new_claim_title]]``, recording each edit for rollback.
+    """
+    if not mapping:
+        return
+    for old_title, new_path in mapping.items():
+        if not old_title or not new_path or old_title == new_path:
+            continue
+        new_body = await vault.read_note(new_path)
+        new_title = _extract_title(new_body, new_path)
+        if not new_title or new_title == old_title:
+            continue
+        old_link = f"[[{old_title}]]"
+        new_link = f"[[{new_title}]]"
+        hits = await vault.find(old_link)
+        for hit in hits:
+            path = hit.get("filename") or hit.get("path")
+            if not path or path == new_path:
+                continue
+            before_body = await vault.read_note(path)
+            if old_link not in before_body:
+                continue
+            rollback.record_backlink_rewrite(path, before_body)
+            after_body = before_body.replace(old_link, new_link)
+            await vault.write_note(path, after_body)
+
+
+# --- D-03a hard backstop: pre/post :graph orphan diff (Reduce track only) -
+
+
+async def _graph_orphan_diff(vault: Any) -> set[str]:
+    """Return the current ``notes/``-scoped orphan-path set via the SAME
+    code path ``GET /vault/graph`` uses (D-03a backstop for the Reduce
+    track only -- Pattern 3: ``:graph`` is structurally blind to ``ops/``,
+    which is why Track A uses the separate ``scan_for_title_refs`` instead).
+    """
+    index = await rebuild_links_index_if_stale(vault)
+    notes_map = _graph_notes_map(index)
+    hub_paths = _graph_hub_paths(index)
+    report = graph_analysis.build_graph_report(notes_map, hub_paths)
+    return set(report.orphans)
+
+
+def _should_rollback(
+    raised_exc: "Exception | None", new_orphans: int, ops_shortfall: bool
+) -> bool:
+    """Locked Decision (resolves RESEARCH Open Question 1): full atomic
+    rollback iff ANY of --
+
+      1. a hard exception escaped a REST mutation (``relocate``/
+         ``write_note``/``delete_note``/``read_note`` raising, an unhandled
+         crash, OR ``SweepInProgressError`` raised mid-body);
+      2. the D-03a ``:graph`` post-pre orphan diff found >=1 NEW orphan
+         (``notes/``-scoped);
+      3. the Track A ops-bound ``scan_for_title_refs`` post<pre shortfall
+         for any moved file that could not be repaired by a rewrite.
+
+    A pipeline dead-letter alone (``report.verify_failed`` non-empty, run
+    ``status="complete"``, no new orphans) is explicitly NOT a trigger --
+    Phase 46's own graceful-degrade contract (a bad LLM completion stays in
+    ``inbox/``, never silently dropped) is a designed, non-corrupting
+    outcome, not vault corruption.
+    """
+    return raised_exc is not None or new_orphans > 0 or ops_shortfall
+
+
 # --- Orchestrator entrypoint ---------------------------------------------
 
 
@@ -386,19 +486,27 @@ async def run(
     For a live run, Track A (ops-bound direct move) runs first while this
     migration's own lock is held -- ``relocate()``/``scan_for_title_refs``
     never touch the shared lock themselves, so no nesting risk there. The
-    lock is then explicitly RELEASED before Track B:
-    ``pipeline_orchestrator.run(mode="pipeline")`` acquires this SAME
-    shared lock internally (D-04 precedent) -- without releasing first, it
-    would immediately raise ``SweepInProgressError`` with zero work done
-    (a guaranteed self-deadlock, not a genuine failure; confirmed against
-    ``pipeline_orchestrator.run():505-506``). The lock is re-acquired once
-    Track B finishes so this migration's own exclusivity resumes for the
-    remainder of the run -- a failed re-acquisition (some other process
-    genuinely grabbed the lock in that window) raises
-    ``SweepInProgressError`` like any other lock conflict.
+    lock is then explicitly RELEASED before Track B: both
+    ``pipeline_orchestrator.run(mode="pipeline")`` and
+    ``links_sidecar_index.rebuild_links_index`` (called transitively via
+    ``_graph_orphan_diff`` below when the ``notes/`` sidecar is stale) each
+    acquire this SAME shared lock internally -- without releasing first,
+    either call would immediately raise ``SweepInProgressError`` with zero
+    work done (a guaranteed self-deadlock, not a genuine failure; confirmed
+    against ``pipeline_orchestrator.run():505-506`` and
+    ``links_sidecar_index.rebuild_links_index:118-119``). The lock is
+    re-acquired once Track B/the graph-diff/the backlink-rewrite finish, so
+    the rollback-trigger decision and any ``rollback.replay()`` still run
+    under migration's own exclusivity.
 
-    The hard-failure rollback trigger (D-02/D-02a) and the D-03a
-    ``:graph`` orphan-diff backstop are wired in a follow-on task.
+    Per the Locked Decision, NO exception escaping the live-run body is
+    re-raised: a hard failure (including a failed lock re-acquisition,
+    treated as "SweepInProgressError raised mid-body") is captured and
+    triggers ``rollback.replay()`` instead, so the caller always gets back
+    a ``MigrationReport`` describing the outcome (``rolled_back``/
+    ``status``/``errors``) rather than an exception. Only the very initial
+    lock-acquisition failure (this migration run could not even start)
+    still raises, unchanged from before.
     """
     migration_id = _iso_utc()
     report = MigrationReport(migration_id=migration_id, status="running", dry_run=dry_run)
@@ -416,40 +524,55 @@ async def run(
 
         rollback = RollbackLedger()
         ledger_backlinks: list[dict[str, Any]] = []
+        raised_exc: Exception | None = None
 
-        # --- Track A: ops-bound direct moves -----------------------------
-        await _run_track_a(vault, report, rollback, ledger_backlinks)
+        try:
+            # --- Track A: ops-bound direct moves -------------------------
+            await _run_track_a(vault, report, rollback, ledger_backlinks)
 
-        # --- Track B: notes-bound enqueue + Reduce backfill --------------
-        # Release the shared lock before delegating to the reused pipeline
-        # orchestrator: pipeline_orchestrator.run() acquires this SAME
-        # shared lock internally (D-04 precedent) -- without releasing
-        # first, it would immediately raise SweepInProgressError with zero
-        # work done (Pitfall 8 nested-lock deadlock; confirmed against
-        # pipeline_orchestrator.run():505-506). Re-acquire once Track B
-        # finishes so this migration's own exclusivity resumes for the
-        # remainder of the run.
-        await vault.release_sweep_lock()
-        await _enqueue_notes_bound(
-            vault, report, rollback, embedder=embedder, settings=settings
-        )
-        if not await vault.acquire_sweep_lock():
-            raise SweepInProgressError(
-                "migration_orchestrator: lock re-acquisition failed after Track B"
-            )
+            # Hand off to Track B -- see the docstring above for why the
+            # lock must be released here.
+            await vault.release_sweep_lock()
+            try:
+                graph_pre = await _graph_orphan_diff(vault)
+
+                old_titles, new_notes_paths = await _enqueue_notes_bound(
+                    vault, report, rollback, embedder=embedder, settings=settings
+                )
+
+                mapping = _build_rewrite_mapping(old_titles, new_notes_paths)
+                await _rewrite_backlinks_after_reduce(vault, mapping, rollback)
+
+                graph_post = await _graph_orphan_diff(vault)
+                report.new_orphans = len(graph_post - graph_pre)
+            except Exception as exc:
+                raised_exc = exc
+            finally:
+                if not await vault.acquire_sweep_lock() and raised_exc is None:
+                    raised_exc = SweepInProgressError(
+                        "migration_orchestrator: lock re-acquisition failed after Track B"
+                    )
+        except Exception as exc:
+            raised_exc = exc
+
+        ops_shortfall = any(entry["post"] < entry["pre"] for entry in ledger_backlinks)
+
+        if _should_rollback(raised_exc, report.new_orphans, ops_shortfall):
+            try:
+                await rollback.replay(vault)
+            except Exception as replay_exc:
+                report.errors.append(f"rollback replay failed: {replay_exc}")
+            report.rolled_back = True
+            report.status = "error"
+            if raised_exc is not None:
+                report.errors.append(str(raised_exc))
+        else:
+            report.status = "complete"
 
         if status_callback:
             status_callback(report)
 
-        report.status = "complete"
         return report
-    except SweepInProgressError:
-        report.status = "blocked"
-        raise
-    except Exception as exc:
-        report.status = "error"
-        report.errors.append(str(exc))
-        raise
     finally:
         await vault.release_sweep_lock()
 

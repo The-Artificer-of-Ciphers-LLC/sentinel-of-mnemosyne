@@ -40,11 +40,23 @@ class _RestoreOriginal:
 class _OpsMove:
     """Inverse of an ops-bound relocate: relocate ``dst`` back to ``src``,
     binding the embedding-sidecar key rename into the SAME entry (T-47-03:
-    never restore the file without also reverting the sidecar key)."""
+    never restore the file without also reverting the sidecar key).
+
+    ``original_body`` (optional, Phase 47 Plan 04 fix) captures the note's
+    EXACT pre-relocate body. ``ObsidianVault.relocate()`` unconditionally
+    overwrites ``original_path``/``topic_moved_at`` frontmatter on every
+    call it makes (``app/vault.py:631-690``) -- a naive "relocate back"
+    inverse would therefore leave stray provenance fields the pre-migration
+    note never had, breaking the D-02a byte-identical restoration
+    contract. When ``original_body`` is supplied, replay restores it via a
+    direct ``write_note`` instead of a second ``relocate()`` call. Older
+    callers that do not supply it fall back to the original relocate-based
+    inverse (backward compatible)."""
 
     src: str
     dst: str
     sidecar_key_moved: bool
+    original_body: str | None = None
 
 
 @dataclass(frozen=True)
@@ -84,13 +96,27 @@ class RollbackLedger:
         self._ops.append(_RestoreOriginal(src=src, body=body))
 
     def record_ops_move(
-        self, src: str, dst: str, *, sidecar_key_moved: bool = False
+        self,
+        src: str,
+        dst: str,
+        *,
+        sidecar_key_moved: bool = False,
+        original_body: str | None = None,
     ) -> None:
-        """Store an inverse that relocates ``dst`` -> ``src`` AND, if
+        """Store an inverse that restores ``dst`` -> ``src`` AND, if
         ``sidecar_key_moved``, reverts the embedding-index key ``dst`` ->
         ``src`` -- as ONE entry (T-47-03: never restore a file without its
-        sidecar)."""
-        self._ops.append(_OpsMove(src=src, dst=dst, sidecar_key_moved=sidecar_key_moved))
+        sidecar). Pass ``original_body`` (the pre-relocate body) for a
+        byte-exact restore that avoids ``relocate()``'s own
+        provenance-frontmatter side effect (see ``_OpsMove`` docstring)."""
+        self._ops.append(
+            _OpsMove(
+                src=src,
+                dst=dst,
+                sidecar_key_moved=sidecar_key_moved,
+                original_body=original_body,
+            )
+        )
 
     def record_backlink_rewrite(self, note_path: str, before_body: str) -> None:
         """Store an inverse that restores ``before_body`` to ``note_path``
@@ -133,11 +159,26 @@ class RollbackLedger:
             return
 
         if isinstance(op, _OpsMove):
-            # Idempotent: only relocate back if the moved file is still at
-            # dst -- mirrors detach_from_hub's "no-op if absent" discipline.
-            current = await vault.read_note(op.dst)
-            if current:
-                await vault.relocate(op.dst, op.src)
+            if op.original_body is not None:
+                # Byte-exact restore (Phase 47 Plan 04 fix): relocate()
+                # unconditionally overwrites original_path/topic_moved_at
+                # frontmatter on every call, so a second "relocate back"
+                # would leave stray provenance fields the pre-migration
+                # note never had. Write the captured pre-move body back
+                # directly, then remove the moved-to copy if still present
+                # (idempotent -- a no-op if already rolled back).
+                current = await vault.read_note(op.dst)
+                if current:
+                    await vault.delete_note(op.dst)
+                await vault.write_note(op.src, op.original_body)
+            else:
+                # Backward-compatible fallback for callers that don't
+                # capture the pre-move body: idempotent -- only relocate
+                # back if the moved file is still at dst (mirrors
+                # detach_from_hub's "no-op if absent" discipline).
+                current = await vault.read_note(op.dst)
+                if current:
+                    await vault.relocate(op.dst, op.src)
             if op.sidecar_key_moved:
                 await self._revert_sidecar_key(vault, op.src, op.dst)
             return
