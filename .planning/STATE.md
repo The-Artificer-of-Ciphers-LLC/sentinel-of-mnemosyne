@@ -4,14 +4,14 @@ milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
 status: executing
 stopped_at: Completed 47-06-PLAN.md
-last_updated: "2026-07-07T03:25:35.954Z"
-last_activity: 2026-07-07 -- Phase 47 execution started
+last_updated: "2026-07-07T04:33:08.981Z"
+last_activity: 2026-07-07
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 25
-  completed_plans: 24
-  percent: 75
+  completed_plans: 25
+  percent: 100
 current_phase: 47
 current_phase_name: Migration Cutover + Hardening
 ---
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 47 (migration-cutover-hardening) — EXECUTING
-Plan: 7 of 7
+Phase: 47
+Plan: Not started
 Status: Ready to execute
-Last activity: 2026-07-07 -- Phase 47 execution started
+Last activity: 2026-07-07
 
 ## Milestone Progress
 
@@ -88,7 +88,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 
 **Velocity:**
 
-- Total plans completed: 34
+- Total plans completed: 41
 - Average duration: ~5 min
 - Total execution time: 0.2 hours
 
@@ -104,6 +104,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | 42 | 5 | - | - |
 | 44 | 4 | - | - |
 | 45 | 7 | - | - |
+| 47 | 7 | - | - |
 
 **Recent Trend:**
 
