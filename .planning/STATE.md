@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
 status: executing
-stopped_at: Completed 47-06-PLAN.md
+stopped_at: Completed 47-07-PLAN.md (Phase 47 complete — v0.6.0 milestone done)
 last_updated: "2026-07-07T04:33:08.981Z"
 last_activity: 2026-07-07
 progress:
@@ -23,13 +23,13 @@ current_phase_name: Migration Cutover + Hardening
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** Phase 47 — migration-cutover-hardening
+**Current focus:** v0.6.0 complete — ready to close the milestone
 
 ## Current Position
 
 Phase: 47
-Plan: Not started
-Status: Ready to execute
+Plan: 07 (all 7 complete)
+Status: Phase 47 verified complete (4/4 MIG requirements) — live migration cutover executed; v0.6.0 milestone done (Phases 44–47)
 Last activity: 2026-07-07
 
 ## Milestone Progress
@@ -44,7 +44,7 @@ Last activity: 2026-07-07
 | v0.5 | The Dungeon | 28–36 | 🔜 IN PROGRESS |
 | v0.5.1 | The Second Brain | 39–41 | ✅ COMPLETE |
 | v0.5.2 | Provider Independence | 42–43 | 🔜 IN PROGRESS |
-| v0.6.0 | Restore the Second-Brain Core | 44–47 | 🔜 IN PROGRESS |
+| v0.6.0 | Restore the Second-Brain Core | 44–47 | ✅ COMPLETE |
 | v0.7 | The Workshop | TBD | — |
 | v0.8 | The Ledger | TBD | — |
 | v0.9 | The Trader (paper) | TBD | — |
