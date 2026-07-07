@@ -12,8 +12,7 @@ Two tracks (D-01):
     and ``accomplishments/`` -> ``ops/accomplishments/``, each a
     frontmatter-preserving ``relocate()`` plus an inline embedding
     sidecar-key patch (Pattern 2, D-04 "no re-embed"), gated by the
-    ops-scoped backlink scan (Pattern 3, D-03 verify-then-trust). Wired in
-    the next task.
+    ops-scoped backlink scan (Pattern 3, D-03 verify-then-trust).
   - **Track B (notes-bound)**: ``learning/``/``reference(s)/`` -> enqueued
     via ``inbox.append_entry()`` and routed through the reused 6 Rs
     ``pipeline_orchestrator.run(mode="pipeline")`` (Pattern 1). Not wired
@@ -28,20 +27,34 @@ loop executes (assert-zero-writes contract, D-02).
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 from app.errors import SweepInProgressError
+from app.services.embedding_sidecar_index import (
+    EMBEDDING_INDEX_PATH,
+    decode_index_body,
+    encode_index_body,
+)
+from app.services.migration_rollback_ledger import RollbackLedger
 from app.services.migration_status_store import (
     new_status as _new_status,
     patch_status as _patch_status,
     set_status as _set_status_from_report,
 )
 from app.services.note_classifier import topic_dir_for
+from app.services.ops_backlink_scan import scan_for_title_refs
 from app.services.task_runner import AsyncioTaskRunner, TaskRunner
 from app.time_utils import _iso_utc, _today_str
 
 logger = logging.getLogger(__name__)
+
+# Structural claim-title check, mirrors note_schema._H1_RE: any Markdown H1
+# line, anywhere in the body. Wikilinks reference notes by their display
+# title (Pattern 4 / Obsidian resolution semantics), never the raw flat-7
+# filename -- this is what scan_for_title_refs must search for.
+_H1_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 
 # Ops-bound (Track A) legacy directory candidates.
 _JOURNAL_DIR = "journal"
@@ -134,6 +147,94 @@ async def _discover_flat7(vault: Any) -> list[dict[str, str]]:
     return discovered
 
 
+def _extract_title(body: str, src: str) -> str:
+    """Return the note's H1 claim title, or its filename stem if absent.
+
+    Wikilinks reference notes by their display title, never the raw flat-7
+    filename -- this is what ``scan_for_title_refs`` must search for.
+    """
+    match = _H1_RE.search(body or "")
+    if match:
+        return match.group(1).strip()
+    stem = src.rsplit("/", 1)[-1]
+    if stem.endswith(".md"):
+        stem = stem[: -len(".md")]
+    return stem
+
+
+# --- Track A: ops-bound direct move + sidecar patch ----------------------
+
+
+async def _patch_sidecar_key(vault: Any, src: str, dst: str) -> bool:
+    """Rename the embedding sidecar's key ``src`` -> ``dst`` in place, value
+    untouched (Pattern 2 / D-04 "no re-embed").
+
+    Returns True if a rename happened, False if ``src`` had no sidecar
+    entry (nothing to patch — the note had no embedding yet and the
+    ordinary sweep will pick it up fresh under its new path, D-04a).
+    """
+    raw = await vault.read_note(EMBEDDING_INDEX_PATH)
+    if not raw.strip():
+        return False
+    index = decode_index_body(raw, EMBEDDING_INDEX_PATH)
+    if src not in index:
+        return False
+    index[dst] = index.pop(src)
+    await vault.write_note(EMBEDDING_INDEX_PATH, encode_index_body(index, EMBEDDING_INDEX_PATH))
+    return True
+
+
+async def _move_ops_bound(
+    vault: Any,
+    src: str,
+    dst: str,
+    rollback: RollbackLedger,
+    ledger_backlinks: list[dict[str, Any]],
+) -> str:
+    """Relocate one ops-bound file, patch its embedding-sidecar key inline
+    (Pattern 2/D-04, no re-embed), record both in ONE rollback-ledger entry
+    (T-47-03), and gate on the vault-wide pre/post backlink scan (Pattern
+    3/D-03 verify-then-trust).
+
+    A post<pre shortfall (a broken ops-bound backlink) is appended to
+    ``ledger_backlinks`` for the rollback-trigger logic to consume — never
+    silently ignored.
+    """
+    body = await vault.read_note(src)
+    title = _extract_title(body, src)
+
+    pre = await scan_for_title_refs(vault, title)
+
+    actual_dst = await vault.relocate(src, dst)
+    sidecar_key_moved = await _patch_sidecar_key(vault, src, actual_dst)
+    rollback.record_ops_move(src, actual_dst, sidecar_key_moved=sidecar_key_moved)
+
+    post = await scan_for_title_refs(vault, title)
+    if post < pre:
+        ledger_backlinks.append(
+            {"src": src, "dst": actual_dst, "title": title, "pre": pre, "post": post}
+        )
+
+    return actual_dst
+
+
+async def _run_track_a(
+    vault: Any,
+    report: MigrationReport,
+    rollback: RollbackLedger,
+    ledger_backlinks: list[dict[str, Any]],
+) -> None:
+    """Ops-bound direct-move track (D-01: ops-bound moves run first)."""
+    discovered = await _discover_flat7(vault)
+    for item in discovered:
+        if item["track"] != "ops":
+            continue
+        actual_dst = await _move_ops_bound(
+            vault, item["src"], item["dst"], rollback, ledger_backlinks
+        )
+        report.ops_moved.append({"src": item["src"], "dst": actual_dst})
+
+
 # --- Orchestrator entrypoint ---------------------------------------------
 
 
@@ -170,8 +271,14 @@ async def run(
             report.status = "complete"
             return report
 
-        # --- Track A: ops-bound direct moves (wired in the next task) ----
+        rollback = RollbackLedger()
+        ledger_backlinks: list[dict[str, Any]] = []
+
+        # --- Track A: ops-bound direct moves -----------------------------
+        await _run_track_a(vault, report, rollback, ledger_backlinks)
+
         # --- Track B: notes-bound enqueue + Reduce backfill (Plan 04) ----
+        # await _enqueue_notes_bound(vault, report, rollback, embedder=embedder, settings=settings)
 
         if status_callback:
             status_callback(report)
