@@ -1012,7 +1012,7 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 2/7 plans executed
+**Plans:** 3/7 plans executed
 **Wave 1**
 
 - [x] 47-01-PLAN.md — Wave 0: RED Nyquist test scaffolds (rollback-ledger, ops-backlink-scan, orchestrator, routes)
@@ -1020,7 +1020,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 47-03-PLAN.md — Wave 2: `migration_status_store` + orchestrator skeleton + Track A ops-bound move + sidecar-key patch (D-01/D-04)
+- [x] 47-03-PLAN.md — Wave 2: `migration_status_store` + orchestrator skeleton + Track A ops-bound move + sidecar-key patch (D-01/D-04)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
