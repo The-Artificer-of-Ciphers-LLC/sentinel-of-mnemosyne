@@ -1,22 +1,21 @@
 ---
-status: partial
+status: passed
 phase: 46-6 Rs Pipeline Orchestrator
 source: [46-VERIFICATION.md]
 started: 2026-07-06T22:04:57Z
-updated: 2026-07-06T23:55:31Z
+updated: 2026-07-07T00:25:25Z
 ---
 
 ## Current Test
 
-[testing complete — 1 pass, 1 blocked]
+[testing complete — 2/2 pass]
 
 ## Tests
 
 ### 1. Live :ralph/:pipeline run mutates the real Obsidian vault
 expected: Seed `inbox/` with a raw capture, run `:ralph` in Discord against the real Obsidian vault with a live LM Studio/exo model. A `notes/{slug}.md` file appears with a claim-style H1 title, at least one wikilink, and a trailing ```_schema block (status: draft); the relevant MOC/hub note is created or updated (appended, not duplicated). Repeating with `:pipeline` drives the full Reduce->Verify->Reflect->Reweave->Rethink sequence end-to-end, respecting the self/ boundary.
-result: [blocked]
-blocked_by: cold-start-empty-vault
-reason: "Pipeline ran correctly end-to-end against the real vault (Reduce produced clean claim titles; Reflect ran; Verify's compliance gate ran; failed entries were requeued with retry_count incremented, needs_attention at cap; errors=[]; self/ boundary respected — its 5 entries untouched, hubs_touched=0). BUT no note could be KEPT/filed: the vault is in a cold-start state (notes/, moc/, hubs/, maps/ all 0 entries), so Reflect's embedding hub-lookup finds no hub to link, no [[wikilink]] is added, and Verify's shipped has_wikilink NOTE-01 compliance rule fails → draft deleted + entry requeued. This is NOT a phase-46 code defect — every stage behaved correctly. Demonstrating a filed note requires a non-empty vault with at least one hub/MOC for Reflect to attach to."
+result: pass
+reason: "Initially failed to file any note (misdiagnosed as cold-start). Real root cause: Reduce→Verify→Reflect ordering + Reflect only linking hub→member meant no note ever got the member [[wikilink]] Verify requires → every note deleted+requeued. Fixed (commit 9b105f4): Reflect now writes a [[hub]] backlink into the member note and runs before Verify, with rollback-on-fail. Re-verified LIVE against the redeployed stack: seeded one clean claim → pipeline reported reduced=1, hubs_touched=1, verify_failed=0, errors=[]; a member note filed in notes/ with an H1 claim title, a [[Spaced Repetition]] wikilink, and a status:draft _schema block (check_note_compliance: zero failures); a hub note was created listing the member; Reweave appended a '## Reweave — <date>' section; self/ (5 entries) untouched throughout. Test artifacts cleaned up afterward."
 
 ### 2. Live pollable status reporting
 expected: Start a pipeline run (`:pipeline` or `:ralph`), then poll `:pipeline status` / `:ralph status` repeatedly while the background task runs (also verify `GET /vault/pipeline/status` directly). Status transitions idle -> running -> complete (or blocked/error), with entries_processed and the per-phase counts advancing between polls, and a final real outcome is reported (not a silent "done").
@@ -26,14 +25,16 @@ evidence: "`GET /vault/pipeline/status` returns the full PipelineReport schema; 
 ## Summary
 
 total: 2
-passed: 1
+passed: 2
 issues: 0
 pending: 0
 skipped: 0
-blocked: 1
+blocked: 0
 
 ## Gaps
 
 ## Findings
 
-- COLD-START GAP (needs user decision, not a phase-46 defect): On an empty vault (no hubs/MOCs), the pipeline can never file its first note — Verify's has_wikilink rule requires a [[wikilink]], but wikilinks come from Reflect attaching to an existing hub, and none exist yet. Chicken-and-egg. The live vault currently has notes/=0 (only self/ has 5 entries), which is itself worth confirming is expected. Decide: (a) expected — vault is normally seeded with hubs / has notes; or (b) real bootstrapping gap to address (e.g., allow the first note(s) to file without a hub, or seed a root MOC).
+- RESOLVED BUG (was reported here as 'cold-start'): the pipeline filed zero notes in prod due to a Verify/Reflect ordering + wikilink-direction defect. Fixed in commit 9b105f4 with a real-compliance integration test added (the mocked verify_note tests had masked it). Verified live 2026-07-07.
+- OPEN (low priority, separate): note_schema.has_claim_title vs moc_maintenance._slugify normalization may reject some punctuation-free H1 titles — but real Reduce-generated claim titles pass (verified live). Worth a quick separate check.
+- OPEN (confirm): prod vault notes/ was empty (only self/ populated) — confirm the deployed container points at the intended vault.
