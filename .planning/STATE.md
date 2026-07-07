@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
 status: executing
-stopped_at: Completed 47-01-PLAN.md
-last_updated: "2026-07-07T02:18:43.952Z"
+stopped_at: Completed 47-02-PLAN.md
+last_updated: "2026-07-07T02:24:29.828Z"
 last_activity: 2026-07-07 -- Phase 47 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 25
-  completed_plans: 19
+  completed_plans: 20
   percent: 75
 current_phase: 47
 current_phase_name: Migration Cutover + Hardening
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 47 (migration-cutover-hardening) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-07-07 -- Phase 47 execution started
 
@@ -156,6 +156,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 45-note-quality-schema-graph-analysis P06 | 12min | 2 tasks | 3 files |
 | Phase 45-note-quality-schema-graph-analysis P07 | 7min | 2 tasks | 6 files |
 | Phase 47 P01 | 20min | 3 tasks | 4 files |
+| Phase 47 P02 | 15min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -265,6 +266,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 45-07]: call_core_graph/stats/check formatters emit only bounded summary keys (counts/density) + up to 10 failing paths for check, never raw route internals -- T-45-KEY mitigation
 - [Phase ?]: [Phase 45-07]: command_router graph/stats/check branches call the injected gateway callable positionally (call_core_graph(user_id)), matching call_core_sweep_status's convention; core_gateway's keyword surface is only used by bot.py's thin wrappers
 - [Phase ?]: [Phase 47-01]: Wave 0 RED test-authoring pins RollbackLedger/ops_backlink_scan/migration_orchestrator/routes.migration contracts before implementation; ledger tests use a minimal local FakeVault (test_graph_analysis.py precedent), orchestrator tests reuse tests/fakes/vault.py's full-protocol FakeVault (test_pipeline_orchestrator.py precedent); record_inbox_write's inverse is delete-if-absent
+- [Phase ?]: [Phase 47-02]: RollbackLedger inverse-op descriptors are frozen dataclasses dispatched via isinstance (not a runtime type-union alias) -- version-safe; record_ops_move's idempotency guard reads current vault state at dst before relocating back
+- [Phase ?]: [Phase 47-02]: scan_for_title_refs kept to a single vault.find() call + len(), zero normalization -- RED tests assert exact literal query string and raw hit count, not a normalized/filtered count
 
 ### Pending Todos
 
@@ -299,6 +302,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-07T02:18:43.947Z
-Stopped at: Completed 47-01-PLAN.md
+Last session: 2026-07-07T02:24:29.823Z
+Stopped at: Completed 47-02-PLAN.md
 Resume file: None
