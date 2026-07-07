@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
 status: executing
-stopped_at: Completed 47-04-PLAN.md
-last_updated: "2026-07-07T03:07:16.543Z"
+stopped_at: Completed 47-05-PLAN.md
+last_updated: "2026-07-07T03:18:55.485Z"
 last_activity: 2026-07-07 -- Phase 47 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 25
-  completed_plans: 22
+  completed_plans: 23
   percent: 75
 current_phase: 47
 current_phase_name: Migration Cutover + Hardening
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 47 (migration-cutover-hardening) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-07-07 -- Phase 47 execution started
 
@@ -159,6 +159,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | Phase 47 P02 | 15min | 2 tasks | 2 files |
 | Phase 47 P03 | 20min | 2 tasks | 2 files |
 | Phase 47 P04 | 30min | 2 tasks | 3 files |
+| Phase 47 P05 | 15min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -274,6 +275,8 @@ Recent decisions affecting current work:
 - [Phase ?]: 47-04: release/reacquire migration's shared sweep lock around Track B (pipeline_orchestrator.run) and any graph-diff rebuild call, since both acquire the same lock internally -- holding it across either is a guaranteed nested-lock deadlock
 - [Phase ?]: 47-04: run() never re-raises a live-run failure -- captures the exception, evaluates the locked rollback-trigger predicate, always returns a MigrationReport
 - [Phase ?]: 47-04: RollbackLedger.record_ops_move gained optional original_body for byte-exact restore -- relocate() unconditionally overwrites original_path/topic_moved_at frontmatter, so a naive relocate-back inverse polluted restored notes
+- [Phase ?]: T-47-02: :migrate defaults to dry_run=True (bare or 'dry-run' verb); only the explicit 'live' verb performs a live migration
+- [Phase ?]: Wired interfaces/discord/bot.py to register call_core_migrate_start/status (not in plan's files_modified) — required for :migrate to be functional end-to-end, a prerequisite for Plan 07's live invocation
 
 ### Pending Todos
 
@@ -308,6 +311,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-07T03:07:16.538Z
-Stopped at: Completed 47-04-PLAN.md
+Last session: 2026-07-07T03:18:55.478Z
+Stopped at: Completed 47-05-PLAN.md
 Resume file: None

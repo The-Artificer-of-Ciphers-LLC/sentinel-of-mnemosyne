@@ -1012,7 +1012,7 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 4/7 plans executed
+**Plans:** 5/7 plans executed
 **Wave 1**
 
 - [x] 47-01-PLAN.md — Wave 0: RED Nyquist test scaffolds (rollback-ledger, ops-backlink-scan, orchestrator, routes)
@@ -1028,7 +1028,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 47-05-PLAN.md — Wave 4: admin-gated `/vault/migrate/*` routes + Discord `:migrate` surface (V4/T-47-01)
+- [x] 47-05-PLAN.md — Wave 4: admin-gated `/vault/migrate/*` routes + Discord `:migrate` surface (V4/T-47-01)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
