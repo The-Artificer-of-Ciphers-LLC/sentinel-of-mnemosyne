@@ -68,7 +68,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [ ] **Phase 43: Embeddings Through Sentinel** — Route pf2e-module embeddings/RAG retrieval through core + wire a non-exo embeddings backend; also restores core's Phase-40 semantic recall (broken when embedding against exo)
 - [x] **Phase 44: Vault Namespace + Taxonomy Foundation** — Three-space vault (self/notes/ops/inbox/templates/) + PARA taxonomy supersedes flat-7; fixes the recall carrier-allowlist and sweeper inbox-skip silent-regression traps in the same phase (completed 2026-07-06)
 - [x] **Phase 45: Note-Quality Schema + Graph Analysis** — `_schema` footer blocks, claim titles, wikilinks, lazy MOC/hub notes; `:graph`/`:stats`/`:check` backed by a `links-index.json` sidecar (completed 2026-07-06)
-- [x] **Phase 46: 6 Rs Pipeline Orchestrator** — Real background orchestration (cloned from the sweeper's shape) for `:capture`/`:seed`/`:ralph`/`:pipeline`/`:reweave`/`:rethink`, with concurrency guard and explicit outcome reporting (completed 2026-07-07)
+- [x] **Phase 46: 6 Rs Pipeline Orchestrator** — Real background orchestration (cloned from the sweeper's shape) for `:capture`/`:seed`/`:ralph`/`:pipeline`/`:reweave`/`:rethink`, with concurrency guard and explicit outcome reporting (completed 2026-07-06)
 - [ ] **Phase 47: Migration Cutover + Hardening** — Backfill existing flat-7 notes into PARA/`_schema` with wikilinks intact; MEM-0x + command-surface regression ledger verified green; full 404+ suite stays green
 
 ## Phase Details
@@ -986,7 +986,7 @@ Plans:
 
 **UI hint**: no
 
-**Status:** COMPLETE (verified 2026-07-07, 5/5 must-haves, human UAT passed)
+**Status:** COMPLETE (verified 2026-07-06, 5/5 must-haves, human UAT passed)
 **Plans:** 7/7 plans complete
 - [x] 46-01-PLAN.md — Wave 0: RED test scaffolds (all six_rs + orchestrator/route/status) + six_rs package stub
 - [x] 46-02-PLAN.md — Wave 1: shared `model_resolution` helper (D-05) + note_classifier refactor
