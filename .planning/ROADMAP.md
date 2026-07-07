@@ -988,6 +988,7 @@ Plans:
 
 **Status:** COMPLETE (verified 2026-07-06, 5/5 must-haves, human UAT passed)
 **Plans:** 7/7 plans complete
+
 - [x] 46-01-PLAN.md — Wave 0: RED test scaffolds (all six_rs + orchestrator/route/status) + six_rs package stub
 - [x] 46-02-PLAN.md — Wave 1: shared `model_resolution` helper (D-05) + note_classifier refactor
 - [x] 46-03-PLAN.md — Wave 1: inbox `retry_count`/`needs_attention` (D-02b) + `pipeline_status_store` (D-03a)
@@ -1012,10 +1013,27 @@ Plans:
 **UI hint**: no
 
 **Plans:** 7 plans
+**Wave 1**
+
 - [ ] 47-01-PLAN.md — Wave 0: RED Nyquist test scaffolds (rollback-ledger, ops-backlink-scan, orchestrator, routes)
 - [ ] 47-02-PLAN.md — Wave 1: `migration_rollback_ledger` (D-02/D-02a) + `ops_backlink_scan` (Pattern 3, D-03)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 47-03-PLAN.md — Wave 2: `migration_status_store` + orchestrator skeleton + Track A ops-bound move + sidecar-key patch (D-01/D-04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 47-04-PLAN.md — Wave 3: Track B notes-bound Reduce backfill (reuse pipeline) + active backlink rewrite (D-03) + :graph gate (D-03a) + locked rollback trigger
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 47-05-PLAN.md — Wave 4: admin-gated `/vault/migrate/*` routes + Discord `:migrate` surface (V4/T-47-01)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 47-06-PLAN.md — Wave 5: boundary hardening gate — full suite (590/326) + MEM-01..09 hot gate green (MIG-04, D-05)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 47-07-PLAN.md — Wave 6: live cutover (empirical wikilink + dry-run + live run) + v0.6.0 ledger check-in (MIG-01/MIG-03)

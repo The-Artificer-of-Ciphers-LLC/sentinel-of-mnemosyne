@@ -4,9 +4,9 @@ milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
 current_phase: 47
 current_phase_name: Migration Cutover + Hardening
-status: verifying
+status: executing
 stopped_at: Phase 47 context gathered
-last_updated: "2026-07-07T01:06:27.436Z"
+last_updated: "2026-07-07T01:46:49.937Z"
 last_activity: 2026-07-06
 last_activity_desc: Phase 46 complete (deployed + UAT passed)
 progress:
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 Phase: 47 (Migration Cutover + Hardening) — NOT STARTED
 Plan: Not started
-Status: Phase 46 complete & verified — Phase 47 not started
+Status: Ready to execute
 Last activity: 2026-07-06 -- Phase 46 complete (deployed + UAT passed)
 
 ## Milestone Progress
