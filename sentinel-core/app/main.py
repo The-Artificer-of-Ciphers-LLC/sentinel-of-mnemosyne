@@ -31,6 +31,7 @@ from app.routes.message import router as message_router
 from app.runtime_config import runtime_config_from_settings
 from app.routes.embeddings import router as embeddings_router
 from app.routes.graph import router as graph_router
+from app.routes.migration import router as migration_router
 from app.routes.modules import router as modules_router
 from app.routes.note import router as note_router
 from app.routes.pipeline import router as pipeline_router
@@ -103,6 +104,7 @@ app.include_router(status_router)
 app.include_router(modules_router)
 app.include_router(note_router)
 app.include_router(pipeline_router)
+app.include_router(migration_router)
 app.include_router(provider_router)
 app.include_router(embeddings_router)
 app.include_router(graph_router)
