@@ -2,10 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
+current_phase: 47
+current_phase_name: Migration Cutover + Hardening
 status: verifying
-stopped_at: Phase 46 complete
-last_updated: "2026-07-06T20:26:59.826Z"
-last_activity: 2026-07-06 -- Phase 46 complete (deployed + UAT passed)
+stopped_at: Phase 47 context gathered
+last_updated: "2026-07-07T01:06:27.436Z"
+last_activity: 2026-07-06
+last_activity_desc: Phase 46 complete (deployed + UAT passed)
 progress:
   total_phases: 4
   completed_phases: 3
@@ -295,6 +298,6 @@ Recent decisions affecting current work:
 
 ## Session Continuity
 
-Last session: 2026-07-06T18:58:42.089Z
-Stopped at: Phase 46 complete (deployed + UAT passed)
-Resume file: none — Phase 47 (Migration Cutover + Hardening) not yet started, no context file generated
+Last session: 2026-07-07T01:06:27.428Z
+Stopped at: Phase 47 context gathered
+Resume file: .planning/phases/47-migration-cutover-hardening/47-CONTEXT.md
