@@ -1011,4 +1011,11 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** TBD
+**Plans:** 7 plans
+- [ ] 47-01-PLAN.md — Wave 0: RED Nyquist test scaffolds (rollback-ledger, ops-backlink-scan, orchestrator, routes)
+- [ ] 47-02-PLAN.md — Wave 1: `migration_rollback_ledger` (D-02/D-02a) + `ops_backlink_scan` (Pattern 3, D-03)
+- [ ] 47-03-PLAN.md — Wave 2: `migration_status_store` + orchestrator skeleton + Track A ops-bound move + sidecar-key patch (D-01/D-04)
+- [ ] 47-04-PLAN.md — Wave 3: Track B notes-bound Reduce backfill (reuse pipeline) + active backlink rewrite (D-03) + :graph gate (D-03a) + locked rollback trigger
+- [ ] 47-05-PLAN.md — Wave 4: admin-gated `/vault/migrate/*` routes + Discord `:migrate` surface (V4/T-47-01)
+- [ ] 47-06-PLAN.md — Wave 5: boundary hardening gate — full suite (590/326) + MEM-01..09 hot gate green (MIG-04, D-05)
+- [ ] 47-07-PLAN.md — Wave 6: live cutover (empirical wikilink + dry-run + live run) + v0.6.0 ledger check-in (MIG-01/MIG-03)
