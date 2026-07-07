@@ -40,12 +40,15 @@ context on every message — so conversations are always informed by history, ne
 - ✓ VAULT-03: Semantic recall recency weighting reconciled to the new namespaces via the D-01 "Sessions-only collapse" — the stale `_CARRIER_NAMESPACE_PREFIXES` allowlist is retired and recency is Session-summary-only; no silent recall degradation — Validated in Phase 44: Vault Namespace + Taxonomy Foundation
 - ✓ VAULT-04: The vault sweeper no longer wholesale-skips `inbox/` — staged captures are embedded, while remaining excluded from the keyword warm tier (`RecallConfig.exclude_prefixes`) until Reduce promotes them to `notes/` — Validated in Phase 44: Vault Namespace + Taxonomy Foundation
 - ✓ VAULT-05: Every message reads the three-space `self/` files at session start (identity, methodology, goals, relationships) — Validated in Phase 44: Vault Namespace + Taxonomy Foundation
+- ✓ NOTE-01, NOTE-02, NOTE-03: `_schema` footer blocks, claim titles, wikilinks, lazy MOC/hub notes, and `:graph`/`:stats`/`:check` backed by a `links-index.json` sidecar — v0.6.0, Validated in Phase 45: Note-Quality Schema + Graph Analysis
+- ✓ PIPE-01..07: The 6 Rs pipeline (Record → Reduce → Reflect → Reweave → Verify → Rethink) as real background orchestration — `:capture`/`:seed`/`:ralph`/`:pipeline`/`:reweave`/`:rethink` with concurrency guard and explicit outcome reporting — v0.6.0, Validated in Phase 46: 6 Rs Pipeline Orchestrator
+- ✓ MIG-01..04: Live vault migration cutover — flat-7 notes backfilled into PARA/`_schema` structure (`ops/`+`notes/`) with wikilinks intact, zero grandfathering, zero new orphans, no rollback needed, plus `:migrate` routes/command — v0.6.0, Validated in Phase 47: Migration Cutover + Hardening
 
 See `.planning/REQUIREMENTS.md` for the full validated requirement history across phases 1–38.
 
 ### Active
 
-Active requirements for v0.5.1 are enumerated in **Current Milestone** below. See `.planning/ROADMAP.md`
+Active requirements for the next milestone are TBD. See `.planning/ROADMAP.md`
 for the phase-level breakdown.
 
 ### Out of Scope
@@ -72,7 +75,9 @@ Phase 40 complete — semantic recall implemented (ADR-0004); `SemanticRecall` s
 
 Phase 41 complete — typed `SessionSummary` and `RetentionPolicy` implemented (ADR-0005); older sessions recalled via the index (warm tier) instead of dropped past the hot window; `RetentionPolicy` is operator-tunable via env; recency weighting applied to episodic/carrier namespaces. MEM-06, MEM-07, MEM-08, and MEM-09 validated. v0.5.1 "The Second Brain" milestone complete (all 3 phases). 20/20 must-haves, full suite 404 passed / 12 skipped.
 
-Phase 44 complete — three-space vault namespace (`self/ notes/ ops/ inbox/ templates/`) + PARA taxonomy replaces the flat-7 classifier as the routing table (D-03); the two research-flagged silent-regression traps fixed in-phase — `recall.py`'s carrier-namespace recency allowlist collapsed to Sessions-only (D-01) and `vault_sweeper.py`'s `inbox/` wholesale-skip removed so staged captures embed (D-02); underscore-prefixed `inbox/` control files guarded from relocation (D-07); `self/` stubs lazily auto-created and read every message (D-04, D-04a). VAULT-01..05 validated; SC-3 reconciled to shipped behavior via accepted override. v0.6.0 "Restore the Second-Brain Core" milestone underway (1/4 phases). Full suite 473 passed / 12 skipped.
+Phase 44 complete — three-space vault namespace (`self/ notes/ ops/ inbox/ templates/`) + PARA taxonomy replaces the flat-7 classifier as the routing table (D-03); the two research-flagged silent-regression traps fixed in-phase — `recall.py`'s carrier-namespace recency allowlist collapsed to Sessions-only (D-01) and `vault_sweeper.py`'s `inbox/` wholesale-skip removed so staged captures embed (D-02); underscore-prefixed `inbox/` control files guarded from relocation (D-07); `self/` stubs lazily auto-created and read every message (D-04, D-04a). VAULT-01..05 validated; SC-3 reconciled to shipped behavior via accepted override.
+
+**v0.6.0 "Restore the Second-Brain Core" milestone shipped 2026-07-07** (Phases 44–47, 25 plans, 48 tasks, 141 commits, +23,881/−536 lines, ~2 days). The second-brain core is restored and the live vault migrated to the PARA/`_schema` structure: note-quality `_schema`/wikilink/graph machinery + `/vault/graph|stats|check` routes shipped in Phase 45; the 6 Rs pipeline orchestrator wired end-to-end (`:ralph`/`:pipeline`/`:reweave`/`:rethink`) in Phase 46; the live vault migration cutover — flat-7 notes physically backfilled into `ops/`+`notes/` with zero grandfathering, zero new orphans, no rollback, plus `:migrate` routes/command — in Phase 47. sentinel-core app is now ≈11,576 LOC (Python). Both suites green: sentinel-core 593 passed/12 skipped, discord 286 passed/50 skipped. Full detail archived at `.planning/milestones/v0.6.0-ROADMAP.md`.
 
 **Domain vocabulary** (canonical terms — see `CONTEXT.md` for full glossary):
 - **Vault**: the Obsidian vault; the `Vault` Protocol in `app/vault.py` is the sole persistence seam
@@ -106,21 +111,15 @@ Phase 44 complete — three-space vault namespace (`self/ notes/ ops/ inbox/ tem
 | Typed `SessionSummary` + `RetentionPolicy` + recency-weighted merge (ADR-0005) | Stops hard-dropping context after 3 turns; older sessions recalled via index instead of silently lost; recalled sessions ranked by recency | ✓ Good |
 | LiteLLM-direct as the AI layer; Pi harness is optional (`--pi` flag) | Removes an unnecessary process boundary for standard chat; Pi harness reserved for advanced coding use at v0.7 | ✓ Good |
 | Docker Compose override fragments per module/interface | Modules never touch the base compose file; zero central registry sprawl | ✓ Good |
+| Two-track migration: `ops/`-bound notes direct-moved, `notes/`-bound notes backfilled via Reduce (Phase 47) | Journal/accomplishment/observation content needs only relocation with sidecar-key preservation; learning/reference content needs real `_schema`/wikilink authoring, so it reuses the Phase 46 Reduce pipeline rather than a bespoke migration writer | ✓ Good |
+| Verify-then-trust ops moves; locked rollback trigger only on Track B failure (Phase 47) | Backlink rewrite + `:graph` dangling-link gate confirm zero new orphans before the migration is considered safe to leave uncommitted-to-rollback | ✓ Good |
+| Reuse `pipeline_orchestrator` verbatim for Track B backfill instead of a parallel migration-specific orchestrator (Phase 47) | The 6 Rs orchestrator already had concurrency guard, outcome reporting, and Verify gating from Phase 46 — building a second orchestrator would duplicate that machinery for no behavioral gain | ✓ Good |
 
 ---
 
-## Current Milestone: v0.6.0 Restore the Second-Brain Core (arscontexta + BASB)
+## Current Milestone: TBD
 
-**Goal:** Rebuild the Sentinel core as the arscontexta+BASB agentic note-taking engine that the phase-27 "Path B" pivot unintentionally gutted — with Pathfinder demoted back to just one module alongside it. Build ON TOP of the current post-pi modular architecture; do NOT revert (keep the recall module, semantic recall, embeddings-through-sentinel, and Pathfinder work).
-
-**Target features:**
-- Three-space vault + BASB structure (`self/ notes/ ops/ inbox/ templates/`, PARA taxonomy replacing the flat-7 classifier)
-- The 27-command system (`:capture :seed :ralph :pipeline :reweave :connect :graph :learn` …)
-- The 6 Rs pipeline (Record → Reduce → Reflect → Reweave → Verify → Rethink)
-- Note-quality standard (`_schema` blocks, claim titles, wikilinks) + MOC/hub notes
-- Pathfinder preserved as a module (not reverted)
-
-**Key context:** The full original design is recovered at `docs/2nd-brain-original-design/10-CONTEXT-master-spec.md` (phase-10 master spec, commit 4c8f1c2). The pre-pivot boundary is tagged `pre-27-pivot` (d6a0242). Reference: arscontexta = https://github.com/agenticnotetaking/arscontexta fused with Tiago Forte's Building a Second Brain (PARA/CODE).
+v0.6.0 "Restore the Second-Brain Core" (Phases 44–47) shipped 2026-07-07. The next milestone has not yet been scoped. See `.planning/ROADMAP.md` for the phase queue and `.planning/milestones/v0.6.0-ROADMAP.md` for the full archived v0.6.0 detail.
 
 ---
 
@@ -143,4 +142,4 @@ PROJECT.md evolves throughout the project lifecycle.
 
 ---
 
-*Last updated: 2026-07-06*
+*Last updated: 2026-07-07 after v0.6.0 milestone*

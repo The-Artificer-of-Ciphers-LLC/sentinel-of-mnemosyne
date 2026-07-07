@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: — Restore the Second-Brain Core
-status: executing
-stopped_at: Completed 47-07-PLAN.md (Phase 47 complete — v0.6.0 milestone done)
-last_updated: "2026-07-07T04:33:08.981Z"
-last_activity: 2026-07-07
+status: Awaiting next milestone
+stopped_at: v0.6.0 shipped — Phases 44–47 all complete (47-07 live cutover done)
+last_updated: "2026-07-07T12:00:48.598Z"
+last_activity: 2026-07-07 — Milestone v0.6.0 completed and archived
 progress:
   total_phases: 4
   completed_phases: 4
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 47
-Plan: 07 (all 7 complete)
-Status: Phase 47 verified complete (4/4 MIG requirements) — live migration cutover executed; v0.6.0 milestone done (Phases 44–47)
-Last activity: 2026-07-07
+Phase: Milestone v0.6.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-07 — Milestone v0.6.0 completed and archived
 
 ## Milestone Progress
 
@@ -82,7 +82,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | 44 | Vault Namespace + Taxonomy Foundation | VAULT-01..05 | Phase 43 | ✅ Complete |
 | 45 | Note-Quality Schema + Graph Analysis | NOTE-01..03 | Phase 44 | ✅ Complete |
 | 46 | 6 Rs Pipeline Orchestrator | PIPE-01..07 | Phase 44, Phase 45 | ✅ Complete |
-| 47 | Migration Cutover + Hardening | MIG-01..04 | Phase 44, Phase 45, Phase 46 | ○ Not started |
+| 47 | Migration Cutover + Hardening | MIG-01..04 | Phase 44, Phase 45, Phase 46 | ✅ Complete |
 
 ## Performance Metrics
 
@@ -316,3 +316,7 @@ Recent decisions affecting current work:
 Last session: 2026-07-07T03:25:35.948Z
 Stopped at: Completed 47-06-PLAN.md
 Resume file: None
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
