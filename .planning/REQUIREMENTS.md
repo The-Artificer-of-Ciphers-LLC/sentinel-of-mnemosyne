@@ -126,8 +126,8 @@
 
 - [x] **MIG-01**: Existing flat-7-classified notes are backfilled into the PARA/`_schema` structure with wikilinks
 - [x] **MIG-02**: The embedding sidecar index and wikilink integrity are preserved through migration (no recall regression)
-- [ ] **MIG-03**: A MEM-0x + command-surface regression ledger is verified at every phase boundary to prevent the core being gutted again
-- [ ] **MIG-04**: Pathfinder module and recall/embeddings remain intact post-migration (existing 404+ test suite stays green)
+- [x] **MIG-03**: A MEM-0x + command-surface regression ledger is verified at every phase boundary to prevent the core being gutted again
+- [x] **MIG-04**: Pathfinder module and recall/embeddings remain intact post-migration (existing 404+ test suite stays green)
 
 ---
 

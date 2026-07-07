@@ -1012,7 +1012,7 @@ Plans:
 
 **UI hint**: no
 
-**Plans:** 5/7 plans executed
+**Plans:** 6/7 plans executed
 **Wave 1**
 
 - [x] 47-01-PLAN.md — Wave 0: RED Nyquist test scaffolds (rollback-ledger, ops-backlink-scan, orchestrator, routes)
@@ -1032,7 +1032,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 47-06-PLAN.md — Wave 5: boundary hardening gate — full suite (590/326) + MEM-01..09 hot gate green (MIG-04, D-05)
+- [x] 47-06-PLAN.md — Wave 5: boundary hardening gate — full suite (590/326) + MEM-01..09 hot gate green (MIG-04, D-05)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
