@@ -178,6 +178,95 @@ async def attach_to_hub(vault: Any, hub_path: str, member_slug: str) -> None:
     await vault.write_note(hub_path, merged)
 
 
+def _concept_slug_from_hub_path(hub_path: str) -> str:
+    """Inverse of :func:`hub_path_for_slug` -- ``"notes/x.md"`` -> ``"x"``.
+
+    Local to this module (never imported from ``six_rs.reflect``, which
+    imports FROM this module -- importing the other way would be circular).
+    """
+    stem = hub_path.rsplit("/", 1)[-1]
+    if stem.endswith(".md"):
+        stem = stem[: -len(".md")]
+    return stem
+
+
+async def add_hub_backlink_to_member(vault: Any, member_path: str, hub_path: str) -> None:
+    """Idempotently insert a ``[[hub]]`` backlink INTO the member note.
+
+    Phase 46 UAT bug: Verify requires the note body to carry a
+    ``[[wikilink]]`` (``note_schema.has_wikilink``), but Reduce composes none
+    and the only stage that could add one -- Reflect -- previously only
+    wrote hub->member links (``attach_to_hub``/``create_or_update_hub``
+    insert the member's link INTO the hub), never a member->hub link. No
+    note could ever pass compliance. This is the write that closes that gap.
+
+    Mirrors ``attach_to_hub``'s split/insert/re-append/idempotency structure
+    (D-03d + RESEARCH Pitfall 1): reads the member's full body, splits off
+    any trailing ``_schema`` block, inserts the hub wikilink into the
+    pre-block body only if not already present, and re-appends the trailing
+    block unchanged so it stays the LAST/terminal content of the file.
+    """
+    body = await vault.read_note(member_path)
+    pre_block_body, trailing_block = split_schema_block(body)
+
+    hub_slug = _concept_slug_from_hub_path(hub_path)
+    wikilink = f"[[{_slug_to_display(hub_slug)}]]"
+
+    if wikilink in pre_block_body:
+        updated_pre_block = pre_block_body
+    else:
+        stripped = pre_block_body.rstrip("\n")
+        updated_pre_block = f"{stripped}\n\n{wikilink}\n" if stripped else f"{wikilink}\n"
+
+    merged = updated_pre_block if updated_pre_block.endswith("\n") else f"{updated_pre_block}\n"
+    if trailing_block:
+        if not merged.endswith("\n\n"):
+            merged = f"{merged.rstrip(chr(10))}\n\n"
+        merged = merged + trailing_block + "\n"
+
+    await vault.write_note(member_path, merged)
+
+
+async def detach_from_hub(vault: Any, hub_path: str, member_slug: str) -> None:
+    """Roll back a hub attach for a member note that later failed Verify.
+
+    Clean-graph invariant (D-02): a note that fails Verify after Reflect
+    already touched a hub must not leave an orphan hub/edge behind. Removes
+    ``member_slug``'s wikilink line from under :data:`HUB_MEMBER_MARKER`
+    (idempotent -- a no-op if the link isn't present) preserving the
+    trailing ``_schema`` block via split/re-append. If, after removal, the
+    hub has NO remaining member wikilinks, the hub note is deleted entirely
+    -- it was freshly created for this now-rejected member.
+    """
+    body = await vault.read_note(hub_path)
+    if not body:
+        return
+
+    pre_block_body, trailing_block = split_schema_block(body)
+    wikilink = f"[[{_slug_to_display(member_slug)}]]"
+    line_to_remove = f"- {wikilink}".strip()
+
+    lines = pre_block_body.split("\n")
+    new_lines = [ln for ln in lines if ln.strip() != line_to_remove]
+
+    if new_lines == lines:
+        return  # idempotent no-op: the member's link wasn't present.
+
+    remaining_members = any(ln.strip().startswith("- [[") for ln in new_lines)
+    if not remaining_members:
+        await vault.delete_note(hub_path)
+        return
+
+    updated_pre_block = "\n".join(new_lines)
+    merged = updated_pre_block if updated_pre_block.endswith("\n") else f"{updated_pre_block}\n"
+    if trailing_block:
+        if not merged.endswith("\n\n"):
+            merged = f"{merged.rstrip(chr(10))}\n\n"
+        merged = merged + trailing_block + "\n"
+
+    await vault.write_note(hub_path, merged)
+
+
 # ---------------------------------------------------------------------------
 # Task 3: create-or-merge orchestration + constrained concept-slug naming
 # (D-03c/d, untrusted-input posture)

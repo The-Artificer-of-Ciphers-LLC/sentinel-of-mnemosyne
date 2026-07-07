@@ -10,15 +10,21 @@ wrapper (D-06) that updates ``pipeline_status_store``.
 
 Command -> mode mapping (46-CONTEXT.md):
   - ``ralph``:    Reduce + Reflect over the inbox queue (the batch core).
-  - ``pipeline``: Reduce -> Verify-gate -> Reflect -> Reweave, then one
+  - ``pipeline``: Reduce -> Reflect -> Verify-gate -> Reweave, then one
     end-of-run Rethink pass.
   - ``reweave``:  Reweave backward pass only (no inbox reduce).
   - ``rethink``:  Rethink triage only.
 
-Verify gates Reflect/Reweave in ``pipeline`` mode (D-02's clean-graph
-invariant): a note that fails compliance is removed from ``notes/`` and
-requeued to ``inbox/`` with a bounded retry count (never silently dropped,
-never looped forever, PIPE-07) rather than being Reflected/Reweaved.
+Reflect runs BEFORE the Verify gate in ``pipeline`` mode: Reflect is what
+writes the ``[[hub]]`` backlink INTO the member note
+(``moc_maintenance.add_hub_backlink_to_member``), and Verify's
+``has_wikilink`` compliance check requires that link to already be present
+-- Reduce alone never produces one. Verify still gates Reweave/notes/
+residency (D-02's clean-graph invariant): a note that fails compliance is
+removed from ``notes/``, its hub attachment (if any) is rolled back via
+``moc_maintenance.detach_from_hub``, and it is requeued to ``inbox/`` with a
+bounded retry count (never silently dropped, never looped forever, PIPE-07)
+rather than being Reweaved.
 
 Never-crash-the-loop (Pitfall 10): every per-entry stage call is wrapped so a
 single bad entry appends to ``report.errors`` and the run continues.
@@ -41,7 +47,7 @@ from app.services.graph_analysis import NOTES_ROOT
 from app.services.inbox import INBOX_PATH, append_entry, parse_inbox, remove_entry
 from app.services.model_resolution import resolve_structured_model
 from app.services.moc_maintenance import _slugify as _title_slugify
-from app.services.moc_maintenance import find_hub_candidate
+from app.services.moc_maintenance import detach_from_hub, find_hub_candidate
 from app.services.note_classifier import ClassificationResult
 from app.services.pipeline_status_store import (
     _new_status as _new_pipeline_status,
@@ -320,13 +326,21 @@ async def _run_pipeline(
     settings: Any,
     status_callback: "Callable[[PipelineReport], None] | None",
 ) -> None:
-    """Reduce -> Verify-gate -> Reflect -> Reweave, then one end-of-run Rethink.
+    """Reduce -> Reflect -> Verify-gate -> Reweave, then one end-of-run Rethink.
 
-    Verify gates Reflect/Reweave (D-02's clean-graph invariant): only a note
-    that PASSES compliance gets Reflected + Reweaved and stays in notes/; a
-    failing note is removed from notes/ and requeued to inbox/ with a bounded
-    retry count (PIPE-07). This preserves the "6 Rs" conceptual sequence
-    while honoring the locked clean-graph constraint.
+    Reflect now runs BEFORE the Verify gate: ``find_and_attach_hub`` (via
+    ``add_hub_backlink_to_member``) is what writes the ``[[hub]]`` wikilink
+    INTO the member note, and Verify's ``has_wikilink`` check requires that
+    link to already be present -- Reduce alone never produces one. Running
+    Verify first (the old order) meant every note failed compliance and the
+    pipeline filed zero notes in production (Phase 46 UAT bug).
+
+    Verify still gates Reweave and notes/ residency (D-02's clean-graph
+    invariant): only a note that PASSES compliance stays in notes/ and gets
+    Reweaved. A failing note is removed from notes/, its hub attachment (if
+    any) is rolled back via ``detach_from_hub`` so no orphan hub/edge is
+    left behind, and the entry is requeued to inbox/ with a bounded retry
+    count (PIPE-07).
     """
     inbox_body = await vault.read_note(INBOX_PATH)
     entries = parse_inbox(inbox_body)
@@ -338,6 +352,16 @@ async def _run_pipeline(
             await vault.write_note(note_path, body)
             report.reduced += 1
 
+            hub_path = await _embed_and_reflect(
+                vault, note_path, body, embedder=embedder, settings=settings
+            )
+            if hub_path:
+                report.hubs_touched += 1
+
+            # Reflect may have just written a member->hub backlink into the
+            # note (add_hub_backlink_to_member) -- re-read before Verify.
+            body = await vault.read_note(note_path)
+
             outcome = await verify_note(
                 vault,
                 note_path=note_path,
@@ -347,11 +371,7 @@ async def _run_pipeline(
             )
 
             if outcome.get("passed"):
-                hub_path = await _embed_and_reflect(
-                    vault, note_path, body, embedder=embedder, settings=settings
-                )
                 if hub_path:
-                    report.hubs_touched += 1
                     addition_text = await _draft_reweave_addition(
                         slug, result.claim_title, result.body
                     )
@@ -368,6 +388,10 @@ async def _run_pipeline(
                 report.verify_failed += 1
                 # D-02: a failing note never lands in notes/.
                 await vault.delete_note(note_path)
+                if hub_path:
+                    # Clean-graph invariant: a rejected note leaves no
+                    # orphan hub attach/edge behind.
+                    await detach_from_hub(vault, hub_path, slug)
                 if outcome.get("requeued"):
                     report.verify_requeued += 1
                 await _requeue_or_flag(vault, entry, outcome, slug)

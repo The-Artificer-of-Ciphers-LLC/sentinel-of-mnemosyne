@@ -22,6 +22,7 @@ from typing import Any
 from app.services.graph_analysis import NOTES_ROOT
 from app.services.model_resolution import resolve_structured_model
 from app.services.moc_maintenance import (
+    add_hub_backlink_to_member,
     attach_to_hub,
     create_or_update_hub,
     find_hub_candidate,
@@ -91,6 +92,11 @@ async def find_and_attach_hub(
        idempotent, never a fresh hub.
     3. On no match: ``propose_hub_slug`` (LLM naming fallback, D-07) then
        ``create_or_update_hub``.
+    4. Either way, ``add_hub_backlink_to_member`` writes a ``[[hub]]``
+       backlink INTO the member note -- ``attach_to_hub``/
+       ``create_or_update_hub`` only ever link hub->member, never
+       member->hub, so without this the member note would never carry the
+       wikilink Verify's ``has_wikilink`` check requires (Phase 46 UAT bug).
 
     Returns the hub path touched.
     """
@@ -115,12 +121,15 @@ async def find_and_attach_hub(
             )
         else:
             await attach_to_hub(vault, hub_path, member_slug)
+            await add_hub_backlink_to_member(vault, note_path, hub_path)
             return hub_path
 
     # Fallback: nothing cleared the floor -- LLM-named new/merged hub (D-07).
     fn = completion_fn or _default_completion_fn
     member_text = (await vault.read_note(note_path)) or member_slug
     concept_slug = await propose_hub_slug(member_texts=[member_text], completion_fn=fn)
-    return await create_or_update_hub(
+    hub_path = await create_or_update_hub(
         vault, concept_slug=concept_slug, member_slug=member_slug, completion_fn=fn
     )
+    await add_hub_backlink_to_member(vault, note_path, hub_path)
+    return hub_path

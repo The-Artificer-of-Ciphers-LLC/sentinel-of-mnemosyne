@@ -287,6 +287,145 @@ async def test_pipeline_mode_verify_failure_at_cap_flags_needs_attention():
     assert flagged_entry.needs_attention is True
 
 
+async def test_pipeline_mode_real_compliance_files_note_with_hub_backlink():
+    """Regression test for the Phase 46 UAT bug: Verify requires the member
+    note to carry a ``[[wikilink]]``, but Reduce composes none and (before
+    the fix) the only stage that could add one -- Reflect -- ran AFTER the
+    Verify gate and only ever linked hub->member, never member->hub. No note
+    could ever pass compliance, so the pipeline filed zero notes in
+    production.
+
+    This test does NOT mock ``verify_note``/``check_note_compliance`` (the
+    prior full-mock tests above are exactly what masked the bug) -- it
+    exercises the real Reduce -> Reflect -> Verify path end to end, mocking
+    ONLY the LLM/embedding boundary calls (the Reduce completion, the
+    embedder, and the hub-naming LLM call inside Reflect's fallback). It
+    MUST fail against the old Verify-before-Reflect ordering and pass after
+    the fix.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import pipeline_orchestrator
+    from app.services.graph_analysis import NOTES_ROOT
+    from app.services.note_schema import check_note_compliance
+    from app.services.six_rs.reduce import ReduceResult
+
+    claim_title = "Local Models Cache Responses: A Latency Insight"
+    fake_reduce_result = ReduceResult(
+        claim_title=claim_title,
+        # Deliberately NO "[[...]]" here -- Reduce never produces a
+        # wikilink; only Reflect's member->hub backlink should supply one.
+        body="Local inference servers cache repeated prompts to shave latency.",
+        schema_type="permanent",
+    )
+
+    vault = _make_vault()
+    embedder = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+
+    with (
+        patch(
+            "app.services.pipeline_orchestrator.reduce_entry",
+            new=AsyncMock(return_value=fake_reduce_result),
+        ),
+        patch(
+            "app.services.six_rs.reflect.propose_hub_slug",
+            new=AsyncMock(return_value="latency-insights"),
+        ),
+    ):
+        report = await pipeline_orchestrator.run(vault, mode="pipeline", embedder=embedder)
+
+    assert report.reduced >= 1
+    assert report.hubs_touched >= 1
+    assert report.verify_failed == 0
+
+    filed_note_paths = [
+        p for p in vault.notes if p.startswith(f"{NOTES_ROOT}/") and p != f"{NOTES_ROOT}/latency-insights.md"
+    ]
+    assert len(filed_note_paths) == 1, "expected exactly one filed member note"
+    member_path = filed_note_paths[0]
+    member_body = vault.notes[member_path]
+
+    assert "[[" in member_body, "filed note must carry a wikilink (member->hub backlink)"
+    compliance = check_note_compliance(member_body, member_path.rsplit("/", 1)[-1][: -len(".md")])
+    assert compliance["failures"] == [], f"filed note failed real compliance: {compliance['failures']}"
+
+    hub_path = f"{NOTES_ROOT}/latency-insights.md"
+    assert hub_path in vault.notes, "hub note must exist"
+    member_slug = member_path.rsplit("/", 1)[-1][: -len(".md")]
+    from app.services.moc_maintenance import _slug_to_display
+
+    assert f"[[{_slug_to_display(member_slug)}]]" in vault.notes[hub_path], (
+        "hub note must list the member (hub->member link, attach_to_hub's job)"
+    )
+
+
+async def test_pipeline_mode_verify_failure_after_reflect_rolls_back_hub_attach():
+    """A Verify failure that occurs AFTER Reflect touched a hub must roll
+    back that hub attachment (clean-graph invariant, D-02): the rejected
+    member note is deleted from notes/ AND the freshly-created hub -- which
+    only ever had this one now-rejected member -- is removed too, via
+    ``moc_maintenance.detach_from_hub``.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import pipeline_orchestrator
+    from app.services.graph_analysis import NOTES_ROOT
+    from app.services.inbox import INBOX_PATH, parse_inbox
+    from app.services.six_rs.reduce import ReduceResult
+
+    fake_reduce_result = ReduceResult(
+        claim_title="Local Models Cache Responses: A Latency Insight",
+        body="Local inference servers cache repeated prompts to shave latency.",
+        schema_type="permanent",
+    )
+
+    vault = _make_vault()
+    embedder = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+
+    failing_outcome = {
+        "passed": False,
+        "requeued": True,
+        "retry_count": 1,
+        "needs_attention": False,
+        "compliance": {"failures": ["forced failure for rollback test"]},
+    }
+
+    with (
+        patch(
+            "app.services.pipeline_orchestrator.reduce_entry",
+            new=AsyncMock(return_value=fake_reduce_result),
+        ),
+        patch(
+            "app.services.six_rs.reflect.propose_hub_slug",
+            new=AsyncMock(return_value="latency-insights"),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.verify_note",
+            new=AsyncMock(return_value=failing_outcome),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.triage_observations",
+            new=AsyncMock(return_value=[]),
+        ),
+    ):
+        report = await pipeline_orchestrator.run(vault, mode="pipeline", embedder=embedder)
+
+    assert report.verify_failed == 1
+    assert report.hubs_touched >= 1, "Reflect must have run (and touched a hub) before Verify"
+
+    hub_path = f"{NOTES_ROOT}/latency-insights.md"
+    assert hub_path not in vault.notes, (
+        "the freshly-created hub had only this one (now-rejected) member -- "
+        "detach_from_hub must have deleted it entirely"
+    )
+
+    remaining_note_paths = [p for p in vault.notes if p.startswith(f"{NOTES_ROOT}/")]
+    assert remaining_note_paths == [], "the rejected member note must be deleted from notes/"
+
+    entries = parse_inbox(vault.notes[INBOX_PATH])
+    assert len(entries) == 1, "the failed entry must be requeued, not dropped"
+
+
 async def test_concurrent_pipeline_and_sweep_refused():
     """Pitfall 8: lock acquisition strictly precedes any inbox read.
 
