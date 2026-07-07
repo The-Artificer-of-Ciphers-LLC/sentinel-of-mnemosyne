@@ -272,6 +272,22 @@ async def _call_core_sweep_status(user_id: str) -> str:
     )
 
 
+async def _call_core_migrate_start(user_id: str, dry_run: bool = True) -> str:
+    return await core_gateway.call_core_migrate_start(
+        user_id=user_id,
+        dry_run=dry_run,
+        sentinel_client=_sentinel_client,
+    )
+
+
+async def _call_core_migrate_status(user_id: str) -> str:
+    return await core_gateway.call_core_migrate_status(
+        user_id=user_id,
+        core_url=SENTINEL_CORE_URL,
+        api_key=SENTINEL_API_KEY,
+    )
+
+
 async def _call_core_pipeline_start(user_id: str, mode: str) -> str:
     return await core_gateway.call_core_pipeline_start(
         user_id=user_id,
@@ -576,6 +592,8 @@ async def handle_sentask_subcommand(
             "call_core_check": _call_core_check,
             "call_core_pipeline_start": _call_core_pipeline_start,
             "call_core_pipeline_status": _call_core_pipeline_status,
+            "call_core_migrate_start": _call_core_migrate_start,
+            "call_core_migrate_status": _call_core_migrate_status,
             "is_admin": _is_admin,
             "note_closed_vocab": _NOTE_CLOSED_VOCAB,
             "plugin_prompts": _PLUGIN_PROMPTS,

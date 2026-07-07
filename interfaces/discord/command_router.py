@@ -62,6 +62,8 @@ async def handle_subcommand(
     subcommand_prompts: dict[str, str],
     subcommand_help: str,
     author_display_name: str | None = None,
+    call_core_migrate_start=None,
+    call_core_migrate_status=None,
 ) -> "str | dict":
     if subcmd == "pf":
         return await pf_dispatch(
@@ -153,6 +155,18 @@ async def handle_subcommand(
             return await call_core_sweep_start(user_id, force_reclassify=False, dry_run=True)
         force = verb == "force"
         return await call_core_sweep_start(user_id, force_reclassify=force)
+
+    if subcmd == "migrate":
+        if not is_admin(user_id):
+            return "Admin only. Set SENTINEL_ADMIN_USER_IDS in your env to use this command."
+        verb = (args.strip().split(maxsplit=1) or [""])[0]
+        if verb == "status":
+            return await call_core_migrate_status(user_id)
+        # T-47-02: dry-run is the safe default surface; a live (non-dry) run
+        # requires the explicit "live" verb, mirroring how :vault-sweep
+        # distinguishes its dry-run/force verbs from its bare invocation.
+        dry_run = verb != "live"
+        return await call_core_migrate_start(user_id, dry_run=dry_run)
 
     if subcmd in ("ralph", "pipeline", "reweave", "rethink", "refactor"):
         if not is_admin(user_id):

@@ -206,3 +206,83 @@ async def test_pipeline_verb_concurrency_message_passed_through():
     call_core_pipeline_start = AsyncMock(return_value="A vault operation is already in progress.")
     res = await _call_pipeline_subcommand("pipeline", call_core_pipeline_start=call_core_pipeline_start)
     assert "already in progress" in res.lower()
+
+
+# --- :migrate (Phase 47-05, T-47-01/T-47-02) ---
+
+
+async def _call_migrate_subcommand(
+    args: str = "",
+    *,
+    is_admin=None,
+    call_core_migrate_start=None,
+    call_core_migrate_status=None,
+):
+    return await command_router.handle_subcommand(
+        subcmd="migrate",
+        args=args,
+        user_id="u1",
+        attachments=None,
+        channel=None,
+        pf_dispatch=AsyncMock(),
+        call_core=AsyncMock(return_value="core-fallback"),
+        call_core_note=AsyncMock(),
+        call_core_inbox_list=AsyncMock(),
+        call_core_inbox_classify=AsyncMock(),
+        call_core_inbox_discard=AsyncMock(),
+        call_core_sweep_start=AsyncMock(),
+        call_core_sweep_status=AsyncMock(),
+        call_core_graph=AsyncMock(),
+        call_core_stats=AsyncMock(),
+        call_core_check=AsyncMock(),
+        call_core_pipeline_start=AsyncMock(),
+        call_core_pipeline_status=AsyncMock(),
+        call_core_migrate_start=call_core_migrate_start or AsyncMock(return_value="MIGRATE-STARTED"),
+        call_core_migrate_status=call_core_migrate_status or AsyncMock(return_value="MIGRATE-STATUS"),
+        is_admin=is_admin or (lambda _u: True),
+        note_closed_vocab=frozenset(),
+        plugin_prompts={},
+        subcommand_prompts={},
+        subcommand_help="HELP",
+    )
+
+
+async def test_migrate_non_admin_refused():
+    call_core_migrate_start = AsyncMock()
+    res = await _call_migrate_subcommand(is_admin=lambda _u: False, call_core_migrate_start=call_core_migrate_start)
+    assert "admin only" in res.lower()
+    call_core_migrate_start.assert_not_called()
+
+
+async def test_migrate_bare_defaults_to_dry_run():
+    call_core_migrate_start = AsyncMock(return_value="MIGRATE-STARTED")
+    res = await _call_migrate_subcommand(call_core_migrate_start=call_core_migrate_start)
+    call_core_migrate_start.assert_awaited_once_with("u1", dry_run=True)
+    assert res == "MIGRATE-STARTED"
+
+
+async def test_migrate_explicit_dry_run_verb():
+    call_core_migrate_start = AsyncMock(return_value="MIGRATE-STARTED")
+    res = await _call_migrate_subcommand("dry-run", call_core_migrate_start=call_core_migrate_start)
+    call_core_migrate_start.assert_awaited_once_with("u1", dry_run=True)
+    assert res == "MIGRATE-STARTED"
+
+
+async def test_migrate_live_verb_requires_explicit_confirmation():
+    call_core_migrate_start = AsyncMock(return_value="MIGRATE-STARTED")
+    res = await _call_migrate_subcommand("live", call_core_migrate_start=call_core_migrate_start)
+    call_core_migrate_start.assert_awaited_once_with("u1", dry_run=False)
+    assert res == "MIGRATE-STARTED"
+
+
+async def test_migrate_status_verb_invokes_status_gateway():
+    call_core_migrate_status = AsyncMock(return_value="MIGRATE-STATUS")
+    call_core_migrate_start = AsyncMock()
+    res = await _call_migrate_subcommand(
+        "status",
+        call_core_migrate_start=call_core_migrate_start,
+        call_core_migrate_status=call_core_migrate_status,
+    )
+    call_core_migrate_status.assert_awaited_once_with("u1")
+    call_core_migrate_start.assert_not_called()
+    assert res == "MIGRATE-STATUS"

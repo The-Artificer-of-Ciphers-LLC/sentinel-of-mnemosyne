@@ -163,6 +163,47 @@ async def call_core_pipeline_status(*, user_id: str, core_url: str, api_key: str
     )
 
 
+async def call_core_migrate_start(*, user_id: str, dry_run: bool, sentinel_client) -> str:
+    payload = {"user_id": user_id, "dry_run": dry_run}
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as http_client:
+            data = await sentinel_client.post_to_module("vault/migrate/start", payload, http_client)
+    except Exception as exc:
+        logger.warning("vault migrate start failed: %s", exc)
+        return f"Vault migrate failed to start: {exc}"
+    migration_id = data.get("migration_id", "?")
+    if dry_run:
+        return (
+            f"Migration dry-run started: `{migration_id}`. "
+            f"Use `:migrate status` to check progress."
+        )
+    return f"Migration started: `{migration_id}`. Use `:migrate status` to check progress."
+
+
+async def call_core_migrate_status(*, user_id: str, core_url: str, api_key: str) -> str:
+    try:
+        async with httpx.AsyncClient() as http_client:
+            resp = await http_client.get(
+                f"{core_url.rstrip('/')}/vault/migrate/status",
+                headers={"X-Sentinel-Key": api_key},
+                timeout=20.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("vault migrate status failed: %s", exc)
+        return f"Vault migrate status fetch failed: {exc}"
+    return (
+        f"migration `{data.get('migration_id', '-')}`: status={data.get('status', '-')}, "
+        f"mode={data.get('mode', '-')}, "
+        f"ops_moved={len(data.get('ops_moved') or [])}, "
+        f"notes_backfilled={data.get('notes_backfilled', 0)}, "
+        f"verify_failed={data.get('verify_failed', 0)}, "
+        f"new_orphans={data.get('new_orphans', 0)}, "
+        f"rolled_back={data.get('rolled_back', False)}"
+    )
+
+
 async def call_core_graph(*, user_id: str, core_url: str, api_key: str) -> str:
     try:
         async with httpx.AsyncClient() as http_client:

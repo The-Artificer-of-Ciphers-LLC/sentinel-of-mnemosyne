@@ -215,6 +215,77 @@ async def test_call_core_pipeline_status_transport_error_returns_friendly_string
     assert "boom" in out
 
 
+# --- call_core_migrate_start / call_core_migrate_status (Phase 47-05) ---
+
+
+async def test_call_core_migrate_start_posts_and_formats_dry_run_response():
+    client = _mock_sentinel_client(return_value={"migration_id": "2026-07-06T00:00:00Z", "status": "running", "mode": "dry_run"})
+    out = await core_gateway.call_core_migrate_start(user_id="u1", dry_run=True, sentinel_client=client)
+
+    client.post_to_module.assert_awaited_once()
+    call_args = client.post_to_module.await_args
+    assert call_args.args[0] == "vault/migrate/start"
+    assert call_args.args[1] == {"user_id": "u1", "dry_run": True}
+    assert "2026-07-06T00:00:00Z" in out
+    assert "dry-run" in out.lower()
+
+
+async def test_call_core_migrate_start_posts_live_response():
+    client = _mock_sentinel_client(return_value={"migration_id": "2026-07-06T00:00:00Z", "status": "running", "mode": "live"})
+    out = await core_gateway.call_core_migrate_start(user_id="u1", dry_run=False, sentinel_client=client)
+
+    call_args = client.post_to_module.await_args
+    assert call_args.args[1] == {"user_id": "u1", "dry_run": False}
+    assert "2026-07-06T00:00:00Z" in out
+    assert "dry-run" not in out.lower()
+
+
+async def test_call_core_migrate_start_transport_error_returns_friendly_string():
+    client = _mock_sentinel_client(exc=httpx.ConnectError("boom"))
+    out = await core_gateway.call_core_migrate_start(user_id="u1", dry_run=True, sentinel_client=client)
+
+    assert "failed" in out.lower()
+    assert "boom" in out
+
+
+async def test_call_core_migrate_status_formats_report_fields():
+    body = {
+        "migration_id": "2026-07-06T00:00:00Z",
+        "status": "complete",
+        "mode": "dry_run",
+        "dry_run": True,
+        "planned_moves": [],
+        "ops_moved": [{"src": "journal/a.md", "dst": "ops/journal/2026-07-06/a.md"}],
+        "notes_backfilled": 3,
+        "verify_failed": 1,
+        "new_orphans": 0,
+        "rolled_back": False,
+        "errors": [],
+    }
+    with patch("core_gateway.httpx") as mock_httpx:
+        mock_httpx.AsyncClient.return_value = _mock_get_client(
+            response=httpx.Response(200, json=body, request=httpx.Request("GET", "http://core/vault/migrate/status"))
+        )
+        out = await core_gateway.call_core_migrate_status(user_id="u1", core_url="http://core", api_key="k")
+
+    assert "complete" in out
+    assert "dry_run" in out
+    assert "ops_moved=1" in out
+    assert "notes_backfilled=3" in out
+    assert "verify_failed=1" in out
+    assert "new_orphans=0" in out
+    assert "rolled_back=False" in out
+
+
+async def test_call_core_migrate_status_transport_error_returns_friendly_string():
+    with patch("core_gateway.httpx") as mock_httpx:
+        mock_httpx.AsyncClient.return_value = _mock_get_client(exc=httpx.ConnectError("boom"))
+        out = await core_gateway.call_core_migrate_status(user_id="u1", core_url="http://core", api_key="k")
+
+    assert "failed" in out.lower()
+    assert "boom" in out
+
+
 async def test_call_core_pipeline_status_blocked_surfaces_concurrency_message():
     body = {
         "pipeline_id": "2026-07-06T00:00:00Z",
