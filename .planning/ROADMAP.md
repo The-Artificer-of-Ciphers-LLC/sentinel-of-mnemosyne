@@ -937,7 +937,7 @@ Full detail archived in `milestones/v0.4.1-ROADMAP.md`.
 
 **UI hint**: no
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 Plans:
 **Wave 1**
@@ -946,7 +946,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 48-02-PLAN.md — Wave 2: pf2e cutover to the shared client + full pf2e regression gate (XMOD-01, D-05/D-06)
+- [x] 48-02-PLAN.md — Wave 2: pf2e cutover to the shared client + full pf2e regression gate (XMOD-01, D-05/D-06)
 - [ ] 48-03-PLAN.md — Wave 2: music module scaffold (FastAPI + registration/heartbeat + healthz + core-only ObsidianClient), zero Core changes (MUS-01, MUS-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
