@@ -5,7 +5,7 @@ milestone_name: — Music Lesson Tracker
 status: executing
 stopped_at: Completed 48-04-PLAN.md
 last_updated: "2026-07-08T03:13:35.665Z"
-last_activity: 2026-07-08 -- Phase 48 execution started
+last_activity: 2026-07-08 — Quick task 260708-mz4 OKF assessment (do-not-incorporate); Phase 48 paused at 48-05 live-smoke
 progress:
   total_phases: 10
   completed_phases: 0
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 Phase: 48 (Module Scaffold + Shared Vault Client) — EXECUTING
 Plan: 5 of 5
 Status: Ready to execute
-Last activity: 2026-07-08 -- Phase 48 execution started
+Last activity: 2026-07-08 — Quick task 260708-mz4 OKF assessment (do-not-incorporate); Phase 48 paused at 48-05 live-smoke
 
 ## Milestone Progress
 
@@ -334,6 +334,7 @@ Recent decisions affecting current work:
 | 260427-5kl | LiteLLM helpers consolidation refactor — DRY audit H-1/H-2/H-3/H-4: shared/sentinel_shared/model_profiles.py replaces dual copies, ResolvedModel + resolve() unifies pathfinder model resolution, acompletion_with_profile wrapper kills 11 boilerplate sites, strip_litellm_prefix consolidated | 2026-04-27 | 6f3e3f5 | [260427-5kl-litellm-helpers-consolidation](.planning/quick/260427-5kl-litellm-helpers-consolidation/) |
 | 260427-vl1 | 2nd-brain note import + vault sweeper — :note/:inbox/:vault-sweep subcommands, classifier service with 7-topic taxonomy, embedding-similarity de-dup ≥0.92, fail-closed admin gate, acompletion_with_profile promoted to sentinel_shared, json_schema strict-mode classifier output | 2026-04-27 | (see SUMMARY) | [260427-vl1-note-import-vault-sweeper](.planning/quick/260427-vl1-note-import-vault-sweeper/) |
 | 260513-pi4 | Import external Obsidian music/songwriting vault from ~/trekkie/ into Sentinel vault under notes/music/ — 37/37 files via Obsidian REST API, skipped AppleDouble sidecars + empty files | 2026-05-13 | (this commit) | [260513-pi4-import-music-vault](.planning/quick/260513-pi4-import-music-vault/) |
+| 260708-mz4 | OKF (Open Knowledge Format) incorporation assessment — recommend **do-not-incorporate-now**: OKF v0.1 draft is a markdown+frontmatter vault format ≈ Sentinel's existing model; single-user (no external consumer), and wikilink→mdlink conversion would degrade Obsidian UX. Convergence = design validation. Backlog: optional `sentinel_shared` export adapter | 2026-07-08 | (this commit) | [260708-mz4-okf-incorporation-assessment](.planning/quick/260708-mz4-okf-incorporation-assessment/) |
 
 ## Session Continuity
 
