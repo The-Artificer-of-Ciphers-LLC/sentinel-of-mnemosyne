@@ -26,6 +26,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.obsidian import ObsidianClient
+from app.seed import seed_music_hub
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -108,6 +109,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             api_key=settings.obsidian_api_key,
         )
         app.state.obsidian_client = obsidian_client
+        # Seed the music/ hub-mesh (MUS-05, D-08). Graceful: a vault outage at
+        # startup is logged and swallowed, never crashes the module (mirrors
+        # the degrade-gracefully shape of ObsidianClientCore's own methods).
+        try:
+            await seed_music_hub(obsidian_client)
+        except Exception:
+            logger.exception("Failed to seed music/ hub-mesh at startup")
         heartbeat_task = asyncio.create_task(_registration_heartbeat())
         try:
             yield
