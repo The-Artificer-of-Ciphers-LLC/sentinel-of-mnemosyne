@@ -116,13 +116,54 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (to be filled by roadmapper) | — | Pending |
+| MUS-01 | Phase 48 | Pending |
+| MUS-02 | Phase 48 | Pending |
+| MUS-05 | Phase 48 | Pending |
+| XMOD-01 | Phase 48 | Pending |
+| MUS-03 | Phase 49 | Pending |
+| MUS-04 | Phase 49 | Pending |
+| LOG-01 | Phase 49 | Pending |
+| LOG-02 | Phase 49 | Pending |
+| LOG-03 | Phase 49 | Pending |
+| LOG-04 | Phase 49 | Pending |
+| LOG-05 | Phase 49 | Pending |
+| LOG-06 | Phase 49 | Pending |
+| LOG-07 | Phase 49 | Pending |
+| IDEA-01 | Phase 50 | Pending |
+| IDEA-02 | Phase 50 | Pending |
+| IDEA-03 | Phase 50 | Pending |
+| HIST-01 | Phase 51 | Pending |
+| HIST-02 | Phase 51 | Pending |
+| HIST-03 | Phase 51 | Pending |
+| HIST-04 | Phase 51 | Pending |
+| RCL-01 | Phase 51 | Pending |
+| RTN-01 | Phase 52 | Pending |
+| RTN-02 | Phase 52 | Pending |
+| RTN-03 | Phase 52 | Pending |
+| RTN-04 | Phase 52 | Pending |
+| RTN-05 | Phase 52 | Pending |
+| RTN-06 | Phase 52 | Pending |
+| RTN-07 | Phase 52 | Pending |
+| LBZ-01 | Phase 53 | Pending |
+| LBZ-02 | Phase 53 | Pending |
+| LBZ-03 | Phase 53 | Pending |
+| DSC-01 | Phase 54 | Pending |
+| DSC-02 | Phase 54 | Pending |
+| DSC-03 | Phase 54 | Pending |
+| AUDIO-01 | Phase 55 | Pending |
+| AUDIO-02 | Phase 55 | Pending |
+| AUDIO-03 | Phase 55 | Pending |
+| AUDIO-04 | Phase 55 | Pending |
+| DAW-01 | Phase 56 | Pending |
+| DAW-02 | Phase 56 | Pending |
+| GAME-01 | Phase 57 | Pending |
+| GAME-02 | Phase 57 | Pending |
 
 **Coverage:**
 - v1 requirements: 42 total (MUS ×5, LOG ×7, IDEA ×3, HIST ×4, RTN ×7, LBZ ×3, DSC ×3, AUDIO ×4, GAME ×2, DAW ×2, RCL ×1, XMOD ×1)
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 42 ⚠️ (roadmapper will map)
+- Mapped to phases: 42/42 ✓ (Phases 48–57)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-07-07*
-*Last updated: 2026-07-07 after full-scope expansion (all except multi-user)*
+*Last updated: 2026-07-08 after roadmap creation — 10-phase structure (Phases 48–57), 100% v1 coverage*

@@ -35,7 +35,7 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [ ] **Phase 9: Tech Debt Cleanup** — Fix Pi bare except, remove dead send_prompt()
 - [x] **Phase 10: Knowledge Migration Tool** — Import from Notion/Roam/Logseq, classify, review, restructure to Sentinel vault conventions
 - [ ] **Phase 11: Pathfinder 2e Module** — NPC management, session notes, dialogue generation
-- [ ] **Phase 12: Music Lesson Module** — Practice logging, history queries, Obsidian vault structure
+- [ ] **Phase 12: Music Lesson Module** — Superseded by Phases 48–57 (v0.6.0 Music Lesson Tracker milestone; see Phase Details below).
 - [ ] **Phase 13: Coder Interface** — Separate Pi environment, cloud routing, module scaffolding
 - [ ] **Phase 14: Personal Finance Module** — OFX import, categorization, budgets, natural language queries
 - [ ] **Phase 15: Autonomous Stock Trader (Paper)** — Alpaca paper trading, rules enforcement, 30-day run
@@ -70,6 +70,16 @@ From bare Docker Compose to a fully-operational personal AI assistant platform. 
 - [x] **Phase 45: Note-Quality Schema + Graph Analysis** — `_schema` footer blocks, claim titles, wikilinks, lazy MOC/hub notes; `:graph`/`:stats`/`:check` backed by a `links-index.json` sidecar (completed 2026-07-06)
 - [x] **Phase 46: 6 Rs Pipeline Orchestrator** — Real background orchestration (cloned from the sweeper's shape) for `:capture`/`:seed`/`:ralph`/`:pipeline`/`:reweave`/`:rethink`, with concurrency guard and explicit outcome reporting (completed 2026-07-06)
 - [x] **Phase 47: Migration Cutover + Hardening** — Backfill existing flat-7 notes into PARA/`_schema` with wikilinks intact; MEM-0x + command-surface regression ledger verified green; full 404+ suite stays green (completed 2026-07-07)
+- [ ] **Phase 48: Module Scaffold + Shared Vault Client** — Standalone `music-module` Docker service registers with Core; duplicated ObsidianClient consolidated into `sentinel_shared`
+- [ ] **Phase 49: Core Practice + Lesson Logging** — `:music log`/`:music lesson` write structured, sweeper-safe practice and lesson notes with deterministic piece slugs
+- [ ] **Phase 50: Idea Capture** — `:music idea` captures structured chord/melody ideas with reserved Discogs fields
+- [ ] **Phase 51: Deterministic Practice-History Query + Ambient Recall** — Exact aggregate history answers from a dedicated query engine, plus an optional feature-flagged ambient-Recall path
+- [ ] **Phase 52: Practice-Routine Builder** — History-adaptive, pedagogy-grounded routines constrained by AI-SPEC.md to structural planning only
+- [ ] **Phase 53: ListenBrainz Integration (Stretch)** — Feature-flagged async listening-history poller, never load-bearing on core logging
+- [ ] **Phase 54: Discogs Integration (Stretch)** — Feature-flagged wantlist writes + similarity-search suggestions, never load-bearing on core logging
+- [ ] **Phase 55: Audio Tools** — Metronome, tuner, DSP analysis, and audio-to-notation transcription
+- [ ] **Phase 56: DAW Project Integration** — Parse DAW project files into practice/idea notes
+- [ ] **Phase 57: Gamification** — Achievement badges and goal/challenge tracking
 
 ## Phase Details
 
@@ -896,15 +906,184 @@ Plans:
 
 - [ ] 43-05-PLAN.md — Cutover + live verification gate (autonomous: false): phase regression suites + operator LM Studio cutover + human-verify EMB-03/EMB-04 (EMB-03, EMB-04)
 
-## Milestone v0.6.0 — Restore the Second-Brain Core
+## Milestone v0.4.1 — Restore the Second-Brain Core (originally mislabeled v0.6.0)
 
 <details>
-<summary>✅ v0.6.0 — Restore the Second-Brain Core (Phases 44–47) — SHIPPED 2026-07-07</summary>
+<summary>✅ v0.4.1 — Restore the Second-Brain Core (Phases 44–47) — SHIPPED 2026-07-07 (originally mislabeled v0.6.0; relabeled to free v0.6.0 for the Music Lesson Tracker milestone)</summary>
 
-Full detail archived in `milestones/v0.6.0-ROADMAP.md`.
+Full detail archived in `milestones/v0.4.1-ROADMAP.md`.
 
 - [x] Phase 44: Vault Namespace + Taxonomy Foundation (4 plans) — VAULT-01..05
 - [x] Phase 45: Note-Quality Schema + Graph Analysis (7 plans) — NOTE-01..03
 - [x] Phase 46: 6 Rs Pipeline Orchestrator (7 plans) — PIPE-01..07
 - [x] Phase 47: Migration Cutover + Hardening (7 plans) — MIG-01..04
 </details>
+
+## Milestone v0.6.0 — Music Lesson Tracker
+
+### Phase 48: Module Scaffold + Shared Vault Client
+
+**Goal:** The Music module exists as a standalone, registered Docker service with its own vault-write foundation and note-schema contract, and the duplicated per-module Obsidian client is consolidated into a shared package before a second copy accumulates.
+**Depends on:** Phase 47
+**Requirements:** MUS-01, MUS-02, MUS-05, XMOD-01
+**Canonical ref:** `.planning/research/ARCHITECTURE.md` (Suggested Build Order step 1; `modules/pathfinder/` reference implementation), `.planning/research/PITFALLS.md` Pitfall 1
+**Success Criteria** (what must be TRUE):
+
+  1. The music-module container starts, registers with Core via `POST /modules/register` with retry+heartbeat, and Core's module registry lists `music` — with zero Core code changes.
+  2. The module reads and writes notes under a new `music/` vault namespace through its own `ObsidianClient` — it never imports Core's internal `Vault` Protocol.
+  3. Every note the module writes carries a trailing `_schema` block and wikilinks that satisfy `:check`/`:graph` compliance with zero orphans.
+  4. pf2e and music both consume one shared `sentinel_shared.ObsidianClient` implementation — no duplicated per-module Obsidian REST client code remains in either module's tree.
+
+**UI hint**: no
+
+**Plans:** TBD
+
+### Phase 49: Core Practice + Lesson Logging
+
+**Goal:** User can log practice sessions and lessons from Discord with structured, aggregable data, with zero risk of the vault sweeper relocating that data.
+**Depends on:** Phase 48
+**Requirements:** MUS-03, MUS-04, LOG-01, LOG-02, LOG-03, LOG-04, LOG-05, LOG-06, LOG-07
+**Canonical ref:** `.planning/research/ARCHITECTURE.md` (Suggested Build Order step 2), `.planning/research/PITFALLS.md` Pitfalls 1, 2, 3, 5, 6
+**Success Criteria** (what must be TRUE):
+
+  1. User can log a practice session via `:music log`, capturing duration, pieces/exercises worked, focus area, and freeform notes, written to `music/practice-log/[date]-[instrument].md`.
+  2. User can record a lesson via `:music lesson`, capturing teacher/self, topics covered, and assignments, written to `music/lessons/[date].md`.
+  3. A practice-log entry captures tempo/BPM progress per piece, mood and energy level, a pre-session goal, a post-session reflection, and can link a recording/audio reference.
+  4. The same piece logged under inconsistent casing/phrasing across many sessions resolves to one deterministic slug, so per-piece data aggregates correctly (LOG-07).
+  5. A live `:vault-sweep` run after logging never relocates a `music/` note into `_trash/` — `music/` is confirmed present in `sweep_skip_prefixes` (MUS-03).
+
+**UI hint**: no
+
+**Plans:** TBD
+
+### Phase 50: Idea Capture
+
+**Goal:** User can capture structured musical ideas in the vault, reserved for future Discogs enrichment, and link them into the rest of their music vault.
+**Depends on:** Phase 49
+**Requirements:** IDEA-01, IDEA-02, IDEA-03
+**Canonical ref:** `.planning/research/ARCHITECTURE.md` (Suggested Build Order step 3)
+**Success Criteria** (what must be TRUE):
+
+  1. User can capture a chord progression or melody idea via `:music idea`, stored as a plain-text chord grid plus YAML frontmatter at `music/ideas/[slug].md`.
+  2. Every idea note carries reserved (empty until Phase 54) `discogs_*` fields for a related release.
+  3. User can link an idea to a piece, instrument, or session via wikilinks, and the link resolves correctly through `:graph`.
+
+**UI hint**: no
+
+**Plans:** TBD
+
+### Phase 51: Deterministic Practice-History Query + Ambient Recall
+
+**Goal:** User can get exact answers to practice-history questions from a dedicated deterministic engine, with an explicit, feature-flagged option to also surface that context in ordinary free chat.
+**Depends on:** Phase 49
+**Requirements:** HIST-01, HIST-02, HIST-03, HIST-04, RCL-01
+**Canonical ref:** `.planning/research/ARCHITECTURE.md` Pattern 2 (mirrors pf2e's `player_recall_engine.py`), Anti-Pattern 2; `.planning/research/PITFALLS.md` Pitfalls 4, 6
+**Success Criteria** (what must be TRUE):
+
+  1. User can ask "how long have I spent on [piece]" and get an exact total computed by summing structured session data across every logged session.
+  2. User can ask "what did I work on last week" (or any time window) and get an accurate list of sessions/pieces for that window.
+  3. User can see practice streaks and time-on-instrument / time-on-skill rollups.
+  4. Every history answer is produced by a dedicated deterministic query engine that lists and parses practice-log `_schema` footers directly — never Core's relevance-ranked Recall.
+  5. With the ambient-Recall flag enabled, an unprompted free-chat mention of music surfaces relevant practice context; with the flag at its default (disabled), `music/` notes stay out of Core's warm-tier recall entirely.
+
+**UI hint**: no
+
+**Plans:** TBD
+
+### Phase 52: Practice-Routine Builder
+
+**Goal:** User can generate, save, and progressively refine instrument-specific practice routines that are grounded in their real practice history and safely scoped away from technique/injury advice.
+**Depends on:** Phase 49, Phase 51
+**Requirements:** RTN-01, RTN-02, RTN-03, RTN-04, RTN-05, RTN-06, RTN-07
+**Canonical ref:** `.planning/research/ARCHITECTURE.md` (Suggested Build Order step 5), `.planning/research/PITFALLS.md` Pitfall 8
+**Note:** Needs an `AI-SPEC.md` design contract (invoke `/gsd-ai-integration-phase`) before generation logic is built — constrain output to structural practice planning only, never technique-correction or injury/health advice, per Pitfall 8.
+**Success Criteria** (what must be TRUE):
+
+  1. User can generate an instrument-specific routine (electric guitar, electric bass, synthesizer/sound-design, piano/keys, sampler, EDM/techno/melodic-techno production) grounded in the pedagogy knowledge base, covering named skill categories with metronome/tempo progression.
+  2. Generated routine content is constrained by `AI-SPEC.md` to structural practice planning only — no output includes technique-correction or injury/health advice.
+  3. A generated routine adapts to the user's recent practice history via the HIST query engine, surfacing under-practiced skills/pieces.
+  4. User can save a routine to the vault and later log a practice session against it.
+  5. User can generate a multi-week progressive plan (periodization across sessions) and rate a completed routine's effectiveness, with ratings feeding into future generations.
+
+**UI hint**: no
+
+**Plans:** TBD
+
+### Phase 53: ListenBrainz Integration (Stretch)
+
+**Goal:** User's ListenBrainz listening history enriches their music vault via a safe, feature-flagged background poller that never touches core logging.
+**Depends on:** Phase 52 — core loop (logging, idea capture, history queries, routine builder) UAT'd before any stretch integration starts, per PITFALLS.md Pitfall 7.
+**Requirements:** LBZ-01, LBZ-02, LBZ-03
+**Canonical ref:** `.planning/research/ARCHITECTURE.md` Pattern 4, `.planning/research/PITFALLS.md` Pitfalls 5, 7
+**Success Criteria** (what must be TRUE):
+
+  1. With `MUSIC_LISTENBRAINZ_ENABLED=true`, the module pulls the user's recent listening history via an async poller against `GET /1/user/{username}/listens`, incrementally from a stored high-water-mark timestamp, honoring rate-limit headers.
+  2. Listening data enriches practice/idea notes via reserved `listenbrainz_*` fields.
+  3. With ListenBrainz disabled, unreachable, or erroring, core practice logging still succeeds unaffected — the poller fails silently (logged, not raised) and never blocks a write.
+  4. User can request listening-based recommendations via the ListenBrainz `cf/recommendation` endpoint.
+
+**UI hint**: no
+
+**Plans:** TBD
+
+### Phase 54: Discogs Integration (Stretch)
+
+**Goal:** User can flag loved music for their Discogs wantlist and get related-release suggestions, safely and asynchronously, without ever risking core logging.
+**Depends on:** Phase 50 (reuses the `discogs_*` fields reserved on the `Idea` model), Phase 53 (sequenced after ListenBrainz per the milestone's stretch ordering)
+**Requirements:** DSC-01, DSC-02, DSC-03
+**Canonical ref:** `.planning/research/ARCHITECTURE.md` Integration Points, `.planning/research/PITFALLS.md` Integration Gotchas (Discogs row), Security Mistakes
+**Success Criteria** (what must be TRUE):
+
+  1. User can flag a loved song/release and the module adds it to their Discogs wantlist via the idempotent `PUT /users/{username}/wants/{release_id}`, authenticated with a Personal Access Token stored via Docker secrets (never the vault or compose `environment:` block).
+  2. User can get related vinyl/CD suggestions via Discogs similarity search paired with ListenBrainz `cf/recommendation` output (Discogs has no native recommendations endpoint).
+  3. Discogs operations run async and feature-flagged; disabling or failing them never blocks or breaks core practice logging.
+
+**UI hint**: no
+
+**Plans:** TBD
+
+### Phase 55: Audio Tools
+
+**Goal:** User has real-time audio tools available during practice and can get structured analysis or transcription attached to recordings.
+**Depends on:** Phase 52 — sequenced after the full core loop, per PROJECT.md's explicit scope note that heavy audio/ML work ships after the core tracker.
+**Requirements:** AUDIO-01, AUDIO-02, AUDIO-03, AUDIO-04
+**Note:** Real-time audio + ML — outside the scope of the existing SUMMARY/ARCHITECTURE/PITFALLS research (which scoped built-in audio tooling as an anti-feature before the operator expanded v1 scope to include it). Flag for dedicated phase-specific research at plan time.
+**Success Criteria** (what must be TRUE):
+
+  1. User can start a metronome with configurable tempo and time signature during a logged practice session.
+  2. User has access to a built-in tuner that detects pitch from audio input.
+  3. User can submit a recording and receive DSP analysis (pitch/tempo/level) attached to the corresponding practice/idea note.
+  4. User can capture audio of an idea or session and receive structured notation/chords via audio-to-notation transcription.
+
+**UI hint**: no
+
+**Plans:** TBD
+
+### Phase 56: DAW Project Integration
+
+**Goal:** User can pull context directly from their DAW project files into their practice/idea notes.
+**Depends on:** Phase 55
+**Requirements:** DAW-01, DAW-02
+**Note:** DAW project-file parsing across multiple formats is outside the scope of the existing research. Flag for dedicated phase-specific research at plan time.
+**Success Criteria** (what must be TRUE):
+
+  1. User can submit a DAW project file and the module extracts tempo, tracks, and plugins into a practice/idea note.
+  2. User can link a DAW project to a session or idea, with the DAW/project type auto-detected and recorded.
+
+**UI hint**: no
+
+**Plans:** TBD
+
+### Phase 57: Gamification
+
+**Goal:** User is motivated to keep practicing through achievements and goal-tracking layered on top of their practice history.
+**Depends on:** Phase 56
+**Requirements:** GAME-01, GAME-02
+**Success Criteria** (what must be TRUE):
+
+  1. User earns achievements/badges beyond simple streaks (e.g. "10 hours on a piece", "30-day streak", "first routine completed").
+  2. User can set a practice goal/challenge and see progress tracked toward it.
+
+**UI hint**: no
+
+**Plans:** TBD

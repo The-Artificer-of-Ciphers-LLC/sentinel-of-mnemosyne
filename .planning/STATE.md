@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v0.6.0
 milestone_name: Music Lesson Tracker
 status: planning
-last_updated: "2026-07-08T00:07:55.182Z"
+last_updated: "2026-07-08T01:00:00.000Z"
 last_activity: 2026-07-08
 progress:
-  total_phases: 0
+  total_phases: 10
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** v0.6.0 Music Lesson Tracker — defining requirements (domain research → REQUIREMENTS → ROADMAP)
+**Current focus:** v0.6.0 Music Lesson Tracker — roadmap created (Phases 48–57, 42 requirements mapped); ready for `/gsd-plan-phase 48`
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-07-08 — Milestone v0.6.0 started
+Phase: 48 — Module Scaffold + Shared Vault Client
+Plan: — (not yet planned)
+Status: Roadmap created; awaiting phase planning
+Last activity: 2026-07-08 — v0.6.0 roadmap created (Phases 48–57, 42 requirements mapped, 100% coverage)
 
 ## Milestone Progress
 
@@ -73,7 +73,7 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | 40 | Semantic Recall | MEM-03, MEM-04, MEM-05 | Phase 39 | ○ Not started |
 | 41 | Typed SessionSummary + Retention | MEM-06, MEM-07, MEM-08 | Phase 39, Phase 40 | ○ Not started |
 
-## v0.6.0 Phase Map
+## v0.4.1 Phase Map (originally mislabeled v0.6.0)
 
 | Phase | Name | Requirements | Depends on | Status |
 |-------|------|--------------|------------|--------|
@@ -81,6 +81,21 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 | 45 | Note-Quality Schema + Graph Analysis | NOTE-01..03 | Phase 44 | ✅ Complete |
 | 46 | 6 Rs Pipeline Orchestrator | PIPE-01..07 | Phase 44, Phase 45 | ✅ Complete |
 | 47 | Migration Cutover + Hardening | MIG-01..04 | Phase 44, Phase 45, Phase 46 | ✅ Complete |
+
+## v0.6.0 Phase Map
+
+| Phase | Name | Requirements | Depends on | Status |
+|-------|------|--------------|------------|--------|
+| 48 | Module Scaffold + Shared Vault Client | MUS-01, MUS-02, MUS-05, XMOD-01 | Phase 47 | ○ Not started |
+| 49 | Core Practice + Lesson Logging | MUS-03, MUS-04, LOG-01..07 | Phase 48 | ○ Not started |
+| 50 | Idea Capture | IDEA-01..03 | Phase 49 | ○ Not started |
+| 51 | Deterministic Practice-History Query + Ambient Recall | HIST-01..04, RCL-01 | Phase 49 | ○ Not started |
+| 52 | Practice-Routine Builder | RTN-01..07 | Phase 49, Phase 51 | ○ Not started |
+| 53 | ListenBrainz Integration (Stretch) | LBZ-01..03 | Phase 52 | ○ Not started |
+| 54 | Discogs Integration (Stretch) | DSC-01..03 | Phase 50, Phase 53 | ○ Not started |
+| 55 | Audio Tools | AUDIO-01..04 | Phase 52 | ○ Not started |
+| 56 | DAW Project Integration | DAW-01..02 | Phase 55 | ○ Not started |
+| 57 | Gamification | GAME-01..02 | Phase 56 | ○ Not started |
 
 ## Performance Metrics
 
@@ -168,7 +183,8 @@ Progress (v0.5): [███████   ] 78% (7/9 phases — 28, 29, 30, 31, 
 - Phase 25 added: V0.40 pre-beta refactoring — eliminate duplicates (DUP-01–05), complete stubs (STUB-01–08), fix architecture contradictions (CONTRA-01–04), implement RD-01 through RD-10
 - v0.5 Phases 28–36 added: 9-phase Pathfinder 2e module roadmap (31 requirements)
 - v0.5.1 Phases 39–41 added: 3-phase Second Brain roadmap (8 requirements: MEM-01..08; ADRs 0003/0004/0005)
-- v0.6.0 Phases 44–47 added: 4-phase Restore-the-Second-Brain-Core roadmap (19 requirements: VAULT-01..05, NOTE-01..03, PIPE-01..07, MIG-01..04); derived from research/ARCHITECTURE.md's convergent Phase A→B→C→D build order (taxonomy foundation → schema/graph → 6 Rs orchestrator → migration cutover)
+- v0.6.0 Phases 44–47 added: 4-phase Restore-the-Second-Brain-Core roadmap (19 requirements: VAULT-01..05, NOTE-01..03, PIPE-01..07, MIG-01..04); derived from research/ARCHITECTURE.md's convergent Phase A→B→C→D build order (taxonomy foundation → schema/graph → 6 Rs orchestrator → migration cutover). Milestone later relabeled v0.4.1 to free v0.6.0 for the Music Lesson Tracker.
+- v0.6.0 Phases 48–57 added: 10-phase Music Lesson Tracker roadmap (42 requirements: MUS-01..05, LOG-01..07, IDEA-01..03, HIST-01..04, RTN-01..07, LBZ-01..03, DSC-01..03, AUDIO-01..04, GAME-01..02, DAW-01..02, RCL-01, XMOD-01); derived from research/ARCHITECTURE.md's convergent dependency-ordered build sequence (module scaffold+shared-client → core logging → idea capture → deterministic history query+ambient recall → routine builder → stretch integrations (ListenBrainz, Discogs) → heavy audio/DAW/gamification phases sequenced last per PITFALLS.md Pitfall 7)
 
 ### Decisions
 
@@ -317,4 +333,4 @@ Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan Phase 48 with `/gsd-plan-phase 48`
