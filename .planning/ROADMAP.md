@@ -937,7 +937,7 @@ Full detail archived in `milestones/v0.4.1-ROADMAP.md`.
 
 **UI hint**: no
 
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 
 Plans:
 **Wave 1**
@@ -951,7 +951,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 48-04-PLAN.md — Wave 3: first music/ hub-mesh write (zero-orphan + _schema) + generated sweeper protection + drift guard, same commit (MUS-01, MUS-02, MUS-05)
+- [x] 48-04-PLAN.md — Wave 3: first music/ hub-mesh write (zero-orphan + _schema) + generated sweeper protection + drift guard, same commit (MUS-01, MUS-02, MUS-05)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
