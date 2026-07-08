@@ -917,6 +917,7 @@ Full detail archived in `milestones/v0.4.1-ROADMAP.md`.
 - [x] Phase 45: Note-Quality Schema + Graph Analysis (7 plans) — NOTE-01..03
 - [x] Phase 46: 6 Rs Pipeline Orchestrator (7 plans) — PIPE-01..07
 - [x] Phase 47: Migration Cutover + Hardening (7 plans) — MIG-01..04
+
 </details>
 
 ## Milestone v0.6.0 — Music Lesson Tracker
@@ -939,11 +940,21 @@ Full detail archived in `milestones/v0.4.1-ROADMAP.md`.
 **Plans:** 5 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 48-01-PLAN.md — Wave 1: shared ObsidianClientCore + Heading/Binary mixins + vendored graph_check orphan rule (XMOD-01, MUS-05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 48-02-PLAN.md — Wave 2: pf2e cutover to the shared client + full pf2e regression gate (XMOD-01, D-05/D-06)
 - [ ] 48-03-PLAN.md — Wave 2: music module scaffold (FastAPI + registration/heartbeat + healthz + core-only ObsidianClient), zero Core changes (MUS-01, MUS-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 48-04-PLAN.md — Wave 3: first music/ hub-mesh write (zero-orphan + _schema) + generated sweeper protection + drift guard, same commit (MUS-01, MUS-02, MUS-05)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 48-05-PLAN.md — Wave 4: 4-venv regression gate + live-Docker smoke (human-verify)
 
 ### Phase 49: Core Practice + Lesson Logging
