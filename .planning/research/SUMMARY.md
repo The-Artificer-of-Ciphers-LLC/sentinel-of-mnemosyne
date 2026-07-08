@@ -1,140 +1,167 @@
 # Project Research Summary
 
-**Project:** Sentinel of Mnemosyne
-**Domain:** Agentic note-taking / personal knowledge management engine (arscontexta + Building a Second Brain), fused into an existing FastAPI/Discord/Obsidian-REST/LiteLLM assistant
-**Researched:** 2026-07-05
-**Confidence:** MEDIUM-HIGH
+**Project:** Sentinel of Mnemosyne — v0.6.0 Music Lesson Tracker milestone
+**Domain:** Pluggable Docker module for a self-hosted AI assistant — personal music practice journal + pedagogy-driven routine builder
+**Researched:** 2026-07-08
+**Confidence:** MEDIUM-HIGH (architecture/pitfalls grounded directly in this repo's source; stack/features cross-checked against official docs and multiple independent sources)
 
 ## Executive Summary
 
-v0.6.0 rebuilds the arscontexta+BASB note-taking core that the phase-27 "Path B" pivot unintentionally gutted -- three-space vault (self/notes/ops/inbox/templates/), PARA taxonomy, the 6 Rs pipeline (Record to Reduce to Reflect to Reweave to Verify to Rethink), _schema/claim-titles/wikilinks, MOC/hub notes, and the 27-command surface -- built on top of, not instead of, the post-phase-39 architecture (Recall module, semantic recall, embeddings-through-Sentinel, Pathfinder). All four researchers converged independently on the same core finding: the Discord command surface is already routed (command_router.py/bot.py dispatch all 27 commands today), so the actual gap is not "wire up the commands" but build the 6 Rs pipeline as real backend orchestration. Today :ralph/:pipeline/:reweave are single fixed-text prompts (_SUBCOMMAND_PROMPTS) sent through call_core() to one ai_provider.complete() call -- no tool-calling, no vault mutation loop, no per-phase context isolation. The Discord reply looks like a completed pipeline run while the vault is untouched. Recognizing this distinction (routing vs. orchestration) is the single most important reframe for phase sequencing.
+The Music Lesson Tracker is best built exactly like the existing `modules/pathfinder/` reference implementation: a fully independent Docker Compose service (`modules/music/`, `profiles: ["music"]`) that registers itself with Sentinel Core over the already-generic `POST /modules/register` + proxy seam, requiring **zero changes to Core**. It owns its own thin `ObsidianClient` talking directly to the Obsidian Local REST API — it does **not** import Core's internal `Vault` Protocol (ADR-0002 scopes that to Core only; every existing module, including pf2e, already duplicates this thin client rather than sharing it). `/music/` becomes a brand-new top-level vault namespace, a sibling to `self/`, `notes/`, `ops/`, `inbox/`, `templates/`, and pf2e's own tree — not a PARA-classified subfolder — because its content (practice sessions, lessons, ideas) is structured and module-authored, not freeform captures for the 6 Rs pipeline to classify.
 
-The recommended approach requires zero new runtime dependencies -- every capability (footer _schema block parsing, wikilink regex extraction, graph metrics, a links-index sidecar, background pipeline orchestration) is achievable by extending patterns already present in sentinel-core/app/ (markdown_frontmatter.py, embedding_sidecar_index.py, task_runner.py, note_classifier.py's structured-output pattern) using dependencies already pinned (PyYAML, pydantic, stdlib). The 6 Rs pipeline should be implemented as a six_rs/ package of independent, structured-completion phases (mirroring note_classifier.classify_note()) driven by a new pipeline_orchestrator.py scheduled via the existing AsyncioTaskRunner seam -- architecturally cloned from the proven vault_sweeper.py/sweep_status_store.py background-task template, never inlined into MessageProcessor. PARA taxonomy replacing the flat-7 classifier is a breaking change, not an addition: learning/reference content routes to inbox/ for Reduce instead of directly to flat category folders, while journal/accomplishment/observation keep directory filing but move under ops/ subdirectories. notes/ itself stays flat (no topic subfolders) -- MOC/wikilink navigation replaces directory-based organization.
+The recommended approach sequences work by hard dependency: module scaffold + registration first (nothing else can exist without it), then core practice/lesson logging (the data foundation), then idea capture (independent but shares scaffolding), then a **deterministic, non-LLM practice-history query engine** (mirrors pf2e's `player_recall_engine.py` precedent — Core's relevance-ranked Recall is architecturally wrong for exact aggregates like "total minutes on this piece"), then the practice-routine builder (start templated/deterministic from a researched pedagogy knowledge base, defer history-adaptive generation), and only then the two explicitly-stretch, feature-flagged, non-load-bearing integrations — a ListenBrainz listening-history poller and a Discogs wantlist/search writer — both hand-rolled `httpx` async clients (never the sync-`requests`-based official libraries) with Discogs-shaped fields reserved in the data model from day one but the actual clients built last.
 
-The dominant risk is repeating the exact failure that created this milestone: the core was gutted at phase 27 via a refactor scoped around an unrelated concern (Pi-harness removal), with no regression contract to catch the silent loss. v0.6.0 must carry a MEM-0x + restored-command-surface regression ledger checked at every phase boundary -- not just at milestone close. Two further code-grounded, silent-regression traps were found by direct inspection: recall.py's _CARRIER_NAMESPACE_PREFIXES hardcodes flat-7 paths as a second, independently-maintained copy of the taxonomy map -- migrating the taxonomy without updating this allowlist silently degrades recency weighting with zero test failures; and vault_sweeper.py's SWEEP_SKIP_PREFIXES never embeds inbox/, which is fine today but becomes a recall blind-spot once inbox/ is a first-class, longer-lived pipeline staging area. Both must be fixed in the same phase that introduces the taxonomy change, not deferred.
+The single biggest risk is quietly violating one of five hard-won architectural invariants this codebase already enforces: the vault sweeper will relocate any `/music/` note into `_trash/` on the very next scheduled sweep unless `"music/"` is added to `sweep_skip_prefixes` in the *same phase* as the first Vault write (config.py:133-136 already anticipates this exact gap); module registration alone produces **no** Discord command surface (that's a separate hand-wired `command_router.py` branch + dispatch trio in a different container); and this project has already suffered the adapter-to-route payload-drift bug class three times (Phase 37) — every new `:music` Discord verb needs a contract-module test plus one live E2E smoke call, never just mocked unit tests. A secondary risk is scope-creep into the stretch integrations (ListenBrainz/Discogs) before the core logging/query/routine loop is validated — explicitly guard against this in phase sequencing.
 
 ## Key Findings
 
 ### Recommended Stack
 
-Zero new dependencies. Extend app/markdown_frontmatter.py with symmetric split_footer_schema()/join_footer_schema() functions (footer fence, not header -- arscontexta's _schema block sits at the end of the note, structurally distinct from existing leading YAML frontmatter). Add a small wikilinks.py module (compiled regex, same style as _FRONTMATTER_RE) and a NoteSchema pydantic model for :review/:check validation. Persist a links/graph sidecar (ops/sweeps/links-index.json) using the exact JSON-in-markdown-fence pattern already established by embedding_sidecar_index.py, computed in the same sweep pass that already computes embeddings. Graph metrics (orphans, backlinks, density) are hand-rolled dict/set/Counter operations over that sidecar -- explicitly rejecting networkx/obsidiantools as unwarranted dependency surface for personal-vault scale. The 6 Rs pipeline is prompt-driven AI reasoning through the existing litellm/LM Studio path, orchestrated via the existing AsyncioTaskRunner.schedule() seam -- explicitly rejecting APScheduler/Celery/RQ (no periodic/distributed requirement) and any anthropic/Claude SDK call (hard constraint: local-model-only processing path).
+New dependencies are minimal and deliberately boring: `fastapi`, `uvicorn[standard]`, `httpx`, `pydantic-settings`, `pyyaml` — an exact mirror of `modules/pathfinder/pyproject.toml`, already validated in this repo. No new HTTP client libraries and no music-theory library are added.
 
 **Core technologies:**
-- PyYAML (existing pin) -- parse/emit the new footer _schema fence, symmetric to existing frontmatter handling
-- pydantic (existing pin) -- NoteSchema validation backing :review/:check
-- stdlib re/json/asyncio -- wikilink extraction, links-index sidecar, pipeline orchestration
-- Existing AsyncioTaskRunner/TaskRunner seam -- background execution for :ralph/:pipeline/:reweave, cloned from the sweeper's proven shape
-- litellm (existing) -- 6 Rs stage completions via the existing LM Studio/local-model provider path only
+- `httpx.AsyncClient` — used for the module's own `ObsidianClient` **and** hand-rolled ListenBrainz/Discogs clients — matches the house standard everywhere else (`Vault`, `ObsidianClient`, `SentinelCoreClient`) and avoids introducing a second, blocking sync-IO stack
+- Plain YAML frontmatter (`pyyaml`) for chords/keys/progressions — no `music21` or theory library; this codebase has no schema library anywhere, and `music21` solves a different problem (analyzing existing scores, not freeform idea capture)
+- **Do NOT add `liblistenbrainz` or `python3-discogs-client`** — both are built on synchronous `requests` (confirmed via PyPI `requires_dist`); calling them from `async def` routes without `asyncio.to_thread` blocks the event loop, a class of bug this codebase has zero instances of. Both target APIs are simple enough (1-2 GET calls, one PUT) that ~30-line hand-rolled `httpx` wrappers are the boring, consistent choice.
+- Discogs auth: **Personal Access Token** (`Authorization: Discogs token=<token>` header), not OAuth 1.0a — OAuth is for apps acting on behalf of *other* users, irrelevant for a single-operator tool
+- ListenBrainz auth: user token via `Authorization: Token <token>` header; rate-limit is header-driven (`X-RateLimit-*`), must be read and respected, not a fixed published number
 
 ### Expected Features
 
-**Must have (table stakes):** three-space vault structure (self/notes/ops/inbox/templates/) with migration from core/; session-start reading pattern (self/*.md, ops/reminders.md) -- largely already implemented via RecallConfig.self_paths; PARA taxonomy replacing flat-7 (/note/classify and /vault/sweep re-specified -- a breaking change, not layered addition); _schema block + claim-title + wikilink note-quality standard with :review/:check; Record to Reduce to Reflect (6 Rs stages 1-3) via :capture/:seed/:ralph; MOC/hub notes created lazily via :connect; core command subset (:capture :seed :ralph :pipeline :connect :review :check :stats :graph :help); non-destructive writes preserved (_trash/ relocation only, never hard-delete).
+**Must have (table stakes / P1):**
+- Practice session logging (duration, instrument, pieces, focus area, freeform notes, mood/energy) → `/music/practice-log/[date]-[instrument].md`
+- Structured chord-progression / melody-idea capture → `/music/ideas/[slug].md`
+- Practice-history queries ("what did I work on last week", "how long on this piece") via a dedicated deterministic engine, not Core's ambient Recall
+- Practice streaks + per-instrument/per-piece rollups (near-free, pure derived query once logging exists)
+- Practice-routine builder — v1 scope is **static/templated per instrument**, seeded from researched pedagogy (guitar/bass/synth/keys/production), NOT yet history-adaptive
 
-**Should have (differentiators):** Reweave (backward-pass note revision -- BASB's Distill phase, depends on a populated graph existing first); operational learning loop (ops/observations/, ops/tensions/ to threshold-triggered :rethink); :graph/:stats vault health analytics (orphans, link density, dangling links); reuse of the existing SemanticRecall embedding index for :connect/:reweave candidate-finding (genuine head start -- flag explicitly so planning doesn't reinvent retrieval); task-stack (:tasks/:next).
+**Should have (differentiators, P2):**
+- History-adaptive routine builder (bias toward neglected/plateaued skills)
+- Skill-category time balance view (actual vs. prescribed practice-time split)
+- Cross-domain recall tying practice sessions into the rest of the second-brain graph
 
-**Defer (v2+):** true fresh-context-per-phase orchestration (separate sequential call_core() calls per 6 Rs stage) unless D-13's single-prompt approach shows measurable quality degradation; plugin-tier meta-commands (:plugin:health, :plugin:architect, etc.); vault-wide backfill of pre-milestone notes to the new _schema standard (grandfather-vs-backfill decision explicitly unresolved -- flag for requirements); multi-domain extension.
+**Defer (stretch / P2-P3):**
+- ListenBrainz listening-history pull (feature-flagged background poller)
+- Discogs wantlist writes / related-release suggestions (on-demand route; Discogs has **no** recommendations endpoint — reframe as Discogs search-by-similarity + ListenBrainz `cf/recommendation`)
 
-**Anti-features (do not build):** literal port of arscontexta's Claude Code hooks (SessionStart/PostToolUse/git-auto-commit -- Sentinel has no filesystem-hook or subagent runtime); scheduled/cron vault reorganization (violates BASB's just-in-time organization principle); auto-running :pipeline on every message without being asked; PARA subfolders inside notes/ (violates the flat-namespace invariant); auto-updating self/identity.md from inferred behavior without confirmation; indexing Sentinel's own generated replies as graph content; over-retrieval (exhaustive scan-and-dump) during :connect/:reweave candidate search.
+**Anti-features (explicitly out of scope):** built-in audio recording/tuner/metronome tooling, real-time multi-user/teacher-student sharing, badge/XP gamification beyond simple streaks, audio-to-notation transcription, deep DAW project-file integration.
 
 ### Architecture Approach
 
-The command-routing layer needs no rework -- :capture/:seed/:note/:inbox/:vault-sweep/:pf stay unchanged. The pipeline-shaped commands (:ralph/:pipeline/:reweave/:check/:rethink/:graph/:stats/:review/:connect) swap from call_core(fixed_prompt) to new dedicated endpoints backed by real orchestration. POST /message/MessageProcessor stays deliberately untouched -- the pipeline is a background task, not a chat turn, avoiding the exact layering mistake ADR-0003 already rejected for Recall.
+Music is a full sibling Docker service to `modules/pathfinder/`, communicating with Core only through the already-generic registration/proxy seam and with Discord only through a new hand-wired dispatch trio — Core requires **zero code changes** either way.
 
 **Major components:**
-1. pipeline_orchestrator.py + pipeline_status_store.py (new) -- background 6 Rs orchestration, cloned from vault_sweeper.run_sweep/sweep_status_store.py's proven admin-gated, pollable-status shape
-2. six_rs/{reduce,reflect,reweave,verify,rethink}.py (new package) -- independent structured-completion calls per phase, mirroring note_classifier.py's model-resolution + JSON-schema-constrained completion pattern; each phase gets only minimal context, never the full conversational Hot/Warm tier
-3. note_schema.py, graph_analysis.py, moc_maintenance.py (new) -- trailing _schema block parse/validate, orphan/backlink/density computation over the links-index sidecar, lazy hub create/append with bidirectional wikilinks -- hub-matching reuses the existing embedding sidecar (SemanticRecall machinery) before falling back to a fresh LLM call
-4. note_classifier.py/vault_sweep_plan.py/vault_sweeper.py (modified) -- taxonomy routing splits notes-bound (to inbox/ for Reduce) vs. ops-bound (to ops/{journal,accomplishments}/); topic-dir relocation for notes-bound content retired
+1. `modules/music/app/main.py` + `config.py` + `obsidian.py` — module skeleton, own `ObsidianClient`, registers with Core via `POST /modules/register` with retry+heartbeat (mirrors pf2e exactly)
+2. `services/practice_log.py`, `services/idea_store.py` — write structured, `_schema`-footer-carrying notes to `/music/practice-log/`, `/music/lessons/`, `/music/ideas/`
+3. `services/practice_query.py` — **deterministic** aggregate engine (lists+parses `_schema` fields directly, sums/filters in Python), explicitly not Core's BM25/semantic Recall — mirrors pf2e's `player_recall_engine.py` precedent
+4. `services/routine_builder.py` — pedagogy rules engine per instrument, reads recent practice history via the module's own `ObsidianClient`
+5. `services/listenbrainz_poller.py`, `services/discogs_client.py` — feature-flagged, off-by-default, non-load-bearing background/on-demand stretch integrations
+6. `interfaces/discord/music_dispatch.py` + `music_bridge.py` + `music_types.py` + a `command_router.py` branch — separate deliverable, structurally identical to the existing pf2e trio
 
 ### Critical Pitfalls
 
-1. **Silent core regression during restructure (repeating phase-27)** -- enumerate the pre-27 command surface and MEM-01..MEM-09 as two parallel requirement ledgers; every phase must gate on both staying green, plus a standing full-suite regression run, not just at milestone close.
-2. **Taxonomy migration silently breaks Recall's carrier allowlist** -- recall.py's _CARRIER_NAMESPACE_PREFIXES is a hand-maintained second copy of the taxonomy map; migrating without updating it degrades recency weighting with zero test failures. Must ship in the same phase as the classifier change, ideally as a single shared source of truth.
-3. **Embedding/sweeper blind spot during pipeline migration** -- inbox/ is never embedded (SWEEP_SKIP_PREFIXES), which is correct today but becomes a recall blind-spot once inbox/ is a longer-lived staging area; migration moves must preserve embedding_b64/embedding_model frontmatter (rename, not delete+recreate) or trigger a costly full-vault re-embed.
-4. **Over-automation of the 6 Rs pipeline against a bounded local model** -- keep :ralph/:pipeline strictly user-invoked in this milestone; never gate Reduce's success on passing the same validation bar :review uses -- file as _schema.status: draft and let Verify catch imperfection, don't stall the pipeline.
-5. **Wikilink integrity breaks across the taxonomy migration** -- a naive write-new-path+delete migration silently orphans every [[wikilink]] referencing the old path; must verify empirically whether wikilinks are title- or path-keyed before assuming risk, and treat pre/post :graph dangling-link count as a Nyquist validation gate.
+1. **`/music/` missing from the sweeper's skip-prefix list** — the vault sweeper walks the entire vault and will (non-destructively but disruptively) relocate practice logs into `_trash/` on the next scheduled sweep unless `"music/"` is added to `sweep_skip_prefixes` in the *same phase/commit* as the first Vault write. `config.py:133-136` already anticipates exactly this scenario.
+2. **Module registration ≠ Discord command surface** — `POST /modules/register` only wires the HTTP proxy; `:music` commands require a hand-written dispatch module and an explicit branch in `interfaces/discord/command_router.py`, a separate deliverable with its own acceptance criteria.
+3. **Adapter-to-route payload drift** — this exact bug class already hit the codebase three times in Phase 37 (mocked adapter tests pass green while live calls 422). Every new `:music` verb needs a contract-module test validated against the real Pydantic model, plus one live E2E smoke call before verifier PASS.
+4. **Practice-log volume degrading warm-tier recall** — decide deliberately whether `/music/` is embedded/searchable by Core's ambient Recall at all; default recommendation is to exclude it and let the module's own deterministic query layer own aggregate answers, keeping sweep cost and warm-tier relevance stable.
+5. **External API failures must never break core logging** — ListenBrainz/Discogs calls must be strictly async, best-effort, fire-and-forget, never inline in the practice-log write path (this project already hardened `ops/sessions/` writes against exactly this failure mode once).
+6. **Freeform notes can't answer duration/aggregate queries reliably** — pieces need deterministic slugification and structured frontmatter fields (not LLM-normalized text matching) or "how long on Chameleon" silently under/over-counts depending on phrasing.
 
 ## Implications for Roadmap
 
-All four researchers converge on the same four-phase build order, driven by hard dependency edges (schema/graph needs the taxonomy decided first; the pipeline needs schema+graph to validate/connect against).
+Based on combined research, the dependency-ordered build sequence (converged on independently by ARCHITECTURE and FEATURES, and reinforced by PITFALLS' sequencing pitfall #7) is:
 
-### Phase A: Vault Namespace + Taxonomy Foundation
-**Rationale:** Everything downstream (PARA, _schema, MOCs, session-start reads) assumes the self/notes/ops/inbox/templates structure and taxonomy routing already exist. This is the correct, lowest-risk starting point -- it changes a routing table and directory conventions, not core retrieval behavior.
-**Delivers:** notes//templates/ namespaces (lazy-create per existing D-14 pattern); note_classifier.TOPIC_VAULT_PATH split into notes-bound (to inbox/) vs. ops-bound (to ops/{journal,accomplishments}/); narrowed vault_sweep_plan.py/vault_sweeper.py topic-dir move scope; PROTECTED_NAMESPACES and RecallConfig.exclude_prefixes gain templates/ (confirm notes/ stays un-excluded); a one-time, reviewable migration of existing flat-7 content.
-**Addresses:** three-space vault, PARA taxonomy replacing flat-7 (FEATURES.md P1 items).
-**Avoids:** Pitfall 2 (carrier-allowlist drift -- must ship the recall.py update in this same phase), Pitfall 3 (embedding/wikilink preservation during migration), Pitfall 7 (wikilink integrity across migration).
+### Phase 1: Module Scaffold + Registration
+**Rationale:** Unconditional prerequisite — no other phase can add routes without a running, registered service. Pure mirror of `modules/pathfinder/`'s skeleton; zero new architectural risk.
+**Delivers:** `modules/music/` Docker service (`main.py`, `config.py`, `obsidian.py`, `compose.yml` with `profiles: ["music"]`), healthz route, registration payload + heartbeat lifespan.
+**Avoids:** Nothing yet to avoid — but must include the `sweep_skip_prefixes` addition as an explicit acceptance criterion the moment any write path is planned (Pitfall 1), even if the first actual write lands in Phase 2.
 
-### Phase B: Note-Quality Schema + Graph Analysis (additive, read-mostly)
-**Rationale:** Read/analysis endpoints with no chat-path coupling -- safe to build once notes/+templates/ exist and taxonomy routing is decided, without waiting on the pipeline orchestrator.
-**Delivers:** note_schema.py (trailing _schema: parse/validate), graph_analysis.py (orphans/triangles/density/hub membership), moc_maintenance.py (lazy hub create/append); :review, :check, :graph, :stats, :connect swap from fixed-prompt call_core() to real structured endpoints.
-**Uses:** the links-index sidecar pattern from STACK.md (mirrors embedding_sidecar_index.py); reuses SemanticRecall's embedding infrastructure for hub-candidate matching before falling back to an LLM call (Architecture Pattern 4).
-**Implements:** the note-quality standard (_schema+claim-title+wikilinks) and MOC/hub navigation layer from FEATURES.md.
+### Phase 2: Core Practice + Lesson Logging
+**Rationale:** The foundational data-producing capability every other feature reads from; must ship with **zero external-API code** in the write path (Pitfall 5).
+**Delivers:** `POST /practice/log`, `services/practice_log.py` writing `/music/practice-log/` and `/music/lessons/` with `_schema` footers, deterministic piece slugification (Pitfall 6), `:music log` Discord command (full dispatch/bridge/types trio + `command_router.py` branch).
+**Addresses:** Practice session logging, mood/focus rating, per-piece time tracking (FEATURES P1).
+**Avoids:** Pitfall 1 (sweep skip-prefix, same commit as first write), Pitfall 2 (Discord surface is its own deliverable, not implied by registration), Pitfall 3 (contract-module test + E2E smoke per verb), Pitfall 5, Pitfall 6.
 
-### Phase C: 6 Rs Pipeline Orchestrator (highest complexity)
-**Rationale:** This is the actual "restore the core" work -- the gap every researcher flagged as the real missing capability, not the already-routed command surface. Requires Phase A's taxonomy decision (what counts as an inbox entry destined for Reduce) and Phase B's schema/graph (Verify and Reflect depend on them).
-**Delivers:** pipeline_orchestrator.py + pipeline_status_store.py (cloned from the sweeper's proven background-task shape); six_rs/{reduce,reflect,reweave,verify,rethink}.py as independent structured completions; POST /vault/pipeline/start / GET /vault/pipeline/status (admin-gated, mirrors /vault/sweep/*); :ralph/:pipeline/:reweave/:rethink swap to these new endpoints; a concurrency guard (lockfile or compare-and-swap, mirroring the sweeper's/NoteIntake's existing patterns) and explicit success/partial/failure reporting back to Discord (not fire-and-forget).
-**Addresses:** Record to Reduce to Reflect to Reweave to Verify to Rethink (all 6 Rs stages), the pipeline's actual note-organizing output.
-**Avoids:** Pitfall 4 (over-automation/unattended triggers -- keep strictly user-invoked), Pitfall 5 (orphan explosion -- make :ralph refuse to mark "processed" without a successful Reflect), Pitfall 6 (_schema enforcement at the wrong stage -- file as draft, don't block Reduce on Verify-grade validation), Pitfall 8 (concurrency -- no double-processing), Pitfall 9 (local-model cost/latency compounding -- benchmark against the real configured provider, including exo's idle-unload behavior, before committing to a single-completion :pipeline), Pitfall 10 (silent background-task failure -- must report actual outcome, deviating from the session-summary fire-and-forget pattern).
+### Phase 3: Idea Capture
+**Rationale:** Independent of practice logging but reuses the Discord dispatch scaffolding built in Phase 2 — sequence right after to avoid duplicating that trio twice.
+**Delivers:** `POST /idea/capture`, `services/idea_store.py` writing `/music/ideas/`, `:music idea` command. Includes Discogs-shaped optional fields (release id, related-release suggestions) in the `Idea` model per the milestone's "data model built to hold these fields from day one" directive — schema only, no live integration.
+**Uses:** Plain YAML chord/key/progression fields (STACK.md).
 
-### Phase D: Migration Completion + Cutover Hardening
-**Rationale:** Full-vault migration and retirement of dead directory-routing code should only happen once A-C are validated against real Discord traffic -- doing it earlier risks a destructive migration against a still-shifting taxonomy.
-**Delivers:** completion of remaining flat-7 content migration; removal of now-dead directory-routing code paths; USER-GUIDE.md/README.md updates reflecting the new background-task UX for pipeline commands; full regression + live UAT pass.
-**Addresses:** the grandfather-vs-backfill decision for pre-milestone notes (FEATURES.md open question), final cutover.
+### Phase 4: Deterministic Practice-History Query
+**Rationale:** Hard dependency on Phase 2 — nothing to query until sessions exist with a stable `_schema` shape.
+**Delivers:** `services/practice_query.py` (lists+parses `/music/practice-log/*.md` `_schema` footers, sums/filters in Python — never Core's BM25/RRF Recall), `POST /practice/query`, `:music history` command.
+**Implements:** Architecture Pattern 2 (module-owned deterministic query, mirrors pf2e's `player_recall_engine.py`).
+**Avoids:** Anti-Pattern 2 (answering aggregate questions via semantic Recall).
+
+### Phase 5: Practice-Routine Builder (templated v1)
+**Rationale:** Depends on Phase 2 (reads recent practice history) and benefits from Phase 4's query engine already existing (reuse, don't duplicate the parser). This is the milestone's named differentiator and its highest-complexity feature.
+**Delivers:** `services/routine_builder.py` seeded from the researched pedagogy KB (per-instrument skill categories: Technique, Repertoire, Ear Training, Theory, Production Workflow; slow-to-fast tempo progression; spaced-repetition scheduling), `POST /routine/build`, `:music routine <instrument>` command. Scoped to structural practice planning only — gets an `AI-SPEC.md` via `gsd-ai-integration-phase` constraining output away from technique/injury advice (Pitfall 8).
+**Addresses:** FEATURES P1 templated routine builder; explicitly defers history-adaptive generation to v1.x.
+
+### Phase 6 (Stretch): ListenBrainz Poller
+**Rationale:** No hard dependency beyond the module skeleton and vault-write conventions; sequenced last among "real" features because it's explicitly stretch per PROJECT.md and must never destabilize the shippable core (Pitfall 7).
+**Delivers:** Feature-flagged (`MUSIC_LISTENBRAINZ_ENABLED=false` default) background poller task, incremental pull from a stored high-water-mark timestamp, rate-limit-header-aware backoff.
+**Implements:** Architecture Pattern 4 (feature-flagged background task, mirrors `_registration_heartbeat`/`_build_rules_index_safely` precedent).
+
+### Phase 7 (Stretch): Discogs Wantlist Writer
+**Rationale:** Data-model fields already added in Phase 3; this phase only adds the live API integration behind a flag. Sequenced last for the same reason as Phase 6.
+**Delivers:** On-demand `POST /discogs/wantlist-sync` route (idempotent `PUT /users/{username}/wants/{release_id}` — no app-side dedupe needed), Docker-secrets-file token storage.
+**Avoids:** Anti-Pattern 3 (making stretch integrations load-bearing), Security Mistake (tokens in `.env`/compose — use `secrets/`).
 
 ### Phase Ordering Rationale
 
-- **A gates B, B gates C** -- pure dependency: graph_analysis.py's code can be unit-tested against FakeVault fixtures without waiting for real pipeline output, but nothing meaningful exists in notes/ until A's taxonomy routing and, eventually, C's Reduce phase populate it. six_rs.reflect needs B's graph_analysis/moc_maintenance; six_rs.verify needs B's note_schema.
-- **Reweave/:rethink/:refactor are correctly late** -- nothing to reweave, rethink, or refactor against on an empty or freshly-migrated vault; these depend on Reduce+Reflect already populating a non-trivial graph.
-- **This order directly avoids the phase-27 anti-pattern**: each phase's scope is narrow and explicit (taxonomy OR schema/graph OR orchestrator OR migration), so a regression ledger can attribute any MEM-0x or command-surface breakage to a specific phase rather than discovering it silently, months later, the way phase 27's Pi-harness removal did.
-- **Phase C should be feature-flagged/left unwired in Discord until its own regression pass is green** -- it is the highest-complexity, most-new-code phase and the one most likely to need iteration before user-facing exposure.
+- **Dependencies drive the order strictly for Phases 1→2→4→5**: no module without scaffold, no history query without logged data, no reuse-friendly routine builder without the query engine existing first.
+- **Idea capture (Phase 3) is architecturally independent but placed early** to avoid building the Discord dispatch trio twice — a scaffolding-reuse optimization, not a hard dependency.
+- **Stretch integrations (6, 7) are deliberately last** — PITFALLS' Pitfall 7 explicitly warns that ListenBrainz/Discogs work is the most "interesting" engineering and risks crowding out the milestone's actual named deliverable (the routine builder). Roadmap must gate these behind core-feature UAT completion, not just informal ordering.
+- **The sweep-skip-prefix fix and Discord-surface work are not separate phases** — they are acceptance criteria baked into Phases 1/2, per PITFALLS' explicit recommendation not to defer them to a later hardening phase.
 
 ### Research Flags
 
-Needs deeper research during planning:
-- **Phase C (6 Rs pipeline orchestrator):** the single-prompt-vs-per-stage-isolation tradeoff (D-13 cheap approach vs. true fresh-context-per-phase) needs a real local-model latency/context benchmark against both configured providers (LM Studio and exo) before locking the design -- recommend starting with the single-prompt approach and validating quality before adding per-stage isolation.
-- **Phase A (migration):** wikilink title-vs-path-keying needs an empirical check against the live Obsidian vault before finalizing the migration approach (rename vs. copy+relink).
+Phases likely needing deeper research during planning:
+- **Phase 5 (Routine Builder):** ARCHITECTURE explicitly flags this — "Domain research... runs before requirements" — the pedagogy content (per-instrument skill progressions) is the bulk of new logic and was only lightly seeded here; also needs an `AI-SPEC.md` design contract for the technique/injury-advice guardrail (Pitfall 8).
+- **Phase 6/7 (ListenBrainz/Discogs):** external API integration details (rate-limit handling, pagination/high-water-mark state, exact idempotency semantics) are MEDIUM confidence from docs-only research; verify against live calls during planning.
 
-Phases with standard, well-documented patterns (skip --research-phase):
-- **Phase B:** directly clones embedding_sidecar_index.py's JSON-sidecar pattern and note_classifier.py's structured-completion pattern; no novel technology.
-- **Phase D:** migration completion and doc updates follow the non-destructive _trash/-only pattern already established.
+Phases with standard patterns (skip research-phase):
+- **Phase 1 (Scaffold):** direct mirror of `modules/pathfinder/`, HIGH confidence, no unknowns.
+- **Phase 2 (Core Logging), Phase 3 (Idea Capture), Phase 4 (History Query):** established patterns already proven in this codebase (pf2e's `ObsidianClient`, `player_recall_engine.py`, note-schema conventions).
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | MEDIUM-HIGH | Existing-code claims verified by direct read of sentinel-core/app/; arscontexta claims verified via raw GitHub file fetch but tool-classified LOW-confidence source -- cross-check against the live upstream repo before implementation |
-| Features | MEDIUM-HIGH | Primary-source repo content (README, three-spaces.md, kernel.yaml) for arscontexta mechanics is HIGH confidence; BASB/PARA framing is well-established public methodology (MEDIUM); Sentinel-specific constraints sourced from PROJECT.md and the recovered phase-10 master spec (HIGH) |
-| Architecture | HIGH/MEDIUM | HIGH for current-codebase findings (production source, ADRs, phase-10 spec); MEDIUM for arscontexta upstream pattern citations (single WebFetch pass, not independently cross-verified) |
-| Pitfalls | HIGH/MEDIUM | HIGH for integration-specific pitfalls (grounded in live code and git history including the pre-27-pivot tag); MEDIUM for general second-brain/Zettelkasten domain patterns, triangulated from adjacent-methodology community sources |
+| Stack | MEDIUM | No premium research providers this run; every version claim cross-checked against PyPI JSON API + GitHub/ReadTheDocs; repo-read claims (Vault seam, ObsidianClient shape) are HIGH |
+| Features | MEDIUM | PART A cross-checked against 5-6 competitor apps + official ListenBrainz/Discogs docs; PART B pedagogy cross-checked across multiple independent, converging sources per instrument — no single-source claims, but not primary/authoritative pedagogy texts |
+| Architecture | HIGH | Grounded directly in inspection of the running reference implementation (`modules/pathfinder/`) and the actual Core seams (`module_registry.py`, `module_gateway.py`, `vault_sweeper.py`) — not general domain convention |
+| Pitfalls | HIGH (architecture/integration) / MEDIUM (external APIs) / LOW (music-schema and technique/injury-advice claims) | Architecture pitfalls grounded in this repo's own documented history (Phase 37 payload-drift, `config.py` skip-prefix comment); external-API pitfalls from official docs + forum corroboration; general music-pedagogy-AI-safety claims flagged LOW, no primary source found |
 
 **Overall confidence:** MEDIUM-HIGH
 
 ### Gaps to Address
 
-- **Grandfather vs. backfill existing flat-7 notes to the _schema standard** -- not resolved by research; requirements/planning must decide whether pre-milestone notes are retroactively brought up to standard via a batch :check/:review pass, or grandfathered with the new standard applying only going forward.
-- **:ralph/:pipeline orchestration depth** -- single-prompt (D-13, cheap, current design) vs. true per-stage isolated call_core() calls (faithful to arscontexta's "fresh context per phase" principle, costlier). Recommend starting with the former for MVP and treating per-stage isolation as a differentiator to add once quality gaps are observed in production use.
-- **Title-keyed vs. path-keyed wikilinks** -- Obsidian's wikilink resolution behavior against this specific vault needs an empirical check before finalizing the migration/rename strategy; assuming REST semantics without verification risks silently breaking cross-references.
-- **Local-model pipeline cost/latency** -- no real benchmark exists yet for a single-completion :pipeline run against either configured provider (LM Studio, exo); exo's idle-unload/404 behavior in particular needs explicit handling, not silent failure. Must be benchmarked as part of Phase C's own verification, using the existing provider-registry (phase 42) work.
+- **Discogs "related-release suggestions"** as originally scoped needs reframing — Discogs has no recommendations endpoint; the roadmapper/planner should treat this as "Discogs search-by-similarity + ListenBrainz `cf/recommendation`," not a single Discogs call (STACK.md gap, flagged explicitly).
+- **Whether `/music/` should be sweeper-skip-listed but still semantically embedded for ambient Recall** is an open follow-on decision — ARCHITECTURE recommends defaulting to NOT embedded/not in ambient Recall for v0.6.0, revisiting only if usage shows real need; the pre-existing `pf2e/` vs `mnemosyne/pf2e/` skip-prefix string mismatch in `vault_sweeper.py` should be verified at implementation time, not assumed correct.
+- **Whether to promote `ObsidianClient` into `shared/sentinel_shared`** to reduce duplication (pf2e + music, and future modules per PROJECT.md) is a legitimate roadmap-level refactor decision, not resolved here — flag for a future phase if a third module makes duplication a real cost.
+- **Pedagogy KB depth for the routine builder** — PART B seeds converging, multi-source guidance per instrument but is not exhaustive; Phase 5 planning should treat it as a starting content seed, potentially warranting a dedicated research-phase pass.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Direct reads of production source: sentinel-core/app/vault.py, app/services/message_processing.py, app/services/recall.py, app/services/note_classifier.py, app/services/vault_sweep_plan.py, app/services/vault_sweeper.py, app/services/task_runner.py, app/services/note_sweep_runner.py, app/services/sweep_status_store.py, app/services/embedding_sidecar_index.py, app/routes/note.py, app/markdown_frontmatter.py, interfaces/discord/command_router.py, interfaces/discord/bot.py
-- docs/2nd-brain-original-design/10-CONTEXT-master-spec.md -- recovered phase-10 master spec (D-01 through D-16)
-- .planning/PROJECT.md, CONTEXT.md, docs/adr/0001-0006 -- current milestone scope, validated MEM-01..MEM-09 history, architectural precedent
-- Git history: pre-27-pivot tag and the phase 27-43 commit trail confirming the core was rebuilt around provider/embeddings concerns with no note-taking regression gate
-- https://raw.githubusercontent.com/agenticnotetaking/arscontexta/main/README.md, reference/three-spaces.md, reference/kernel.yaml -- direct repository fetch (not summarized)
+- `sentinel-core/app/vault.py`, `app/services/module_registry.py`, `app/services/module_gateway.py`, `app/routes/modules.py`, `app/services/vault_sweeper.py`, `app/config.py`, `app/services/recall.py`, `app/services/note_schema.py`, `app/services/pipeline_orchestrator.py` — read directly from this repo
+- `modules/pathfinder/app/obsidian.py`, `app/main.py`, `pyproject.toml`, `compose.yml`, `app/routes/npc.py`, `app/routes/session.py`, `app/player_recall_engine.py` — read directly, reference implementation
+- `interfaces/discord/command_router.py`, `pathfinder_dispatch.py`, `pathfinder_bridge.py`, `pathfinder_types.py`, `core_gateway.py` — read directly
+- `.planning/PROJECT.md`, `CONTEXT.md` (Phase 37 `session_issues`, `verifier_blind_spots`, `Pathfinder command contract`, `obsidian_search_invariant`) — this project's own documented history
 
 ### Secondary (MEDIUM confidence)
-- /yaml/pyyaml, /networkx/networkx (Context7) -- version/API confirmation and "rejected as overkill" grounding
-- WebFetch digest of github.com/agenticnotetaking/arscontexta general repo overview
-- Web search on Tiago Forte's Building a Second Brain (PARA/CODE framework, just-in-time organization principle)
-- Community sources on PARA/BASB over-organization and Zettelkasten/MOC orphan decay (Obsidian Forum, Zettelkasten Forum, Medium)
+- `https://pypi.org/pypi/liblistenbrainz/json`, `https://pypi.org/pypi/python3-discogs-client/json` — dependency lists, versions
+- `https://listenbrainz.readthedocs.io/en/latest/users/api/core.html`, `https://github.com/metabrainz/liblistenbrainz` — API shape, rate limits
+- `https://www.discogs.com/developers`, Context7 `/joalla/discogs_client` (215 snippets) — auth model, wantlist endpoint
+- Andante, Modacity, Instrumentive, Legato, Athenify, Practis, Better Practice (competitor practice-tracker apps) — feature landscape
+- D'Addario, Scott's Bass Lessons, Berklee Take Note, MusicTech, Syntorial, Fundamentals of Piano Practice, Myloops, EDM Tips, Beatportal (per-instrument pedagogy sources, multiple independent sources per instrument)
 
 ### Tertiary (LOW confidence)
-- WebFetch of agenticnotetaking/arscontexta (tool-classified LOW by the harness despite being a direct primary-source fetch) -- cross-check against the live repo before implementation, per STACK.md's own flag
-- python-frontmatter, obsidiantools (WebSearch) -- used only to identify and reject alternatives
+- General web search on AI-assisted music technique/injury risk — directional caution only, no music-pedagogy-specific primary source
+- General web search on music/practice-log schema design and MusicBrainz tag-provenance pattern — design precedent only, not a verified pitfall claim
 
 ---
-*Research completed: 2026-07-05*
+*Research completed: 2026-07-08*
 *Ready for roadmap: yes*

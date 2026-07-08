@@ -1,279 +1,254 @@
 # Feature Research
 
-**Domain:** Agentic note-taking / personal knowledge management (arscontexta + Building a Second Brain, fused into an existing FastAPI+Discord+Obsidian assistant)
-**Researched:** 2026-07-05
-**Confidence:** MEDIUM-HIGH (primary-source repo content for arscontexta mechanics; MEDIUM for BASB/PARA framing, which is well-established public methodology)
+**Domain:** Personal music practice tracker + practice-routine builder (Music Lesson Tracker module for Sentinel of Mnemosyne)
+**Researched:** 2026-07-08
+**Confidence:** MEDIUM (PART A: cross-checked against 5-6 established practice-tracker apps and official ListenBrainz/Discogs docs; PART B: cross-checked across multiple independent pedagogy sources per instrument, consistent with well-known method-book conventions — no single-source claims)
+
+> **Supersedes** the prior FEATURES.md content (arscontexta/second-brain feature research for the v0.4.1 "Restore the Second-Brain Core" milestone, formerly mislabeled v0.6.0). That milestone shipped 2026-07-07 and its research is archived in `.planning/milestones/v0.4.1-ROADMAP.md`. This file now covers the **new** v0.6.0 Music Lesson Tracker milestone.
 
 ---
 
-## Context: What Already Exists (v0.5.1 baseline — do not re-research)
-
-This is a **subsequent milestone** (v0.6.0) restoring functionality that the phase-27 "Path B" pivot
-removed. The current system already has, and this milestone builds **on top of**, not instead of:
-
-- `Vault` Protocol seam (`app/vault.py`) — sole persistence interface
-- Recall module: hot tier (persona + Self namespace + recent sessions) + warm tier (BM25 + semantic,
-  RRF-merged) — see `.planning/research/FEATURES.md` history (superseded content) for full detail
-- Vault sweeper with per-note `embedding_b64` frontmatter, live semantic retrieval
-- A **flat-7 note classifier** + `/note/classify` + `/inbox` + `/vault/sweep` — notes are currently
-  sorted into 7 flat categories at classification time (no PARA, no 6 Rs, no `_schema`, no MOCs)
-- Pathfinder 2e module (NPC/session/rule management) — must be preserved as a module, not reverted
-
-This document covers **only** the note-taking-engine features this milestone adds: the three-space
-vault, PARA taxonomy, the 6 Rs pipeline, `_schema`/claim-titles/wikilinks, MOC maintenance, and the
-27-command surface. Where a new feature **replaces or conflicts with** flat-7 behavior, this is flagged
-explicitly (see "Conflicts with Existing flat-7 Behavior" below the tables).
-
----
-
-## What arscontexta Actually Is (grounding, from primary source)
-
-arscontexta (`github.com/agenticnotetaking/arscontexta`) is a Claude Code plugin that **derives** a
-personal knowledge system from a conversation about how the user thinks and works, then generates:
-folder structure, note templates with `_schema` blocks, a processing pipeline (skills), automation
-hooks, and MOC navigation — backed by a 249-claim internal research corpus ("kernel.yaml" defines 15
-universal primitives every generated system must include). It explicitly synthesizes Zettelkasten,
-Cornell Note-Taking, Evergreen Notes, **PARA**, GTD, and cognitive-science research on context-switching
-cost and spreading activation.
-
-**Critical portability note:** arscontexta's automation is built as Claude Code plugin primitives —
-`SessionStart` hook (tree injection, identity load), `PostToolUse` hook (schema validation on every
-Write, async git auto-commit), and literal subagent spawning via the Task tool for "fresh context per
-phase." Sentinel is a FastAPI service driven by Discord messages calling an Obsidian REST vault — it
-has **no filesystem hooks and no Task-tool subagent spawner**. Every mechanism below needs a Sentinel-
-native analog (sequential `call_core()` prompts per pipeline stage, background-task writes, vault-REST
-reads instead of `tree`/`rg`), not a literal port. This is called out per-feature below.
-
----
-
-## Feature Landscape
+## PART A — Practice Tracker Feature Landscape
 
 ### Table Stakes (Users Expect These)
 
-Features the phase-10 spec commits to and that the "second brain" promise is not credible without.
+Features every practice-journal / lesson-tracker product on the market has. Missing these makes the module feel like a toy, not a journal.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| **Three-space vault (`self/ notes/ ops/` + `inbox/ templates/`)** | The whole milestone's premise. `self/` = agent's persistent mind (identity, methodology, goals — read on every session start); `notes/` = the durable knowledge graph; `ops/` = temporal scaffolding (queue, sessions, health, observations, tensions). Conflating spaces is documented in the source as producing "six failure modes" (e.g. ops-into-notes pollutes search with processing debris, inflates note counts, degrades MOC coherence). | MEDIUM | Directory + path convention change, not new infra. Existing `ops/sessions/` write path already correct. Lazy stub creation on first write (per D-14) keeps this cheap — no big-bang migration needed beyond `core/` → `self/`/`ops/` per D-01. |
-| **Session-start reading pattern (`self/identity.md`, `methodology.md`, `goals.md`, `relationships.md`, `ops/reminders.md`)** | A second brain that "forgets who you are" every message breaks the core trust promise — same failure class as the v0.5.1 "forgets after three turns" gap this milestone follows. | LOW-MEDIUM | Pure read-path extension: `asyncio.gather()` of 5 additional vault GETs, 404-silent per D-02. Composes cleanly with the existing hot-tier assembly in Recall — this is additional hot-tier content, not a new retrieval strategy. |
-| **PARA taxonomy replacing the flat-7 classifier** | Users expect note organization that reflects actionability (Projects/Areas/Resources/Archives), not an arbitrary flat category set. This is the single largest **behavior change** in the milestone — see Conflicts section. | HIGH | Requires re-deciding what `/note/classify` outputs and how `/vault/sweep` routes notes. Per D-16, PARA's Projects/Areas map to `ops/` subdirectories (deadline/responsibility-bound, temporal), not `notes/` subfolders — `notes/` stays flat per arscontexta's kernel invariant ("no subfolders for organization; prevents folder reorganization from breaking links"). Resources ≈ `notes/` graph; Archives ≈ `ops/` rolling archive. |
-| **Claim-title convention for `notes/`** | "This note argues that [title]" readability test. One insight per file is the atomic-note discipline the whole graph depends on — MOCs, wikilinks, and `:connect` all assume one claim per note. | LOW-MEDIUM | Prompt-engineering + validation problem (a title-quality check), not new plumbing. Bounded by local-model capability per D-11's "design prompts to work well with smaller models" constraint — needs example-rich prompts, not just an instruction. |
-| **`_schema` block on every note** | arscontexta's kernel primitive `schema-enforcement`: "templates define required fields and enums; deterministic validation catches what instruction-following misses" as context fills. Without it, `:review`/`:check` have nothing to validate against. | MEDIUM | Minimum viable fields per D-05: `type` (permanent\|hub\|literature\|fleeting), `hub` (wikilink), `status` (draft\|ready). arscontexta's own kernel adds `description` (~150 char, distinct from title) and `topics` (MOC membership footer) as universal fields — recommend adopting both; they're what makes `:stats`/`:graph` and progressive disclosure work at all. |
-| **Wikilinks connecting every note to the graph** | Without at least one `[[wikilink]]`, a note is an orphan — invisible to `:connect`, `:graph`, and MOC traversal. This is the mechanism that makes "second brain" not just "folder of files." | LOW | Enforced at `:review`/`:check` time; creation-time enforcement is a stretch goal (arscontexta's `PostToolUse` write-validate hook has no direct Sentinel equivalent — see Anti-Features). |
-| **MOC / hub notes, created lazily** | Flat `notes/` with 50+ files needs a navigation layer or nothing is findable. This is the arscontexta answer to "how do you organize without folders." | MEDIUM | `:connect` finds/creates the owning hub; `:graph` reports hub membership + orphans; `:stats` reports hub count/avg-notes-per-hub. Depends on **PARA taxonomy landing first** (hub concept titles are how Resources gets organized without folders). |
-| **Core command subset as Discord `:prefix` subcommands** | The phase-10 spec commits to all 27; but the ones with load-bearing dependencies on other table-stakes features are: `:capture`, `:seed` (Record), `:ralph`/`:pipeline` (orchestration), `:connect` (Reflect), `:review`/`:check` (Verify), `:stats`/`:graph` (navigation/health), `:help`. | MEDIUM | Same routing pattern as existing `_SUBCOMMAND_PROMPTS` dict (D-03) — additive, not a rewrite of `handle_sentask_subcommand()`. |
-| **Reduce stage — inbox → notes/ with `_schema` + claim title** | The mechanical core of "the AI actually organizes my notes." Without it, `:capture`/`:seed` just dump text into `inbox/` forever — the pipeline has no output. | MEDIUM-HIGH | This is the stage most exposed to local-model quality limits (D-11). Depends on PARA taxonomy + `_schema` format landing first (Reduce writes both). |
-| **Non-destructive vault operations preserved** | Existing constraint (sweeper only relocates to `_trash/`, never hard-deletes) must extend to all new pipeline writes — `:refactor`, `:reweave`, `:rethink` all touch existing notes. | LOW | Carry the existing constraint forward explicitly into every new write path; do not silently narrow it during the note-engine rebuild. |
+| Practice session logging (duration, instrument, pieces/exercises worked, focus area, freeform notes) | Every reviewed app (Andante, Modacity, Instrumentive, Legato, Practis, Better Practice) treats this as the core primitive — it's the "journal" in practice journal | LOW | Maps directly to `/music/practice-log/[date].md` in the vault; a session is a single markdown note with `_schema` frontmatter (duration_min, instrument, pieces[], focus_area, mood/energy) |
+| Mood / energy / focus self-rating per session | Andante and Instrumentive both log mood/focus as a lightweight 1-5 or emoji field; used to correlate practice quality with conditions over time | LOW | Simple frontmatter field; no UI beyond a prompt in the logging flow (chat or Discord command) |
+| Per-piece / per-exercise time tracking | Instrumentive and Athenify explicitly split time by piece and by skill/technique, not just total session time — this is what makes "how long have I worked on X" answerable at all | MEDIUM | Requires the session log to model an array of `{item, minutes}` sub-entries, not just one duration field |
+| Practice streaks | Andante, Legato, Athenify all gamify via streak counters — this is the single most common "hook" feature across every competitor | LOW | Pure derived/computed value from session log dates; no new storage, just a query over existing logs |
+| Practice-history query / recall ("what did I work on last week?", "how long on this piece?") | This is the explicit differentiator of a *journal* vs. a bare timer — table stakes for anything calling itself a "tracker," and it's the killer feature this module gets almost for free by riding the existing Vault + Recall infrastructure | MEDIUM | This is where the module gets outsized leverage: it doesn't need bespoke NLQ — the same `Recall`/vault-search seam that already answers "what have we talked about" answers "what did I practice," provided sessions are well-tagged and named consistently (reuse VAULT/NOTE schema conventions from Phase 44/45) |
+| Aggregate summaries (weekly/monthly time totals, per-instrument split) | Practis, tuneUPGRADE, Instrumentive all show 7-day/30-day/all-time rollups — users expect a "how am I doing overall" view, not just raw logs | MEDIUM | Computed report, not new storage; can be a scheduled digest (reuses existing 6 Rs pipeline cadence) or an on-demand query |
+| Idea capture for chord progressions and melody fragments | Every gigging/writing musician needs a fast way to jot "I found this progression, don't lose it" — competitors (iReal Pro, voice-memo habits, notebook apps) all solve this in some form; a music module without it feels incomplete for a musician who produces | LOW–MEDIUM | See dedicated sub-section below — this is the one feature that needs real format design work, not just a markdown note |
 
 ### Differentiators (Competitive Advantage)
 
-Features that go beyond "notes get filed somewhere" — where this milestone earns the "agentic" label.
+Features that set this module apart from commodity practice-tracker apps — mostly because it inherits infrastructure those apps don't have.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **Reweave (backward pass)** | The single most "second-brain" feature: old notes get updated when new understanding arrives, rather than staying frozen at the moment they were written. arscontexta describes this as the pipeline's most intellectually rich step; D-15 maps it directly to BASB's Distill phase. Genuinely differentiates from "just file it and forget it" note apps. | HIGH | Requires the system to search *its own* graph for stale-but-related notes given new content — closest thing to a "read the whole vault and reconsider" operation. Highest risk of being slow/expensive and of local-model quality ceiling (D-11) producing shallow updates. Depends on PARA + `_schema` + MOCs already being populated (nothing to reweave against otherwise). |
-| **Operational learning loop (`ops/observations/`, `ops/tensions/` → `:rethink`)** | The system notices its own friction (an observation) or contradictions between new content and existing notes (a tension), accumulates them, and periodically surfaces them for the user to triage — arscontexta's kernel calls this "scientific method applied to knowledge systems: systems that cannot observe their own friction cannot evolve." This is what makes the vault self-correcting instead of static. | MEDIUM | Threshold-based surfacing (arscontexta default: >10 pending observations or >5 pending tensions triggers a `:rethink` suggestion at session-start) is a cheap, high-value pattern — pure counting + a nudge, no new retrieval infra. Composes with the existing session-start read pattern (table stakes above). |
-| **`:graph` / `:stats` vault health analytics** | Orphan detection, link density, hub-size distribution, dangling-link detection — turns "is my vault healthy" from a vague feeling into a number. Directly actionable ("Inbox has 4 items older than 3 days — want to process?" per D-07 voice). | MEDIUM | Sentinel-native adaptation needed: arscontexta computes this via `tree` + `ripgrep` against a local filesystem; Sentinel must compute it via Vault-REST reads (list + parse frontmatter) since there's no local mount (see memory: "Vault is REST-only"). This is a real engineering cost the arscontexta repo doesn't have to pay. |
-| **Fresh-context-per-phase orchestration for `:ralph`/`:pipeline`** | arscontexta's stated rationale: "LLM attention degrades as context fills; spawning a fresh subagent per phase keeps every phase in the smart zone." This is genuinely valuable for local-model quality (D-11's stated constraint) since smaller models degrade faster with context bloat than frontier models. | HIGH | No literal port possible — no Task-tool subagent spawner in a FastAPI service. D-13 already specifies the correct-scoped analog: `:ralph` sends **one** `call_core()` prompt and lets the AI orchestrate using vault context it already has; a truer "fresh context per phase" would instead issue **separate, sequential `call_core()` calls per 6 Rs stage** (Reduce call, then a fresh Reflect call with a clean context window, etc.) rather than one prompt asking the model to do all of it internally. This is the deepest design decision this research surfaces for requirements/roadmap: cheap-but-shallow (D-13's single-prompt approach) vs. faithful-but-costlier (sequential per-stage calls). Recommend starting with D-13's single-prompt approach for MVP and treating per-stage isolation as a differentiator to add once quality gaps are observed. |
-| **Task-stack (`:tasks`, `:next`)** | Unified queue (pipeline tasks + auto-generated maintenance tasks) gives "what should I work on" a concrete answer instead of an open-ended vault. `:next` reconciling maintenance conditions (e.g. "12 notes connected, no orphans, inbox has 4 items older than 3 days") is what makes the system feel proactive rather than passive. | MEDIUM | Builds on `ops/queue/` (already specified, D-09) + the health/`:graph` metrics above. Natural second-phase feature once Record/Reduce/Reflect are solid. |
-| **Plugin-tier commands (`:plugin:health`, `:plugin:architect`, `:plugin:recommend`, `:plugin:tutorial`)** | Meta-commands that reason about the vault's own configuration and give architecture advice — arscontexta's "derivation over templating" philosophy applied ongoing, not just at setup. Genuinely differentiates from static note tools. | MEDIUM | Lower priority than the standard 17 — these are meta/reflective tools on top of a working pipeline, not core to daily capture-organize-retrieve. Good candidates for a later phase once `:stats`/`:graph`/`:check` exist to give them something to reason about. |
-| **Semantic search reused for `:connect`/`:reweave`/`:graph` candidate-finding** | The existing `SemanticRecall` strategy (already shipped, v0.5.1) is exactly the retrieval primitive arscontexta's optional `qmd` semantic layer provides — "not required, the system works with ripgrep + MOC traversal" but recommended when available. Sentinel already has this; arscontexta treats it as an add-on. | LOW | This is a genuine head start: reuse the existing embedding index for hub-candidate discovery (`:connect`) and stale-note discovery (`:reweave`) instead of building a new retrieval path. Flag explicitly for the roadmap — this dependency should be called out so planning doesn't accidentally re-invent semantic search inside the note engine. |
+| Practice-routine builder generating instrument-specific routines | No mainstream practice tracker *generates* a routine from pedagogy — they log time against a routine the user already knows. Combining PART B pedagogy with the user's own practice-history (what's been neglected, what's plateaued) into an auto-generated session plan is a genuinely differentiated feature no commodity app offers | HIGH | Needs: (1) a pedagogy knowledge base per instrument/domain (seed from PART B below), (2) a query into recent practice history to detect neglect/plateau, (3) a generation step (LLM prompt templated on the pedagogy KB + history). This is the most novel, most complex, and highest-value feature in the module |
+| Conversational / chat-native logging and querying | Because this rides the Sentinel's existing chat + Discord interface, session logging and history queries happen in natural language ("logged 30 min on the F major scale, felt sluggish") instead of a bespoke UI form — competitor apps are all app-first, form-first | MEDIUM | Reuses existing message-processing pipeline; mostly a parsing/extraction problem (structured fields from freeform chat text) plus a vault-write step |
+| Cross-domain recall tying practice to the rest of the second brain | Because everything lands in the same Vault, a practice session can be woven into the same graph as journal entries, other Session summaries, and Pathfinder module notes — "what was I stressed about the week my guitar practice dropped off" becomes answerable in a way no siloed practice app can do | MEDIUM | Leverages VAULT-02 PARA taxonomy and existing semantic recall (Phase 40) essentially for free — this is the single biggest reason to build this as a module rather than adopt an existing app |
+| Structured, queryable chord-progression / melody-idea store | iReal Pro proves a compact text notation for chord progressions is viable and has 15+ years of validation; capturing progressions in a similar structured-but-plain-text form (not audio-only voice memos) makes them searchable/reusable across the vault (e.g. "find every idea in a minor key I haven't touched in 3 months") | MEDIUM | Format design: adopt an iReal-Pro-inspired plain-text chord grid (bar \| bar \| bar) stored as a fenced code block or dedicated frontmatter field in `/music/ideas/`, NOT the URL-encoded iReal format itself (that's a closed, app-specific encoding) — see Feature Dependencies below |
+| Skill-category time balance view | Athenify's "time per technique" concept extended: because PART B pedagogy defines named skill categories per instrument (technique, repertoire, ear-training, theory, production-workflow), the module can show *actual* imbalance against the *prescribed* balance from the routine builder, not just an arbitrary self-defined tag | MEDIUM | Depends on the routine builder's skill taxonomy being the same taxonomy used for logging focus_area |
 
-### Anti-Features (Do Not Build These)
+### Anti-Features (Commonly Requested, Often Problematic)
 
-| Feature | Why Requested | Why Problematic | Better Approach |
-|---------|---------------|-----------------|-----------------|
-| **Literal port of arscontexta's Claude Code hooks (`SessionStart`, `PostToolUse` write-validate, async git auto-commit)** | The source repo's automation looks complete and battle-tested; tempting to replicate 1:1. | These are Claude Code **plugin** primitives that fire on local filesystem events inside a Claude Code session. Sentinel has no local filesystem (vault is REST-only per memory), no Claude Code session lifecycle, and no git-auto-commit requirement in its constraints. Attempting a literal port invents infrastructure Sentinel doesn't have and wasn't asked to build. | Build the *outcome* each hook produces via Sentinel-native means: session-start reads via `asyncio.gather()` (D-02, already specified), schema validation as a step inside `:review`/`:check`/the Reduce stage (not a write-time hook), and skip git-auto-commit entirely — non-destructive `_trash/`-relocation is the existing durability guarantee. |
-| **Scheduled/batch vault reorganization sessions** | "Clean up the vault every night" sounds like good hygiene. | Violates BASB's explicit "just-in-time organization" principle: organize only when acting on the information, not preemptively on a schedule. Scheduled reorg also risks destructive-feeling changes to notes the user hasn't touched in a while, undermining trust that the vault won't move things without being asked. | `:refactor`/`:rethink` are user- or threshold-triggered (arscontexta pattern: >10 pending observations / >5 tensions), never cron-scheduled. Lazy hub creation (D-06) and lazy stub creation (D-14) are the structural embodiment of "organize as a natural consequence of working." |
-| **Premature full pipeline automation (auto-running `:pipeline` on every message without being asked)** | "Why doesn't it just always keep the vault perfectly organized in real time" is an intuitive ask. | The 6 Rs stages (especially Reduce and Reweave) are exactly where local-model quality is weakest (D-11 constraint) — auto-running them on unreviewed input risks silently degrading note quality at scale before anyone notices, and burns compute on every message even when nothing note-worthy was said. This is the note-engine's version of the v0.5.1 "over-retrieval" anti-feature: more automation is not better automation. | Keep `:capture`/`:seed` as explicit, user-invoked Record actions; `:ralph`/`:pipeline` as explicit batch operations the user triggers (matching D-13's existing decision). Auto-processing is a post-validation enhancement, not day-one scope. |
-| **PARA subfolders inside `notes/` (`notes/projects/`, `notes/areas/`)** | Seems like the "obvious" way to implement PARA — just make the folders. | Directly contradicts arscontexta's kernel invariant that `notes/` is flat with no organizational subfolders ("prevents folder reorganization from breaking links") — and directly contradicts D-16's explicit instruction not to create these folders unless synthesis strongly calls for it. Folders reintroduce exactly the flat-7-style rigid categorization this milestone is meant to replace, just one level deeper. | PARA's Projects/Areas route to `ops/` subdirectories (temporal, deadline/responsibility-bound); Resources maps onto the flat `notes/` graph via MOC/hub organization; Archives maps to `ops/` rolling archive. `notes/` stays flat, always. |
-| **Auto-updating `self/identity.md` from inferred user behavior without confirmation** | "The system should learn who I am automatically" sounds like the natural evolution of the self-space idea. | Explicitly deferred in the original phase-10 spec ("Deferred Ideas": auto-updating identity is future work). Self-space content (identity, relationships — including sensitive data like kids' schedules per the phase-10 spec) is high-trust content; silently auto-writing inferred facts into it risks embedding wrong or unwanted inferences into the system's persistent sense of the user. | Self-space updates flow through the explicit `:remember` command (user- or session-triggered) and the observation-promotion pipeline (`ops/observations/` → `self/methodology.md`, one-directional, requires the content to "earn permanence" by recurring) — never silent auto-write. |
-| **Sentinel's own generated replies indexed as recalled/graph content** | Carried forward from the v0.5.1 research: "full conversation memory" intuition. | Same failure mode as before, now compounded: if the Reduce stage ever extracted "insights" from the Sentinel's own prior replies into `notes/`, hallucinations become permanent knowledge-graph nodes indistinguishable from user-authored claims — far worse than the existing session-recall issue because notes are the durable, trusted layer. | The `ops/` exclusion from Recall (already validated, v0.5.1) must extend to the Reduce stage's input sources: only user-authored `inbox/` content and explicitly user-provided source material are eligible for promotion into `notes/`. |
-| **Over-retrieval during `:connect`/`:reweave` candidate search** | "Search the whole vault for every possible connection" feels thorough. | Same anti-pattern as v0.5.1's over-retrieval finding: injecting dozens of loosely-related notes into a Reflect/Reweave prompt buries the 1-2 genuinely relevant hub/notes and degrades local-model output quality (D-11) faster than it would degrade a frontier model. | Reuse the existing relevance-threshold + budget discipline from Recall (already validated) for hub-candidate and stale-note discovery — top-k within budget, not exhaustive scan-and-dump. |
-
----
-
-## Conflicts with Existing flat-7 Behavior (flagged per quality gate)
-
-| arscontexta/PARA feature | Conflicts with | Resolution needed |
-|---|---|---|
-| PARA taxonomy (Projects/Areas/Resources/Archives) | The flat-7 classifier's existing category set and `/note/classify` output contract | `/note/classify` must be re-specified to emit PARA-oriented routing (or a superseding classification) instead of the current 7 categories. This is a breaking change to an existing, already-shipped endpoint — requirements must decide whether flat-7 is replaced outright or PARA is layered as a second classification dimension during a transition window. |
-| Flat, folder-less `notes/` with MOC navigation | Whatever folder/category structure `/vault/sweep` currently sweeps notes into under the flat-7 model | Sweeper routing logic must change from "file under one of 7 categories" to "file in `inbox/` first, then Reduce moves to flat `notes/` with `_schema`+hub membership." This changes `/vault/sweep`'s effective behavior, not just its output labels. |
-| `_schema` block + claim-title + wikilink requirement for "done" notes | Any existing flat-7-classified notes that lack these fields | Needs a migration/backfill decision: are pre-milestone notes retroactively brought up to the new standard (via `:check`/`:review` batch pass), or grandfathered as-is with the new standard applying only going forward? Not resolved by this research — flag for requirements. |
-
----
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|------------------|-------------|
+| Built-in audio recording, pitch/timing analysis, or tuner/metronome tooling | Modacity and several competitors bundle a metronome, tone generator, and recorder because "an all-in-one practice app" feels complete | This is a personal single-user tool with an existing Discord/chat interface, not a mobile practice-room app; building real-time audio DSP (pitch detection, tempo detection) is a huge, unrelated engineering investment with no reuse of the Vault/Recall infrastructure that is this project's actual value | Recommend existing dedicated tools (a real metronome app, Modacity, a tuner) for the moment-to-moment practice room experience; this module owns the *journal and routine planning* layer only, not the practice-room instrument tooling |
+| Real-time collaborative / multi-user practice tracking (bandmates, teacher-student sharing) | "Practice apps for lessons" (Better Practice, My Music Staff) are built around a teacher assigning and reviewing a student's log | PROJECT.md explicitly scopes this as a single-operator personal tool; multi-user sharing/permissioning is out of scope for the whole Sentinel project, not just this module | None needed — if a teacher relationship ever matters, it's a manual export/share of vault notes, not a built-in feature |
+| Gamification beyond simple streaks (badges, levels, leaderboards, XP) | Athenify's "medals for great practice days" and similar app patterns lean into extrinsic-motivation game mechanics | For a personal tool used by one adult musician, badges/levels add UI surface and data model complexity for a motivational effect that's weak without a social/competitive audience; risks becoming a Goodhart's-Law metric people practice *for* rather than practicing well | Keep the existing simple streak counter (table stakes) and let the routine builder + history recall be the actual motivator via visible skill progress, not badges |
+| Auto-transcription of played audio into notation/tab from a recording | Feels like the "ultimate" idea-capture feature — never lose a riff again, even if you didn't type it | Real audio-to-tab/notation transcription is a hard ML problem (polyphonic pitch detection, especially for guitar/bass with bends and techno production's dense multi-track material) — far outside this project's stack (Python/FastAPI, no audio ML pipeline) and would dominate the whole milestone's budget for one feature | Text-based idea capture (chord grid + freeform melody description, optionally a hummed-note sequence typed as note names) covers the "don't lose the idea" need at a fraction of the cost; if audio matters later, ListenBrainz-style *metadata* capture (what you listened to for reference) is a much cheaper proxy than transcription |
+| Deep DAW integration (reading Ableton/FL project files, plugin-state capture) | Producers naturally want "log what I did in Ableton automatically" instead of manually describing the session | DAW project-file formats are proprietary/binary, version-fragile, and this project's module-isolation principle (Core doesn't import module code, modules don't reach into other apps' internals) argues against a brittle file-format integration | Freeform notes describing the production session (what was worked on: sound design, arrangement, mixing) captured the same way as an instrument practice session — the routine builder's production-workflow skill category (PART B) covers this without needing file parsing |
 
 ## Feature Dependencies
 
 ```
-[Three-space vault: self/ notes/ ops/ + inbox/ templates/]
-    └──required by──> [PARA taxonomy replacing flat-7]
-    └──required by──> [Session-start reading pattern]
-    └──required by──> [_schema block standard]
+Practice session logging (table stakes)
+    └──requires──> Vault write seam (existing, Phase 44 namespace/taxonomy)
+    └──requires──> A per-instrument/skill-category taxonomy (from routine builder, PART B)
 
-[PARA taxonomy replacing flat-7]
-    └──required by──> [Reduce stage: inbox/ -> notes/ with _schema]
-    └──conflicts with──> [Existing flat-7 classifier / note/classify output]
+Practice-history queries ("what did I work on last week?")
+    └──requires──> Practice session logging (need logged data to query)
+    └──requires──> Existing Recall module / semantic search (Phase 39-41) — reused, not rebuilt
 
-[_schema block standard + claim-title convention]
-    └──required by──> [MOC / hub notes]
-    └──required by──> [:review, :check (Verify stage)]
+Practice streaks, aggregate summaries
+    └──requires──> Practice session logging (derived purely from logged session dates/durations)
 
-[MOC / hub notes]
-    └──required by──> [:connect (Reflect stage)]
-    └──required by──> [:graph, :stats]
+Practice-routine builder
+    └──requires──> Pedagogy knowledge base per instrument/domain (PART B, seeded once, versioned as content not code)
+    └──requires──> Practice-history queries (to bias routines toward neglected/plateaued skills — optional for v1, but the differentiator value comes from this link)
 
-[Reduce + Reflect (6 Rs stages 2-3)]
-    └──required by──> [Reweave (6 Rs stage 4)]
-    └──required by──> [:rethink, :refactor (6 Rs stage 6)]
+Structured chord-progression / melody-idea capture
+    └──enhances──> Practice-routine builder (ideas can seed "workshop this progression" practice items)
+    └──independent of──> Practice session logging (ideas are captured outside a specific session; a session can *reference* an idea note via wikilink, reusing existing NOTE-01..03 wikilink/graph machinery from Phase 45)
 
-[Existing SemanticRecall (v0.5.1, already shipped)]
-    └──enables──> [:connect hub-candidate discovery]
-    └──enables──> [:reweave stale-note discovery]
+ListenBrainz listening-history pull (stretch)
+    └──enhances──> Idea capture + routine builder (recently-listened reference tracks can seed "transcribe/ear-train on X" routine items)
+    └──independent of──> Core logging/query features (purely additive; module functions fully without it)
 
-[Existing Vault Protocol seam (app/vault.py)]
-    └──required by──> [all new vault paths and writes — no bypass]
-
-[ops/observations/, ops/tensions/]
-    └──required by──> [:rethink threshold-triggered surfacing]
-    └──enhances──> [session-start reading pattern (surfaces maintenance signals)]
+Discogs wantlist / related-release suggestions (stretch)
+    └──enhances──> Idea capture (a chord/melody idea can link to an inspiring release)
+    └──conflicts with──> nothing; data model should hold Discogs release-id fields from day one per PROJECT.md, even if the write path ships later
 ```
 
 ### Dependency Notes
 
-- **Three-space vault gates almost everything.** PARA taxonomy, `_schema`, MOCs, and the session-start
-  read pattern all assume the `self/notes/ops/inbox/templates` structure exists first. This is the
-  correct phase-1 foundation for the roadmap.
-- **PARA taxonomy directly conflicts with the shipped flat-7 classifier** — this is not a pure addition,
-  it is a replacement of already-shipped behavior (`/note/classify`, `/vault/sweep` routing). Roadmap
-  should sequence this as an explicit "supersede" phase, not bundle it silently inside a "vault structure"
-  phase.
-- **Reweave, `:rethink`, `:refactor` (6 Rs stages 4 and 6) require Reduce+Reflect (stages 2-3) to already
-  be populating a non-trivial `notes/` graph** — there is nothing to reweave, rethink, or refactor against
-  on an empty or freshly-migrated vault. These are correctly late-phase.
-- **`:connect` and `:reweave` should reuse the existing `SemanticRecall` strategy**, not build new
-  retrieval. This is a genuine architectural head start from the v0.5.1 work and should be an explicit
-  phase dependency, not rediscovered.
-- **Fresh-context-per-phase orchestration has no existing Sentinel primitive.** Whichever design is
-  chosen (D-13's single-prompt approach vs. true sequential per-stage calls) is independent of the vault-
-  structure work and can be deferred/iterated without blocking Record/Reduce/Reflect landing.
-
----
+- **Practice-history queries require session logging:** there is nothing to query until sessions exist — but critically, this dependency is nearly free because it reuses the *existing* Recall/vault-search infrastructure (MEM-01..09, Phase 39-41) rather than needing new query machinery. This is the strongest argument for sequencing "get logging + vault schema right first" before "build history queries."
+- **Routine builder requires the pedagogy KB (PART B) as content, not code:** the KB should be authored as vault-resident reference notes (or a structured seed file) so it's editable without a code change — consistent with the project's existing pattern of operator-tunable content living in the Vault (ADR-0001 precedent: persona sourced from the Vault, not hardcoded).
+- **Idea capture is independent of session logging** but enhances the routine builder once both exist — sequence it in parallel with or just after core logging, not blocking on the routine builder.
+- **ListenBrainz and Discogs are additive, not load-bearing:** both should be built so the module's core value (logging, history, routines) works completely without either integration ever shipping. PROJECT.md's own phrasing — "data model built to hold these fields from day one" — confirms these are schema-first, implementation-later.
 
 ## MVP Definition
 
-### Launch With (v0.6.0 core)
+### Launch With (v1)
 
-- [ ] **Three-space vault structure** (`self/ notes/ ops/ inbox/ templates/`) with migration from `core/`
-- [ ] **Session-start reading pattern** (`self/*.md`, `ops/reminders.md`) — parallel reads, graceful 404
-- [ ] **PARA taxonomy replacing flat-7** — `/note/classify` and `/vault/sweep` re-specified
-- [ ] **`_schema` block + claim-title + wikilink note-quality standard**, with `:review`/`:check`
-- [ ] **Record → Reduce → Reflect (6 Rs stages 1-3)** — `:capture`, `:seed`, `:ralph` (Reduce+Reflect batch)
-- [ ] **MOC/hub notes created lazily** via `:connect`
-- [ ] **Core command subset**: `:capture :seed :ralph :pipeline :connect :review :check :stats :graph :help`
-- [ ] **Non-destructive writes preserved** across all new pipeline paths (`_trash/` relocation only)
+Minimum viable product — what's needed to validate the concept as a genuinely useful daily-driver journal.
 
-### Add After Validation (v0.6.x)
+- [ ] Practice session logging (duration, instrument, pieces/exercises, focus area, freeform notes, mood/energy) written to `/music/practice-log/[date].md` — why essential: it's the data foundation every other feature reads from
+- [ ] Structured chord-progression / melody-idea capture in `/music/ideas/` — why essential: PROJECT.md names this as a target feature and it's cheap (plain-text format, no audio) relative to its value for a producing musician
+- [ ] Practice-history queries via the existing Recall/vault-search seam ("what did I work on last week", "how long on this piece") — why essential: this is the actual differentiator vs. a bare notes file, and it rides infrastructure that already exists
+- [ ] Practice streaks + basic per-instrument/per-piece time rollups — why essential: table stakes, and near-zero cost once logging exists (pure derived query)
+- [ ] Practice-routine builder (v1 scope: static/templated routines per instrument seeded from PART B pedagogy, not yet history-adaptive) — why essential: this is the named differentiator feature in PROJECT.md; a v1 that generates a correct, well-structured routine per instrument/skill-category is achievable without the harder "adapt to history" logic
 
-- [ ] **Reweave (6 Rs stage 4)** — depends on a populated graph existing first; validate Reduce/Reflect
-      quality before adding backward-pass complexity
-- [ ] **Operational learning loop** (`ops/observations/`, `ops/tensions/`, `:rethink`) — threshold-based
-      surfacing once there's enough pipeline activity to generate friction signals
-- [ ] **Task-stack** (`:tasks`, `:next`) — natural once `ops/queue/` and health metrics exist
-- [ ] **`:refactor`, `:revisit`, `:learn`, `:remember`** — remaining standard commands
-- [ ] **True fresh-context-per-phase orchestration** (sequential per-stage `call_core()` calls) — only if
-      D-13's single-prompt `:ralph` shows quality degradation on the local model
+### Add After Validation (v1.x)
 
-### Future Consideration (v0.7+)
+- [ ] History-adaptive routine builder (bias generated routines toward neglected or plateaued skills, using the practice-history query layer) — trigger for adding: once basic routine generation and history queries are both proven correct independently, wiring them together is a natural v1.x step
+- [ ] Skill-category time balance view (actual practice time vs. routine-prescribed balance) — trigger for adding: once the routine builder's skill taxonomy has stabilized and enough session history exists to make the comparison meaningful
+- [ ] ListenBrainz listening-history pull — trigger for adding: once core logging/query/routine loop is validated and stable; this is explicitly a stretch feature per PROJECT.md
 
-- [ ] **Plugin-tier commands** (`:plugin:health`, `:plugin:architect`, `:plugin:recommend`,
-      `:plugin:tutorial`, `:plugin:add-domain`, `:plugin:reseed`, `:plugin:upgrade`) — meta/reflective
-      tools that need a working pipeline to reason about first
-- [ ] **Vault-wide backfill of pre-milestone notes to the `_schema`/claim-title standard** — decide
-      migrate-vs-grandfather in requirements before scoping
-- [ ] **Multi-domain extension** (`:plugin:add-domain`) — not relevant to a single-operator personal vault
-      per existing Out-of-Scope constraints
+### Future Consideration (v2+)
 
----
+- [ ] Discogs wantlist writes / related-release suggestions — why defer: explicitly a stretch in PROJECT.md; only the data model needs to exist at v1, the live write path can wait for a later milestone
+- [ ] Any audio-adjacent tooling (recording, transcription, pitch/tempo detection) — why defer: identified as an anti-feature for this project's stack and scope; revisit only if a future milestone explicitly adds an audio-processing capability to the platform
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Three-space vault structure | HIGH | MEDIUM | P1 — gates everything |
-| Session-start reading pattern | HIGH | LOW-MEDIUM | P1 — closes "forgets who I am" |
-| PARA taxonomy replacing flat-7 | HIGH | HIGH | P1 — core milestone deliverable, but a breaking change |
-| `_schema` + claim-title + wikilinks | HIGH | MEDIUM | P1 — required for Verify stage and MOCs |
-| Record → Reduce → Reflect | HIGH | MEDIUM-HIGH | P1 — the pipeline's actual output |
-| MOC/hub notes | HIGH | MEDIUM | P1 — navigation layer, no flat-graph alternative |
-| Core command subset | HIGH | MEDIUM | P1 — user-facing surface |
-| Reweave | MEDIUM-HIGH | HIGH | P2 — depends on a populated graph existing |
-| Operational learning loop | MEDIUM | MEDIUM | P2 — self-correction, not core capture/organize/retrieve |
-| Task-stack (`:tasks`/`:next`) | MEDIUM | MEDIUM | P2 — proactive layer on top of health metrics |
-| Fresh-context-per-phase orchestration | MEDIUM | HIGH | P2/P3 — no Sentinel primitive exists; validate need first |
-| Plugin-tier meta-commands | LOW-MEDIUM | MEDIUM | P3 — reflective tools needing a working pipeline first |
+| Practice session logging | HIGH | LOW | P1 |
+| Practice-history queries | HIGH | MEDIUM (mostly reuse) | P1 |
+| Practice streaks + rollups | MEDIUM | LOW | P1 |
+| Structured idea capture (chords/melody) | HIGH | MEDIUM | P1 |
+| Practice-routine builder (templated v1) | HIGH | HIGH | P1 |
+| History-adaptive routine builder | HIGH | HIGH | P2 |
+| Skill-category time balance view | MEDIUM | MEDIUM | P2 |
+| ListenBrainz listening-history pull | MEDIUM | MEDIUM | P2 |
+| Discogs wantlist / related-release suggestions | LOW–MEDIUM | MEDIUM | P3 |
+| Audio recording/tuner/metronome tooling | LOW (duplicates existing tools) | HIGH | Not planned (anti-feature) |
+| Audio-to-notation transcription | MEDIUM | VERY HIGH | Not planned (anti-feature) |
 
 **Priority key:**
-- P1: Must have for launch (v0.6.0 core)
-- P2: Should have, add when possible (v0.6.x)
-- P3: Nice to have, future consideration (v0.7+)
+- P1: Must have for launch
+- P2: Should have, add when possible
+- P3: Nice to have, future consideration
+
+## Competitor Feature Analysis
+
+| Feature | Modacity / Andante / Instrumentive (commodity practice apps) | iReal Pro (chord-chart specialist) | Our Approach |
+|---------|---------------------------------------------------------------|--------------------------------------|--------------|
+| Session logging | Native, form-based, app-siloed | N/A | Chat-native logging, vault-persisted, cross-linked to the rest of the second brain |
+| History queries | Basic charts/streaks within the app only | N/A | Full natural-language recall via existing semantic Vault search — no other practice app offers this |
+| Chord/idea capture | Not a focus (session notes only) | Core product; proprietary URL-encoded chord-grid format, closed ecosystem | Open plain-text, iReal-Pro-*inspired* chord-grid notation stored as ordinary markdown/frontmatter — interoperable with the rest of the vault, not locked to one app |
+| Routine generation | None of the reviewed apps generate routines from pedagogy — user supplies their own plan | N/A | Differentiator: pedagogy-informed routine builder (PART B) — no competitor analyzed does this |
+| Cross-domain context | None — practice apps are single-purpose silos | N/A | Practice sessions live in the same graph as journal/session notes and other modules (Pathfinder, etc.) — the core value proposition of building this as a Sentinel module rather than adopting a commodity app |
 
 ---
 
-## What "Good Note-Taking" Looks Like to the User
+## PART B — Practice Pedagogy Knowledge Base (for the Routine Builder)
 
-Synthesized from arscontexta's design rationale and BASB's stated principles:
+This section is the content seed for the routine builder. Each instrument/domain is broken into named skill categories consistent with the "skill-category time balance" differentiator above, with concrete drills/progressions the builder can slot into a generated session. Sourced from multiple independent, converging pedagogy sources per category (see per-claim citations in the digests cached to research-store; representative named sources below).
 
-1. **Capture is zero-friction.** `:seed`/`:capture` never ask the user to categorize anything up front —
-   raw content goes to `inbox/`; organization happens later, during Reduce, not at capture time.
-2. **Organization happens just-in-time, not on a schedule.** Nothing gets reorganized because a timer
-   fired; it gets processed because the user ran `:ralph`/`:pipeline`, or because a threshold (pending
-   observations/tensions) earned a nudge.
-3. **Every finished note makes exactly one claim, titled as that claim, and is reachable from a hub.**
-   If a note can't pass "this note argues that [title]," or has no wikilink into the graph, it isn't done.
-4. **Old knowledge gets revised, not frozen.** Reweave means today's insight can change what a note
-   written months ago says — the graph is alive, not an append-only log.
-5. **The system notices its own friction and surfaces it, unprompted but not naggingly** — "Inbox has 4
-   items older than 3 days — want to process?" (per D-07's stated voice), triggered by a threshold, not
-   every session.
-6. **Stable self-knowledge is never silently rewritten.** `self/identity.md` and `self/relationships.md`
-   change only through explicit user action (`:remember`) or a promotion pipeline that requires an
-   observation to recur — never a silent inference.
-7. **The vault never surprises the user with data loss.** All restructuring (`:refactor`, `:reweave`)
-   relocates to `_trash/` at worst; it never hard-deletes.
+### Cross-Instrument Principles (apply to every routine)
 
----
+1. **Deliberate practice over passive repetition.** Practice must be actively self-supervised: listen critically in real time and/or record yourself, and identify exactly what went wrong on a mistake rather than blindly repeating (Bulletproof Musician / Noa Kageyama; converges with the general deliberate-practice literature, e.g. Ericsson). The routine builder should always pair a drill with an explicit "what to listen for" instruction, not just a duration.
+2. **Spaced repetition within a session.** Interleave 2-4 short tasks and return to each one after a few minutes rather than grinding one task to exhaustion (blocked repetition). This is standard advice across piano, guitar, and general practice-methodology sources (Modacity blog, Piano Practice Assistant). The builder should generate routines as *rotations* of short blocks, not single long blocks per skill.
+3. **Spaced repetition across days — the 24-48-72 rule.** Revisit new material the next day, then 2 days later, then increasingly spaced out, extending the interval each time recall succeeds. This is directly implementable: the routine builder can use logged session history to know when a piece/idea/skill was last touched and schedule its next appearance.
+4. **Slow-to-fast tempo progression via metronome, universally.** Every instrument source converges on: start at a tempo where the passage is 100% clean, and increase in small increments (2-5 BPM) only after 2-3 clean repetitions; drop back on a miss. A "practice below target tempo" phase (50-55% of goal tempo) builds relaxed technique before speed work. This is a directly generatable drill parameter: `{passage, start_bpm, target_bpm, increment_bpm, clean_reps_required}`.
+5. **Named skill categories, not just "practice."** Every instrument routine should be composed from a small fixed taxonomy so time-balance tracking (PART A differentiator) is meaningful: **Technique**, **Repertoire/Vocabulary**, **Ear Training**, **Theory**, and (for production-facing instruments) **Production Workflow**. A generated routine allocates minutes across these categories rather than treating "practice" as one undifferentiated block.
+
+### Electric Guitar
+
+- **Session shape** (D'Addario Lesson Room, Guitar Player, Premier Guitar): ~10 min warmup, ~10 min technique, ~10 min scales, ~20 min repertoire/songs, ~10 min reading — roughly a 50/50 split between mechanics (warmup+technique+scales) and musical application (repertoire+reading).
+- **Warmup drills:** chromatic scale runs across all four fingers (alternate picking and hammer-on/pull-off variants), cycling through open-chord shapes for rhythm players. Keep warmups no harder than the session's actual workload — a warmup that's itself a stretch/speed challenge defeats the purpose.
+- **Technique drills:** scale/arpeggio/chord-shape isolation at a clean, slow metronome tempo, using the universal slow-to-fast progression above (increment_bpm ≈ 2-5).
+- **Repertoire:** apply spaced repetition across days to songs/pieces in progress; a "reading" block (sight-reading tab/notation) rounds out the session.
+- **Suggested method-book/tool lineage to seed drill content from** (well-known, not deep-linked here — routine builder authors can pull specific exercises): chromatic/alternate-picking exercise books (e.g. *Guitar Aerobics*-style daily exercise structure), speed-building method books built around metronome progression (e.g. Troy Stetina's *Speed Mechanics for Lead Guitar*), standard scale/arpeggio/CAGED-shape vocabulary.
+
+### Electric Bass
+
+- **Session shape** (Scott's Bass Lessons, Berklee Take Note, Mastertemps): 5-10 min warmup (fretboard runs / a favorite riff), 10-15 min play-along on a backing track (groove and timing in a real musical context, not isolated drills), 10-15 min theory + ear training.
+- **Bass-specific priority: ear training over generic scale drilling.** Sources are explicit that "big ears" — hearing root movement, feeling harmonic changes, recognizing phrase lengths — is the bassist's core differentiator skill, more so than for melodic-lead instruments. The routine builder should weight Ear Training higher for bass than for lead guitar.
+- **Groove/technique drills:** always practiced *in time* against a backing track or drum loop, not purely mechanical isolation — bass technique's stated purpose is "expression, not perfection" (i.e. groove feel, not just clean note execution).
+- **Transcription** (learning a bassline by ear from a recording) is treated as a core learning method, not an advanced add-on — should appear as a regular routine item, not gated behind an "advanced" tier.
+
+### Synthesizer / Sound Design
+
+- **Core drill: patch recreation by ear.** Reproduce a known/commercial patch (or an iconic sound from a track the user knows) on a synth, working purely by listening rather than reading a preset — this is the sound-design equivalent of ear training and ties directly to the "Ear Training" skill category (MusicTech, ModWiggler forum consensus).
+- **Cross-synth translation drill:** recreate a patch from one synth engine in a different synth engine to force comparison of parameters and signal-flow reasoning — builds transferable sound-design vocabulary rather than one-tool-specific muscle memory.
+- **Context, not isolation.** Design patches against a running drum beat/track rather than soloed — soloed patch design produces overly frequency-rich, mix-incompatible sounds. This is a Production Workflow-category constraint the builder should bake into every synth drill: "load against a reference loop before finalizing."
+- **Named training tool for calibration:** Syntorial (ear-to-synthesis-parameter training) is a purpose-built precedent for this category — useful as a reference point for drill difficulty progression (start with single-oscillator/simple-filter patches, progress to multi-oscillator/modulation-heavy patches).
+
+### Piano / Keys
+
+- **Session shape:** 5 min warmup/stretching, daily scale work (major/minor) plus dexterity drills (Hanon-style), 5-10 min sight-reading at a fixed slow metronome tempo, repertoire practiced hands-separately then combined, dedicated ear-training block. Recommended session length 30-60 min/day; repertoire pace ~1-2 new pieces/week at 15-30 min/session invested.
+- **Repertoire method:** hands-separate first, then hands-together only once each hand is clean; combine at a tempo slow enough to have zero (or very few) mistakes before applying the universal slow-to-fast progression.
+- **Sight-reading:** a dedicated, separate short block (not folded into repertoire) using material *easier* than current repertoire level, at a fixed slow metronome tempo — volume of varied material matters more than difficulty for this skill.
+- **Ear training:** interval and chord identification (tool-assisted, e.g. EarMaster-style apps) plus singing repertoire/popular melodies to internalize pitch relationships — singing is called out specifically as accelerating pitch-relationship internalization.
+- **Named method-book lineage:** Hanon (finger-independence/dexterity), standard major/minor scale-and-arpeggio curricula, sight-reading graded-material series — routine builder can generate scale/Hanon-style drill sequences without needing copyrighted material, just the progression logic (key rotation, hands-separate-then-together, metronome ramp).
+
+### Sampler / Sampling (as a performable instrument)
+
+- **Core reframe: sampling is a practiced instrumental skill, not a production shortcut** (MusicRadar, Audeobox, Melodics). Treat pad-mapping and chopping with the same seriousness as fretboard technique.
+- **Drill 1 — chop-and-map:** take a sample (vocal, break, one-shot library), chop it (transient-detection slicing or manual), and map segments logically across pads/keys for playability — practice *playing* the resulting instrument, not just building it once.
+- **Drill 2 — pad performance / muscle memory:** once a sample kit is mapped, practice playing rhythmic patterns on the pad grid the way a drummer practices rudiments — named professional precedent is MPC-style "played" sampling performance (e.g. Araabmuzik) rather than sequenced/step-entered patterns.
+- **Progression scheme:** start with simple 4-8 pad layouts and short rhythmic patterns, progress to full-kit layouts (multi-velocity, multi-articulation) and longer improvised pad performances — mirrors the technique-drill slow-to-fast/simple-to-complex progression used on other instruments, just measured in pad-count/pattern-complexity instead of BPM.
+
+### Music Production for EDM / Techno / Melodic Techno
+
+- **Treat as (at least) three separate, practicable skill tracks, not one "make a track" blob:** Sound Design, Arrangement, and Mixing (Myloops, EDM Tips, Beatportal guides converge on this separation). The routine builder should generate production-focused sessions that pick ONE of these per session rather than always attempting a full track.
+- **Arrangement-specific pedagogy:** melodic-techno arrangement is explicitly framed as building an emotional journey — build and release tension across sections; a common named pitfall is revealing the best melodic material too early (in the intro) instead of saving it to reward the first breakdown. A generated "arrangement practice" drill can be: take an existing loop/idea and practice building 2-3 different arrangement structures from it without writing new sound design, to isolate the arrangement skill from sound-design skill.
+- **Mixing-specific pedagogy:** the identified common mistake is treating mixing as a final pass after arrangement is "done" — sources recommend mixing concurrently with sound design and arrangement. A generated "mixing practice" drill can target one technique at a time (e.g. a compression-only pass, a reverb/delay-space-only pass) on an existing rough mix, rather than a full mix pass.
+- **Sound-design practice** for this genre reuses the general Synthesizer section above, with the added constraint of designing against a 4-on-the-floor groove/reference loop (techno's structural backbone) rather than an arbitrary beat.
+- **Relationship to sampler/synth skill categories:** production-track sessions should be generatable as a *composite* of the Sampler and Synthesizer skill categories above plus the Arrangement/Mixing categories unique to this section — i.e., production is where the instrument-specific skill categories converge into a session, not a wholly separate taxonomy.
+
+### Ear Training (cross-instrument, but especially load-bearing for bass/synth/production)
+
+- **Structured session shape:** a ~20-minute block splits roughly into intervals (5 min) → chord identification (5 min) → transcription/melodic dictation (5-10 min) → singing (5 min). This maps cleanly to a generatable routine block with fixed sub-durations.
+- **Progression path:** simple intervals → complex intervals → triads/inversions → functional chord progressions, starting with the most common progression (I-IV-V) before generalizing. This gives the routine builder a clear difficulty-ramp axis independent of instrument.
+- **Transcription** (learning a real recording by ear) is the practical capstone of ear training across every instrument section above (guitar, bass, synth-patch-recreation are all specific applications of the same underlying skill) — the routine builder can treat "transcribe X" as a single generic drill type parameterized by instrument and source material.
+- **Tools named as precedent** (for calibrating drill difficulty/format, not for integration): Functional Ear Trainer, Perfect Ear, Tenuto, musictheory.net-style interval/chord drill apps.
 
 ## Sources
 
-**Primary source (HIGH confidence — direct repository read, not summarized):**
-- `https://raw.githubusercontent.com/agenticnotetaking/arscontexta/main/README.md` — command list, 6 Rs
-  table, hooks table, three-space overview, philosophy/synthesis statement
-- `https://raw.githubusercontent.com/agenticnotetaking/arscontexta/main/reference/three-spaces.md` —
-  full self/notes/ops specification, growth/load/durability profiles, six failure modes of conflation,
-  content promotion rule
-- `https://raw.githubusercontent.com/agenticnotetaking/arscontexta/main/reference/kernel.yaml` — 15
-  universal kernel primitives (markdown-yaml, wiki-links, moc-hierarchy, schema-enforcement, self-space,
-  session-rhythm, discovery-first, operational-learning-loop, task-stack, methodology-folder,
-  session-capture, etc.) with validation thresholds and cognitive-science grounding citations
+**PART A (product/feature landscape):**
+- [Andante Music Practice Journal](https://andante.app/) — session logging, mood/focus, streaks
+- [Modacity — Music Practice Journal & Companion](https://www.modacity.co/) — integrated practice toolkit
+- [Instrumentive for Musicians (Google Play)](https://play.google.com/store/apps/details?id=com.instrumentive.musicnotes&hl=en_US) — per-piece time tracking, aggregate charts
+- [Legato: Music Practice Journal (Google Play)](https://play.google.com/store/apps/details?id=com.proximitylabs.legato&hl=en_US) — streaks, stats
+- [Athenify Music Practice Tracker](https://athenify.io/music-practice-tracker-app) — per-technique time balance, medals
+- [Practis — Music Practice Tracker, Timer & Metronome](https://pract.is/) — history/goals/reports
+- [Best Apps to Track Your Music Practice Time (Practis Blog)](https://pract.is/blog/best-apps-to-track-your-music-practice-time-5-options-compared)
+- [Better Practice — teacher/student practice logs](https://betterpracticeapp.com/)
+- [iReal Pro custom chord chart protocol](https://www.irealpro.com/ireal-pro-custom-chord-chart-protocol) — chord-progression text-encoding prior art
+- [ListenBrainz API — Core listens endpoint](https://listenbrainz.readthedocs.io/en/latest/users/api/core.html) — official docs
+- [Discogs API — Collection/Wantlist documentation](https://www.discogs.com/developers/) — official docs
 
-**Secondary sources (MEDIUM confidence — WebFetch summarization + web search, cross-checked against
-primary source above):**
-- WebFetch digest of `github.com/agenticnotetaking/arscontexta` (general repo overview)
-- WebFetch digest attempted on `lobehub.com/skills/agenticnotetaking-arscontexta-reflect` — blocked
-  (HTTP 403), not used as a source
-- Web search on Tiago Forte's Building a Second Brain — PARA (Projects/Areas/Resources/Archives) and
-  CODE (Capture/Organize/Distill/Express) framework, "just-in-time organization" principle
-
-**Project-internal sources (authoritative for Sentinel-specific constraints):**
-- `.planning/PROJECT.md` — v0.6.0 milestone scope, existing validated requirements, Out-of-Scope
-  constraints (single-user, no proprietary cloud, non-destructive vault ops)
-- `docs/2nd-brain-original-design/10-CONTEXT-master-spec.md` — the phase-10 master spec: D-01 through
-  D-16 implementation decisions, the 27-command table with 6 Rs mapping, note-quality standard (D-05),
-  MOC pattern (D-06), migration scope (D-10), PARA/arscontexta synthesis guidance (D-16)
-- `.planning/research/FEATURES.md` (prior version, v0.5.1) — existing Recall/semantic-search/retention
-  feature landscape this milestone builds on top of, referenced for continuity and reuse opportunities
+**PART B (pedagogy):**
+- [Bulletproof Musician — practice hack / deliberate self-supervision](https://bulletproofmusician.com/a-practice-hack-that-could-significantly-boost-practice-efficiency-but-may-not-feel-like-it-in-the-moment/)
+- [Modacity Blog — Using Spaced Repetition to Achieve Effective Practice](https://www.modacity.co/blog/using-repetition-achieve-effective-practice)
+- [Piano Practice Assistant — spaced repetition for musicians](http://pianopracticeassistant.com/spaced-repetition/)
+- [D'Addario Lesson Room — Creating a Practice Routine for Electric Guitar](https://www.daddario.com/the-lesson-room/guitar/electric-guitar/teach/creating-a-practice-routine/)
+- [GuitarPlayer — Warm-Up Time: 11 Exercises](https://www.guitarplayer.com/lessons/warm-up-time-11-exercises-that-will-help-you-play-even-better)
+- [Premier Guitar — Essential Guitar Warm-Up Exercises](https://www.premierguitar.com/lessons/guitar-warm-ups)
+- [Scott's Bass Lessons — 10 Tips to Improve Your Bass Practice Routine](https://scottsbasslessons.com/blog/10x-your-practice-results-the-how-and-the-what)
+- [Berklee Online Take Note — How to Practice Bass Effectively](https://online.berklee.edu/takenote/bass-players-how-to-practice-bass-effectively-pt1/)
+- [Mastertemps Bass Blog — Developing a Practice Routine](https://mastertempsbassblog.com/how-to-practice-bass-guitar/)
+- [MusicTech — Practice sound design by recreating synth patches](https://musictech.com/tutorials/weekend-workshop-practice-your-sound-design-by-recreating-synth-patches/)
+- [Soundfly — Advanced Synths and Patch Design for Producers](https://soundfly.com/courses/advanced-synths-and-patch-design)
+- [Syntorial — Learn Synthesizer Programming](https://www.syntorial.com/learn-more/)
+- [Traipsing About — Creating a Solid Piano Practice Routine](https://www.traipsingabout.com/p/creating-a-solid-piano-practice-routine)
+- [Piano Wizard Academy — Effective Piano Practice Techniques](https://pianowizardacademy.com/music-learners/effective-piano-practice-techniques-for-rapid-progress/)
+- [Fundamentals of Piano Practice — The Practice Routine](https://fundamentals-of-piano-practice.readthedocs.io/chapter1/ch1_procedures/II.1.html)
+- [MusicRadar — MPC-style sampling tricks using Ableton Push 2](https://www.musicradar.com/tuition/tech/how-to-perform-mpc-style-sampling-tricks-using-ableton-push-2-643660)
+- [Audeobox — Ableton Simpler & Sampler Complete Guide](https://www.audeobox.com/learn/ableton/simpler-sampler-complete-guide/)
+- [Melodics — Master the Art of Sampling](https://melodics.com/blog/beginner-guide-to-sampling)
+- [Myloops — Melodic Techno Production: Complete Guide](https://www.myloops.net/melodic-techno-production-complete-guide-from-start-to-finish)
+- [EDM Tips — How to Make Melodic Techno](https://edmtips.com/how-to-make-melodic-techno/)
+- [Beatportal — Step-by-Step Guide to Melodic House & Techno](https://www.beatportal.com/articles/899368-step-by-step-guide-to-creating-a-melodic-house-techno-track-anyma-miss-monique-artbat-stephan-bodzin)
+- [Plugin Music School — How to Mix Techno Like a Pro](https://www.pluginmusicschool.com/mixing-how-to-do-mixing-like-a-pro/)
+- [Bounce Metronome — Accelerating Tempo Gradually](https://www.bouncemetronome.com/features/tempo/gradually-faster-or-slower)
+- [The Online Metronome — How To Practice With A Metronome](https://theonlinemetronome.com/blogs/14/practice-with-a-metronome)
+- [MusiciansTool — Metronome Practice Secrets](https://musicianstool.com/blog/metronome-practice-secrets)
+- [MusicTheory.xyz — Ear Training for Musicians](https://musictheory.xyz/ear-training)
+- [The Music Theory Professor — Ear Training 101](https://themusictheoryprofessor.com/ear-training-101-how-to-hear-intervals-chords-and-progressions-like-a-pro/)
+- [Ear training — Wikipedia](https://en.wikipedia.org/wiki/Ear_training)
 
 ---
-*Feature research for: Sentinel of Mnemosyne — v0.6.0 "Restore the Second-Brain Core" milestone*
-*Researched: 2026-07-05*
+*Feature research for: Music Lesson Tracker module (v0.6.0 milestone)*
+*Researched: 2026-07-08*
