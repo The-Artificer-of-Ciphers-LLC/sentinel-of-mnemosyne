@@ -11,8 +11,8 @@ Requirements for the v0.6.0 Music Lesson Tracker milestone. Numbering continues 
 
 ### Module Foundation
 
-- [ ] **MUS-01**: The Music module runs as a standalone Docker service (own FastAPI app, `compose.yml` with `profiles: ["music"]`) and registers with Core via `POST /modules/register` — Core needs no code changes to host it (mirrors `modules/pathfinder/`).
-- [ ] **MUS-02**: The module persists to a new top-level `music/` vault namespace through its own thin `ObsidianClient` (Obsidian Local REST API) — it does not import Core's `Vault` Protocol.
+- [x] **MUS-01**: The Music module runs as a standalone Docker service (own FastAPI app, `compose.yml` with `profiles: ["music"]`) and registers with Core via `POST /modules/register` — Core needs no code changes to host it (mirrors `modules/pathfinder/`).
+- [x] **MUS-02**: The module persists to a new top-level `music/` vault namespace through its own thin `ObsidianClient` (Obsidian Local REST API) — it does not import Core's `Vault` Protocol.
 - [ ] **MUS-03**: `music/` is added to `vault_sweeper.py` `sweep_skip_prefixes` (day one) so the sweeper never relocates or mangles module-authored music notes.
 - [ ] **MUS-04**: A `:music` Discord command surface (own `music_dispatch.py` + `command_router.py` branch) routes music subcommands, built on the pf2e contract-module + live-E2E-smoke pattern to avoid payload drift.
 - [x] **MUS-05**: Every music note carries a trailing `_schema` block + wikilinks so `/music/` participates in the `:graph`/`:check` machinery with no orphans.
@@ -116,8 +116,8 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MUS-01 | Phase 48 | Pending |
-| MUS-02 | Phase 48 | Pending |
+| MUS-01 | Phase 48 | Complete |
+| MUS-02 | Phase 48 | Complete |
 | MUS-05 | Phase 48 | Complete |
 | XMOD-01 | Phase 48 | Complete |
 | MUS-03 | Phase 49 | Pending |
