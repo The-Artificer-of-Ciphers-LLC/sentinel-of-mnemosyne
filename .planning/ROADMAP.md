@@ -906,10 +906,10 @@ Plans:
 
 - [ ] 43-05-PLAN.md — Cutover + live verification gate (autonomous: false): phase regression suites + operator LM Studio cutover + human-verify EMB-03/EMB-04 (EMB-03, EMB-04)
 
-## Milestone v0.4.1 — Restore the Second-Brain Core (originally mislabeled v0.6.0)
+## Milestone v0.4.1 — Restore the Second-Brain Core
 
 <details>
-<summary>✅ v0.4.1 — Restore the Second-Brain Core (Phases 44–47) — SHIPPED 2026-07-07 (originally mislabeled v0.6.0; relabeled to free v0.6.0 for the Music Lesson Tracker milestone)</summary>
+<summary>✅ v0.4.1 — Restore the Second-Brain Core (Phases 44–47) — SHIPPED 2026-07-07 (originally misnumbered; renumbered from the earlier second-brain milestone — see MILESTONES.md for the version-relabel note)</summary>
 
 Full detail archived in `milestones/v0.4.1-ROADMAP.md`.
 
