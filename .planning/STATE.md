@@ -1,19 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.6.0
-milestone_name: — Restore the Second-Brain Core
-status: Awaiting next milestone
-stopped_at: v0.6.0 shipped — Phases 44–47 all complete (47-07 live cutover done)
-last_updated: "2026-07-07T12:00:48.598Z"
-last_activity: 2026-07-07 — Milestone v0.6.0 completed and archived
+milestone_name: Music Lesson Tracker
+status: planning
+last_updated: "2026-07-08T00:07:55.182Z"
+last_activity: 2026-07-08
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 25
-  completed_plans: 25
-  percent: 100
-current_phase: 47
-current_phase_name: Migration Cutover + Hardening
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -23,14 +20,14 @@ current_phase_name: Migration Cutover + Hardening
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** A message goes in, an AI response that knows your history comes back -- and what mattered gets written to Obsidian so the next conversation starts smarter.
-**Current focus:** v0.6.0 complete — ready to close the milestone
+**Current focus:** v0.6.0 Music Lesson Tracker — defining requirements (domain research → REQUIREMENTS → ROADMAP)
 
 ## Current Position
 
-Phase: Milestone v0.6.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-07 — Milestone v0.6.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-08 — Milestone v0.6.0 started
 
 ## Milestone Progress
 
@@ -44,7 +41,8 @@ Last activity: 2026-07-07 — Milestone v0.6.0 completed and archived
 | v0.5 | The Dungeon | 28–36 | 🔜 IN PROGRESS |
 | v0.5.1 | The Second Brain | 39–41 | ✅ COMPLETE |
 | v0.5.2 | Provider Independence | 42–43 | 🔜 IN PROGRESS |
-| v0.6.0 | Restore the Second-Brain Core | 44–47 | ✅ COMPLETE |
+| v0.4.1 | Restore the Second-Brain Core (was mislabeled v0.6.0) | 44–47 | ✅ COMPLETE |
+| v0.6.0 | Music Lesson Tracker | 48+ | 🔜 IN PROGRESS |
 | v0.7 | The Workshop | TBD | — |
 | v0.8 | The Ledger | TBD | — |
 | v0.9 | The Trader (paper) | TBD | — |

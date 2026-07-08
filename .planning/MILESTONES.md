@@ -1,6 +1,8 @@
 # Milestones
 
-## v0.6.0 Restore the Second-Brain Core (Shipped: 2026-07-07)
+## v0.4.1 Restore the Second-Brain Core (Shipped: 2026-07-07)
+
+> **Version note (relabeled 2026-07-07):** originally tagged v0.6.0, but this milestone was a regression fix / hardening pass on the v0.4.0 refactor, not a feature milestone. Relabeled v0.4.1 to free v0.6.0 for the Music Lesson Tracker module.
 
 **Phases completed:** 4 phases, 25 plans, 48 tasks
 
@@ -27,6 +29,6 @@
 - Notes-bound `learning/`/`reference(s)/` content now backfills into born-compliant `notes/{claim-slug}.md` by reusing `pipeline_orchestrator.run(mode="pipeline")` verbatim, gated by a locked rollback-trigger predicate (hard exception OR new `:graph` orphan OR unrepaired ops-bound backlink shortfall) that atomically replays the ledger — while a designed pipeline dead-letter is reported, never rolled back.
 - Admin-gated `POST /vault/migrate/start` + `GET /vault/migrate/status` routes in sentinel-core, and a Discord `:migrate [status|dry-run|live]` command wired end-to-end through `core_gateway` — every primitive a verbatim mirror of the existing `:vault-sweep` surface (T-47-01/T-47-02 mitigations).
 - Pre-cutover boundary gate proven green on the first run: sentinel-core (592 passed) + discord (286 passed) suites hold with zero shrink, all 9 MEM-0x characterization contracts pass, the 27-command surface (including `:migrate`) still dispatches, and no D-05a compensating shim was reintroduced — Plan 07's live cutover is unblocked.
-- The v0.6.0 second-brain data cutover is executed against the live vault: all 14 flat-7 items are physically migrated (7 journal entries → `ops/journal/2026-07-06/`, 7 learning/reference sources → 8 born-compliant `notes/{claim}.md` via reused Reduce), zero grandfathered, zero new orphans, no rollback — closing the D-05/D-05a accepted transient. A journal date-subdir scan gap surfaced by the live dry-run was fixed inline, regression-tested, and redeployed before any write.
+- The second-brain data cutover is executed against the live vault: all 14 flat-7 items are physically migrated (7 journal entries → `ops/journal/2026-07-06/`, 7 learning/reference sources → 8 born-compliant `notes/{claim}.md` via reused Reduce), zero grandfathered, zero new orphans, no rollback — closing the D-05/D-05a accepted transient. A journal date-subdir scan gap surfaced by the live dry-run was fixed inline, regression-tested, and redeployed before any write.
 
 ---

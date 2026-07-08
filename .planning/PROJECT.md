@@ -40,16 +40,15 @@ context on every message — so conversations are always informed by history, ne
 - ✓ VAULT-03: Semantic recall recency weighting reconciled to the new namespaces via the D-01 "Sessions-only collapse" — the stale `_CARRIER_NAMESPACE_PREFIXES` allowlist is retired and recency is Session-summary-only; no silent recall degradation — Validated in Phase 44: Vault Namespace + Taxonomy Foundation
 - ✓ VAULT-04: The vault sweeper no longer wholesale-skips `inbox/` — staged captures are embedded, while remaining excluded from the keyword warm tier (`RecallConfig.exclude_prefixes`) until Reduce promotes them to `notes/` — Validated in Phase 44: Vault Namespace + Taxonomy Foundation
 - ✓ VAULT-05: Every message reads the three-space `self/` files at session start (identity, methodology, goals, relationships) — Validated in Phase 44: Vault Namespace + Taxonomy Foundation
-- ✓ NOTE-01, NOTE-02, NOTE-03: `_schema` footer blocks, claim titles, wikilinks, lazy MOC/hub notes, and `:graph`/`:stats`/`:check` backed by a `links-index.json` sidecar — v0.6.0, Validated in Phase 45: Note-Quality Schema + Graph Analysis
-- ✓ PIPE-01..07: The 6 Rs pipeline (Record → Reduce → Reflect → Reweave → Verify → Rethink) as real background orchestration — `:capture`/`:seed`/`:ralph`/`:pipeline`/`:reweave`/`:rethink` with concurrency guard and explicit outcome reporting — v0.6.0, Validated in Phase 46: 6 Rs Pipeline Orchestrator
-- ✓ MIG-01..04: Live vault migration cutover — flat-7 notes backfilled into PARA/`_schema` structure (`ops/`+`notes/`) with wikilinks intact, zero grandfathering, zero new orphans, no rollback needed, plus `:migrate` routes/command — v0.6.0, Validated in Phase 47: Migration Cutover + Hardening
+- ✓ NOTE-01, NOTE-02, NOTE-03: `_schema` footer blocks, claim titles, wikilinks, lazy MOC/hub notes, and `:graph`/`:stats`/`:check` backed by a `links-index.json` sidecar — v0.4.1, Validated in Phase 45: Note-Quality Schema + Graph Analysis
+- ✓ PIPE-01..07: The 6 Rs pipeline (Record → Reduce → Reflect → Reweave → Verify → Rethink) as real background orchestration — `:capture`/`:seed`/`:ralph`/`:pipeline`/`:reweave`/`:rethink` with concurrency guard and explicit outcome reporting — v0.4.1, Validated in Phase 46: 6 Rs Pipeline Orchestrator
+- ✓ MIG-01..04: Live vault migration cutover — flat-7 notes backfilled into PARA/`_schema` structure (`ops/`+`notes/`) with wikilinks intact, zero grandfathering, zero new orphans, no rollback needed, plus `:migrate` routes/command — v0.4.1, Validated in Phase 47: Migration Cutover + Hardening
 
 See `.planning/REQUIREMENTS.md` for the full validated requirement history across phases 1–38.
 
 ### Active
 
-Active requirements for the next milestone are TBD. See `.planning/ROADMAP.md`
-for the phase-level breakdown.
+Active requirements for **v0.6.0 Music Lesson Tracker** are being scoped (domain research → REQUIREMENTS.md → ROADMAP.md). See `.planning/REQUIREMENTS.md` and `.planning/ROADMAP.md` once generated.
 
 ### Out of Scope
 
@@ -77,7 +76,7 @@ Phase 41 complete — typed `SessionSummary` and `RetentionPolicy` implemented (
 
 Phase 44 complete — three-space vault namespace (`self/ notes/ ops/ inbox/ templates/`) + PARA taxonomy replaces the flat-7 classifier as the routing table (D-03); the two research-flagged silent-regression traps fixed in-phase — `recall.py`'s carrier-namespace recency allowlist collapsed to Sessions-only (D-01) and `vault_sweeper.py`'s `inbox/` wholesale-skip removed so staged captures embed (D-02); underscore-prefixed `inbox/` control files guarded from relocation (D-07); `self/` stubs lazily auto-created and read every message (D-04, D-04a). VAULT-01..05 validated; SC-3 reconciled to shipped behavior via accepted override.
 
-**v0.6.0 "Restore the Second-Brain Core" milestone shipped 2026-07-07** (Phases 44–47, 25 plans, 48 tasks, 141 commits, +23,881/−536 lines, ~2 days). The second-brain core is restored and the live vault migrated to the PARA/`_schema` structure: note-quality `_schema`/wikilink/graph machinery + `/vault/graph|stats|check` routes shipped in Phase 45; the 6 Rs pipeline orchestrator wired end-to-end (`:ralph`/`:pipeline`/`:reweave`/`:rethink`) in Phase 46; the live vault migration cutover — flat-7 notes physically backfilled into `ops/`+`notes/` with zero grandfathering, zero new orphans, no rollback, plus `:migrate` routes/command — in Phase 47. sentinel-core app is now ≈11,576 LOC (Python). Both suites green: sentinel-core 593 passed/12 skipped, discord 286 passed/50 skipped. Full detail archived at `.planning/milestones/v0.6.0-ROADMAP.md`.
+**v0.4.1 "Restore the Second-Brain Core" milestone shipped 2026-07-07** (Phases 44–47, 25 plans, 48 tasks, 141 commits, +23,881/−536 lines, ~2 days; originally mislabeled v0.6.0 — a regression fix on the v0.4.0 refactor, relabeled to free v0.6.0 for the Music module). The second-brain core is restored and the live vault migrated to the PARA/`_schema` structure: note-quality `_schema`/wikilink/graph machinery + `/vault/graph|stats|check` routes shipped in Phase 45; the 6 Rs pipeline orchestrator wired end-to-end (`:ralph`/`:pipeline`/`:reweave`/`:rethink`) in Phase 46; the live vault migration cutover — flat-7 notes physically backfilled into `ops/`+`notes/` with zero grandfathering, zero new orphans, no rollback, plus `:migrate` routes/command — in Phase 47. sentinel-core app is now ≈11,576 LOC (Python). Both suites green: sentinel-core 593 passed/12 skipped, discord 286 passed/50 skipped. Full detail archived at `.planning/milestones/v0.4.1-ROADMAP.md`.
 
 **Domain vocabulary** (canonical terms — see `CONTEXT.md` for full glossary):
 - **Vault**: the Obsidian vault; the `Vault` Protocol in `app/vault.py` is the sole persistence seam
@@ -117,9 +116,20 @@ Phase 44 complete — three-space vault namespace (`self/ notes/ ops/ inbox/ tem
 
 ---
 
-## Current Milestone: TBD
+## Current Milestone: v0.6.0 Music Lesson Tracker
 
-v0.6.0 "Restore the Second-Brain Core" (Phases 44–47) shipped 2026-07-07. The next milestone has not yet been scoped. See `.planning/ROADMAP.md` for the phase queue and `.planning/milestones/v0.6.0-ROADMAP.md` for the full archived v0.6.0 detail.
+**Goal:** Ship a pluggable Music Lesson Tracker module that logs practice sessions, captures musical ideas, answers practice-history questions, and builds instrument-specific practice routines — persisting everything to the Vault under `/music/`.
+
+**Target features:**
+- Practice logging — duration, pieces worked, focus area, freeform notes
+- Structured idea capture — chord progressions and melody ideas in a queryable form
+- Practice-history queries — temporal + aggregate recall ("what did I work on last week?", "how long on this piece?")
+- Practice-routine builder — skill-development routines for electric guitar, electric bass, synthesizer, piano/keys, and production/sampler instruments, oriented toward EDM / techno / melodic techno
+- Obsidian integration — `/music/lessons/[date].md`, `/music/practice-log/`, `/music/ideas/`
+- Stretch: ListenBrainz listening-history pull
+- Stretch: Discogs wantlist writes / related-release suggestions (data model built to hold these fields from day one)
+
+**Key context:** New pluggable Docker module — must slot in without touching core, reusing the existing Vault Protocol + recall infrastructure. Domain research (music-practice pedagogy across those instruments + ListenBrainz/Discogs APIs) runs before requirements. The previously-shipped "v0.6.0 Restore the Second-Brain Core" was a misnamed regression fix on the v0.4.0 refactor and has been relabeled **v0.4.1** (see `.planning/MILESTONES.md`).
 
 ---
 
@@ -142,4 +152,4 @@ PROJECT.md evolves throughout the project lifecycle.
 
 ---
 
-*Last updated: 2026-07-07 after v0.6.0 milestone*
+*Last updated: 2026-07-07 — started v0.6.0 Music Lesson Tracker milestone (prior v0.6.0 relabeled v0.4.1)*
