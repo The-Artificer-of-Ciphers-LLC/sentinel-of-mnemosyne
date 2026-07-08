@@ -936,7 +936,15 @@ Full detail archived in `milestones/v0.4.1-ROADMAP.md`.
 
 **UI hint**: no
 
-**Plans:** TBD
+**Plans:** 5 plans
+
+Plans:
+
+- [ ] 48-01-PLAN.md — Wave 1: shared ObsidianClientCore + Heading/Binary mixins + vendored graph_check orphan rule (XMOD-01, MUS-05)
+- [ ] 48-02-PLAN.md — Wave 2: pf2e cutover to the shared client + full pf2e regression gate (XMOD-01, D-05/D-06)
+- [ ] 48-03-PLAN.md — Wave 2: music module scaffold (FastAPI + registration/heartbeat + healthz + core-only ObsidianClient), zero Core changes (MUS-01, MUS-02)
+- [ ] 48-04-PLAN.md — Wave 3: first music/ hub-mesh write (zero-orphan + _schema) + generated sweeper protection + drift guard, same commit (MUS-01, MUS-02, MUS-05)
+- [ ] 48-05-PLAN.md — Wave 4: 4-venv regression gate + live-Docker smoke (human-verify)
 
 ### Phase 49: Core Practice + Lesson Logging
 
