@@ -1,0 +1,42 @@
+# modules/music/compose.yml
+# music-module: Music Lesson Tracker module (Phase 48 scaffold, MUS-01/MUS-02)
+#
+# Profile: music  (D-11) — activate with: docker compose --profile music up
+# Service name: music-module — must match base_url in REGISTRATION_PAYLOAD
+# Registry name: music  (D-11) — logical name in sentinel-core module registry
+#
+# Registry name and Docker service/profile name are all "music" (no pf2e-style
+# split — that split only exists because pf2e's Docker service predates its
+# logical rename).
+services:
+  music-module:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      additional_contexts:
+        shared: ../../shared
+    profiles:
+      - music
+    env_file:
+      - ../../.env
+    secrets:
+      - sentinel_api_key
+    environment:
+      - SENTINEL_CORE_URL=http://sentinel-core:8000
+      # OBSIDIAN_BASE_URL, OBSIDIAN_API_KEY are loaded from ../../.env via
+      # env_file above — do not set here or they override the user-configured
+      # values silently (mirrors pf2e's WR-03 fix).
+    depends_on:
+      sentinel-core:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+secrets:
+  sentinel_api_key:
+    file: ../../secrets/sentinel_api_key
