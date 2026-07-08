@@ -937,12 +937,12 @@ Full detail archived in `milestones/v0.4.1-ROADMAP.md`.
 
 **UI hint**: no
 
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 48-01-PLAN.md — Wave 1: shared ObsidianClientCore + Heading/Binary mixins + vendored graph_check orphan rule (XMOD-01, MUS-05)
+- [x] 48-01-PLAN.md — Wave 1: shared ObsidianClientCore + Heading/Binary mixins + vendored graph_check orphan rule (XMOD-01, MUS-05)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

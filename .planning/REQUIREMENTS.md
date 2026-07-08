@@ -15,7 +15,7 @@ Requirements for the v0.6.0 Music Lesson Tracker milestone. Numbering continues 
 - [ ] **MUS-02**: The module persists to a new top-level `music/` vault namespace through its own thin `ObsidianClient` (Obsidian Local REST API) — it does not import Core's `Vault` Protocol.
 - [ ] **MUS-03**: `music/` is added to `vault_sweeper.py` `sweep_skip_prefixes` (day one) so the sweeper never relocates or mangles module-authored music notes.
 - [ ] **MUS-04**: A `:music` Discord command surface (own `music_dispatch.py` + `command_router.py` branch) routes music subcommands, built on the pf2e contract-module + live-E2E-smoke pattern to avoid payload drift.
-- [ ] **MUS-05**: Every music note carries a trailing `_schema` block + wikilinks so `/music/` participates in the `:graph`/`:check` machinery with no orphans.
+- [x] **MUS-05**: Every music note carries a trailing `_schema` block + wikilinks so `/music/` participates in the `:graph`/`:check` machinery with no orphans.
 
 ### Practice Logging
 
@@ -87,7 +87,7 @@ Requirements for the v0.6.0 Music Lesson Tracker milestone. Numbering continues 
 
 ### Cross-Module
 
-- [ ] **XMOD-01**: The duplicated per-module `ObsidianClient` is promoted into a shared `sentinel_shared` package (pf2e + music consume the shared client instead of each owning a copy).
+- [x] **XMOD-01**: The duplicated per-module `ObsidianClient` is promoted into a shared `sentinel_shared` package (pf2e + music consume the shared client instead of each owning a copy).
 
 ## v2 Requirements
 
@@ -118,8 +118,8 @@ Which phases cover which requirements. Populated during roadmap creation.
 |-------------|-------|--------|
 | MUS-01 | Phase 48 | Pending |
 | MUS-02 | Phase 48 | Pending |
-| MUS-05 | Phase 48 | Pending |
-| XMOD-01 | Phase 48 | Pending |
+| MUS-05 | Phase 48 | Complete |
+| XMOD-01 | Phase 48 | Complete |
 | MUS-03 | Phase 49 | Pending |
 | MUS-04 | Phase 49 | Pending |
 | LOG-01 | Phase 49 | Pending |
@@ -160,6 +160,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | GAME-02 | Phase 57 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 42 total (MUS ×5, LOG ×7, IDEA ×3, HIST ×4, RTN ×7, LBZ ×3, DSC ×3, AUDIO ×4, GAME ×2, DAW ×2, RCL ×1, XMOD ×1)
 - Mapped to phases: 42/42 ✓ (Phases 48–57)
 - Unmapped: 0
