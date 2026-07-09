@@ -1,0 +1,39 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-07-09T00:00:02.343Z",
+  "phase": "48",
+  "phase_name": "Module Scaffold + Shared Vault Client",
+  "phase_dir": ".planning/phases/48-module-scaffold-shared-vault-client",
+  "plan": 5,
+  "task": 2,
+  "total_tasks": 2,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": "48-01", "name": "Shared ObsidianClientCore + mixins + vendored orphan checker (sentinel_shared)", "status": "done", "commit": "e86f34a", "tests": "shared 49 passed"},
+    {"id": "48-02", "name": "pf2e cutover to shared client (226->16-line composition subclass, D-05/D-06)", "status": "done", "commit": "a4d0f2a", "tests": "pf2e 405 passed"},
+    {"id": "48-03", "name": "modules/music/ FastAPI scaffold + registration/heartbeat + profiles:[music]", "status": "done", "commit": "4d19224", "tests": "music 6 passed"},
+    {"id": "48-04", "name": "music/ 4-note hub-mesh seed + sweeper protection (D-13 atomic co-commit)", "status": "done", "commit": "e2ca9ef", "tests": "music 10 + sentinel-core 598/12-skipped"},
+    {"id": "48-05-task1", "name": "Phase gate Task 1: four venvs green together (shared 49, pf2e 405, music 10, core 598/12)", "status": "done", "commit": null}
+  ],
+  "remaining_tasks": [
+    {"id": "48-05-task2", "name": "Phase gate Task 2: human live-Docker smoke (register/healthz/seed/sweep-safe) on the deploy stack", "status": "deferred_by_user"},
+    {"id": "phase-verify", "name": "Run gsd-verifier + phase.complete once 48-05 is done", "status": "not_started"}
+  ],
+  "blockers": [
+    {"description": "48-05 live-Docker smoke can only run after Phase 47+48 are deployed to the Mini Me stack; that deploy checkout is 2 phases behind (Phase 46 / 0fcb592). Dev main is 27 commits ahead of origin (unpushed).", "type": "external", "workaround": "Deploy Phases 47+48 to /Volumes/Mini Me (push + pull + rebuild), then run the smoke."},
+    {"description": "Production access is guarded in this environment: reading the deploy .env/secrets and `docker exec` into the running prod containers are both denied by the auto-mode classifier.", "type": "human_action", "workaround": "User runs the smoke steps themselves, or explicitly grants scoped prod access."}
+  ],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "Deploy Phases 47+48 to the Mini Me deploy checkout (git push dev main -> pull on /Volumes/Mini Me -> rebuild stack)", "context": "Prereq for the live smoke; the running stack is Phase-46-era.", "blocking": true},
+    {"action": "Run the 6-step music live-Docker smoke from 48-05-PLAN.md Task 2 (compose --profile music up; registration; healthz; 4-note seed present; :vault-sweep leaves music/ notes in place)", "context": "Final gate to complete Phase 48. Writes to the real Obsidian vault.", "blocking": true}
+  ],
+  "decisions": [
+    {"decision": "Executed Phase 48 sequentially on main (no worktree isolation)", "rationale": "worktree.base-check shouldDegrade=true — local HEAD differs from origin/HEAD (#683)", "phase": "48"},
+    {"decision": "Deferred 48-05 live-Docker smoke; left 48-05 intentionally incomplete (no SUMMARY)", "rationale": "User chose 'Defer live smoke'; deploy checkout is 2 phases behind so the smoke is really a milestone deploy. Leaving 48-05 without a SUMMARY makes a re-run of /gsd-execute-phase 48 resume exactly at 48-05.", "phase": "48"},
+    {"decision": "OKF (Open Knowledge Format) — do-not-incorporate-now (quick task 260708-mz4)", "rationale": "OKF v0.1 draft is a markdown+frontmatter vault format ~= Sentinel's existing model; single-user (no external consumer); wikilink->mdlink conversion would degrade Obsidian UX. Backlog: optional export adapter.", "phase": "quick-260708-mz4"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "When the deploy is ready: run the 6-step live-Docker smoke (48-05-PLAN.md Task 2). If it passes, re-run /gsd-execute-phase 48 — it skips 48-01..04, resumes at 48-05, re-runs the automated gate, re-presents the smoke checkpoint; reply 'approved' -> orchestrator writes 48-05-SUMMARY.md, runs gsd-verifier, and marks Phase 48 complete.",
+  "context_notes": "All Phase 48 CODE is done and independently re-verified (shared 49, pf2e 405, music 10, sentinel-core 598/12). The ONLY remaining work is the human live-Docker smoke, deferred by the user. Do NOT try to 'just run the smoke' locally: this dev checkout has no .env/secrets, and the running stack lives on the Mini Me deploy checkout which is 2 phases behind — running compose from here (same project name 'sentinel-of-mnemosyne') risks reconciling/disrupting the live Core/discord/pf2e. gsd-tools gotcha: `query init.* <phase>` takes a POSITIONAL phase arg, not --phase (wrong flag silently returns phase_found:false)."
+}
