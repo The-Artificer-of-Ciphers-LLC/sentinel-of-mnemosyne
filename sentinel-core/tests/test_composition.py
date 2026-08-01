@@ -8,6 +8,7 @@ silently swallowed.
 """
 from __future__ import annotations
 
+import asyncio as _asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -24,6 +25,7 @@ from app.composition import (
 from app.vault import VaultUnreachableError
 from app.config import Settings
 from app.services.provider_router import ProviderRouter
+from tests.fakes.vault import FakeVault
 
 
 def _settings(**overrides) -> Settings:
@@ -534,4 +536,86 @@ async def test_initialize_startup_passes_embedding_model_loaded_from_graph(
     assert rebuild_called[0] is False, (
         f"rebuild must be called with model_loaded=False when graph.embedding_model_loaded=False; "
         f"got {rebuild_called[0]!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Regression: startup embedding-index and links-index rebuilds must BOTH
+# complete on a cold start (becb590 serialized ObsidianVault.acquire_sweep_lock
+# with an asyncio.Lock, which correctly denies a second concurrent contender —
+# but initialize_startup was scheduling the two rebuilds as two INDEPENDENT
+# asyncio tasks contending for that same lock, so the loser raised
+# SweepInProgressError and its rebuild was silently skipped every cold start).
+# ---------------------------------------------------------------------------
+
+
+class _InterleavingFakeVault(FakeVault):
+    """FakeVault whose read_note/write_note yield to the event loop.
+
+    Plain FakeVault's I/O methods never suspend, so two independently
+    ``asyncio.create_task``-ed callers never actually interleave in tests —
+    the first task simply runs to completion (acquiring AND releasing the
+    sweep lock) before the second ever starts, masking the race that real
+    ObsidianVault I/O (httpx, which always yields) exhibits in production.
+    This double restores a real yield point so lock contention between two
+    concurrently-scheduled tasks is exercised deterministically.
+    """
+
+    async def read_note(self, path: str) -> str:
+        await _asyncio.sleep(0)
+        return await super().read_note(path)
+
+    async def write_note(self, path: str, body: str) -> None:
+        await _asyncio.sleep(0)
+        return await super().write_note(path, body)
+
+
+async def test_initialize_startup_runs_both_rebuilds_without_starving_links_index(
+    monkeypatch,
+):
+    """Both the embedding-index AND links-index startup rebuilds must persist
+    their sidecars on a cold start — neither may be starved of the shared
+    vault sweep lock by the other running concurrently.
+    """
+    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH
+    from app.services.links_sidecar_index import LINKS_INDEX_PATH
+
+    fake_vault = _InterleavingFakeVault()
+    fake_vault.notes["sentinel/persona.md"] = "persona"
+    fake_graph = SimpleNamespace(
+        vault=fake_vault,
+        message_processor=object(),
+        settings=SimpleNamespace(model_name="test-model"),
+        http_client=object(),
+        context_window=8192,
+        lmstudio_stop_sequences=[],
+        note_classifier_fn=AsyncMock(),
+        embeddings=SimpleNamespace(embed=AsyncMock(return_value=[])),
+        module_registry={},
+        ai_provider_name="lmstudio",
+        ai_provider=object(),
+        recall=None,
+        embedding_model_loaded=True,
+    )
+
+    async def _fake_build_application(_settings, _http_client):
+        return fake_graph
+
+    monkeypatch.setattr("app.composition.build_application", _fake_build_application)
+
+    app = SimpleNamespace(state=SimpleNamespace())
+    await initialize_startup(app, SimpleNamespace(), object())
+
+    # Let the background startup rebuild(s) run to completion.
+    for _ in range(50):
+        await _asyncio.sleep(0)
+
+    assert EMBEDDING_INDEX_PATH in fake_vault.notes, (
+        "embedding-index startup rebuild did not persist its sidecar"
+    )
+    assert LINKS_INDEX_PATH in fake_vault.notes, (
+        "links-index startup rebuild did not persist its sidecar — it was "
+        "starved of the vault sweep lock by the concurrently-scheduled "
+        "embedding-index rebuild (SweepInProgressError), the exact "
+        "regression this test guards against"
     )

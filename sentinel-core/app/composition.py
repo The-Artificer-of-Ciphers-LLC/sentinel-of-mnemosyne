@@ -485,7 +485,25 @@ async def initialize_startup(
     # No new unauthenticated surface is introduced (T-40-09).
     from app.services.vault_sweeper import rebuild_embedding_index as _rebuild_embedding_index
 
-    async def _startup_rebuild() -> None:
+    # Phase 45 (NOTE-03 / D-04): non-blocking startup rebuild of the links
+    # sidecar (ops/graph/links-index.json), alongside the embedding-index
+    # startup rebuild. rebuild_links_index() is INDEX-ONLY — it uses only
+    # list_under/read_note/write_note and never relocates or trashes a note —
+    # so a cold start becomes graph-queryable (:graph/:stats/:check) without
+    # operator action. A failure here is logged and non-fatal, exactly like
+    # the embedding-index rebuild.
+    from app.services.links_sidecar_index import rebuild_links_index as _rebuild_links_index
+
+    # Both rebuilds acquire the SAME vault sweep lock (ObsidianVault.
+    # acquire_sweep_lock), which is serialized by a module-level asyncio.Lock
+    # (becb590). Running them as two independent concurrent tasks meant the
+    # loser was correctly denied the lock and raised SweepInProgressError —
+    # a real functional loss (links-index silently skipped on every cold
+    # start), not just a benign race. Fix: run both rebuilds SEQUENTIALLY
+    # inside a single background task so each acquires-and-releases the lock
+    # in turn and BOTH complete. Each keeps its own try/except so one
+    # failing still leaves the other attempted and logged non-fatally.
+    async def _startup_rebuild_sequential() -> None:
         try:
             await _rebuild_embedding_index(
                 graph.vault,
@@ -498,25 +516,6 @@ async def initialize_startup(
                 "Startup embedding-index rebuild failed (non-fatal): %r", exc
             )
 
-    # WR-02: keep a strong reference to the task so it can't be GC-collected
-    # before completion. Store on app.state and register a done-callback that
-    # discards the reference once the task finishes.
-    _rebuild_task = asyncio.create_task(_startup_rebuild())
-    app.state.startup_rebuild_task = _rebuild_task
-    _rebuild_task.add_done_callback(
-        lambda t: setattr(app.state, "startup_rebuild_task", None)
-    )
-
-    # Phase 45 (NOTE-03 / D-04): non-blocking startup rebuild of the links
-    # sidecar (ops/graph/links-index.json), mirroring the embedding-index
-    # startup rebuild immediately above. rebuild_links_index() is
-    # INDEX-ONLY — it uses only list_under/read_note/write_note and never
-    # relocates or trashes a note — so a cold start becomes graph-queryable
-    # (:graph/:stats/:check) without operator action. A failure here is
-    # logged and non-fatal, exactly like the embedding-index rebuild.
-    from app.services.links_sidecar_index import rebuild_links_index as _rebuild_links_index
-
-    async def _startup_links_rebuild() -> None:
         try:
             await _rebuild_links_index(graph.vault)
             logger.info("Startup links-index rebuild complete")
@@ -525,10 +524,21 @@ async def initialize_startup(
                 "Startup links-index rebuild failed (non-fatal): %r", exc
             )
 
-    _links_rebuild_task = asyncio.create_task(_startup_links_rebuild())
-    app.state.startup_links_rebuild_task = _links_rebuild_task
-    _links_rebuild_task.add_done_callback(
-        lambda t: setattr(app.state, "startup_links_rebuild_task", None)
-    )
+    # WR-02: keep a strong reference to the task so it can't be GC-collected
+    # before completion. Store on app.state and register a done-callback that
+    # discards the reference once the task finishes. Both
+    # startup_rebuild_task and startup_links_rebuild_task are retained (no
+    # other code in the tree reads these attributes independently — grepped
+    # sentinel-core/ — so both intentionally point at the SAME task now that
+    # the two rebuilds share one sequential background task).
+    _rebuild_task = asyncio.create_task(_startup_rebuild_sequential())
+    app.state.startup_rebuild_task = _rebuild_task
+    app.state.startup_links_rebuild_task = _rebuild_task
+
+    def _clear_startup_rebuild_task(_task: asyncio.Task) -> None:
+        app.state.startup_rebuild_task = None
+        app.state.startup_links_rebuild_task = None
+
+    _rebuild_task.add_done_callback(_clear_startup_rebuild_task)
 
     return StartupResult(graph=graph, warnings=warnings)
