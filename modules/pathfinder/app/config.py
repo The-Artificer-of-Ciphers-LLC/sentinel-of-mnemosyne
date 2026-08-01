@@ -30,19 +30,19 @@ class Settings(BaseSettings):
     # because the embeddings path (embed_texts, below) still calls
     # litellm.aembedding directly against it (Phase 43 scope; D-02 embeddings
     # stay on litellm).
-    litellm_api_base: str = "http://host.docker.internal:52415/v1"
+    litellm_api_base: str = "http://host.docker.internal:1234/v1"
 
     # Phase 33 rules engine — embedding model for corpus + query embeds, served from
     # litellm_api_base above. Stored as the BARE model id (no provider prefix). The
     # bare name is what gets persisted in cached-ruling frontmatter (D-13), so
     # reuse-match cache comparisons work across processes. embed_texts() prepends
     # "openai/" at the litellm call site — see _resolve_embed_provider in app/llm.py.
-    # NOTE (T-lmstudio-provider-switch): not every OpenAI-compatible local backend
-    # implements POST /v1/embeddings (e.g. exo does not, as of this writing — see
-    # exo-explore/exo#1047). If litellm_api_base points at a chat-only backend, the
-    # startup rules-index build degrades gracefully (see main.py lifespan) rather
-    # than crashing the module; /rule/query returns 503 until an embeddings-capable
-    # backend is configured.
+    # NOTE (T-lmstudio-provider-switch): the default now points at LM Studio:1234,
+    # which serves the nomic embedding model, so the rules-index path works by
+    # default. If litellm_api_base is overridden to point at a backend that lacks
+    # POST /v1/embeddings, the startup rules-index build degrades gracefully (see
+    # main.py lifespan) rather than crashing the module; /rule/query returns 503
+    # until an embeddings-capable backend is configured.
     rules_embedding_model: str = "text-embedding-nomic-embed-text-v1.5"
 
     # Phase 34 session notes settings (D-10, D-13, D-37)

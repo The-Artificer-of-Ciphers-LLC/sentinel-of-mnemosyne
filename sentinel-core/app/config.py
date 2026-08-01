@@ -28,18 +28,16 @@ class Settings(BaseSettings):
     # Docker's host-gateway alias -- NOT "localhost", which inside this container
     # resolves to the container itself rather than the host machine running the
     # backend (T-lmstudio-provider-switch). Override via LMSTUDIO_BASE_URL in .env.
-    # NOTE: not every OpenAI-compatible local backend implements POST /v1/embeddings
-    # (e.g. exo does not, as of this writing -- see exo-explore/exo#1047). If this
-    # points at a chat-only backend, embedding-dependent paths (vault sweeper, note
-    # classifier context probes) degrade gracefully rather than crashing startup --
-    # see app/composition.py's non-fatal probes and app/clients/embeddings.py.
-    lmstudio_base_url: str = "http://host.docker.internal:52415/v1"
+    # NOTE: the default now points at LM Studio on port 1234, which DOES implement
+    # POST /v1/embeddings. This field is the LM Studio (chat) endpoint and must not
+    # be confused with `exo_base_url` below, which keeps exo's own port 52415.
+    lmstudio_base_url: str = "http://host.docker.internal:1234/v1"
     sentinel_api_key: str  # Required — no default. Startup fails fast if missing.
-    # Tracked default kept in sync with the exo backend's actual running model
-    # (exo-model-notfound-502). exo advertises ~120 catalog entries but serves only
-    # the one currently loaded — this MUST match exo's "Running model" exactly, or
+    # Tracked default kept in sync with the model actually loaded in LM Studio
+    # (exo-model-notfound-502). A local backend may advertise more catalog entries
+    # than it will actually serve, so this MUST match the loaded model exactly, or
     # override via MODEL_NAME in .env when the loaded model changes.
-    model_name: str = "mlx-community/Qwen3.5-27B-8bit"
+    model_name: str = "google/gemma-4-31b"
     # LM Studio embedding model id (no provider prefix — `openai/` is added at
     # the litellm call site). Single source of truth: previously duplicated as
     # hardcoded constants in app/clients/embeddings.py and
