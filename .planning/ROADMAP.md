@@ -937,7 +937,7 @@ Full detail archived in `milestones/v0.4.1-ROADMAP.md`.
 
 **UI hint**: no
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -955,7 +955,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 48-05-PLAN.md — Wave 4: 4-venv regression gate + live-Docker smoke (human-verify)
+- [x] 48-05-PLAN.md — Wave 4: 4-venv regression gate + live-Docker smoke (human-verify)
 
 ### Phase 49: Core Practice + Lesson Logging
 
