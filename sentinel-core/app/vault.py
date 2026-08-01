@@ -20,6 +20,7 @@ not one HTTP adapter among many.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import secrets
@@ -105,6 +106,17 @@ def is_protected_path(path: str) -> bool:
 
 _LOCKFILE_PATH = "ops/sweeps/_in-progress.md"
 _STALE_LOCK_SECONDS = 3600  # 1 hour
+
+# Serializes the read-then-write critical section inside acquire_sweep_lock()
+# for callers within THIS process. Without it, two same-process asyncio tasks
+# (e.g. composition.py's concurrent startup rebuild tasks) can both read "no
+# lock held" before either writes, so both get True back from
+# acquire_sweep_lock() despite only one being able to hold it. The loser then
+# calls release_sweep_lock() for a lock it never actually held exclusively,
+# and 404s deleting a lockfile the winner already removed. This lock does NOT
+# provide cross-process mutual exclusion — that is still governed by the
+# vault lockfile itself (see acquire_sweep_lock's stale-takeover logic).
+_acquire_sweep_lock_guard = asyncio.Lock()
 
 
 # Frontmatter helpers migrated to app.markdown_frontmatter (260502-g8c Task 3).
@@ -694,27 +706,41 @@ class ObsidianVault:
 
         Stale lockfiles (older than 1h) are taken over with a WARNING log
         per RESEARCH Pitfall 1.
+
+        The read-then-write check is serialized by ``_acquire_sweep_lock_guard``
+        so that two same-process callers racing this method (e.g. concurrent
+        startup rebuild tasks) can't both observe "no lock held" and both
+        return True — see the guard's module-level docstring.
         """
         now = now or datetime.now(timezone.utc)
-        existing = await self.read_note(_LOCKFILE_PATH)
-        if existing.strip():
-            fm, _ = split_frontmatter(existing)
-            started = _parse_iso(str(fm.get("started_at", "")))
-            if started is not None:
-                age = (now - started).total_seconds()
-                if age < _STALE_LOCK_SECONDS:
-                    return False
-                logger.warning(
-                    "acquire_sweep_lock: stale lockfile (age %.0fs) — taking over",
-                    age,
-                )
-        fm = {"started_at": _iso_utc(now), "host": "sentinel-core"}
-        body = join_frontmatter(fm, "# Sweep in progress\n")
-        await self.write_note(_LOCKFILE_PATH, body)
-        return True
+        async with _acquire_sweep_lock_guard:
+            existing = await self.read_note(_LOCKFILE_PATH)
+            if existing.strip():
+                fm, _ = split_frontmatter(existing)
+                started = _parse_iso(str(fm.get("started_at", "")))
+                if started is not None:
+                    age = (now - started).total_seconds()
+                    if age < _STALE_LOCK_SECONDS:
+                        return False
+                    logger.warning(
+                        "acquire_sweep_lock: stale lockfile (age %.0fs) — taking over",
+                        age,
+                    )
+            fm = {"started_at": _iso_utc(now), "host": "sentinel-core"}
+            body = join_frontmatter(fm, "# Sweep in progress\n")
+            await self.write_note(_LOCKFILE_PATH, body)
+            return True
 
     async def release_sweep_lock(self) -> None:
         try:
             await self.delete_note(_LOCKFILE_PATH)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                # Already gone — release is idempotent-success, not a failure.
+                logger.debug(
+                    "release_sweep_lock: lockfile already absent (404) — treating as released"
+                )
+                return
+            logger.warning("release_sweep_lock: delete failed: %s", exc)
         except Exception as exc:
             logger.warning("release_sweep_lock: delete failed: %s", exc)

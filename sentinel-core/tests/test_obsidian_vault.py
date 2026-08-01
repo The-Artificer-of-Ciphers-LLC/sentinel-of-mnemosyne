@@ -1,4 +1,6 @@
 """Tests for ObsidianVault (MEM-01, MEM-05, MEM-08)."""
+import asyncio
+import logging
 import unittest.mock
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
@@ -692,6 +694,88 @@ async def test_obsidian_vault_acquire_release_sweep_lock_sequence():
         await vault.release_sweep_lock()
         third = await vault.acquire_sweep_lock(now=now)
     assert (first, second, third) == (True, False, True)
+
+
+async def test_obsidian_vault_release_sweep_lock_404_is_debug_not_warning(caplog):
+    """A 404 on release means the lockfile is already gone — idempotent
+    success, not a failure. Must not raise and must not log at WARNING."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        vault = ObsidianVault(client, "http://test", "k")
+        with caplog.at_level(logging.DEBUG, logger="app.vault"):
+            await vault.release_sweep_lock()  # must not raise
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert warnings == []
+    assert any(
+        r.levelno == logging.DEBUG and "already absent" in r.message
+        for r in caplog.records
+    )
+
+
+async def test_obsidian_vault_release_sweep_lock_500_still_warns(caplog):
+    """Any non-404 HTTP error must still be surfaced at WARNING, unchanged."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="internal error")
+
+    transport = httpx.MockTransport(handler)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        vault = ObsidianVault(client, "http://test", "k")
+        with caplog.at_level(logging.WARNING, logger="app.vault"):
+            await vault.release_sweep_lock()  # must not raise
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warnings) == 1
+    assert "release_sweep_lock: delete failed" in warnings[0].message
+
+
+async def test_obsidian_vault_release_sweep_lock_non_http_exception_still_warns(caplog):
+    """A non-HTTP exception (e.g. a connection error) must still log a
+    warning, matching pre-existing behavior for unexpected failures.
+
+    Injected deterministically by monkeypatching delete_note itself so it
+    raises the exact exception, per project convention (never chmod/permission
+    tricks for IO-failure simulation).
+    """
+
+    async def _raise_connect_error(path: str) -> None:
+        raise httpx.ConnectError("vault down")
+
+    async with AsyncClient(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200)),
+        base_url="http://test",
+    ) as client:
+        vault = ObsidianVault(client, "http://test", "k")
+        orig = vault.delete_note
+        vault.delete_note = _raise_connect_error
+        try:
+            with caplog.at_level(logging.WARNING, logger="app.vault"):
+                await vault.release_sweep_lock()  # must not raise
+        finally:
+            vault.delete_note = orig
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warnings) == 1
+    assert "release_sweep_lock: delete failed" in warnings[0].message
+
+
+async def test_obsidian_vault_concurrent_acquire_sweep_lock_only_one_wins():
+    """Two same-process callers racing acquire_sweep_lock() must not both
+    get True back — regression for the startup-task race (composition.py's
+    concurrent _startup_rebuild/_startup_links_rebuild tasks) that made the
+    loser call release_sweep_lock() on a lock it never actually held,
+    producing a spurious 404."""
+    store: dict[str, str] = {}
+    transport = _make_store_transport(store)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        vault = ObsidianVault(client, "http://test", "k")
+        results = await asyncio.gather(
+            vault.acquire_sweep_lock(),
+            vault.acquire_sweep_lock(),
+        )
+    assert sorted(results) == [False, True]
 
 
 async def test_obsidian_vault_move_to_trash_raises_on_transport_failure():

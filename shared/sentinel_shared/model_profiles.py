@@ -114,6 +114,10 @@ FAMILY_PROFILES["llama3_1"] = FAMILY_PROFILES["llama3"]
 FAMILY_PROFILES["llama3_2"] = FAMILY_PROFILES["llama3"]
 FAMILY_PROFILES["mistral_nemo"] = FAMILY_PROFILES["mistral"]
 FAMILY_PROFILES["gemma3"] = FAMILY_PROFILES["gemma2"]
+# gemma-4's stop sequence was verified as `<end_of_turn>` against a live LM
+# Studio instance (google/gemma-4-31b, arch='gemma4') on 2026-08-01, matching
+# gemma2/3 — the whole gemma family shares this stop token.
+FAMILY_PROFILES["gemma4"] = FAMILY_PROFILES["gemma2"]
 FAMILY_PROFILES["phi3_5"] = FAMILY_PROFILES["phi3"]
 
 # Conservative default — no stop sequences (LM Studio handles termination via chat template)
@@ -141,6 +145,7 @@ _SUBSTRING_PATTERNS: list[tuple[str, str]] = [
     ("qwen", "qwen2"),
     ("gemma-3", "gemma3"),
     ("gemma-2", "gemma2"),
+    ("gemma-4", "gemma4"),
     ("gemma", "gemma2"),
     ("phi-3.5", "phi3_5"),
     ("phi-3", "phi3"),
