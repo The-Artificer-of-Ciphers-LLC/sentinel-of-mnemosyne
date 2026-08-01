@@ -80,7 +80,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="Sentinel Core",
-    version="0.53.0",
+    version="0.53.1",
     description="Sentinel of Mnemosyne — Core message processing API",
     lifespan=lifespan,
 )
