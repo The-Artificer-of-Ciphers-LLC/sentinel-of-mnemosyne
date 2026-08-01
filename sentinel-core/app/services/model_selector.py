@@ -23,6 +23,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Literal, Mapping, Sequence
 
+from app.clients.litellm_provider import get_model_capabilities_from_lmstudio
 from app.errors import ModelSelectorError
 
 import httpx
@@ -132,6 +133,7 @@ def select_model(
     *,
     preferences: Mapping[str, str | None] | None = None,
     default: str | None = None,
+    live_capabilities: Mapping[str, dict] | None = None,
 ) -> str:
     """Pick the best loaded model for ``task_kind``.
 
@@ -155,6 +157,14 @@ def select_model(
     Now, when there is genuine ambiguity (0 or 2+ unscored/unmatched candidates), this
     function prefers the explicitly configured ``default`` over guessing, and raises
     rather than silently returning an arbitrary catalog entry when no default exists.
+
+    live_capabilities: optional ``{model_id: {"max_tokens": int,
+        "supports_function_calling": bool}}`` sourced from a live LM Studio
+        capability fetch (see ``_fetch_live_capabilities``). Threaded straight
+        into ``_score`` — see its docstring for why this is required for local
+        (LM Studio) model ids, which litellm's static cloud registry has no
+        entry for. ``None`` (the default) preserves the original
+        litellm-only scoring behavior for every existing sync caller.
     """
     prefs = dict(preferences or {})
     preferred = prefs.get(task_kind)
@@ -164,7 +174,14 @@ def select_model(
     if loaded:
         scored: list[tuple[int, str]] = []
         for model_id in loaded:
-            score = _score(task_kind, model_id)
+            if live_capabilities is not None:
+                score = _score(task_kind, model_id, live_capabilities)
+            else:
+                # Preserve the original 2-arg call shape when no live capability
+                # data was fetched — keeps every existing sync caller (and any
+                # test that patches `_score` with the pre-existing 2-arg
+                # signature) working unchanged.
+                score = _score(task_kind, model_id)
             if score > 0:
                 scored.append((score, model_id))
         if scored:
@@ -190,29 +207,114 @@ def select_model(
     )
 
 
-def _score(task_kind: str, model_id: str) -> int:
-    """Score a model_id for a task_kind. Returns 0 for unknown or ineligible models."""
-    try:
-        info = litellm.get_model_info(model=model_id)
-    except Exception:
-        return 0
-    max_tokens = int(info.get("max_tokens") or info.get("max_input_tokens") or 0)
-    try:
-        supports_fc = bool(litellm.supports_function_calling(model=model_id))
-    except Exception:
+def _score(
+    task_kind: str,
+    model_id: str,
+    live_capabilities: Mapping[str, dict] | None = None,
+) -> int:
+    """Score a model_id for a task_kind. Returns 0 for unknown or ineligible models.
+
+    litellm.get_model_info()/supports_function_calling() query a STATIC CLOUD
+    registry that has no entry for LM Studio-style local model ids (e.g.
+    "google/gemma-4-31b") — every local model previously scored 0 for every
+    task_kind, which made ``probe_classifier_model_ready`` permanently report
+    "not ready" on local-only deployments and silently disabled destructive
+    vault sweeps (fix-score-local-model-capabilities).
+
+    ``live_capabilities``, when supplied, is an already-fetched
+    ``{model_id: {"max_tokens": int, "supports_function_calling": bool}}``
+    mapping (see ``_fetch_live_capabilities`` / ``get_model_capabilities_from_lmstudio``)
+    sourced from LM Studio's own ``/api/v0/models/{id}`` endpoint, which DOES
+    know about local models. When ``model_id`` is present in this mapping, it
+    is used INSTEAD of the litellm lookup. Cloud models (absent from
+    ``live_capabilities``) fall through to the original litellm-only path
+    unchanged.
+    """
+    is_live = bool(live_capabilities and model_id in live_capabilities)
+    if is_live:
+        info = live_capabilities[model_id]  # type: ignore[index]
+        max_tokens = int(info.get("max_tokens") or 0)
         supports_fc = bool(info.get("supports_function_calling", False))
+    else:
+        try:
+            info = litellm.get_model_info(model=model_id)
+        except Exception:
+            return 0
+        max_tokens = int(info.get("max_tokens") or info.get("max_input_tokens") or 0)
+        try:
+            supports_fc = bool(litellm.supports_function_calling(model=model_id))
+        except Exception:
+            supports_fc = bool(info.get("supports_function_calling", False))
 
     if task_kind == "chat":
         return max_tokens + (10_000 if supports_fc else 0)
     if task_kind == "structured":
         if not supports_fc:
             return 0
-        return 10_000 - abs(max_tokens - 8_000)
+        score = 10_000 - abs(max_tokens - 8_000)
+        if is_live:
+            # LM Studio's max_context_length/loaded_context_length is a
+            # context-WINDOW size (often tens/hundreds of thousands of
+            # tokens for modern local models — e.g. 262144). litellm's
+            # `max_tokens` is an output-cap-style figure (typically low
+            # thousands) that this "moderate context preferred" heuristic
+            # was tuned against. Plugging a raw local context-window number
+            # into the same formula unchanged can swing deeply negative
+            # (e.g. 10_000 - abs(262_144 - 8_000) = -244_144), which would
+            # make select_model's `score > 0` eligibility gate DISQUALIFY a
+            # genuinely function-calling-capable local model outright — the
+            # exact defect this fix addresses. Floor at a small positive
+            # score instead: the model still ranks behind a more "moderate"
+            # one among multiple live candidates, but a supports_fc=True
+            # local model is never entirely excluded from candidacy purely
+            # because of its context-window scale. Cloud models (is_live is
+            # False) are NEVER floored here — they keep scoring exactly as
+            # before via litellm (fix-score-local-model-capabilities).
+            score = max(1, score)
+        return score
     if task_kind == "fast":
         if max_tokens < 4_000:
             return 0
-        return 100_000 - max_tokens
+        score = 100_000 - max_tokens
+        if is_live:
+            # Same context-window-vs-output-cap scale mismatch as above —
+            # floor so a large-context local model isn't disqualified
+            # outright from "fast" eligibility, only ranked lower.
+            score = max(1, score)
+        return score
     return 0
+
+
+async def _fetch_live_capabilities(
+    http_client: httpx.AsyncClient,
+    lmstudio_base_url: str,
+    model_ids: Sequence[str],
+) -> dict[str, dict]:
+    """Fetch live capability data for each of ``model_ids`` from LM Studio.
+
+    One HTTP call per model_id against ``/api/v0/models/{id}`` (via
+    ``get_model_capabilities_from_lmstudio``), issued concurrently. A model_id
+    whose fetch fails (unreachable LM Studio, model absent/404, unexpected
+    schema, or the model isn't reported ``state: "loaded"``) is simply OMITTED
+    from the returned mapping — ``_score`` treats a missing entry as "no live
+    data available" and falls back to the litellm static-registry path (which
+    itself fails closed, returning 0, for unknown local ids). Never raises.
+    """
+    live_capabilities: dict[str, dict] = {}
+    if not model_ids:
+        return live_capabilities
+
+    fetched = await asyncio.gather(
+        *(
+            get_model_capabilities_from_lmstudio(http_client, lmstudio_base_url, model_id)
+            for model_id in model_ids
+        ),
+        return_exceptions=True,
+    )
+    for model_id, info in zip(model_ids, fetched):
+        if isinstance(info, dict):
+            live_capabilities[model_id] = info
+    return live_capabilities
 
 
 def _reset_cache_for_tests() -> None:
@@ -376,14 +478,30 @@ async def probe_classifier_model_ready(
 ) -> bool:
     """Return True iff a genuinely-loaded model SCORES for the 'structured' task kind.
 
-    This probe mirrors the EXACT model-selection path that ``classify_note`` uses via
-    ``_resolve_model_for_classification``:
+    This probe mirrors the EXACT model-selection path that ``classify_note`` (and every
+    ``six_rs/*`` structured-completion stage) uses via
+    ``model_resolution.resolve_structured_model``:
     - It discovers loaded models from the same ``/v1/models`` endpoint.
     - It builds the same ``preferences`` dict (``{"structured": model_preferred or model_name}``).
-    - It calls ``select_model("structured", loaded, preferences=..., default=None)`` with
-      ``default=None`` so that rule 3 (``default in loaded``) and rule 5 (bare default
-      even when nothing is loaded) CANNOT fire — a defaulted fallback selection is treated
-      as NOT ready (fail-closed).
+    - It fetches the SAME live LM Studio capability data via ``_fetch_live_capabilities``
+      (``resolve_structured_model`` fetches this too — fix-score-local-model-capabilities
+      round 2) and threads it into ``select_model`` as ``live_capabilities``, so both paths
+      score every candidate model identically instead of ``_score`` unconditionally
+      returning 0 for local model ids via litellm's static cloud registry.
+    - It calls ``select_model("structured", loaded, preferences=..., default=None,
+      live_capabilities=...)`` with ``default=None`` so that rule 3 (``default in loaded``)
+      and rule 5 (bare default even when nothing is loaded) CANNOT fire — a defaulted
+      fallback selection is treated as NOT ready (fail-closed).
+
+    ONE deliberate, documented divergence remains: ``resolve_structured_model`` calls
+    ``select_model`` with ``default=settings.model_name or None`` (not ``None``) — see
+    "WHY a defaulted/non-scored selection is treated as NOT ready" below. This means the
+    real classify/six_rs path can still resolve a model via rules 3/4/5 in a case this
+    probe reports as NOT ready — that is BY DESIGN (the probe is intentionally stricter
+    than the real resolver: it never treats a defaulted/non-scored selection as "ready"),
+    not an accidental drift. Everything upstream of that one rule (loaded models,
+    preferences, and — as of this fix — live_capabilities) is now identical between the
+    two paths.
 
     WHY a defaulted/non-scored selection is treated as NOT ready:
     ``select_model`` can still return a model via rule 4 (the SOLE entry in ``loaded``
@@ -429,6 +547,19 @@ async def probe_classifier_model_ready(
             # No models loaded — rule-5 defaulted selection is NOT ready (fail-closed)
             return False
 
+        # Fetch live per-model capability data from LM Studio's own
+        # /api/v0/models/{id} endpoint (fix-score-local-model-capabilities).
+        # litellm.get_model_info()/supports_function_calling() have no entry
+        # for local model ids, so without this every local model scores 0 for
+        # "structured" — permanently reporting "not ready" and silently
+        # disabling destructive vault sweeps on any local-LLM deployment.
+        # A model_id absent from this mapping (fetch failed / not loaded /
+        # unreachable) is NOT given any permissive default — _score falls
+        # through to the (also fail-closed) litellm path for it.
+        live_capabilities = await _fetch_live_capabilities(
+            http_client, lmstudio_base_url, loaded
+        )
+
         # Build preferences exactly as _resolve_model_for_classification does
         preferences: dict[str, str] = {}
         preferred = model_preferred or model_name
@@ -443,6 +574,7 @@ async def probe_classifier_model_ready(
                 loaded,
                 preferences=preferences,
                 default=None,
+                live_capabilities=live_capabilities,
             )
         except ModelSelectorError:
             # Nothing loaded and no default → not ready
@@ -453,7 +585,7 @@ async def probe_classifier_model_ready(
         # rule 4 (the sole entry in loaded, when len(loaded) == 1) may have
         # _score("structured", id) == 0 — that means no function calling support, and
         # classify_note would emit degraded output.
-        if _score("structured", selected_id) <= 0:
+        if _score("structured", selected_id, live_capabilities) <= 0:
             return False
 
         return True

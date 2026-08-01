@@ -544,7 +544,14 @@ async def run_sweep(
                             except _ProtectedPathError as exc:
                                 report.errors.append(f"protected: refused to move {path}: {exc}")
                         else:
-                            report.errors.append(f"degraded/unsafe: skipped noise-trash for {path}")
+                            msg = f"degraded/unsafe: skipped noise-trash for {path}"
+                            logger.warning(
+                                "sweep %s: skipping destructive noise-trash move for %r — "
+                                "classifier/embedding readiness probe reports unsafe",
+                                sweep_id,
+                                path,
+                            )
+                            report.errors.append(msg)
                     report.files_processed += 1
                     if status_callback:
                         status_callback(report)
@@ -590,6 +597,13 @@ async def run_sweep(
                     else:
                         # MANDATORY per-move safety check (re-evaluated before each relocate)
                         if not await _is_safe():
+                            logger.warning(
+                                "sweep %s: skipping destructive topic-move for %r (-> %r) — "
+                                "classifier/embedding readiness probe reports unsafe",
+                                sweep_id,
+                                path,
+                                proposed_dst,
+                            )
                             report.errors.append(f"degraded/unsafe: skipped topic-move for {path}")
                             report.files_processed += 1
                             if status_callback:
@@ -628,6 +642,12 @@ async def run_sweep(
                 if not dry_run and not await _is_safe():
                     # Unsafe — skip frontmatter write-back, don't add to survivors
                     # (no embedding index update with fresh hash either)
+                    logger.warning(
+                        "sweep %s: skipping classification frontmatter write-back for %r — "
+                        "classifier/embedding readiness probe reports unsafe",
+                        sweep_id,
+                        path,
+                    )
                     report.files_processed += 1
                     if status_callback:
                         status_callback(report)
@@ -740,6 +760,14 @@ async def run_sweep(
                         continue
                     # MANDATORY per-move safety check (re-evaluated before each dedup-trash)
                     if not await _is_safe():
+                        logger.warning(
+                            "sweep %s: skipping destructive dedup-trash move for %r "
+                            "(duplicate of %r) — classifier/embedding readiness probe "
+                            "reports unsafe",
+                            sweep_id,
+                            src,
+                            keeper_path,
+                        )
                         report.errors.append(f"degraded/unsafe: skipped dedup-trash for {src}")
                         continue
                     try:
@@ -777,6 +805,30 @@ async def run_sweep(
             except Exception as exc:
                 logger.warning("sweep log write failed: %s", exc)
                 report.errors.append(f"log: {exc}")
+
+        skipped_unsafe = sum(
+            1 for e in report.errors if e.startswith("degraded/unsafe:")
+        )
+        if skipped_unsafe:
+            # Aggregate summary — the per-move WARNINGs above are logged at the
+            # moment each move is skipped; this one-line rollup ensures an
+            # operator scanning logs after a "complete" sweep can immediately
+            # tell that moves were suppressed (and how many) even without
+            # reading every per-file line, rather than seeing a silent
+            # "complete" sweep that moved nothing.
+            logger.warning(
+                "sweep %s: complete with %d destructive move(s)/write-back(s) "
+                "SKIPPED due to unsafe classifier/embedding readiness — "
+                "processed %d/%d files, noise_moved=%d, duplicates_moved=%d, "
+                "topic_moves=%d",
+                sweep_id,
+                skipped_unsafe,
+                report.files_processed,
+                report.files_total,
+                report.noise_moved,
+                report.duplicates_moved,
+                report.topic_moves,
+            )
 
         report.status = "complete"
         return report

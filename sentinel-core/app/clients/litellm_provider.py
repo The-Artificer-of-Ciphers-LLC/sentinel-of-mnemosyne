@@ -159,3 +159,63 @@ async def get_context_window_from_lmstudio(
         return int(resp.json().get("max_context_length", 4096))
     except Exception:
         return 4096
+
+
+async def get_model_capabilities_from_lmstudio(
+    client: httpx.AsyncClient,
+    base_url: str,
+    model_name: str,
+) -> dict | None:
+    """
+    Fetch live capability data for ``model_name`` from LM Studio's
+    ``/api/v0/models/{model_name}`` endpoint (same endpoint/pattern as
+    ``get_context_window_from_lmstudio`` above and
+    ``sentinel_shared.model_profiles.get_profile`` — the confirmed live seam
+    for LM Studio model metadata; this reuses it rather than adding a new
+    HTTP client).
+
+    Returns a dict normalized to look like ``litellm.get_model_info()``'s
+    shape so callers (``app.services.model_selector._score``) can treat live
+    and litellm-sourced data uniformly:
+
+      - ``"max_tokens"``: int — LM Studio's ``max_context_length``
+      - ``"supports_function_calling"``: bool — whether LM Studio's
+        ``capabilities`` list contains ``"tool_use"`` (the local equivalent of
+        litellm's ``supports_function_calling``)
+      - ``"state"``: str — LM Studio's own ``state`` field, preserved for
+        callers that want it
+
+    Returns ``None`` — never a permissive default — on any HTTP/JSON failure,
+    a missing model (404), a non-dict response body, or when the model is not
+    reported ``state: "loaded"``. Callers MUST treat ``None`` as "no live
+    data available for this model" and fail closed accordingly (never assume
+    capability).
+
+    fix-score-local-model-capabilities: litellm's ``get_model_info()`` /
+    ``supports_function_calling()`` only know about a static cloud registry —
+    they have no entry for LM Studio-style local model ids (e.g.
+    "google/gemma-4-31b"), so every local model previously scored 0 for every
+    task_kind in ``model_selector._score``. This function is the live-data
+    source that fixes that.
+    """
+    api_base = base_url.rstrip("/").removesuffix("/v1")
+    try:
+        resp = await client.get(f"{api_base}/api/v0/models/{model_name}", timeout=5.0)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+    if data.get("state") != "loaded":
+        # Not genuinely loaded — fail closed, no permissive default.
+        return None
+
+    capabilities = data.get("capabilities") or []
+    max_tokens = data.get("max_context_length") or data.get("loaded_context_length") or 0
+    return {
+        "max_tokens": int(max_tokens),
+        "supports_function_calling": "tool_use" in capabilities,
+        "state": data.get("state"),
+    }

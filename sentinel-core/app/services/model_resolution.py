@@ -17,8 +17,11 @@ from __future__ import annotations
 
 import logging
 
+import httpx
+
 from app.config import settings
 from app.services.model_selector import (
+    _fetch_live_capabilities as _default_fetch_live_capabilities,
     ensure_litellm_prefix,
     get_loaded_models as _default_get_loaded_models,
     select_model as _default_select_model,
@@ -35,6 +38,7 @@ async def resolve_structured_model(
     get_loaded_models=_default_get_loaded_models,
     select_model=_default_select_model,
     get_profile=_default_get_profile,
+    fetch_live_capabilities=_default_fetch_live_capabilities,
 ) -> tuple[str, object | None, str | None]:
     """Resolve ``(prefixed_model_id, profile, api_base)`` for a structured-output
     (JSON-mode ``response_format``) completion call.
@@ -65,6 +69,38 @@ async def resolve_structured_model(
         logger.warning("resolve_structured_model: get_loaded_models failed: %s", exc)
         loaded = []
 
+    # Fetch live LM Studio capability data (fix-score-local-model-capabilities
+    # divergence fix, round 2): this is the SAME model-selection path
+    # ``probe_classifier_model_ready`` uses to decide whether a destructive
+    # vault sweep may run. Without live capability data here too, the probe
+    # could report "ready" (using live capabilities) while this function —
+    # the ACTUAL classify_note / six_rs structured-completion resolver —
+    # resolves a DIFFERENT model (e.g. via the rule-4 sole-candidate
+    # fallback, since a local model with no live capability data still
+    # scores 0 for "structured" via the litellm-only path). Fetching here
+    # too keeps both paths resolving the SAME model id from the SAME inputs.
+    #
+    # Deliberately non-fatal, mirroring every other except-warn fallback in
+    # this function: any failure (client construction, network, unreachable
+    # LM Studio) degrades to live_capabilities={} — i.e. exactly today's
+    # pre-fix litellm-only scoring behavior — never raises, and never
+    # changes the existing select_model except-handler's fallback ordering
+    # below.
+    live_capabilities: dict = {}
+    if loaded:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as http_client:
+                live_capabilities = await fetch_live_capabilities(
+                    http_client, api_base_v1, loaded
+                )
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning(
+                "resolve_structured_model: live capability fetch failed (%s); "
+                "falling back to litellm-only scoring",
+                exc,
+            )
+            live_capabilities = {}
+
     # Honor MODEL_PREFERRED for the structured task kind too — operators set
     # this when they want one specific model for everything (avoids LM Studio
     # TTL-unloading multiple models, pinning to known-working ones).
@@ -79,6 +115,7 @@ async def resolve_structured_model(
             loaded,
             preferences=preferences,
             default=settings.model_name or None,
+            live_capabilities=live_capabilities,
         )
     except Exception as exc:
         # select_model only raises when there's no configured default AND the loaded/catalog

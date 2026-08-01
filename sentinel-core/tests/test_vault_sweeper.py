@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json as _json  # local alias to avoid shadowing the module-level `json`
+import logging
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
@@ -1649,3 +1650,53 @@ async def test_dry_run_protected_relocation_dst_refused_namespace_poisoning(monk
 
     assert report.topic_moves == 0
     assert report.protected_refused == 1
+
+
+# ---------------------------------------------------------------------------
+# fix-score-local-model-capabilities Task 2: skipped-move logging
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_sweep_unsafe_skip_emits_warning_log(caplog):
+    """A destructive move skipped because ``_is_safe()`` is False must be
+    logged at WARNING (naming the path and the reason), not silently
+    swallowed. Previously a live sweep with an unready classifier/embedding
+    probe reported "complete" with zero moves and NO log trace of why."""
+    note_paths = ["random-folder/misplaced.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+    fake.notes["random-folder/misplaced.md"] = "A classifiable note body."
+
+    async def _always_false_probe():
+        return False
+
+    async def _classifier(text):
+        return ClassificationResult(topic="accomplishment", confidence=0.9, title_slug="x", reasoning="r")
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    with caplog.at_level(logging.WARNING, logger="app.services.vault_sweeper"):
+        report = await run_sweep(
+            fake, _classifier, _emb, force_reclassify=True,
+            safe_to_mutate=_always_false_probe,
+        )
+
+    assert report.topic_moves == 0
+
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert warnings, "expected at least one WARNING log for the skipped move"
+    assert any("random-folder/misplaced.md" in r.getMessage() for r in warnings), (
+        f"expected a WARNING naming the skipped path; got: "
+        f"{[r.getMessage() for r in warnings]}"
+    )
+    assert any(
+        "unsafe" in r.getMessage() or "readiness" in r.getMessage()
+        for r in warnings
+    ), "expected the WARNING to explain the reason (readiness/unsafe)"
+    # Aggregate rollup line — operator must be able to tell moves were
+    # suppressed even from a quick log scan, not just per-file lines.
+    assert any("SKIPPED" in r.getMessage() for r in warnings), (
+        f"expected an aggregate skipped-move summary WARNING; got: "
+        f"{[r.getMessage() for r in warnings]}"
+    )
