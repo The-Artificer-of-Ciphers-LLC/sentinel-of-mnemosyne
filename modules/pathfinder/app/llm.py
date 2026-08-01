@@ -168,7 +168,10 @@ async def generate_mj_description(
 ) -> str:
     """Generate a comma-separated visual description for a Midjourney token prompt (OUT-02).
 
-    Constrained LLM call: max_tokens=40 limits output to 15-30 tokens (D-10).
+    Constrained LLM call: output length is steered by the system prompt
+    ("15-30 tokens total"), not a max_tokens cap (D-10) — Phase 42 (D-09/SC-6)
+    rerouted this call through sentinel-core's POST /provider/complete, whose
+    request model (messages, stop, temperature) has no max_tokens field.
     Inputs sanitized (D-11): personality and backstory truncated to 200 chars and
     newlines replaced with spaces before LLM interpolation, blocking prompt injection.
     Returns plain string — NOT JSON-parsed.

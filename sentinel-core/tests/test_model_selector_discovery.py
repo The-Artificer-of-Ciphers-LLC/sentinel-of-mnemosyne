@@ -8,7 +8,6 @@ from app.errors import ModelSelectorError
 from app.services.model_selector import (  # noqa: F401 — probe used in tests below
     _reset_cache_for_tests,
     discover_active_model,
-    discover_via_exo_state,
     probe_embedding_model_loaded,
     select_model,
 )
@@ -378,40 +377,6 @@ def test_select_model_sole_candidate_is_unambiguous():
     assert result == "only-model-available"
 
 
-async def test_discovery_exo_style_catalog_honors_configured_default_not_catalog_zero(
-    monkeypatch,
-):
-    """End-to-end regression for exo-model-notfound-502 at the discover_active_model
-    level: a large, unscored, unmatched catalog (simulating exo's ~120-model
-    /v1/models advertisement) must resolve to the configured MODEL_NAME/MODEL_PREFERRED,
-    never to the catalog's first entry."""
-    monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
-    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
-    monkeypatch.setenv("MODEL_NAME", "mlx-community/Qwen3.5-27B-8bit")
-    monkeypatch.setenv("MODEL_PREFERRED", "qwen3.6-35b-a3b")  # stale — matches nothing
-    monkeypatch.setenv("AI_PROVIDER", "lmstudio")
-    monkeypatch.setenv("LMSTUDIO_BASE_URL", "http://test-exo/v1")
-    from app.config import Settings
-    s = Settings()
-
-    catalog = [
-        {"id": "mlx-community/MiniMax-M2.7-4bit"},  # catalog[0] — must NOT be chosen
-        {"id": "mlx-community/Some-Other-Model-4bit"},
-        {"id": "mlx-community/Qwen3.5-27B-8bit"},
-    ]
-
-    def handler(request):
-        return httpx.Response(200, json={"data": catalog})
-
-    transport = httpx.MockTransport(handler)
-    with patch("app.services.model_selector._score", side_effect=_unscored):
-        async with httpx.AsyncClient(transport=transport) as client:
-            result = await discover_active_model(s, client)
-
-    assert result == "openai/mlx-community/Qwen3.5-27B-8bit"
-    assert "MiniMax" not in result, "must never silently resolve to exo's catalog[0]"
-
-
 async def test_discovery_except_handler_falls_back_to_settings_model_name_not_loaded_zero(
     monkeypatch,
 ):
@@ -419,18 +384,17 @@ async def test_discovery_except_handler_falls_back_to_settings_model_name_not_lo
     `except ModelSelectorError` handler (distinct from select_model's internal logic)
     must fall back to settings.model_name, never loaded[0].
 
-    The test above (test_discovery_exo_style_catalog_honors_configured_default_not_catalog_zero)
-    passes a non-empty settings.model_name as `default` into select_model, which
-    select_model itself then returns via its own rule 3 ("default in loaded") — it never
-    actually raises, so that test never exercises discover_active_model's except-handler
-    at all. This test forces select_model to raise directly so the except-handler
-    (lines ~278-293) is genuinely hit."""
+    A test passing a non-empty settings.model_name as `default` into select_model
+    would have select_model itself return it via its own rule 3 ("default in
+    loaded") — it would never actually raise, so it wouldn't exercise
+    discover_active_model's except-handler at all. This test forces
+    select_model to raise directly so the except-handler is genuinely hit."""
     monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
     monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
     monkeypatch.setenv("MODEL_NAME", "configured-fallback-model")
     monkeypatch.setenv("MODEL_PREFERRED", "")
     monkeypatch.setenv("AI_PROVIDER", "lmstudio")
-    monkeypatch.setenv("LMSTUDIO_BASE_URL", "http://test-exo/v1")
+    monkeypatch.setenv("LMSTUDIO_BASE_URL", "http://test-lmstudio/v1")
     from app.config import Settings
     s = Settings()
 
@@ -454,234 +418,17 @@ async def test_discovery_except_handler_falls_back_to_settings_model_name_not_lo
     assert "MiniMax" not in result, "except-handler must never fall back to loaded[0]"
 
 
-# --- Task 1 (42-02): discover_via_exo_state — GET /state tagged-union discovery ---
-
-
-async def test_discover_via_exo_state_zero_instances_returns_empty_list():
-    """Zero running instances ({"instances": {}}) -> [] (D-08's zero-case)."""
-    def handler(request):
-        assert request.url.path == "/state"
-        return httpx.Response(200, json={"instances": {}})
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
-        result = await discover_via_exo_state("http://test-exo:52415/v1", client)
-
-    assert result == []
-
-
-async def test_discover_via_exo_state_mlx_ring_instance_unwraps_tagged_union():
-    """Single MlxRingInstance -> one model id via tagged-union unwrap."""
-    def handler(request):
-        return httpx.Response(
-            200,
-            json={
-                "instances": {
-                    "instance-1": {
-                        "MlxRingInstance": {
-                            "shardAssignments": {
-                                "modelId": "mlx-community/Qwen3.5-27B-8bit",
-                            }
-                        }
-                    }
-                }
-            },
-        )
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
-        result = await discover_via_exo_state("http://test-exo:52415/v1", client)
-
-    assert result == ["mlx-community/Qwen3.5-27B-8bit"]
-
-
-async def test_discover_via_exo_state_mlx_jaccl_instance_unwraps_tagged_union():
-    """Single MlxJacclInstance -> same tagged-union unwrap as MlxRingInstance."""
-    def handler(request):
-        return httpx.Response(
-            200,
-            json={
-                "instances": {
-                    "instance-1": {
-                        "MlxJacclInstance": {
-                            "shardAssignments": {
-                                "modelId": "mlx-community/Other-Model-4bit",
-                            }
-                        }
-                    }
-                }
-            },
-        )
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
-        result = await discover_via_exo_state("http://test-exo:52415/v1", client)
-
-    assert result == ["mlx-community/Other-Model-4bit"]
-
-
-async def test_discover_via_exo_state_malformed_shard_assignments_skipped_not_raised():
-    """A malformed/missing shardAssignments entry is skipped, not raised
-    (defensive structural walk) — a well-formed sibling instance is still
-    returned."""
-    def handler(request):
-        return httpx.Response(
-            200,
-            json={
-                "instances": {
-                    "instance-bad-1": {
-                        "MlxRingInstance": {
-                            # shardAssignments missing entirely
-                        }
-                    },
-                    "instance-bad-2": {
-                        "MlxRingInstance": {
-                            "shardAssignments": "not-a-dict",
-                        }
-                    },
-                    "instance-bad-3": "not-a-dict-either",
-                    "instance-good": {
-                        "MlxJacclInstance": {
-                            "shardAssignments": {
-                                "modelId": "mlx-community/Good-Model-4bit",
-                            }
-                        }
-                    },
-                }
-            },
-        )
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
-        result = await discover_via_exo_state("http://test-exo:52415/v1", client)
-
-    assert result == ["mlx-community/Good-Model-4bit"]
-
-
-async def test_discover_via_exo_state_accepts_snake_case_fallback():
-    """A1 defensive fallback: snake_case shard_assignments/model_id is also
-    accepted since the camelCase wire format was not live-curl-confirmed."""
-    def handler(request):
-        return httpx.Response(
-            200,
-            json={
-                "instances": {
-                    "instance-1": {
-                        "MlxRingInstance": {
-                            "shard_assignments": {
-                                "model_id": "mlx-community/Snake-Case-Model",
-                            }
-                        }
-                    }
-                }
-            },
-        )
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
-        result = await discover_via_exo_state("http://test-exo:52415/v1", client)
-
-    assert result == ["mlx-community/Snake-Case-Model"]
-
-
-async def test_discover_via_exo_state_strips_v1_suffix_before_state():
-    """base_url with a trailing /v1 (exo_base_url's default shape) must hit
-    {root}/state, not {root}/v1/state."""
-    captured: dict[str, str] = {}
-
-    def handler(request):
-        captured["path"] = request.url.path
-        return httpx.Response(200, json={"instances": {}})
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
-        await discover_via_exo_state("http://test-exo:52415/v1", client)
-
-    assert captured["path"] == "/state"
-
-
-async def test_discovery_exo_provider_uses_state_not_v1_models(monkeypatch):
-    """discover_active_model with ai_provider='exo' routes through GET /state,
-    not the generic /v1/models GET (SC-4, D-07)."""
-    monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
-    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
-    monkeypatch.setenv("MODEL_NAME", "fallback-model")
-    monkeypatch.setenv("AI_PROVIDER", "exo")
-    monkeypatch.setenv("EXO_BASE_URL", "http://test-exo:52415/v1")
-    from app.config import Settings
-    s = Settings()
-
-    def handler(request):
-        assert request.url.path == "/state", "must query /state, not /v1/models"
-        return httpx.Response(
-            200,
-            json={
-                "instances": {
-                    "instance-1": {
-                        "MlxRingInstance": {
-                            "shardAssignments": {
-                                "modelId": "mlx-community/Qwen3.5-27B-8bit",
-                            }
-                        }
-                    }
-                }
-            },
-        )
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
-        result = await discover_active_model(s, client)
-
-    assert result == "openai/mlx-community/Qwen3.5-27B-8bit"
-
-
-async def test_discovery_exo_zero_instances_never_guesses_falls_back_to_default(
-    monkeypatch,
-):
-    """D-08: zero exo instances must never yield a guessed model — falls back
-    to the configured MODEL_NAME default via select_model's documented
-    contract, exactly like get_loaded_models's [] result does for lmstudio."""
-    monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
-    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
-    monkeypatch.setenv("MODEL_NAME", "configured-default-model")
-    monkeypatch.setenv("AI_PROVIDER", "exo")
-    monkeypatch.setenv("EXO_BASE_URL", "http://test-exo:52415/v1")
-    from app.config import Settings
-    s = Settings()
-
-    def handler(request):
-        return httpx.Response(200, json={"instances": {}})
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
-        result = await discover_active_model(s, client)
-
-    assert result == "openai/configured-default-model"
-
-
-async def test_discovery_unknown_provider_logs_warning_not_silent_lmstudio_default(
-    monkeypatch, caplog
-):
-    """An unrecognized ai_provider logs a WARNING rather than silently
-    querying lmstudio_base_url (Pitfall 2)."""
-    import logging
+def test_ai_provider_rejects_unknown_value_at_settings_construction(monkeypatch) -> None:
+    """ai_provider is now a validated Literal (Task 3) — an unrecognized value
+    like the old 'totally-unknown-provider' probe must fail fast at Settings()
+    construction with a pydantic ValidationError, rather than reaching
+    discover_active_model's defensive 'Unknown AI_PROVIDER' WARNING branch at
+    all (that branch is now unreachable via a validly-constructed Settings)."""
+    import pydantic
 
     monkeypatch.setenv("SENTINEL_API_KEY", "test-key")
-    monkeypatch.setenv("MODEL_AUTO_DISCOVER", "true")
-    monkeypatch.setenv("MODEL_NAME", "fallback-model")
     monkeypatch.setenv("AI_PROVIDER", "totally-unknown-provider")
     from app.config import Settings
-    s = Settings()
 
-    def raise_connect(request):
-        raise httpx.ConnectError("refused")
-
-    transport = httpx.MockTransport(raise_connect)
-    with caplog.at_level(logging.WARNING, logger="app.services.model_selector"):
-        async with httpx.AsyncClient(transport=transport) as client:
-            result = await discover_active_model(s, client)
-
-    assert result == "openai/fallback-model"
-    assert any(
-        "Unknown AI_PROVIDER" in record.message for record in caplog.records
-    ), "unrecognized ai_provider must log a WARNING, not silently default"
+    with pytest.raises(pydantic.ValidationError):
+        Settings()

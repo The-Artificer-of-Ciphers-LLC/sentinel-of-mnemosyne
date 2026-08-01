@@ -36,7 +36,7 @@ def setup_app_state(mock_ai_provider):
     app.state.route_ctx = RouteContext(
         vault=AsyncMock(),
         ai_provider=mock_ai_provider,
-        ai_provider_name="exo",
+        ai_provider_name="lmstudio",
     )
     yield
     if orig is _MISSING:
@@ -54,7 +54,7 @@ async def test_provider_complete_success(mock_ai_provider):
         resp = await client.post("/provider/complete", json=_VALID_BODY, headers=AUTH_HEADERS)
 
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"content": "Hi there", "model": "exo"}
+    assert resp.json() == {"content": "Hi there", "model": "lmstudio"}
     mock_ai_provider.complete.assert_awaited_once()
     call_args = mock_ai_provider.complete.call_args
     assert call_args.args[0] == [{"role": "user", "content": "hello"}]
@@ -83,7 +83,7 @@ async def test_provider_complete_503_on_provider_unavailable(mock_ai_provider):
     """ProviderUnavailableError -> 503 with a generic detail; no secrets leaked (T-42-08)."""
     mock_ai_provider.complete = AsyncMock(
         side_effect=ProviderUnavailableError(
-            "Both providers failed. api_base=http://secret-exo-host:52415 api_key=sk-super-secret"
+            "Both providers failed. api_base=http://secret-lmstudio-host:1234 api_key=sk-super-secret"
         )
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -91,7 +91,7 @@ async def test_provider_complete_503_on_provider_unavailable(mock_ai_provider):
 
     assert resp.status_code == 503
     body_text = resp.text
-    assert "secret-exo-host" not in body_text
+    assert "secret-lmstudio-host" not in body_text
     assert "sk-super-secret" not in body_text
 
 

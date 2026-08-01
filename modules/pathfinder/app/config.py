@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     obsidian_api_key: str = ""  # blank if Obsidian REST API auth disabled
 
     # LiteLLM — API base for the embeddings/rules-index path (Phase 33/43).
-    # Local OpenAI-compatible inference backend (e.g. exo, LM Studio) reached via
+    # Local OpenAI-compatible inference backend (LM Studio) reached via
     # Docker's host-gateway alias -- NOT "localhost", which inside this container
     # resolves to the container itself rather than the host machine running the
     # backend (T-lmstudio-provider-switch). Override via LITELLM_API_BASE in .env.

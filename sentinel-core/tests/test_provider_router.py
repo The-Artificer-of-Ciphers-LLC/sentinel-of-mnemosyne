@@ -77,8 +77,9 @@ async def test_raises_unavailable_with_no_fallback(primary):
 
 
 async def test_falls_back_on_not_found_error(primary, fallback):
-    """D-06: litellm.NotFoundError (exo's real 404 failure mode) triggers fallback,
-    mirroring the existing ConnectError/TimeoutException behavior."""
+    """D-06: litellm.NotFoundError (a model-not-served backend's 404 failure mode)
+    triggers fallback, mirroring the existing ConnectError/TimeoutException
+    behavior."""
     primary.complete.side_effect = litellm.NotFoundError(
         "no instance found", llm_provider="openai", model="mlx-community/x"
     )

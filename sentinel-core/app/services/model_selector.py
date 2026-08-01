@@ -220,63 +220,6 @@ def _reset_cache_for_tests() -> None:
     _model_cache.clear()
 
 
-async def discover_via_exo_state(
-    base_url: str, http_client: httpx.AsyncClient
-) -> list[str]:
-    """Return the list of currently-loaded exo model ids via GET /state.
-
-    Unlike /v1/models (a ~120-entry static catalog of servable-but-not-
-    necessarily-running models), /state.instances reflects ONLY models with
-    an active running instance. Each instance value is a tagged union —
-    {"MlxRingInstance": {...}} or {"MlxJacclInstance": {...}} — with the
-    model id at <tag-value>.shardAssignments.modelId (camelCase on the wire,
-    per exo's alias_generator=to_camel). Since the exact wire format was not
-    live-curl-confirmed (RESEARCH.md Assumptions Log A1), the snake_case
-    shard_assignments/model_id spelling is also accepted defensively.
-
-    /state lives at exo's API root, not under /v1 — a trailing "/v1" on
-    base_url (exo_base_url's default shape, e.g.
-    "http://host.docker.internal:52415/v1") is stripped before appending
-    /state, mirroring get_context_window_from_lmstudio's existing /v1 ->
-    /api/v0 strip pattern (app/clients/litellm_provider.py).
-
-    A malformed/missing shardAssignments entry (or a non-dict instance/
-    tagged body) is skipped, not raised — a defensive structural walk that
-    survives exo API version bumps better than exact-schema parsing.
-
-    Zero running instances -> "instances": {} -> returns [] (the caller
-    feeds this into select_model(), which raises ModelSelectorError rather
-    than guessing when `loaded` is empty and no default is configured —
-    D-08; it never picks an arbitrary catalog[0] entry).
-    """
-    root = base_url.rstrip("/").removesuffix("/v1")
-    resp = await http_client.get(f"{root}/state", timeout=5.0)
-    resp.raise_for_status()
-    data = resp.json()
-    instances = data.get("instances", {}) if isinstance(data, dict) else {}
-
-    model_ids: list[str] = []
-    for instance_value in instances.values():
-        if not isinstance(instance_value, dict):
-            continue
-        # Tagged union: exactly one key, the class name
-        # (MlxRingInstance | MlxJacclInstance).
-        for tagged_body in instance_value.values():
-            if not isinstance(tagged_body, dict):
-                continue
-            shard = tagged_body.get("shardAssignments")
-            if not isinstance(shard, dict):
-                shard = tagged_body.get("shard_assignments")
-            if not isinstance(shard, dict):
-                continue
-            model_id = shard.get("modelId")
-            if not isinstance(model_id, str) or not model_id:
-                model_id = shard.get("model_id")
-            if isinstance(model_id, str) and model_id:
-                model_ids.append(model_id)
-    return model_ids
-
-
 async def discover_active_model(
     settings: "Settings",
     http_client: httpx.AsyncClient,
@@ -291,7 +234,7 @@ async def discover_active_model(
     backend's model regardless of which provider is active (e.g. building a
     fallback provider_map entry) must use a dedicated discovery function
     instead, such as ``discover_lmstudio_model`` — see its docstring for the
-    exo<->lmstudio bidirectional-fallback rationale (SC-3).
+    bidirectional-fallback rationale (SC-3).
     """
     # Resolve base URL for the active provider — table-driven (Pitfall 2 fix).
     # An unrecognized ai_provider logs a WARNING rather than silently
@@ -302,7 +245,6 @@ async def discover_active_model(
         "lmstudio": settings.lmstudio_base_url,
         "ollama": settings.ollama_base_url,
         "llamacpp": settings.llamacpp_base_url,
-        "exo": settings.exo_base_url,
     }
     if settings.ai_provider in provider_base_urls:
         base_url = provider_base_urls[settings.ai_provider]
@@ -326,21 +268,18 @@ async def discover_lmstudio_model(
 ) -> str:
     """Discover LM Studio's OWN active model — independent of settings.ai_provider.
 
-    ``discover_active_model`` is ai_provider-aware: when ``settings.ai_provider
-    == "exo"`` it queries exo (via ``discover_via_exo_state``), NOT LM Studio.
-    That is correct for resolving whichever provider is currently ACTIVE, but
-    it is WRONG for building the LM Studio entry in composition.py's
-    ``provider_map`` — that entry is unconditionally paired with
-    ``settings.lmstudio_base_url`` and must therefore always hold LM STUDIO's
-    own loaded model, so LM Studio works correctly as either the primary OR
-    the fallback provider (SC-3 bidirectional lmstudio<->exo fallback).
+    ``discover_active_model`` is ai_provider-aware: it queries whichever
+    backend is currently active. That is correct for resolving whichever
+    provider is currently ACTIVE, but it is WRONG for building the LM Studio
+    entry in composition.py's ``provider_map`` — that entry is unconditionally
+    paired with ``settings.lmstudio_base_url`` and must therefore always hold
+    LM STUDIO's own loaded model, so LM Studio works correctly as either the
+    primary OR the fallback provider (SC-3 bidirectional fallback).
 
-    Mirrors ``discover_via_exo_state``'s existing unconditional independence
-    from ``settings.ai_provider`` (D-07) — that same independence was
-    previously missing on the LM Studio side: with ai_provider="exo", the LM
-    Studio provider_map entry got LM Studio's api_base paired with exo's
-    discovered model id, so a fallback to LM Studio would request a model LM
-    Studio doesn't serve.
+    This discovery call is unconditionally independent of
+    ``settings.ai_provider`` (D-07) so a fallback to LM Studio always
+    requests a model LM Studio actually serves, regardless of which provider
+    is primary.
 
     Never raises — mirrors discover_active_model's non-fatal contract.
     """
@@ -358,11 +297,10 @@ async def _discover_model_for_provider(
 ) -> str:
     """Shared discovery + selection + prefixing pipeline.
 
-    ``provider`` decides both the fetch strategy (exo's GET /state vs the
-    generic OpenAI-compatible GET /models) and the litellm prefix (only
-    "ollama" gets "ollama/"; every other provider — including lmstudio — gets
-    "openai/", matching pre-refactor behavior). ``base_url`` is the
-    already-resolved endpoint to query.
+    ``provider`` decides the litellm prefix (only "ollama" gets "ollama/";
+    every other provider — including lmstudio — gets "openai/", matching
+    pre-refactor behavior) via the generic OpenAI-compatible GET /models
+    fetch. ``base_url`` is the already-resolved endpoint to query.
 
     Extracted from ``discover_active_model`` so the active-provider-selection
     path (``discover_active_model``) and the LM-Studio-specific fallback-entry
@@ -385,15 +323,10 @@ async def _discover_model_for_provider(
 
     url = base_url.rstrip("/")
     try:
-        if provider == "exo":
-            # exo's /v1/models advertises ~120 servable-but-not-running
-            # models; only GET /state reflects what's ACTUALLY loaded (D-07).
-            loaded = await discover_via_exo_state(url, http_client)
-        else:
-            resp = await http_client.get(f"{url}/models", timeout=5.0)
-            resp.raise_for_status()
-            data = resp.json()
-            loaded = [e["id"] for e in data.get("data", []) if isinstance(e.get("id"), str)]
+        resp = await http_client.get(f"{url}/models", timeout=5.0)
+        resp.raise_for_status()
+        data = resp.json()
+        loaded = [e["id"] for e in data.get("data", []) if isinstance(e.get("id"), str)]
     except Exception as exc:
         logger.warning("Model discovery failed: %s — using MODEL_NAME=%s", exc, settings.model_name)
         return _prefixed(settings.model_name)

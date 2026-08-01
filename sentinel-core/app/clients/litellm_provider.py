@@ -56,7 +56,7 @@ class LiteLLMProvider:
     """
     AI backend client wrapping litellm.acompletion().
 
-    LM Studio:  model_string="openai/<model_name>", api_base="http://host.docker.internal:52415/v1"
+    LM Studio:  model_string="openai/<model_name>", api_base="http://host.docker.internal:1234/v1"
     Claude:     model_string="claude-haiku-4-5" (or sonnet), api_key=anthropic_api_key
     Ollama:     model_string="ollama/<model_name>", api_base="http://<host>:11434"
     llama.cpp:  model_string="openai/<model_name>", api_base="http://<host>:8080/v1"
@@ -124,7 +124,21 @@ class LiteLLMProvider:
                     "Try a shorter message."
                 ) from exc
             raise
-        return response.choices[0].message.content
+        # Reasoning models (e.g. google/gemma-4-31b) can return `content`
+        # empty/None with the actual text in `reasoning_content` — mirrors
+        # the LM Studio + Qwen3 thinking-mode fallback used in
+        # app/services/six_rs/reduce.py::_extract_completion_content and
+        # pipeline_orchestrator.py::_extract_completion_content (bug #1773).
+        # POST /provider/complete's response model declares `content: str`,
+        # so this must never return None — "" is the floor.
+        msg = response.choices[0].message
+        if isinstance(msg, dict):
+            return msg.get("content") or msg.get("reasoning_content") or ""
+        return (
+            getattr(msg, "content", None)
+            or getattr(msg, "reasoning_content", None)
+            or ""
+        )
 
 
 async def get_context_window_from_lmstudio(

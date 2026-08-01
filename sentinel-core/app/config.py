@@ -6,7 +6,7 @@ Never call os.getenv() directly — use settings singleton instead.
 Secret fields (API keys, tokens) are read from /run/secrets/<name> files when running
 in Docker. Falls back to environment variables for local development without Docker secrets.
 """
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
@@ -24,13 +24,12 @@ def _read_secret(name: str, env_fallback: str = "") -> str:
 
 
 class Settings(BaseSettings):
-    # Local OpenAI-compatible inference backend (e.g. exo, LM Studio) reached via
-    # Docker's host-gateway alias -- NOT "localhost", which inside this container
-    # resolves to the container itself rather than the host machine running the
-    # backend (T-lmstudio-provider-switch). Override via LMSTUDIO_BASE_URL in .env.
-    # NOTE: the default now points at LM Studio on port 1234, which DOES implement
-    # POST /v1/embeddings. This field is the LM Studio (chat) endpoint and must not
-    # be confused with `exo_base_url` below, which keeps exo's own port 52415.
+    # Local OpenAI-compatible inference backend (LM Studio) reached via Docker's
+    # host-gateway alias -- NOT "localhost", which inside this container resolves
+    # to the container itself rather than the host machine running the backend
+    # (T-lmstudio-provider-switch). Override via LMSTUDIO_BASE_URL in .env.
+    # The default points at LM Studio on port 1234, which implements
+    # POST /v1/embeddings.
     lmstudio_base_url: str = "http://host.docker.internal:1234/v1"
     sentinel_api_key: str  # Required — no default. Startup fails fast if missing.
     # Tracked default kept in sync with the model actually loaded in LM Studio
@@ -44,21 +43,25 @@ class Settings(BaseSettings):
     # app/services/vault_sweeper.py (260502-1zv D-03).
     embedding_model: str = "text-embedding-nomic-embed-text-v1.5"
     # Embeddings backend — fully independent of the chat `ai_provider` (D-04).
-    # Defaults to LM Studio's nomic endpoint on port 1234 (D-01), NOT exo's
-    # 52415 (exo does not implement POST /v1/embeddings as of this writing —
-    # see exo-explore/exo#1047, D-02). Setting `lmstudio_base_url` or
-    # `exo_base_url` (both chat-only) does NOT affect this field and vice
-    # versa — chat can run on exo while embeddings run on LM Studio
-    # simultaneously. Override via EMBEDDING_BASE_URL in .env (D-03).
+    # Defaults to LM Studio's nomic endpoint on port 1234 (D-01). LM Studio was
+    # chosen specifically because the prior local backend never implemented
+    # POST /v1/embeddings (see exo-explore/exo#1047, D-02) — that history is
+    # why this field exists as its own independently-configurable setting
+    # rather than reusing `lmstudio_base_url`. Setting `lmstudio_base_url`
+    # (chat-only) does NOT affect this field and vice versa. Override via
+    # EMBEDDING_BASE_URL in .env (D-03).
     embedding_base_url: str = "http://host.docker.internal:1234/v1"
     embedding_api_key: str = ""  # optional — only if the embeddings backend requires auth
     log_level: str = "INFO"
     obsidian_api_url: str = "http://host.docker.internal:27123"  # HTTP mode (port 27123, not 27124)
     obsidian_api_key: str = ""  # blank = no Authorization header sent
 
-    # AI provider selection (PROV-01, PROV-02)
-    ai_provider: str = "lmstudio"  # lmstudio | claude | ollama | llamacpp | exo
-    ai_fallback_provider: str = "none"  # any configured provider name, or "none" (D-05)
+    # AI provider selection (PROV-01, PROV-02). Literal (not bare str) so a
+    # stale/typo'd AI_PROVIDER (e.g. the retired "exo") fails fast at startup
+    # with a clear pydantic ValidationError instead of silently degrading to
+    # LM Studio at the primary-provider selection call site.
+    ai_provider: Literal["lmstudio", "claude", "ollama", "llamacpp"] = "lmstudio"
+    ai_fallback_provider: Literal["lmstudio", "claude", "ollama", "llamacpp", "none"] = "none"  # (D-05)
 
     # Claude / Anthropic (PROV-02)
     anthropic_api_key: str = ""  # blank = Claude provider disabled
@@ -74,17 +77,6 @@ class Settings(BaseSettings):
 
     # LM Studio API key (optional — only if LM Studio auth is enabled)
     lmstudio_api_key: str = ""
-
-    # exo (D-03) — dedicated config, independent of lmstudio_*. exo and LM Studio
-    # can be configured simultaneously; ai_provider selects which is active.
-    exo_base_url: str = "http://host.docker.internal:52415/v1"
-    # Blank = auto-discover the currently-loaded model via exo's GET /state
-    # (D-07/D-08). Deliberately NOT a hardcoded model id — exo advertises ~120
-    # catalog entries via /v1/models but serves only whatever instance is
-    # actually loaded (exo-model-notfound-502); guessing a default here would
-    # reproduce that bug.
-    exo_model: str = ""
-    exo_api_key: str = ""
 
     # Model auto-discovery (lcl-model-agnostic)
     model_auto_discover: bool = True
@@ -108,7 +100,6 @@ class Settings(BaseSettings):
             "sentinel_api_key": "sentinel_api_key",
             "obsidian_api_key": "obsidian_api_key",
             "lmstudio_api_key": "lmstudio_api_key",
-            "exo_api_key": "exo_api_key",
             "embedding_api_key": "embedding_api_key",
             "anthropic_api_key": "anthropic_api_key",
             "alpaca_paper_api_key": "alpaca_paper_api_key",

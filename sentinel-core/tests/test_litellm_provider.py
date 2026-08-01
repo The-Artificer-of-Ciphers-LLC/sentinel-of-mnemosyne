@@ -68,6 +68,31 @@ async def test_retries_on_timeout_exception(lmstudio_provider):
     assert mock_call.call_count == 3
 
 
+async def test_complete_falls_back_to_reasoning_content_when_content_is_none(lmstudio_provider):
+    """Reasoning models (e.g. google/gemma-4-31b) can return `content` empty/None
+    with the actual text in `reasoning_content` (bug #1773 precedent — qwen3
+    thinking-mode). complete() must return the reasoning text, not None, since
+    POST /provider/complete's response model declares `content: str`."""
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = None
+    mock_response.choices[0].message.reasoning_content = "thought text"
+    with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_response):
+        result = await lmstudio_provider.complete([{"role": "user", "content": "hi"}])
+    assert result == "thought text"
+
+
+async def test_complete_returns_empty_string_when_both_content_and_reasoning_empty(lmstudio_provider):
+    """Never return None even when both fields are empty — "" is the floor."""
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = None
+    mock_response.choices[0].message.reasoning_content = None
+    with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_response):
+        result = await lmstudio_provider.complete([{"role": "user", "content": "hi"}])
+    assert result == ""
+
+
 async def test_get_context_window_from_lmstudio_returns_value():
     import httpx
     def handler(request):

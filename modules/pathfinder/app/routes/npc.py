@@ -706,7 +706,10 @@ async def token_prompt(req: NPCOutputRequest) -> JSONResponse:
     if note_text is None:
         raise HTTPException(status_code=404, detail={"error": "NPC not found", "slug": slug})
     fields = _parse_frontmatter(note_text)
-    # Task kind "fast" — max_tokens=40, prefers smaller/cheaper model above 4K ctx
+    # Task kind "fast" scores loaded models toward the smallest one with >=4K
+    # context (app/model_selector.py); no max_tokens cap is applied. The
+    # resolved model/profile below are vestigial and discarded — sentinel-core's
+    # /provider/complete resolves the actual model itself (D-09, SC-6).
     r = await resolve("fast")
     description = await generate_mj_description(
         fields=fields,

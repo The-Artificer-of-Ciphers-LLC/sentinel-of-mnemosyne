@@ -7,8 +7,6 @@ Stored in app.state.model_registry as dict[str, ModelInfo].
 
 Per-provider live fetch:
   LM Studio: GET /api/v0/models/{model_name} → max_context_length
-  exo:       no context-window endpoint (Pitfall 4) → model_profiles family
-             inference only, keyed on the model discovered via GET /state
   Claude:    Anthropic SDK models.list() → max_input_tokens (or seed fallback)
   Ollama:    POST /api/show → model_info.llama.context_length (stub — seed only)
   llama.cpp: GET /props → n_ctx (stub — seed only)
@@ -132,52 +130,6 @@ async def _fetch_lmstudio(
     }
 
 
-async def _fetch_exo(
-    settings: Settings, discovered_name: str
-) -> dict[str, "ModelInfo"]:
-    """Infer exo's context window via model_profiles family-based lookup.
-
-    exo has no LM-Studio-style /api/v0/models/{id} context-window endpoint
-    (Pitfall 4 / Assumption A2) — do NOT route through _fetch_lmstudio or
-    attempt that call against exo at all. Goes straight to the
-    model_profiles family-based inference _fetch_lmstudio itself only uses
-    as a secondary fallback.
-
-    Non-fatal: any failure (network, unknown family) degrades to the
-    conservative 4096 default and is logged, never crashes startup.
-    """
-    ctx = 4096
-    notes = "exo: no context-window endpoint — using conservative 4096 default"
-    try:
-        profile = await get_profile(discovered_name, api_base=settings.exo_base_url)
-        if profile.context_window and profile.context_window != 4096:
-            ctx = profile.context_window
-            notes = (
-                f"exo: context inferred from model_profiles family '{profile.family}' "
-                "(exo has no /api/v0/models/{id}-equivalent endpoint)"
-            )
-        else:
-            logger.info(
-                "exo: model_profiles has no better value for '%s' — using 4096 default",
-                discovered_name,
-            )
-    except Exception as exc:
-        logger.warning(
-            "exo model_profiles fallback failed for '%s' — using 4096 default: %s",
-            discovered_name,
-            exc,
-        )
-    return {
-        discovered_name: ModelInfo(
-            id=discovered_name,
-            provider="exo",
-            context_window=ctx,
-            capabilities={"chat": True},
-            notes=notes,
-        )
-    }
-
-
 async def _fetch_claude(settings: Settings) -> dict[str, "ModelInfo"]:
     """
     Fetch model list from Anthropic API via app/clients/anthropic_registry.py.
@@ -224,14 +176,6 @@ async def build_model_registry(
         registry.update(live)
     elif settings.ai_provider == "claude":
         live = await _fetch_claude(settings)
-        registry.update(live)
-    elif settings.ai_provider == "exo":
-        # exo has no LM-Studio-style /api/v0/models/{id} endpoint (Pitfall
-        # 4) — skip _fetch_lmstudio entirely and go straight to the
-        # model_profiles family-based inference via _fetch_exo.
-        model_str = await discover_active_model(settings, http_client)
-        discovered_exo_name = strip_litellm_prefix(model_str, prefixes=_ORIGINAL_PREFIXES)
-        live = await _fetch_exo(settings, discovered_exo_name)
         registry.update(live)
     elif settings.ai_provider == "ollama":
         logger.info("Ollama registry fetch: stub only — using seed data")

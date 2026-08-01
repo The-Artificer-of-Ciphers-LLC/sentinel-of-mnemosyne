@@ -12,10 +12,13 @@ Per CONTEXT.md Phase 4 decisions:
   - Both fail → HTTP 503 with detail explaining both failed, log both at ERROR level
 
 Per Phase 42 decision D-06: litellm.NotFoundError (HTTP 404) is ALSO a fallback
-trigger — exo's real failure mode when zero instances are loaded is a 404, so a
-ConnectError-only fallback would never fire for it. NotFoundError is a fallback
-trigger ONLY — it is deliberately NOT added to app/clients/litellm_provider.py's
-retryable set (a 404 is not a transient error).
+trigger — a model-not-served backend can fail with a plain 404 rather than a
+connectivity error, so a ConnectError-only fallback would never fire for it.
+Formerly justified by the (now-retired) exo backend's 404-on-no-instance
+behavior; kept as a general safety net for any openai_compatible backend with
+the same failure shape. NotFoundError is a fallback trigger ONLY — it is
+deliberately NOT added to app/clients/litellm_provider.py's retryable set (a
+404 is not a transient error).
 """
 import logging
 
@@ -28,7 +31,7 @@ from app.errors import ContextLengthError, ProviderUnavailableError
 _FALLBACK_TRIGGERS = (
     httpx.ConnectError,
     httpx.TimeoutException,
-    litellm.NotFoundError,  # D-06: exo's real failure mode is a 404
+    litellm.NotFoundError,  # D-06: model-not-served backends can fail with a 404
 )
 
 logger = logging.getLogger(__name__)
@@ -42,7 +45,7 @@ class ProviderRouter:
     Routes complete() calls to primary provider, with optional fallback.
 
     Fallback is triggered on httpx.ConnectError, httpx.TimeoutException, or
-    litellm.NotFoundError (D-06 — model-not-served, e.g. exo's 404). All other
+    litellm.NotFoundError (D-06 — model-not-served backends can 404). All other
     exceptions (other HTTP errors, auth failures, rate limits) propagate unchanged.
     """
 

@@ -24,12 +24,10 @@ from app.clients.litellm_provider import LiteLLMProvider
 from app.services.injection_filter import InjectionFilter
 from app.services.message_processing import MessageProcessor
 from app.services.recall import Recall, RecallConfig, RetentionPolicy, SemanticRecall
-from app.errors import ModelSelectorError
 from app.services.model_registry import build_model_registry
 from app.services.model_selector import (
     _ORIGINAL_PREFIXES,
     discover_lmstudio_model,
-    discover_via_exo_state,
     probe_embedding_model_loaded,
     select_model,
     strip_litellm_prefix,
@@ -135,12 +133,8 @@ async def build_provider_router(
     model_registry = await build_model_registry(settings, http_client)
 
     # LM Studio model resolution — ALWAYS attempted independently via LM
-    # Studio's own discovery path (mirrors the exo resolution below), so LM
-    # Studio works correctly as either the primary OR the fallback provider
-    # (SC-3 bidirectional fallback). discover_active_model() would instead
-    # resolve whichever provider is currently ACTIVE (e.g. exo's model when
-    # ai_provider="exo"), which broke exo-primary -> lmstudio-fallback by
-    # pairing LM Studio's api_base with exo's discovered model id.
+    # Studio's own discovery path, so LM Studio works correctly as either the
+    # primary OR the fallback provider (SC-3 bidirectional fallback).
     lmstudio_model_str = await discover_lmstudio_model(settings, http_client)
     # Strip ONLY the litellm provider tag — keep any HF-style namespace inside
     # the bare id (e.g. "qwen/qwen2.5-coder-14b" must round-trip verbatim).
@@ -148,45 +142,15 @@ async def build_provider_router(
         lmstudio_model_str, prefixes=_ORIGINAL_PREFIXES
     )
 
-    # exo model resolution — ALWAYS attempted independently via GET /state
-    # (D-07), regardless of which provider is currently active, so exo works
-    # correctly as either the primary OR the fallback provider (D-05
-    # generalized fallback). Never a hardcoded model id (D-08).
-    try:
-        exo_loaded = await discover_via_exo_state(settings.exo_base_url, http_client)
-    except Exception as exc:
-        logger.warning(
-            "exo /state discovery failed (%s): %s", settings.exo_base_url, exc
-        )
-        exo_loaded = []
-    try:
-        resolved_exo_model = select_model(
-            "chat", exo_loaded, default=settings.exo_model or None
-        )
-    except ModelSelectorError:
-        # No safe candidate among discovered instances and no configured
-        # default — never guess an arbitrary loaded[0] (D-08). Degrade to
-        # settings.exo_model (possibly blank; the exo provider entry will
-        # simply be unusable until an instance loads or EXO_MODEL is set).
-        resolved_exo_model = settings.exo_model
-        if not resolved_exo_model:
-            logger.warning(
-                "exo: no loaded model discovered via GET /state and no "
-                "EXO_MODEL configured — exo provider entry will be unusable "
-                "until an instance is loaded or EXO_MODEL is set"
-            )
-
     # Table-driven active_model lookup (Pitfall 1 fix) — replaces the ternary
     # chain that silently fell through to llamacpp_model for any unlisted
-    # ai_provider (including exo, before this phase). An unrecognized
-    # ai_provider now logs a WARNING instead of silently adopting another
-    # provider's model name.
+    # ai_provider. An unrecognized ai_provider now logs a WARNING instead of
+    # silently adopting another provider's model name.
     active_model_table = {
         "lmstudio": lmstudio_model_name,
         "claude": settings.claude_model,
         "ollama": settings.ollama_model,
         "llamacpp": settings.llamacpp_model,
-        "exo": resolved_exo_model,
     }
     if settings.ai_provider in active_model_table:
         active_model = active_model_table[settings.ai_provider]
@@ -210,23 +174,20 @@ async def build_provider_router(
     # Fetch model profile for stop sequences — non-fatal; defaults to no stop
     # sequences. api_base/model resolve from the ACTIVE provider's table
     # entry (Pitfall 3 fix), not unconditionally lmstudio_base_url regardless
-    # of settings.ai_provider — both lmstudio AND exo can be configured
-    # simultaneously (D-02), so the fetch must follow whichever is active.
+    # of settings.ai_provider.
     stop_seq_base_url_table = {
         "lmstudio": settings.lmstudio_base_url,
-        "exo": settings.exo_base_url,
         "ollama": settings.ollama_base_url,
         "llamacpp": settings.llamacpp_base_url,
     }
     stop_seq_model_table = {
         "lmstudio": lmstudio_model_name,
-        "exo": resolved_exo_model,
         "ollama": settings.ollama_model,
         "llamacpp": settings.llamacpp_model,
     }
     active_api_base = (
         stop_seq_base_url_table.get(settings.ai_provider, settings.lmstudio_base_url)
-        or "http://host.docker.internal:52415"
+        or "http://host.docker.internal:1234"
     )
     active_profile_model = stop_seq_model_table.get(
         settings.ai_provider, lmstudio_model_name
@@ -252,20 +213,12 @@ async def build_provider_router(
         lmstudio_stop_sequences = []
 
     # All backends route through LiteLLMProvider (RD-02 — eliminate stub providers).
-    # lmstudio and exo are both openai_compatible entries (D-01/D-02/D-03) —
-    # exo follows the exact same shape as lmstudio, just keyed on its own
-    # dedicated settings (exo_base_url/exo_api_key) and its own /state-derived
-    # model, so switching AI_PROVIDER between the two is config-only (SC-2).
+    # lmstudio is an openai_compatible entry (D-01/D-02/D-03).
     provider_map = {
         "lmstudio": LiteLLMProvider(
             model_string=lmstudio_model_str,  # discovered, not hardcoded
             api_base=settings.lmstudio_base_url,
             api_key="lmstudio",
-        ),
-        "exo": LiteLLMProvider(
-            model_string=f"openai/{resolved_exo_model}",
-            api_base=settings.exo_base_url,
-            api_key=settings.exo_api_key or None,
         ),
         "ollama": LiteLLMProvider(
             model_string=f"ollama/{settings.ollama_model}",
