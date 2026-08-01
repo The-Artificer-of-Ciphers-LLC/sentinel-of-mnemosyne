@@ -12,3 +12,6 @@ __pycache__/
 # Python virtualenvs (bare pattern also catches symlinks, not just dirs)
 .venv
 .venv/
+
+# Linked git worktrees created for agentic work (never commit their contents)
+.claude/worktrees/
