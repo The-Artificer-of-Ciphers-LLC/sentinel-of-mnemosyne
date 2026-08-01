@@ -8,3 +8,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+
+# Python virtualenvs (bare pattern also catches symlinks, not just dirs)
+.venv
+.venv/
