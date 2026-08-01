@@ -106,3 +106,30 @@ def plan_duplicate_trash(
         dst=f"_trash/{today}/{filename}",
         reason=f"duplicate of {keeper_path} (cosine≥0.92, conf={confidence:.1f})",
     )
+
+
+def is_move_protected(plan: SweepMovePlan) -> bool:
+    """True when a LIVE sweep would REFUSE ``plan`` via the protected-namespace guard.
+
+    Dry-run/live parity fix: ``ObsidianVault.move_to_trash`` refuses whenever
+    the SOURCE path is protected, and ``ObsidianVault.relocate`` refuses
+    whenever EITHER the source OR the destination is protected (the
+    destination check exists to stop namespace poisoning — moving arbitrary
+    content INTO ``sentinel/``, ``self/``, ``security/``, or ``templates/``).
+    Checking both ``plan.src`` and ``plan.dst`` here means a dry-run report
+    reflects exactly what the live path would do for every move kind: for
+    ``kind="trash"`` the dst is always under ``_trash/`` (never protected),
+    so this reduces to the src-only check ``move_to_trash`` performs; for
+    ``kind="topic"`` this mirrors ``relocate``'s dual guard.
+
+    Reuses ``app.vault.is_protected_path`` (segment-boundary matching, e.g.
+    it will not false-positive on ``notessentinel/x.md`` matching
+    ``sentinel/``) rather than reimplementing that matching logic here.
+    Imported locally — mirrors the existing local import of
+    ``topic_dir_for`` in ``propose_topic_move`` above — so this
+    side-effect-free planning module doesn't acquire a module-load-order
+    dependency on ``app.vault``.
+    """
+    from app.vault import is_protected_path
+
+    return is_protected_path(plan.src) or is_protected_path(plan.dst)

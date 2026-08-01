@@ -32,6 +32,7 @@ from app.services.embedding_sidecar_index import (
 )
 from app.services.vault_sweep_plan import (
     is_in_topic_dir,
+    is_move_protected,
     plan_duplicate_trash,
     plan_noise_trash,
     plan_topic_move,
@@ -140,7 +141,21 @@ class SweepReport(BaseModel):
     errors: list[str] = Field(default_factory=list)
     # In dry_run mode, populated with {kind, src, dst, reason} dicts
     # describing every move the sweeper WOULD make. Empty for live runs.
+    # Dry-run/live parity: a move touching a protected namespace is NEVER
+    # placed here — see refused_moves below.
     proposed_moves: list[dict] = Field(default_factory=list)
+    # In dry_run mode, populated with {kind, src, dst, reason, protected} dicts
+    # for every move that the SAME protected-namespace guard the live path
+    # enforces (app.vault.is_protected_path, checked via
+    # vault_sweep_plan.is_move_protected) would refuse. These are moves the
+    # planner considered but a live sweep would raise ProtectedPathError on —
+    # kept visible here (never silently dropped) so an operator previewing a
+    # dry-run report sees the file was considered and protected, not that it
+    # will be moved. Empty for live runs (live refusals go to `errors`).
+    refused_moves: list[dict] = Field(default_factory=list)
+    # Count of entries in refused_moves — mirrors noise_moved/topic_moves/
+    # duplicates_moved as a quick-glance summary counter.
+    protected_refused: int = 0
 
 
 # --- Frontmatter helpers migrated to app.markdown_frontmatter (260502-g8c Task 3) ---
@@ -505,10 +520,19 @@ async def run_sweep(
                 if getattr(result, "topic", None) == "noise":
                     if dry_run:
                         today = _today_str()
-                        report.proposed_moves.append(
-                            plan_noise_trash(path, today=today).asdict()
-                        )
-                        report.noise_moved += 1
+                        noise_plan = plan_noise_trash(path, today=today)
+                        # Dry-run/live parity: a live move_to_trash() refuses
+                        # protected paths as its FIRST statement. Reflect that
+                        # refusal in the report instead of listing a move that
+                        # would never actually happen.
+                        if is_move_protected(noise_plan):
+                            refused = noise_plan.asdict()
+                            refused["protected"] = True
+                            report.refused_moves.append(refused)
+                            report.protected_refused += 1
+                        else:
+                            report.proposed_moves.append(noise_plan.asdict())
+                            report.noise_moved += 1
                     else:
                         # MANDATORY per-move safety check (re-evaluated here, not once per run)
                         if await _is_safe():
@@ -542,11 +566,21 @@ async def run_sweep(
                 proposed_dst = topic_plan.dst if topic_plan is not None else None
                 if proposed_dst is not None:
                     if dry_run:
-                        report.proposed_moves.append(topic_plan.asdict())
-                        # 260427-cza: parity with the live `else` branch below
-                        # which increments topic_moves. Without this, dry-run
-                        # reports `topic_moves: 0` while listing N proposals.
-                        report.topic_moves += 1
+                        # Dry-run/live parity: a live relocate() refuses when
+                        # EITHER the source OR the destination is protected
+                        # (source: moving an operator-critical file out;
+                        # destination: namespace poisoning). Mirror both here.
+                        if is_move_protected(topic_plan):
+                            refused = topic_plan.asdict()
+                            refused["protected"] = True
+                            report.refused_moves.append(refused)
+                            report.protected_refused += 1
+                        else:
+                            report.proposed_moves.append(topic_plan.asdict())
+                            # 260427-cza: parity with the live `else` branch below
+                            # which increments topic_moves. Without this, dry-run
+                            # reports `topic_moves: 0` while listing N proposals.
+                            report.topic_moves += 1
                         # Don't add to survivors in dry-run — we're not writing
                         # frontmatter or computing embeddings. Just report.
                         report.files_processed += 1
@@ -687,15 +721,22 @@ async def run_sweep(
                     keeper_path = survivors[keeper_idx][0]
                     if dry_run:
                         today = _today_str()
-                        report.proposed_moves.append(
-                            plan_duplicate_trash(
-                                src,
-                                keeper_path,
-                                confidence=conf,
-                                today=today,
-                            ).asdict()
+                        dup_plan = plan_duplicate_trash(
+                            src,
+                            keeper_path,
+                            confidence=conf,
+                            today=today,
                         )
-                        report.duplicates_moved += 1
+                        # Dry-run/live parity: same protected-src guard
+                        # move_to_trash() enforces for the dedup-trash path.
+                        if is_move_protected(dup_plan):
+                            refused = dup_plan.asdict()
+                            refused["protected"] = True
+                            report.refused_moves.append(refused)
+                            report.protected_refused += 1
+                        else:
+                            report.proposed_moves.append(dup_plan.asdict())
+                            report.duplicates_moved += 1
                         continue
                     # MANDATORY per-move safety check (re-evaluated before each dedup-trash)
                     if not await _is_safe():

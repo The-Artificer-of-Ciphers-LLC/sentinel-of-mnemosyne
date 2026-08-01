@@ -1496,3 +1496,156 @@ async def test_run_sweep_protected_path_error_continues_and_processes_others():
         f"other misplaced note must still be relocated; topic_moves={report.topic_moves}"
     )
     assert report.status == "complete", f"sweep must return 'complete' after ProtectedPathError; got {report.status}"
+
+
+# ---------------------------------------------------------------------------
+# Dry-run/live parity regression tests (production incident 2026-08-01).
+#
+# A live POST /vault/sweep/start?dry_run=true previously reported
+# `sentinel/persona.md` (boot-critical, PROTECTED_NAMESPACES) as a plain
+# proposed trash move even though a live sweep would refuse it via
+# move_to_trash's is_protected_path guard — the dry-run planner never
+# consulted the guard at all. These tests pin that run_sweep's dry-run
+# branches now mirror is_protected_path exactly, for all three move kinds
+# (noise-trash, dedup-trash, topic-relocation — both the relocation SOURCE
+# and DESTINATION guards), without over-filtering ordinary proposals.
+#
+# Note: `sentinel/` is deliberately the protected namespace used below — it
+# is the only entry in PROTECTED_NAMESPACES that is NOT also in the default
+# sweep_skip_prefixes walk-skip set (self/, security/, templates/ are both
+# protected AND walk-skipped, so they never reach the planner at all under
+# default settings). Using sentinel/ reproduces the actual incident path
+# under real, unmodified settings — see app/config.py Settings.sweep_skip_prefixes
+# vs Settings.protected_namespaces.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_dry_run_protected_noise_path_refused_not_proposed_non_protected_still_proposed():
+    """Reproduces the incident report verbatim: sentinel/persona.md (protected)
+    and inbox/_pending-classification.md (not protected) both classify as
+    noise in the same dry run. The protected one must be refused, not listed
+    as a plain proposed move; the non-protected one must be unaffected.
+    """
+    fake = FakeObsidian()
+    fake.dirs[""] = ["sentinel/", "inbox/"]
+    fake.dirs["sentinel"] = ["persona.md"]
+    fake.dirs["inbox"] = ["_pending-classification.md"]
+    fake.store["sentinel/persona.md"] = "Persona content — boot-critical"
+    fake.store["inbox/_pending-classification.md"] = "queued unsure captures"
+
+    async def _noise_classifier(text):
+        return ClassificationResult(
+            topic="noise", confidence=1.0, title_slug="n", reasoning="cheap-filter:noise"
+        )
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    report = await run_sweep(
+        fake, _noise_classifier, _emb, force_reclassify=True, dry_run=True
+    )
+
+    # Protected path: refused, NEVER a plain proposed move.
+    assert not any(m["src"] == "sentinel/persona.md" for m in report.proposed_moves), (
+        f"protected path must not appear as a plain proposed move; got {report.proposed_moves}"
+    )
+    refused = [m for m in report.refused_moves if m["src"] == "sentinel/persona.md"]
+    assert len(refused) == 1, f"protected path must appear in refused_moves; got {report.refused_moves}"
+    assert refused[0]["kind"] == "trash"
+    assert refused[0]["protected"] is True
+    assert refused[0]["dst"].startswith("_trash/") and refused[0]["dst"].endswith("persona.md")
+
+    # Non-protected path: unaffected — still a normal proposed move (no over-filtering).
+    assert any(
+        m["src"] == "inbox/_pending-classification.md" for m in report.proposed_moves
+    ), f"non-protected noise path must still be proposed normally; got {report.proposed_moves}"
+    assert not any(
+        m["src"] == "inbox/_pending-classification.md" for m in report.refused_moves
+    )
+
+    # Counters: only the non-protected move counts toward noise_moved.
+    assert report.noise_moved == 1, f"expected 1 noise_moved (non-protected only); got {report.noise_moved}"
+    assert report.protected_refused == 1, f"expected 1 protected_refused; got {report.protected_refused}"
+    assert report.errors == [], "a dry-run refusal must not be recorded as an error"
+
+    # Dry-run performs no mutation regardless of protection status.
+    assert fake.store["sentinel/persona.md"] == "Persona content — boot-critical"
+    assert "sentinel/persona.md" in fake.store
+
+
+@pytest.mark.asyncio
+async def test_dry_run_protected_relocation_src_refused_not_proposed():
+    """A topic-move dry-run proposal whose SOURCE is a protected path
+    (sentinel/) must not appear as a plain proposed relocation — a live
+    relocate() would refuse it via its source guard. Confirms the SAME gap
+    identified for trash moves also affects the relocation path.
+    """
+    fake = FakeObsidian()
+    fake.dirs[""] = ["sentinel/"]
+    fake.dirs["sentinel"] = ["stray.md"]
+    fake.store["sentinel/stray.md"] = "A classifiable note body."
+
+    async def _classifier(text):
+        return ClassificationResult(topic="observation", confidence=0.9, title_slug="x", reasoning="r")
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    report = await run_sweep(
+        fake, _classifier, _emb, force_reclassify=True, dry_run=True
+    )
+
+    assert not any(m["src"] == "sentinel/stray.md" for m in report.proposed_moves), (
+        f"protected src must not appear as a plain proposed relocation; got {report.proposed_moves}"
+    )
+    refused = [m for m in report.refused_moves if m["src"] == "sentinel/stray.md"]
+    assert len(refused) == 1, f"protected src must appear in refused_moves; got {report.refused_moves}"
+    assert refused[0]["kind"] == "topic"
+    assert refused[0]["protected"] is True
+    assert refused[0]["dst"] == "ops/observations/stray.md"
+
+    assert report.topic_moves == 0, f"expected 0 topic_moves (refused, not proposed); got {report.topic_moves}"
+    assert report.protected_refused == 1
+    assert "sentinel/stray.md" in fake.store  # unchanged
+
+
+@pytest.mark.asyncio
+async def test_dry_run_protected_relocation_dst_refused_namespace_poisoning(monkeypatch):
+    """A topic-move dry-run proposal whose DESTINATION would land inside a
+    protected namespace must be refused too — mirrors relocate()'s
+    destination guard (namespace-poisoning prevention, vault.py concern 6).
+    No topic currently maps into a protected namespace under the shipped
+    taxonomy, so this is exercised end-to-end by temporarily remapping the
+    'observation' topic's canonical directory to templates/ (a protected
+    namespace); monkeypatch reverts it automatically after the test.
+    """
+    from app.services import note_classifier as note_classifier_module
+
+    monkeypatch.setitem(note_classifier_module.TOPIC_VAULT_PATH, "observation", "templates")
+
+    fake = FakeObsidian()
+    fake.dirs[""] = ["random-folder/"]
+    fake.dirs["random-folder"] = ["note.md"]
+    fake.store["random-folder/note.md"] = "A classifiable note body."
+
+    async def _classifier(text):
+        return ClassificationResult(topic="observation", confidence=0.9, title_slug="x", reasoning="r")
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    report = await run_sweep(
+        fake, _classifier, _emb, force_reclassify=True, dry_run=True
+    )
+
+    assert not any(m["src"] == "random-folder/note.md" for m in report.proposed_moves), (
+        f"move whose dst is protected must not appear as a plain proposed move; got {report.proposed_moves}"
+    )
+    refused = [m for m in report.refused_moves if m["src"] == "random-folder/note.md"]
+    assert len(refused) == 1, f"dst-protected relocation must appear in refused_moves; got {report.refused_moves}"
+    assert refused[0]["dst"] == "templates/note.md"
+    assert refused[0]["protected"] is True
+
+    assert report.topic_moves == 0
+    assert report.protected_refused == 1

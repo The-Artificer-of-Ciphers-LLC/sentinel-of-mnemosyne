@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from app.services.note_classifier import topic_dir_for
 from app.services.vault_sweep_plan import (
+    SweepMovePlan,
     is_in_topic_dir,
+    is_move_protected,
     plan_duplicate_trash,
     plan_noise_trash,
     plan_topic_move,
@@ -67,3 +69,70 @@ def test_plan_duplicate_trash_matches_dry_run_report_shape():
         "dst": "_trash/2026-06-16/short.md",
         "reason": "duplicate of references/long.md (cosine≥0.92, conf=0.9)",
     }
+
+
+# --- is_move_protected: dry-run/live parity guard (production incident 2026-08-01) ---
+#
+# A live sweep refuses moves touching a protected namespace
+# (app.vault.PROTECTED_NAMESPACES / is_protected_path) via ProtectedPathError
+# in ObsidianVault.move_to_trash (src only) and .relocate (src OR dst). These
+# tests pin that is_move_protected mirrors both guards exactly using the
+# real app.vault.is_protected_path (segment-boundary matching), not a
+# reimplementation.
+
+
+def test_is_move_protected_true_for_protected_src_trash_plan():
+    """A noise-trash plan whose SOURCE is boot-critical (sentinel/) must be
+    flagged protected — mirrors move_to_trash's src-only guard."""
+    plan = plan_noise_trash("sentinel/persona.md", today="2026-08-01")
+    assert is_move_protected(plan) is True
+
+
+def test_is_move_protected_false_for_non_protected_trash_plan():
+    """An ordinary noise-trash plan outside any protected namespace must NOT
+    be flagged — the guard must not over-filter normal proposals."""
+    plan = plan_noise_trash("inbox/_pending-classification.md", today="2026-08-01")
+    assert is_move_protected(plan) is False
+
+
+def test_is_move_protected_true_for_protected_src_topic_plan():
+    """A topic-move plan whose SOURCE is under a protected namespace must be
+    flagged — mirrors relocate()'s source guard (moving a critical file out)."""
+    plan = SweepMovePlan(
+        kind="topic",
+        src="self/stray-note.md",
+        dst="ops/observations/stray-note.md",
+        reason="topic=observation (confidence=0.90)",
+    )
+    assert is_move_protected(plan) is True
+
+
+def test_is_move_protected_true_for_protected_dst_topic_plan():
+    """A topic-move plan whose DESTINATION lands inside a protected namespace
+    must be flagged even when the source is ordinary — mirrors relocate()'s
+    destination guard (namespace-poisoning prevention, vault.py concern 6).
+    """
+    plan = SweepMovePlan(
+        kind="topic",
+        src="random-folder/note.md",
+        dst="templates/note.md",
+        reason="topic=observation (confidence=0.90)",
+    )
+    assert is_move_protected(plan) is True
+
+
+def test_is_move_protected_false_for_ordinary_topic_plan():
+    """A ordinary topic-move plan with neither src nor dst protected must not
+    be flagged — the guard must not over-filter normal relocations."""
+    plan = plan_topic_move("random/a.md", "accomplishment", confidence=0.9)
+    assert plan is not None
+    assert is_move_protected(plan) is False
+
+
+def test_is_move_protected_uses_segment_boundary_matching():
+    """Near-miss paths that merely start with a protected prefix's letters
+    (e.g. ``sentinelsomething/``) must NOT be flagged — proves is_move_protected
+    delegates to the real app.vault.is_protected_path (segment-boundary
+    matching) rather than a naive substring/reimplemented check."""
+    plan = plan_noise_trash("sentinelsomething/x.md", today="2026-08-01")
+    assert is_move_protected(plan) is False

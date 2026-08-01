@@ -264,6 +264,73 @@ async def test_start_sweep_live_path_sweep_in_progress_persists_blocked_status()
 
 
 @pytest.mark.asyncio
+async def test_start_sweep_dry_run_report_marks_protected_path_refused_not_proposed():
+    """Regression — production incident 2026-08-01: a live dry-run at
+    POST /vault/sweep/start?dry_run=true wrote a report listing
+    sentinel/persona.md (boot-critical) under '## Trash moves' as a plain
+    proposed move, even though a live sweep would refuse to trash it.
+
+    Runs the REAL run_sweep (not mocked) through start_sweep end-to-end —
+    the same call path that produced the bad report — and asserts on the
+    actual written markdown body:
+      - the protected path never appears on a line without "REFUSED"
+      - it IS still visible, under a "## Refused (protected namespace)" section
+      - the non-protected noise path from the same incident report
+        (inbox/_pending-classification.md) is still a normal proposed move
+    """
+    vault = FakeVault()
+    vault.dirs[""] = ["sentinel/", "inbox/"]
+    vault.dirs["sentinel"] = ["persona.md"]
+    vault.dirs["inbox"] = ["_pending-classification.md"]
+    vault.notes["sentinel/persona.md"] = "Persona content — boot-critical"
+    vault.notes["inbox/_pending-classification.md"] = "queued unsure captures"
+
+    async def _noise_classifier(text):
+        from app.services.note_classifier import ClassificationResult
+        return ClassificationResult(
+            topic="noise", confidence=1.0, title_slug="n", reasoning="cheap-filter:noise"
+        )
+
+    async def _emb(texts):
+        return [[1.0, 0.0, 0.0]] * len(texts)
+
+    runner = _ImmediateTaskRunner()
+
+    result = await start_sweep(
+        vault=vault,
+        classifier=_noise_classifier,
+        embedder=_emb,
+        force_reclassify=True,
+        dry_run=True,
+        task_runner=runner,
+    )
+    await runner.run_all()
+
+    report_path = result["report_path"]
+    assert report_path in vault.notes, f"expected report written to {report_path}"
+    report_body = vault.notes[report_path]
+    lines = report_body.splitlines()
+
+    persona_lines = [ln for ln in lines if "sentinel/persona.md" in ln]
+    assert persona_lines, "protected path must still be visible in the report"
+    assert all("REFUSED" in ln for ln in persona_lines), (
+        f"every line mentioning the protected path must be marked REFUSED "
+        f"(never a plain proposed move); got: {persona_lines}"
+    )
+    assert "## Refused (protected namespace)" in report_body, (
+        f"expected a dedicated refused section; got body:\n{report_body}"
+    )
+
+    pending_lines = [ln for ln in lines if "inbox/_pending-classification.md" in ln]
+    assert pending_lines, "non-protected noise path must still be visible in the report"
+    assert all("REFUSED" not in ln for ln in pending_lines), (
+        f"non-protected path must not be marked REFUSED (must not over-filter); "
+        f"got: {pending_lines}"
+    )
+    assert "## Trash moves" in report_body
+
+
+@pytest.mark.asyncio
 async def test_start_sweep_live_path_generic_exception_persists_error_status():
     """Regression: a generic Exception on the live path must persist status='error'.
 

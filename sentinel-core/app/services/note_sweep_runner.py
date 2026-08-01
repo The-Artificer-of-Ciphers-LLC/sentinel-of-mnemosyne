@@ -85,6 +85,7 @@ async def start_sweep(
                     f"- Topic relocations proposed: {report.topic_moves}",
                     f"- Noise→trash proposed: {report.noise_moved}",
                     f"- Duplicates→trash proposed: {report.duplicates_moved}",
+                    f"- Refused (protected namespace): {report.protected_refused}",
                     f"- Errors: {len(report.errors)}",
                     "",
                 ]
@@ -101,6 +102,19 @@ async def start_sweep(
                     lines.append("")
                     for m in trash_moves:
                         lines.append(f"- `{m['src']}` → `{m['dst']}` — {m.get('reason', '')}")
+                    lines.append("")
+                if report.refused_moves:
+                    # A live sweep would REFUSE these via the protected-namespace
+                    # guard (app.vault.is_protected_path / ProtectedPathError) —
+                    # never folded into "Topic relocations" / "Trash moves" above,
+                    # so an operator sees the file was considered and protected,
+                    # not that it will be moved.
+                    lines.append("## Refused (protected namespace)")
+                    lines.append("")
+                    for m in report.refused_moves:
+                        lines.append(
+                            f"- `{m['src']}` → `{m['dst']}` — {m.get('reason', '')} — REFUSED (protected namespace)"
+                        )
                     lines.append("")
                 if report.errors:
                     lines.append("## Errors")
