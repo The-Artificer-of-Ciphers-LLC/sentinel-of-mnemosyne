@@ -12,6 +12,7 @@ from app.errors import (
     MessageProcessingError,
     ProviderUnavailableError,
 )
+from app.services.response_anomaly import EXCERPT_MAX_CHARS, detect_anomalies
 from app.services.token_budget import TokenBudget, TokenLimitError
 
 if TYPE_CHECKING:
@@ -161,6 +162,30 @@ class MessageProcessor:
             raise MessageProcessingError(
                 "provider_misconfigured", f"AI provider error: {type(exc).__name__}"
             ) from exc
+
+        # Response-anomaly detection (observability only -- see
+        # app/services/response_anomaly.py for the full "why"). This is
+        # detection, not a gate: it must never block, alter, or retry the
+        # response -- output_scanner (below) owns safety blocking. The call
+        # is wrapped because an observability feature must NEVER be able to
+        # take down the message path; detect_anomalies() also never raises
+        # on its own, but we don't rely on that guarantee here.
+        # finish_reason: the provider abstraction (ai_provider.complete)
+        # only returns the completion text, not a finish_reason, so we pass
+        # None rather than contorting the provider interface for this.
+        try:
+            anomaly = detect_anomalies(content, prompt_text=req.content, finish_reason=None)
+            if anomaly.suspicious:
+                excerpt = content[:EXCERPT_MAX_CHARS]
+                logger.warning(
+                    "response-anomaly: signals=%s model=%s content_len=%d excerpt=%r",
+                    anomaly.signals,
+                    req.model_name,
+                    len(content),
+                    excerpt,
+                )
+        except Exception:
+            logger.debug("response-anomaly: detector raised; skipping", exc_info=True)
 
         is_safe, _reason = await self._output_scanner.scan(content)
         if not is_safe:
