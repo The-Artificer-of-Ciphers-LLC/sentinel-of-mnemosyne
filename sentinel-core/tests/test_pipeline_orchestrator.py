@@ -532,6 +532,204 @@ async def test_ralph_mode_non_durable_entry_discarded_not_filed():
     assert entries == [], "a non-durable entry is dropped from inbox/, not requeued"
 
 
+# --- Standalone inbox note absorption (2026-08-29 production gap) ----------
+#
+# TOPIC_VAULT_PATH files HIGH-confidence learning/reference notes as
+# standalone inbox/{slug}-{date}.md files, but only the queue file
+# (INBOX_PATH) was ever drained -- those standalone notes had no promotion
+# path and were permanently invisible to recall. absorb_standalone_inbox_notes
+# converts them into ordinary queue entries so the existing Reduce/Reflect/
+# Verify/Reweave machinery drains them unchanged (no parallel processing path).
+
+
+def _standalone_note_body(
+    *, topic: str = "reference", title_slug: str = "stranded-note", confidence: float = 0.85
+) -> str:
+    """Mirrors ``NoteIntake._build_filed_note_markdown``'s frontmatter shape."""
+    return (
+        "---\n"
+        f"topic: {topic}\n"
+        f"title_slug: {title_slug}\n"
+        f"confidence: {confidence}\n"
+        "created: 2026-08-02T00:00:00Z\n"
+        "source: note-import\n"
+        "---\n\n"
+        "# Stranded Note\n\n"
+        "This knowledge had no promotion path before absorb.\n"
+    )
+
+
+async def test_absorb_standalone_inbox_note_becomes_queue_entry():
+    """A standalone inbox/{slug}-{date}.md note is absorbed: it becomes an
+    entry in the queue file, and the original path is gone from the vault
+    (moved to trash, not deleted outright)."""
+    from app.services import pipeline_orchestrator
+    from app.services.inbox import INBOX_PATH, parse_inbox
+    from tests.fakes.vault import FakeVault
+
+    vault = FakeVault()
+    standalone_path = "inbox/cencia-advice-2026-08-02.md"
+    vault.dirs["inbox"] = ["cencia-advice-2026-08-02.md"]
+    vault.notes[standalone_path] = _standalone_note_body(title_slug="cencia-advice")
+
+    report = pipeline_orchestrator.PipelineReport(pipeline_id="p1", mode="pipeline")
+    absorbed = await pipeline_orchestrator.absorb_standalone_inbox_notes(vault, report)
+
+    assert absorbed == 1
+    assert report.errors == []
+
+    entries = parse_inbox(vault.notes[INBOX_PATH])
+    assert len(entries) == 1
+    assert entries[0].topic == "reference"
+    assert "no promotion path" in entries[0].candidate_text
+
+    assert standalone_path not in vault.notes, "original standalone note must be gone"
+    trashed_paths = [p for p in vault.notes if p.startswith("_trash/")]
+    assert trashed_paths, "original must be moved to trash, not hard-deleted"
+
+
+async def test_absorb_never_absorbs_the_queue_file_itself():
+    """The critical guard: absorbing INBOX_PATH into itself would be
+    catastrophic, so it must never be treated as a standalone note."""
+    from app.services import pipeline_orchestrator
+    from app.services.inbox import INBOX_PATH, append_entry, parse_inbox
+    from app.services.note_classifier import ClassificationResult
+    from tests.fakes.vault import FakeVault
+
+    vault = FakeVault()
+    vault.dirs["inbox"] = [INBOX_PATH.rsplit("/", 1)[-1]]
+    result = ClassificationResult(topic="reference", confidence=0.8, title_slug="x")
+    vault.notes[INBOX_PATH] = append_entry("", "already-queued candidate text", result)
+
+    report = pipeline_orchestrator.PipelineReport(pipeline_id="p2", mode="pipeline")
+    absorbed = await pipeline_orchestrator.absorb_standalone_inbox_notes(vault, report)
+
+    assert absorbed == 0
+    assert report.errors == []
+    assert INBOX_PATH in vault.notes
+
+    entries = parse_inbox(vault.notes[INBOX_PATH])
+    assert len(entries) == 1, "the queue file's own entry must be untouched"
+    trashed_paths = [p for p in vault.notes if p.startswith("_trash/")]
+    assert trashed_paths == [], "the queue file must never be trashed"
+
+
+async def test_absorb_trash_failure_after_successful_queue_write_records_error():
+    """Ordering is load-bearing: the queue append+write happens FIRST. If
+    disposal fails afterwards, that must be recorded as a visible error
+    (so the future duplication risk is observable) and must NOT raise."""
+    from app.services import pipeline_orchestrator
+    from app.services.inbox import INBOX_PATH, parse_inbox
+    from tests.fakes.vault import FakeVault
+
+    vault = FakeVault()
+    standalone_path = "inbox/stranded-note-2026-08-02.md"
+    vault.dirs["inbox"] = ["stranded-note-2026-08-02.md"]
+    vault.notes[standalone_path] = _standalone_note_body(topic="learning")
+
+    async def _boom(*args, **kwargs):
+        raise RuntimeError("simulated trash transport failure")
+
+    vault.move_to_trash = _boom  # type: ignore[assignment]
+
+    report = pipeline_orchestrator.PipelineReport(pipeline_id="p3", mode="pipeline")
+    absorbed = await pipeline_orchestrator.absorb_standalone_inbox_notes(vault, report)
+
+    assert absorbed == 0, "a note whose disposal failed must not be counted absorbed"
+    assert any("trash failed" in e for e in report.errors), report.errors
+
+    # The queue write itself must have succeeded before the trash attempt.
+    entries = parse_inbox(vault.notes[INBOX_PATH])
+    assert len(entries) == 1
+    assert standalone_path in vault.notes, "original stays put when disposal fails"
+
+
+async def test_pipeline_mode_absorbs_standalone_note_end_to_end():
+    """End-to-end in pipeline mode: a standalone inbox note that previously
+    had NO promotion path now ends up as a notes/ note, and
+    ``report.absorbed_standalone == 1``."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import pipeline_orchestrator
+    from app.services.graph_analysis import NOTES_ROOT
+    from app.services.six_rs.reduce import ReduceResult
+    from tests.fakes.vault import FakeVault
+
+    vault = FakeVault()
+    vault.dirs[""] = []
+    standalone_path = "inbox/stranded-note-2026-08-02.md"
+    vault.dirs["inbox"] = ["stranded-note-2026-08-02.md"]
+    vault.notes[standalone_path] = _standalone_note_body(topic="learning")
+
+    fake_reduce_result = ReduceResult(
+        claim_title="Stranded Notes Now Have A Promotion Path",
+        body="Standalone inbox notes are absorbed into the queue before Reduce runs.",
+        schema_type="permanent",
+    )
+
+    with (
+        patch(
+            "app.services.pipeline_orchestrator.reduce_entry",
+            new=AsyncMock(return_value=fake_reduce_result),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.find_and_attach_hub",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.verify_note",
+            new=AsyncMock(return_value={"passed": True, "requeued": False, "retry_count": 0}),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.reweave_note",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.triage_observations",
+            new=AsyncMock(return_value=[]),
+        ),
+    ):
+        report = await pipeline_orchestrator.run(vault, mode="pipeline")
+
+    assert report.absorbed_standalone == 1
+    assert standalone_path not in vault.notes
+
+    filed_note_paths = [p for p in vault.notes if p.startswith(f"{NOTES_ROOT}/")]
+    assert len(filed_note_paths) == 1, "the absorbed standalone note must reach notes/"
+
+
+async def test_ralph_mode_absorbed_standalone_zero_when_no_standalone_notes():
+    """Non-regression: a run with no standalone inbox/ notes behaves
+    exactly as before absorb was added, and ``absorbed_standalone == 0``."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import pipeline_orchestrator
+    from app.services.six_rs.reduce import ReduceResult
+
+    fake_reduce_result = ReduceResult(
+        claim_title="Cosine Floor Governs Hub Attachment",
+        body="The hub-lookup floor is reused verbatim from RecallConfig.\n\n[[Recall Hub]]",
+        schema_type="permanent",
+    )
+
+    vault = _make_vault()
+
+    with (
+        patch(
+            "app.services.pipeline_orchestrator.reduce_entry",
+            new=AsyncMock(return_value=fake_reduce_result),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.find_and_attach_hub",
+            new=AsyncMock(return_value="notes/recall-hub.md"),
+        ),
+    ):
+        report = await pipeline_orchestrator.run(vault, mode="ralph")
+
+    assert report.absorbed_standalone == 0
+    assert report.reduced >= 1
+
+
 async def test_concurrent_pipeline_and_sweep_refused():
     """Pitfall 8: lock acquisition strictly precedes any inbox read.
 
