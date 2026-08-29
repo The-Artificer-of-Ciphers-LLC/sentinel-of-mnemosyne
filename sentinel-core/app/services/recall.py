@@ -430,6 +430,59 @@ class KeywordRecall:
 # ---------------------------------------------------------------------------
 
 
+def _semantic_degrade_message(
+    index: dict[str, dict],
+    *,
+    exclude_prefixes: tuple[str, ...],
+    matched_model_count: int,
+    active_model: str,
+) -> str:
+    """Build the diagnostic for SemanticRecall's degrade-to-keyword-only path.
+
+    Incident (2026-08-29, live prod): the prior message unconditionally
+    asserted "all N index entries mismatch active model", which sent a live
+    debugging session hunting a model/config problem that did not exist. In
+    that incident every remaining entry's ``embedding_model`` was
+    byte-identical to the active model — most entries were namespace-excluded
+    and every survivor was ``stale`` (no vector), so the model check never ran
+    on them at all.
+
+    ``eligible_entries`` (embedding_sidecar_index.py) filters in this exact
+    order: namespace exclusion -> stale flag -> model match -> dimension match
+    -> decode. ``matched_model_count`` is only incremented for entries that
+    survived BOTH the namespace and stale filters AND matched
+    ``active_model`` — so ``matched_model_count == 0`` means "nothing reached
+    the model check", not "the model mismatched". This function distinguishes
+    that case (report the real namespace/stale/mismatch breakdown, computed
+    here without re-running the decode-time checks) from the case where some
+    entries DID match the model but were still unusable downstream (dimension
+    mismatch, decode failure, or below the cosine floor — D-08/EMB-04, D-11).
+    """
+    total = len(index)
+    if matched_model_count > 0:
+        return (
+            f"SemanticRecall: {matched_model_count} of {total} index entries matched "
+            f"active model {active_model!r} but none were usable (dimension mismatch, "
+            f"decode error, or below cosine floor) — degrading to keyword-only"
+        )
+
+    excluded = sum(1 for path in index if path.startswith(exclude_prefixes))
+    stale = sum(
+        1
+        for path, entry in index.items()
+        if not path.startswith(exclude_prefixes) and entry.get("stale")
+    )
+    # matched_model_count == 0, so every entry that survived both filters
+    # above reached the model check and failed it (embedding_model differs
+    # from active_model) — this is the only remaining category.
+    mismatched = total - excluded - stale
+    return (
+        f"SemanticRecall: 0 of {total} index entries eligible ({excluded} excluded by "
+        f"namespace, {stale} stale/no-vector, {mismatched} model mismatch) — "
+        f"degrading to keyword-only"
+    )
+
+
 class SemanticRecall:
     """Semantic retrieval adapter over the sweeper-maintained embedding sidecar.
 
@@ -594,14 +647,31 @@ class SemanticRecall:
 
             candidates.append((sim, entry.path))
 
-        if matched_model_count == 0 and self._index:
-            # D-14: all-mismatch silent degrade — keyword-only via WR-03 path
-            logger.warning(
-                "SemanticRecall: all %d index entries mismatch active model %r"
-                " — degrading to keyword-only",
-                len(self._index),
-                self._active_model,
-            )
+        if not candidates:
+            if not decoded_entries:
+                # D-14: nothing was even eligible — genuine index degradation.
+                # Report what is actually known (namespace/stale/mismatch
+                # breakdown or "matched but still unusable") rather than
+                # asserting a model mismatch that may not be the true cause
+                # (2026-08-29 incident, see _semantic_degrade_message docstring).
+                logger.warning(
+                    _semantic_degrade_message(
+                        self._index,
+                        exclude_prefixes=self._config.exclude_prefixes,
+                        matched_model_count=matched_model_count,
+                        active_model=self._active_model,
+                    )
+                )
+            else:
+                # Index is healthy — entries were eligible and searched, but
+                # none cleared the cosine floor. This is a normal miss (e.g. an
+                # off-topic query), not a degradation; log at debug so it
+                # doesn't dilute the real degrade signal (2026-08-29 incident).
+                logger.debug(
+                    "SemanticRecall: searched %d eligible entries, none met "
+                    "cosine floor %.2f — no semantic match for this query",
+                    len(decoded_entries), self._config.semantic_cosine_floor,
+                )
             return []
 
         # Sort by cosine desc, tie-break on path for determinism

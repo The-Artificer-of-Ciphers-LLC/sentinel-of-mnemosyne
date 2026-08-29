@@ -829,6 +829,215 @@ async def test_semantic_all_mismatch_degrades_to_keyword():
     )
 
 
+# ---------------------------------------------------------------------------
+# 2026-08-29 incident: degrade log must not over-claim "model mismatch" when
+# the real cause is namespace exclusion or staleness (entries never reach
+# the model check at all in eligible_entries' filter order).
+# ---------------------------------------------------------------------------
+
+
+async def test_semantic_degrade_log_does_not_claim_mismatch_for_stale_and_excluded(caplog):
+    """Incident repro: stale + excluded entries (all matching active_model)
+    must NOT produce a log claiming a model mismatch.
+
+    Index has 3 entries, all with embedding_model == active_model:
+    - ops/excluded.md is namespace-excluded (default exclude_prefixes)
+    - notes/stale-a.md / notes/stale-b.md are stale=True (no usable vector)
+
+    None reach eligible_entries' model-match check, so matched_model_count
+    is 0 — but the true cause is namespace exclusion and staleness, not a
+    model mismatch. The emitted message must report that breakdown instead
+    of asserting a mismatch that never happened.
+    """
+    import logging
+
+    from app.services.recall import SemanticRecall
+
+    model = "test-model-v1"
+    vec = [1.0, 0.0, 0.0]
+
+    index = {
+        "ops/excluded.md": {
+            "embedding_b64": encode_embedding(vec),
+            "embedding_model": model,
+            "content_hash": "c0",
+        },
+        "notes/stale-a.md": {
+            "embedding_b64": encode_embedding(vec),
+            "embedding_model": model,
+            "content_hash": "c1",
+            "stale": True,
+        },
+        "notes/stale-b.md": {
+            "embedding_b64": encode_embedding(vec),
+            "embedding_model": model,
+            "content_hash": "c2",
+            "stale": True,
+        },
+    }
+    config = RecallConfig()
+    vault = FakeVault()
+    vault.notes[config.index_path] = json.dumps(index)
+
+    semantic = SemanticRecall(vault=vault, embed_fn=fake_embedder, active_model=model, config=config)
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="app.services.recall"):
+        results = await semantic.search("test query", budget=10)
+
+    assert results == [], f"Expected [] (nothing eligible), got {results}"
+
+    degrade_records = [
+        r for r in caplog.records
+        if r.levelno == logging.WARNING and "degrading to keyword-only" in r.getMessage()
+    ]
+    assert len(degrade_records) == 1, (
+        f"Expected exactly 1 degrade warning, got {len(degrade_records)}: "
+        f"{[r.getMessage() for r in caplog.records]}"
+    )
+    message = degrade_records[0].getMessage()
+
+    # Must NOT assert a model mismatch as the cause — the old unconditional
+    # wording ("N index entries mismatch active model") is exactly the bug.
+    assert "entries mismatch active model" not in message, (
+        f"Message must not over-claim a model mismatch; got: {message!r}"
+    )
+    # Must report the real breakdown: 3 total, 1 excluded, 2 stale, 0 mismatch.
+    assert "3 index entries eligible" in message, message
+    assert "1 excluded by namespace" in message, message
+    assert "2 stale/no-vector" in message, message
+    assert "0 model mismatch" in message, message
+
+
+async def test_semantic_degrade_log_reports_genuine_model_mismatch(caplog):
+    """When entries genuinely mismatch the active model (none stale, none
+    excluded), the message must say so with the correct counts.
+    """
+    import logging
+
+    from app.services.recall import SemanticRecall
+
+    wrong_model = "old-model-v1"
+    active_model = "new-model-v2"
+    vec = [1.0, 0.0, 0.0]
+
+    config = RecallConfig()
+    vault = FakeVault()
+    vault.notes[config.index_path] = json.dumps(
+        make_fixture_index(["notes/a.md", "notes/b.md"], [vec, vec], wrong_model)
+    )
+
+    semantic = SemanticRecall(vault=vault, embed_fn=fake_embedder, active_model=active_model, config=config)
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="app.services.recall"):
+        results = await semantic.search("test query", budget=10)
+
+    assert results == []
+
+    degrade_records = [
+        r for r in caplog.records
+        if r.levelno == logging.WARNING and "degrading to keyword-only" in r.getMessage()
+    ]
+    assert len(degrade_records) == 1, (
+        f"Expected exactly 1 degrade warning, got {len(degrade_records)}: "
+        f"{[r.getMessage() for r in caplog.records]}"
+    )
+    message = degrade_records[0].getMessage()
+
+    assert "2 index entries eligible" in message, message
+    assert "0 excluded by namespace" in message, message
+    assert "0 stale/no-vector" in message, message
+    assert "2 model mismatch" in message, message
+
+
+async def test_semantic_degrade_log_reports_matched_but_unusable(caplog):
+    """When entries DO match active_model but are still unusable downstream
+    (e.g. dimension mismatch), the message must say "matched ... but none
+    were usable" rather than claiming a model mismatch or a namespace/stale
+    breakdown that doesn't apply to this case.
+    """
+    import logging
+
+    from app.services.recall import SemanticRecall
+
+    model = "test-model-v1"
+    # Wrong-dimension vector (query dim is 3 from fake_embedder) — matches
+    # active_model but fails the dimension check downstream of the model match.
+    wrong_dim_vec = [1.0, 0.0, 0.0, 0.0, 0.0]
+
+    index = {
+        "notes/wrongdim.md": {
+            "embedding_b64": encode_embedding(wrong_dim_vec),
+            "embedding_model": model,
+            "content_hash": "c1",
+        },
+    }
+    config = RecallConfig()
+    vault = FakeVault()
+    vault.notes[config.index_path] = json.dumps(index)
+
+    semantic = SemanticRecall(vault=vault, embed_fn=fake_embedder, active_model=model, config=config)
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="app.services.recall"):
+        results = await semantic.search("test query", budget=10)
+
+    assert results == []
+
+    degrade_records = [
+        r for r in caplog.records
+        if r.levelno == logging.WARNING and "degrading to keyword-only" in r.getMessage()
+    ]
+    assert len(degrade_records) == 1, (
+        f"Expected exactly 1 degrade warning, got {len(degrade_records)}: "
+        f"{[r.getMessage() for r in caplog.records]}"
+    )
+    message = degrade_records[0].getMessage()
+
+    assert "1 of 1 index entries matched active model" in message, message
+    assert "none were usable" in message, message
+    assert "excluded by namespace" not in message, message
+
+
+async def test_semantic_healthy_index_no_match_does_not_warn(caplog):
+    """Regression for the 2026-08-29 log-spam bug: a healthy index (entry is
+    not excluded, not stale, matches active_model, decodes fine) that simply
+    has no vector close enough to this query's embedding must NOT emit the
+    degrade WARNING — that is a normal miss (e.g. an off-topic query), not
+    index degradation. Only a debug-level message is appropriate here.
+    """
+    import logging
+
+    from app.services.recall import SemanticRecall
+
+    model = "test-model-v1"
+    # Orthogonal to the fake_embedder query vector [0.9, 0.436, 0.0] -> cosine
+    # ≈ 0.0, well below the default 0.50 floor. Entry is otherwise perfectly
+    # eligible (not excluded, not stale, correct model, correct dimension).
+    far_vec = [0.0, 0.0, 1.0]
+
+    config = RecallConfig()
+    vault = FakeVault()
+    vault.notes[config.index_path] = json.dumps(
+        make_fixture_index(["notes/unrelated.md"], [far_vec], model)
+    )
+
+    semantic = SemanticRecall(vault=vault, embed_fn=fake_embedder, active_model=model, config=config)
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="app.services.recall"):
+        results = await semantic.search("off topic query", budget=10)
+
+    assert results == [], f"Expected [] (nothing cleared the cosine floor), got {results}"
+
+    warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert warning_records == [], (
+        f"Healthy index with a normal semantic miss must not emit a WARNING; "
+        f"got: {[r.getMessage() for r in warning_records]}"
+    )
+
+
 async def test_cosine_floor_excludes_weak_candidates():
     """Cosine floor gate (D-11): notes below cosine floor excluded, above included.
 

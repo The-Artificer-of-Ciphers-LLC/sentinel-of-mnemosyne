@@ -123,6 +123,34 @@ def stale_entry(
     }
 
 
+def _is_reusable_entry(
+    entry: dict[str, Any],
+    *,
+    body_hash: str,
+    active_model: str,
+) -> bool:
+    """Return True iff *entry* can be carried forward as-is.
+
+    Incident (2026-08-29, live prod): a stale entry (written by
+    ``stale_entry`` after a transient embedding failure) still records the
+    note's current ``content_hash`` and the active ``embedding_model`` — it
+    just carries no usable vector. A content_hash/model match alone is
+    therefore NOT sufficient to prove an entry is safe to carry forward:
+    without also checking ``stale`` and the presence of ``embedding_b64``,
+    a stale entry would match on every subsequent rebuild forever and could
+    never heal, even once a fresh vector for that same note was sitting
+    right there in the current sweep's ``embeddings`` list. All three
+    carry-forward sites in ``build_embedding_index`` must route through
+    this helper so they cannot drift apart on this check again.
+    """
+    return (
+        entry.get("content_hash") == body_hash
+        and entry.get("embedding_model") == active_model
+        and not entry.get("stale")
+        and bool(entry.get("embedding_b64"))
+    )
+
+
 def build_embedding_index(
     *,
     existing_index: dict[str, dict[str, Any]],
@@ -161,9 +189,8 @@ def build_embedding_index(
             existing_entry = existing_index.get(path, {})
 
             if idx >= len(embeddings):
-                if (
-                    existing_entry.get("content_hash") == body_hash
-                    and existing_entry.get("embedding_model") == active_model
+                if _is_reusable_entry(
+                    existing_entry, body_hash=body_hash, active_model=active_model
                 ):
                     new_index[path] = existing_entry
                 else:
@@ -175,9 +202,8 @@ def build_embedding_index(
                     )
                 continue
 
-            if (
-                existing_entry.get("content_hash") == body_hash
-                and existing_entry.get("embedding_model") == active_model
+            if _is_reusable_entry(
+                existing_entry, body_hash=body_hash, active_model=active_model
             ):
                 new_index[path] = existing_entry
             else:
@@ -190,9 +216,8 @@ def build_embedding_index(
     for path, _fm, rest, _cls in survivors:
         body_hash = content_hash(rest)
         existing_entry = existing_index.get(path, {})
-        if (
-            existing_entry.get("content_hash") == body_hash
-            and existing_entry.get("embedding_model") == active_model
+        if _is_reusable_entry(
+            existing_entry, body_hash=body_hash, active_model=active_model
         ):
             new_index[path] = existing_entry
         else:
