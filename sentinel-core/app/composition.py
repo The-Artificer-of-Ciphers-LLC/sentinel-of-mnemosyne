@@ -505,12 +505,29 @@ async def initialize_startup(
     # failing still leaves the other attempted and logged non-fatally.
     async def _startup_rebuild_sequential() -> None:
         try:
-            await _rebuild_embedding_index(
+            _report = await _rebuild_embedding_index(
                 graph.vault,
                 graph.embeddings.embed,
                 model_loaded=graph.embedding_model_loaded,
             )
-            logger.info("Startup embedding-index rebuild complete")
+            # Reflect the REPORT'S actual status — a "partial" rebuild (the
+            # embedder raised mid-run) is a real semantic-recall degradation
+            # and must be loud, not folded into the same INFO line a full
+            # success gets. Never fatal to startup either way (D-06).
+            if _report.status == "partial":
+                logger.error(
+                    "Startup embedding-index rebuild PARTIAL (%s) — semantic "
+                    "recall will be degraded until the next successful rebuild",
+                    "; ".join(_report.errors) or "no error detail",
+                )
+            elif _report.status == "skipped":
+                logger.warning(
+                    "Startup embedding-index rebuild skipped — embedding "
+                    "model not loaded; semantic recall will be degraded "
+                    "until the next successful rebuild"
+                )
+            else:
+                logger.info("Startup embedding-index rebuild complete")
         except Exception as exc:
             logger.warning(
                 "Startup embedding-index rebuild failed (non-fatal): %r", exc

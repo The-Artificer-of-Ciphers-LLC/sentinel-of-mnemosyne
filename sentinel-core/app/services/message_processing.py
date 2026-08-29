@@ -122,6 +122,19 @@ class MessageProcessor:
             messages.append({"role": "user", "content": filtered_context})
             messages.append({"role": "assistant", "content": "Understood."})
 
+        # Inventory injection (presentation, D-04) -- meta-question about
+        # vault CONTENTS ("what topics do you have?"), populated by Recall
+        # only when the request matched vault_inventory.is_inventory_query.
+        if recalled.inventory:
+            inventory_block = (
+                "Vault contents (the notes currently in the user's second brain):\n"
+                + recalled.inventory
+            )
+            safe_inventory = self._budget.truncate(inventory_block, search_budget)
+            filtered_inventory = self._injection_filter.wrap_context(safe_inventory)
+            messages.append({"role": "user", "content": filtered_inventory})
+            messages.append({"role": "assistant", "content": "Understood."})
+
         # Warm-tier injection (presentation, D-04).
         if recalled.warm:
             vault_block = self._format_search_results(recalled.warm)

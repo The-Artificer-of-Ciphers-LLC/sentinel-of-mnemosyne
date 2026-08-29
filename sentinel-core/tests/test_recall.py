@@ -1914,6 +1914,38 @@ async def test_inbox_gap_not_recalled():
     )
 
 
+async def test_sentinel_persona_not_recalled():
+    """sentinel/ MEM-07-style gap characterization: the Sentinel's own persona
+    is not warm-recalled (document-and-accept, mirrors the inbox/ test above).
+
+    ``sentinel/persona.md`` is already injected as the system message by
+    ``MessageProcessor`` via ``vault.read_self_context("sentinel/persona.md")``.
+    Measured in production it was the top warm hit for nearly every query,
+    duplicating the persona into the prompt and consuming a
+    ``warm_top_n=3`` result slot. We explicitly add "sentinel/" to the
+    warm-tier exclude_prefixes so the boundary is a tested, recorded
+    contract rather than a silent omission.
+    """
+    persona_path = "sentinel/persona.md"
+    notes = {
+        persona_path: "sentinel persona gap characterization warm test content unique marker",
+    }
+    # Use default RecallConfig() — the implementation must add "sentinel/" to exclude_prefixes
+    recall = Recall(vault=FakeVault(notes=notes), config=RecallConfig())
+    result = await recall.assemble(
+        make_request(content="sentinel persona gap characterization warm test content unique marker"),
+        budget=8192,
+    )
+
+    warm_paths = [r.path for r in result.warm]
+    # sentinel/ content must NOT appear in warm recall
+    assert persona_path not in warm_paths, (
+        f"sentinel/ content must not appear in warm recall (persona duplication gap); "
+        f"found {persona_path!r} in warm paths: {warm_paths}. "
+        f"Fix: ensure 'sentinel/' is in RecallConfig.exclude_prefixes default."
+    )
+
+
 def test_no_stale_warm_tier_exclude_prefixes_duplicate():
     """D-03b (44-03 Task 1): _WARM_TIER_EXCLUDE_PREFIXES must not survive as a
     second, drifting duplicate of RecallConfig.exclude_prefixes.

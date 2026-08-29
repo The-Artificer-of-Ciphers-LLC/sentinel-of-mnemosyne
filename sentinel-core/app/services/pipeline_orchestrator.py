@@ -85,6 +85,13 @@ class PipelineReport(BaseModel):
     reweave_edits: int = 0
     verify_failed: int = 0
     verify_requeued: int = 0
+    # 2026-08-29 production incident: Reduce filed conversational
+    # meta-commentary ("The model's knowledge cutoff is prior to the
+    # current date", "User is seeking additional information about a
+    # specific project") as permanent notes. `durable=False` (six_rs/reduce)
+    # short-circuits filing for such entries; this counter makes that
+    # discard observable in the pipeline report.
+    discarded_not_durable: int = 0
     errors: list[str] = Field(default_factory=list)
 
 
@@ -299,18 +306,29 @@ async def _run_ralph(
     for entry in sorted(entries, key=lambda e: e.entry_n, reverse=True):
         try:
             result, slug, note_path, body = await _reduce_to_note(entry)
-            await vault.write_note(note_path, body)
-            report.reduced += 1
 
-            hub_path = await _embed_and_reflect(
-                vault, note_path, body, embedder=embedder, settings=settings
-            )
-            if hub_path:
-                report.hubs_touched += 1
+            if not result.durable:
+                # Mirrors the non-durable gate in `_run_pipeline` -- keep the
+                # two in sync, do not let them drift. Ralph has no
+                # Verify/Reweave stage, so there is nothing to roll back:
+                # just drop the entry from inbox/ and record the discard.
+                report.discarded_not_durable += 1
+                current_body = await vault.read_note(INBOX_PATH)
+                current_body = remove_entry(current_body, entry.entry_n)
+                await vault.write_note(INBOX_PATH, current_body)
+            else:
+                await vault.write_note(note_path, body)
+                report.reduced += 1
 
-            current_body = await vault.read_note(INBOX_PATH)
-            current_body = remove_entry(current_body, entry.entry_n)
-            await vault.write_note(INBOX_PATH, current_body)
+                hub_path = await _embed_and_reflect(
+                    vault, note_path, body, embedder=embedder, settings=settings
+                )
+                if hub_path:
+                    report.hubs_touched += 1
+
+                current_body = await vault.read_note(INBOX_PATH)
+                current_body = remove_entry(current_body, entry.entry_n)
+                await vault.write_note(INBOX_PATH, current_body)
         except Exception as exc:
             report.errors.append(f"entry {entry.entry_n}: {exc}")
         report.entries_processed += 1
@@ -349,52 +367,68 @@ async def _run_pipeline(
     for entry in sorted(entries, key=lambda e: e.entry_n, reverse=True):
         try:
             result, slug, note_path, body = await _reduce_to_note(entry)
-            await vault.write_note(note_path, body)
-            report.reduced += 1
 
-            hub_path = await _embed_and_reflect(
-                vault, note_path, body, embedder=embedder, settings=settings
-            )
-            if hub_path:
-                report.hubs_touched += 1
-
-            # Reflect may have just written a member->hub backlink into the
-            # note (add_hub_backlink_to_member) -- re-read before Verify.
-            body = await vault.read_note(note_path)
-
-            outcome = await verify_note(
-                vault,
-                note_path=note_path,
-                body=body,
-                filename_slug=slug,
-                retry_count=entry.retry_count,
-            )
-
-            if outcome.get("passed"):
-                if hub_path:
-                    addition_text = await _draft_reweave_addition(
-                        slug, result.claim_title, result.body
-                    )
-                    reweaved = await reweave_note(
-                        vault, target_path=hub_path, addition_text=addition_text
-                    )
-                    if reweaved:
-                        report.reweave_edits += 1
-
+            if not result.durable:
+                # 2026-08-29 production incident: Reduce filed conversational
+                # meta-commentary ("The model's knowledge cutoff is prior to
+                # the current date", "User is seeking additional information
+                # about a specific project") as permanent notes. A
+                # non-durable entry must NEVER be filed and must never enter
+                # Reflect/Verify/Reweave -- just drop it from inbox/ (like
+                # the happy path below) and record the discard so it stays
+                # observable.
+                report.discarded_not_durable += 1
                 current_body = await vault.read_note(INBOX_PATH)
                 current_body = remove_entry(current_body, entry.entry_n)
                 await vault.write_note(INBOX_PATH, current_body)
             else:
-                report.verify_failed += 1
-                # D-02: a failing note never lands in notes/.
-                await vault.delete_note(note_path)
+                await vault.write_note(note_path, body)
+                report.reduced += 1
+
+                hub_path = await _embed_and_reflect(
+                    vault, note_path, body, embedder=embedder, settings=settings
+                )
                 if hub_path:
-                    # Clean-graph invariant: a rejected note leaves no
-                    # orphan hub attach/edge behind.
-                    await detach_from_hub(vault, hub_path, slug)
-                if outcome.get("requeued"):
-                    report.verify_requeued += 1
-                await _requeue_or_flag(vault, entry, outcome, slug)
+                    report.hubs_touched += 1
+
+                # Reflect may have just written a member->hub backlink into
+                # the note (add_hub_backlink_to_member) -- re-read before
+                # Verify.
+                body = await vault.read_note(note_path)
+
+                outcome = await verify_note(
+                    vault,
+                    note_path=note_path,
+                    body=body,
+                    filename_slug=slug,
+                    retry_count=entry.retry_count,
+                )
+
+                if outcome.get("passed"):
+                    if hub_path:
+                        addition_text = await _draft_reweave_addition(
+                            slug, result.claim_title, result.body
+                        )
+                        reweaved = await reweave_note(
+                            vault, target_path=hub_path, addition_text=addition_text
+                        )
+                        if reweaved:
+                            report.reweave_edits += 1
+
+                    current_body = await vault.read_note(INBOX_PATH)
+                    current_body = remove_entry(current_body, entry.entry_n)
+                    await vault.write_note(INBOX_PATH, current_body)
+                else:
+                    report.verify_failed += 1
+                    # D-02: a failing note never lands in notes/.
+                    await vault.delete_note(note_path)
+                    if hub_path:
+                        # Clean-graph invariant: a rejected note leaves no
+                        # orphan hub attach/edge behind.
+                        await detach_from_hub(vault, hub_path, slug)
+                    if outcome.get("requeued"):
+                        report.verify_requeued += 1
+                    await _requeue_or_flag(vault, entry, outcome, slug)
         except Exception as exc:
             report.errors.append(f"entry {entry.entry_n}: {exc}")
         report.entries_processed += 1

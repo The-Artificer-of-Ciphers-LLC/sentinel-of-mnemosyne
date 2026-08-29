@@ -426,6 +426,112 @@ async def test_pipeline_mode_verify_failure_after_reflect_rolls_back_hub_attach(
     assert len(entries) == 1, "the failed entry must be requeued, not dropped"
 
 
+async def test_pipeline_mode_non_durable_entry_discarded_not_filed():
+    """2026-08-29 production incident follow-up: a Reduce result with
+    ``durable=False`` (conversational meta-commentary, not knowledge) must
+    NOT be filed as a note and must never enter Reflect/Verify/Reweave --
+    it is simply dropped from inbox/ and the discard is recorded on the
+    report (``discarded_not_durable``)."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import pipeline_orchestrator
+    from app.services.graph_analysis import NOTES_ROOT
+    from app.services.inbox import INBOX_PATH, parse_inbox
+    from app.services.six_rs.reduce import ReduceResult
+
+    non_durable_result = ReduceResult(
+        claim_title="The model's knowledge cutoff is prior to the current date",
+        body="The model's knowledge cutoff is prior to the current date.",
+        schema_type="fleeting",
+        durable=False,
+    )
+
+    vault = _make_vault()
+
+    with (
+        patch(
+            "app.services.pipeline_orchestrator.reduce_entry",
+            new=AsyncMock(return_value=non_durable_result),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.find_and_attach_hub",
+            new=AsyncMock(return_value="notes/recall-hub.md"),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.verify_note",
+            new=AsyncMock(),
+        ) as verify_mock,
+        patch(
+            "app.services.pipeline_orchestrator.reweave_note",
+            new=AsyncMock(),
+        ) as reweave_mock,
+        patch(
+            "app.services.pipeline_orchestrator.triage_observations",
+            new=AsyncMock(return_value=[]),
+        ),
+    ):
+        report = await pipeline_orchestrator.run(vault, mode="pipeline")
+
+    assert report.discarded_not_durable == 1
+    assert report.reduced == 0
+    assert report.verify_failed == 0
+
+    filed_note_paths = [p for p in vault.notes if p.startswith(f"{NOTES_ROOT}/")]
+    assert filed_note_paths == [], "a non-durable entry must never be filed as a note"
+
+    verify_mock.assert_not_awaited()
+    reweave_mock.assert_not_awaited()
+
+    entries = parse_inbox(vault.notes[INBOX_PATH])
+    assert entries == [], "a non-durable entry is dropped from inbox/, not requeued"
+
+
+async def test_ralph_mode_non_durable_entry_discarded_not_filed():
+    """Same production-incident gate as
+    ``test_pipeline_mode_non_durable_entry_discarded_not_filed``, mirrored
+    onto ``mode="ralph"``: a Reduce result with ``durable=False`` must NOT
+    be filed as a note, must never enter Reflect, is dropped from inbox/,
+    and the discard is recorded on the report."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import pipeline_orchestrator
+    from app.services.graph_analysis import NOTES_ROOT
+    from app.services.inbox import INBOX_PATH, parse_inbox
+    from app.services.six_rs.reduce import ReduceResult
+
+    non_durable_result = ReduceResult(
+        claim_title="The model's knowledge cutoff is prior to the current date",
+        body="The model's knowledge cutoff is prior to the current date.",
+        schema_type="fleeting",
+        durable=False,
+    )
+
+    vault = _make_vault()
+
+    with (
+        patch(
+            "app.services.pipeline_orchestrator.reduce_entry",
+            new=AsyncMock(return_value=non_durable_result),
+        ),
+        patch(
+            "app.services.pipeline_orchestrator.find_and_attach_hub",
+            new=AsyncMock(),
+        ) as reflect_mock,
+    ):
+        report = await pipeline_orchestrator.run(vault, mode="ralph")
+
+    assert report.discarded_not_durable == 1
+    assert report.reduced == 0
+
+    filed_note_paths = [p for p in vault.notes if p.startswith(f"{NOTES_ROOT}/")]
+    assert filed_note_paths == [], "a non-durable entry must never be filed as a note"
+
+    reflect_mock.assert_not_awaited()
+
+    entries = parse_inbox(vault.notes[INBOX_PATH])
+    assert entries == [], "a non-durable entry is dropped from inbox/, not requeued"
+
+
 async def test_concurrent_pipeline_and_sweep_refused():
     """Pitfall 8: lock acquisition strictly precedes any inbox read.
 

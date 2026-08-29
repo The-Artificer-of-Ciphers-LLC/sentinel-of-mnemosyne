@@ -27,6 +27,7 @@ from app.services.embedding_sidecar_index import (
     decode_index_body,
     eligible_entries,
 )
+from app.services.vault_inventory import is_inventory_query, load_inventory
 
 if TYPE_CHECKING:
     from app.vault import Vault
@@ -233,6 +234,15 @@ class RecalledContext:
     warm: list[SearchResult]
     """Warm-tier search results filtered by threshold and namespace exclusions."""
 
+    inventory: str = ""
+    """Rendered vault-contents summary (``vault_inventory.format_inventory``).
+
+    Populated only when the request is an inventory-shaped meta-question
+    (``vault_inventory.is_inventory_query``); "" for every ordinary query.
+    Deliberately kept off the hot path -- the links-index read this requires
+    is not worth paying on every message.
+    """
+
 
 @dataclass(frozen=True)
 class RecallConfig:
@@ -246,13 +256,20 @@ class RecallConfig:
     relevance_threshold: float = -200.0
     """BM25 score floor; results below this are excluded from warm tier."""
 
-    exclude_prefixes: tuple[str, ...] = ("ops/", "_trash/", "self/", "inbox/")
+    exclude_prefixes: tuple[str, ...] = ("ops/", "_trash/", "self/", "inbox/", "sentinel/")
     """Warm-tier namespace exclusion list. Passed directly to ``str.startswith``.
 
     ``inbox/`` is included here (document-and-accept, D-06, Pitfall 1): low-confidence
     content quarantined in ``inbox/`` is also in ``sweep_skip_prefixes`` and is never
     embedded; excluding it from warm recall aligns keyword search with semantic behavior
     and preserves the noise-quarantine intent.
+
+    ``sentinel/`` is included here because ``sentinel/persona.md`` is the Sentinel's
+    OWN persona, already injected as the system message by ``MessageProcessor`` via
+    ``vault.read_self_context("sentinel/persona.md")``. Measured in production, it was
+    the top warm hit for essentially every query -- surfacing it again as a "Relevant
+    vault note" both duplicates it into the prompt and burns one of only
+    ``warm_top_n=3`` result slots on content that carries no query-specific signal.
     """
 
     sessions_ratio: float = 0.15
@@ -879,12 +896,19 @@ class Recall:
         Per-tier truncation is the responsibility of ``MessageProcessor``
         (D-04); ``assemble`` returns untruncated content.
         """
-        _self_raw, _sessions_raw, _warm_raw = await asyncio.gather(
+        inventory_requested = is_inventory_query(request.content)
+
+        gather_args = [
             self._hot_self(),
             self._hot_sessions(request.user_id),
             self._warm_search(request.content),
-            return_exceptions=True,
-        )
+        ]
+        if inventory_requested:
+            gather_args.append(load_inventory(self._vault))
+
+        gathered = await asyncio.gather(*gather_args, return_exceptions=True)
+        _self_raw, _sessions_raw, _warm_raw = gathered[:3]
+        _inventory_raw = gathered[3] if inventory_requested else ""
 
         if isinstance(_self_raw, BaseException):
             logger.warning("recall tier failed: %r", _self_raw)
@@ -904,8 +928,15 @@ class Recall:
         else:
             warm = _warm_raw
 
+        if isinstance(_inventory_raw, BaseException):
+            logger.warning("recall tier failed: %r", _inventory_raw)
+            inventory: str = ""
+        else:
+            inventory = _inventory_raw
+
         return RecalledContext(
             self_context=self_context,
             sessions=sessions,
             warm=warm,
+            inventory=inventory,
         )
