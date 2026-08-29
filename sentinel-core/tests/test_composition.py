@@ -570,6 +570,75 @@ class _InterleavingFakeVault(FakeVault):
         return await super().write_note(path, body)
 
 
+# ---------------------------------------------------------------------------
+# Onboarding (GH #38): startup self-profile completeness check
+# ---------------------------------------------------------------------------
+
+
+async def test_startup_profile_check_logs_warning_when_incomplete(caplog):
+    """_startup_profile_check logs a WARNING naming the unfilled paths when
+    the canonical self/ files are still stub/missing."""
+    import logging
+
+    from app.composition import _startup_profile_check
+    from app.services.self_profile import CANONICAL_PROFILE_PATHS
+
+    vault = FakeVault()  # nothing pre-populated -> all "missing"
+
+    with caplog.at_level(logging.WARNING, logger="app.composition"):
+        await _startup_profile_check(vault)  # must not raise
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert "Self-profile incomplete" in message
+    for path in CANONICAL_PROFILE_PATHS:
+        assert path in message
+
+
+async def test_startup_profile_check_logs_info_when_complete(caplog):
+    """_startup_profile_check logs at INFO (not WARNING) when the profile is
+    complete."""
+    import logging
+
+    from app.composition import _startup_profile_check
+    from app.services.self_profile import CANONICAL_PROFILE_PATHS
+
+    vault = FakeVault(
+        notes={p: f"# {p}\n\nReal content.\n" for p in CANONICAL_PROFILE_PATHS}
+    )
+
+    with caplog.at_level(logging.INFO, logger="app.composition"):
+        await _startup_profile_check(vault)
+
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert warnings == []
+    infos = [r for r in caplog.records if r.levelno == logging.INFO]
+    assert any("Self-profile complete" in r.getMessage() for r in infos)
+
+
+async def test_startup_profile_check_does_not_raise_when_vault_errors(caplog):
+    """A vault failure on every path is swallowed non-fatally by
+    ``profile_status`` (per-path fail-soft) and surfaces as the ordinary
+    "incomplete" WARNING — the check must not raise regardless of which
+    layer absorbed the error, matching the embedding/links index startup
+    rebuilds' non-fatal posture."""
+    import logging
+
+    from app.composition import _startup_profile_check
+
+    class _BrokenVault:
+        async def read_note(self, path: str) -> str:
+            raise RuntimeError("simulated vault outage")
+
+    with caplog.at_level(logging.WARNING):
+        await _startup_profile_check(_BrokenVault())  # must not raise
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) >= 1
+    assert any("Self-profile incomplete" in r.getMessage() for r in warnings)
+
+
 async def test_initialize_startup_runs_both_rebuilds_without_starving_links_index(
     monkeypatch,
 ):

@@ -64,7 +64,18 @@ async def handle_subcommand(
     author_display_name: str | None = None,
     call_core_migrate_start=None,
     call_core_migrate_status=None,
+    onboard_dispatch=None,
 ) -> "str | dict":
+    if subcmd == "onboard":
+        if onboard_dispatch is None:
+            return "Onboarding is not configured on this deployment."
+        return await onboard_dispatch(
+            args,
+            user_id,
+            channel=channel,
+            author_display_name=author_display_name,
+        )
+
     if subcmd == "pf":
         return await pf_dispatch(
             args,

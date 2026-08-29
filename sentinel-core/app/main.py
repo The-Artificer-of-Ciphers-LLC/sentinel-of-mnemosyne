@@ -36,10 +36,12 @@ from app.routes.modules import router as modules_router
 from app.routes.note import router as note_router
 from app.routes.pipeline import router as pipeline_router
 from app.routes.provider import router as provider_router
+from app.routes.self_profile import router as self_profile_router
 from app.routes.status import router as status_router
 from app.services.health_response import build_health_payload
 from app.services.model_selector import probe_embedding_model_loaded
 from app.services.runtime_probe import probe_runtime
+from app.services.self_profile import profile_status
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 logger = logging.getLogger(__name__)
@@ -108,6 +110,7 @@ app.include_router(migration_router)
 app.include_router(provider_router)
 app.include_router(embeddings_router)
 app.include_router(graph_router)
+app.include_router(self_profile_router)
 
 
 @app.get("/health")
@@ -133,4 +136,16 @@ async def health(request: Request) -> JSONResponse:
     except Exception:
         pass
 
-    return JSONResponse(build_health_payload(snapshot, embedding_loaded))
+    # Onboarding (GH #38): report profile completeness as a non-blocking
+    # /health field, same graceful-degrade posture as the embedding probe
+    # above -- a vault failure here must never turn /health non-200.
+    vault = getattr(request.app.state, "vault", None)
+    profile_complete = False
+    if vault is not None:
+        try:
+            status = await profile_status(vault)
+            profile_complete = status.complete
+        except Exception:
+            pass
+
+    return JSONResponse(build_health_payload(snapshot, embedding_loaded, profile_complete))

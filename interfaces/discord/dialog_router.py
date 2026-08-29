@@ -50,20 +50,35 @@ async def maybe_consume_as_answer(
     # network call so regular text channels stay free of HTTP traffic.
     if not isinstance(channel, discord.Thread):
         return None
-    # Hit condition 3: draft must exist for ``(thread.id, user_id)``.
-    if not await draft_exists(channel.id, str(user_id), http_client=http_client):
-        return None
+    # Hit condition 3: draft must exist for ``(thread.id, user_id)``. Checked
+    # against both dialog draft stores — a thread can only carry one kind of
+    # draft at a time, but the gate itself is dialog-agnostic.
+    if await draft_exists(channel.id, str(user_id), http_client=http_client):
+        # Lazy import — keeps dialog_router decoupled from dialog-state internals at
+        # import time (avoids a cycle through bot.py during conftest collection).
+        import pathfinder_player_dialog as ppd
 
-    # Lazy import — keeps dialog_router decoupled from dialog-state internals at
-    # import time (avoids a cycle through bot.py during conftest collection).
-    import pathfinder_player_dialog as ppd
+        outcome = await ppd.consume_as_answer_outcome(
+            thread=channel,
+            user_id=str(user_id),
+            message_text=message,
+            sentinel_client=sentinel_client,
+            http_client=http_client,
+        )
+        return outcome.to_router_response()
 
-    # All conditions met — consume the message as the next dialog answer.
-    outcome = await ppd.consume_as_answer_outcome(
-        thread=channel,
-        user_id=str(user_id),
-        message_text=message,
-        sentinel_client=sentinel_client,
-        http_client=http_client,
-    )
-    return outcome.to_router_response()
+    from self_profile_draft_store import draft_exists as self_profile_draft_exists
+
+    if await self_profile_draft_exists(channel.id, str(user_id), http_client=http_client):
+        import self_profile_dialog as spd
+
+        outcome = await spd.consume_as_answer_outcome(
+            thread=channel,
+            user_id=str(user_id),
+            message_text=message,
+            sentinel_client=sentinel_client,
+            http_client=http_client,
+        )
+        return outcome.to_router_response()
+
+    return None
