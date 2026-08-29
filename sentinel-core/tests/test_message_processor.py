@@ -297,6 +297,67 @@ async def test_empty_body_session_does_not_introduce_stray_separator():
     )
 
 
+async def test_degenerate_response_logs_response_anomaly_warning_and_is_returned_unchanged(caplog):
+    """A degenerate provider response (repeated 'la-system' garbage) trips
+    the anomaly detector: exactly one WARNING starting with
+    'response-anomaly:' is logged, and the response is still returned
+    UNCHANGED to the caller (detection only, never a gate)."""
+    degenerate = (
+        "This covers la-system methodology, la-system principles, and "
+        "la-system markers for managing active requests."
+    )
+    proc, _, ai = make_processor(ai_response=degenerate)
+    req = make_request(content="what is in my second brain?")
+
+    with caplog.at_level(logging.WARNING, logger="app.services.message_processing"):
+        result = await proc.process(req)
+
+    assert result.content == degenerate
+    anomaly_warnings = [
+        r for r in caplog.records
+        if r.getMessage().startswith("response-anomaly:")
+    ]
+    assert len(anomaly_warnings) == 1, (
+        f"Expected exactly one response-anomaly warning; got: "
+        f"{[r.getMessage() for r in caplog.records]}"
+    )
+
+
+async def test_clean_response_logs_no_response_anomaly_warning(caplog):
+    """A well-formed response must not trip the anomaly detector."""
+    proc, _, ai = make_processor(ai_response="Got it. That sounds like a great milestone!")
+    req = make_request()
+
+    with caplog.at_level(logging.WARNING, logger="app.services.message_processing"):
+        result = await proc.process(req)
+
+    assert result.content == "Got it. That sounds like a great milestone!"
+    anomaly_warnings = [
+        r for r in caplog.records
+        if r.getMessage().startswith("response-anomaly:")
+    ]
+    assert anomaly_warnings == []
+
+
+async def test_anomaly_detector_raising_does_not_break_message_processing(monkeypatch):
+    """If detect_anomalies() itself raises, message processing must still
+    succeed and return the content unchanged — observability must never be
+    able to take down the message path."""
+    import app.services.message_processing as mp_module
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("detector exploded")
+
+    monkeypatch.setattr(mp_module, "detect_anomalies", _boom)
+
+    proc, _, ai = make_processor(ai_response="Perfectly normal reply.")
+    req = make_request()
+
+    result = await proc.process(req)
+
+    assert result.content == "Perfectly normal reply."
+
+
 # Mark all tests in this module as async — pytest-asyncio is in auto mode per
 # pyproject.toml (asyncio_mode="auto"), but make the dependency explicit.
 pytestmark = pytest.mark.asyncio
