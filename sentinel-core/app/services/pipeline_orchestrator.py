@@ -352,7 +352,10 @@ async def absorb_standalone_inbox_notes(vault: Any, report: PipelineReport) -> i
     try:
         listing = await vault.list_under("inbox")
     except Exception as exc:
-        report.errors.append(f"absorb_standalone_inbox_notes: list_under(inbox) failed: {exc}")
+        report.errors.append(
+            f"absorb_standalone_inbox_notes: list_under(inbox) failed: "
+            f"{type(exc).__name__}: {exc}"
+        )
         logger.warning("absorb_standalone_inbox_notes: list_under(inbox) failed: %s", exc)
         return 0
 
@@ -389,7 +392,8 @@ async def absorb_standalone_inbox_notes(vault: Any, report: PipelineReport) -> i
                 # the next run unless someone notices this error.
                 msg = (
                     f"absorb_standalone_inbox_notes: trash failed for {path} after "
-                    f"successful queue append (will duplicate on next run): {trash_exc}"
+                    f"successful queue append (will duplicate on next run): "
+                    f"{type(trash_exc).__name__}: {trash_exc}"
                 )
                 report.errors.append(msg)
                 logger.error(msg)
@@ -397,7 +401,9 @@ async def absorb_standalone_inbox_notes(vault: Any, report: PipelineReport) -> i
 
             absorbed += 1
         except Exception as exc:
-            report.errors.append(f"absorb_standalone_inbox_notes: {path}: {exc}")
+            report.errors.append(
+                f"absorb_standalone_inbox_notes: {path}: {type(exc).__name__}: {exc}"
+            )
             logger.warning("absorb_standalone_inbox_notes: %s failed: %s", path, exc)
 
     return absorbed
@@ -453,7 +459,7 @@ async def _run_ralph(
                 current_body = remove_entry(current_body, entry.entry_n)
                 await vault.write_note(INBOX_PATH, current_body)
         except Exception as exc:
-            report.errors.append(f"entry {entry.entry_n}: {exc}")
+            report.errors.append(f"entry {entry.entry_n}: {type(exc).__name__}: {exc}")
         report.entries_processed += 1
         if status_callback:
             status_callback(report)
@@ -557,7 +563,7 @@ async def _run_pipeline(
                         report.verify_requeued += 1
                     await _requeue_or_flag(vault, entry, outcome, slug)
         except Exception as exc:
-            report.errors.append(f"entry {entry.entry_n}: {exc}")
+            report.errors.append(f"entry {entry.entry_n}: {type(exc).__name__}: {exc}")
         report.entries_processed += 1
         if status_callback:
             status_callback(report)
@@ -571,7 +577,7 @@ async def _run_pipeline(
                 len(dispositions),
             )
     except Exception as exc:
-        report.errors.append(f"rethink: {exc}")
+        report.errors.append(f"rethink: {type(exc).__name__}: {exc}")
 
 
 async def _run_reweave(
@@ -617,7 +623,7 @@ async def _run_reweave(
                 if reweaved:
                     report.reweave_edits += 1
         except Exception as exc:
-            report.errors.append(f"reweave {path}: {exc}")
+            report.errors.append(f"reweave {path}: {type(exc).__name__}: {exc}")
         report.entries_processed += 1
         if status_callback:
             status_callback(report)
@@ -633,7 +639,7 @@ async def _run_rethink(
     try:
         dispositions = await triage_observations(vault)
     except Exception as exc:
-        report.errors.append(f"rethink: {exc}")
+        report.errors.append(f"rethink: {type(exc).__name__}: {exc}")
         dispositions = []
     report.entries_total = len(dispositions)
     report.entries_processed = len(dispositions)
@@ -689,7 +695,7 @@ async def run(
         raise
     except Exception as exc:
         report.status = "error"
-        report.errors.append(str(exc))
+        report.errors.append(f"{type(exc).__name__}: {exc}")
         raise
     finally:
         await vault.release_sweep_lock()

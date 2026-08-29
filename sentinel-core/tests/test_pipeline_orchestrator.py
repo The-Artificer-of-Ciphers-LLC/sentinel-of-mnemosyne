@@ -730,6 +730,52 @@ async def test_ralph_mode_absorbed_standalone_zero_when_no_standalone_notes():
     assert report.reduced >= 1
 
 
+async def test_ralph_mode_entry_error_with_empty_str_exception_still_names_exception_type():
+    """Regression (2026-08-29 production incident): a caught exception whose
+    ``str()`` is empty (e.g. ``asyncio.TimeoutError()``, as raised by a real
+    LLM request timeout) must still surface an identifiable error -- the
+    exception's class name -- instead of degenerating to a bare
+    ``"entry N: "`` with zero diagnostic value."""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import pipeline_orchestrator
+
+    vault = _make_vault()
+
+    with patch(
+        "app.services.pipeline_orchestrator.reduce_entry",
+        new=AsyncMock(side_effect=asyncio.TimeoutError()),
+    ):
+        report = await pipeline_orchestrator.run(vault, mode="ralph")
+
+    assert len(report.errors) == 1
+    error = report.errors[0]
+    assert error != "entry 1: ", "error string must not degenerate to a bare empty message"
+    assert "TimeoutError" in error
+
+
+async def test_ralph_mode_entry_error_with_message_still_includes_message():
+    """Non-regression: an exception carrying a real message keeps that
+    message in the recorded error string alongside the exception type."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import pipeline_orchestrator
+
+    vault = _make_vault()
+
+    with patch(
+        "app.services.pipeline_orchestrator.reduce_entry",
+        new=AsyncMock(side_effect=ValueError("bad candidate text")),
+    ):
+        report = await pipeline_orchestrator.run(vault, mode="ralph")
+
+    assert len(report.errors) == 1
+    error = report.errors[0]
+    assert "ValueError" in error
+    assert "bad candidate text" in error
+
+
 async def test_concurrent_pipeline_and_sweep_refused():
     """Pitfall 8: lock acquisition strictly precedes any inbox read.
 
