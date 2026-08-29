@@ -14,6 +14,7 @@ Lockfile sentinel ``ops/sweeps/_in-progress.md`` prevents overlapping sweeps
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import AsyncIterator, Awaitable, Callable
 
@@ -99,6 +100,20 @@ def _active_skip_prefixes() -> tuple[str, ...]:
 
 LOCKFILE_PATH = "ops/sweeps/_in-progress.md"
 STALE_LOCK_SECONDS = 3600  # 1 hour
+
+EMBED_BATCH_SIZE = 8
+"""Max notes sent to ``embedder()`` per call in ``rebuild_embedding_index``.
+
+This is a RELIABILITY bound, not a performance tuning knob. Measured
+2026-08-29 against the live embedding endpoint (reached over an LM Studio
+"LM Link" remote-device tunnel): batch=1 → 0/6 failures, batch=8 → 0/6
+failures, batch=24 → 2/6 failures ("LM Link connection closed."). The
+failure is load-related flakiness, NOT a clean byte-size threshold (a
+174 KB / 4-item request succeeded) and NOT a clean count threshold (24
+failed on one trial while 40 succeeded on another). Chunking at this size
+bounds the blast radius of a single dropped request to at most
+``EMBED_BATCH_SIZE`` notes instead of the entire vault.
+"""
 
 def _embedding_model_id() -> str:
     """Return the configured embedding model id for frontmatter recording.
@@ -396,25 +411,76 @@ async def rebuild_embedding_index(
                 logger.warning("rebuild_embedding_index error: %s", msg)
                 report.errors.append(msg)
 
-        # 3. Embed all surviving bodies (NOMIC_DOCUMENT_PREFIX for nomic instruction space)
+        # 3. Embed all surviving bodies (NOMIC_DOCUMENT_PREFIX for nomic instruction space).
+        # Chunked at EMBED_BATCH_SIZE (see constant docstring — this is a
+        # reliability bound against the flaky LM Link transport, not a perf
+        # knob). A single dropped chunk must NOT poison every other note's
+        # vector, so results are accumulated per-chunk keyed by the
+        # survivor's original index, and a chunk that fails twice (initial +
+        # one retry) only marks ITS OWN indices as having no fresh vector.
         bodies = [NOMIC_DOCUMENT_PREFIX + s[2] for s in survivors]
-        embeddings: list[list[float]] | None = None
-        embedding_failed = False
+        embeddings_by_idx: dict[int, list[float]] = {}
+        failed_indices: list[int] = []
         if bodies:
-            try:
-                embeddings = await embedder(bodies)
-            except Exception as exc:
-                embedding_failed = True
-                logger.error(
-                    "rebuild_embedding_index: embedding endpoint failed (%s); index will be partial",
-                    exc,
-                )
-                report.errors.append(f"embedding endpoint failed; index is partial: {exc}")
-                embeddings = None
+            for start in range(0, len(bodies), EMBED_BATCH_SIZE):
+                chunk = bodies[start : start + EMBED_BATCH_SIZE]
+                chunk_indices = list(range(start, start + len(chunk)))
+                try:
+                    chunk_embeddings = await embedder(chunk)
+                except Exception as exc:
+                    logger.warning(
+                        "rebuild_embedding_index: embedding chunk %d-%d failed (%s); "
+                        "retrying once",
+                        start,
+                        start + len(chunk) - 1,
+                        exc,
+                    )
+                    await asyncio.sleep(0.5)
+                    try:
+                        chunk_embeddings = await embedder(chunk)
+                    except Exception as exc2:
+                        msg = (
+                            f"embedding endpoint failed for chunk "
+                            f"{start}-{start + len(chunk) - 1} after retry; "
+                            f"index will be partial for these notes: {exc2}"
+                        )
+                        logger.error("rebuild_embedding_index: %s", msg)
+                        report.errors.append(msg)
+                        failed_indices.extend(chunk_indices)
+                        continue
+                for i, vec in zip(chunk_indices, chunk_embeddings):
+                    embeddings_by_idx[i] = vec
+        embedding_failed = bool(failed_indices)
 
-        # 4. Emit index sidecar — reuses the shared helper; no classify/relocate/trash
+        # 4. Emit index sidecar — reuses the shared helper; no classify/relocate/trash.
+        #
+        # build_embedding_index (app.services.embedding_sidecar_index) only
+        # knows how to represent "no fresh vector" as a TRAILING truncation of
+        # the embeddings list relative to survivors (its `idx >= len(embeddings)`
+        # branch) — it has no concept of a hole in the middle of the list. To
+        # express "these specific (possibly non-trailing) positions failed"
+        # WITHOUT modifying that shared module, we locally reorder survivors
+        # so the successfully-embedded ones come first (in their original
+        # relative order) followed by the failed ones, and pass only the
+        # successful vectors (same order) as `embeddings`. This reorder is
+        # scoped to this call only — nothing downstream of this line
+        # consumes `survivors` — so each note is still paired with its own
+        # correct vector (or correctly falls into the existing carry-
+        # forward/stale path) and the degraded-index invariant (a changed
+        # note's content_hash is never persisted without a fresh vector) is
+        # preserved exactly as it was for the prior all-or-nothing failure
+        # path.
         active_paths: set[str] = {s[0] for s in survivors}
-        await _emit_embedding_index(client, survivors, embeddings, active_paths, report)
+        success_indices = [i for i in range(len(survivors)) if i in embeddings_by_idx]
+        ordered_survivors = [survivors[i] for i in success_indices] + [
+            survivors[i] for i in failed_indices
+        ]
+        ordered_embeddings: list[list[float]] = [
+            embeddings_by_idx[i] for i in success_indices
+        ]
+        await _emit_embedding_index(
+            client, ordered_survivors, ordered_embeddings, active_paths, report
+        )
 
         report.status = "partial" if embedding_failed else "complete"
         return report
