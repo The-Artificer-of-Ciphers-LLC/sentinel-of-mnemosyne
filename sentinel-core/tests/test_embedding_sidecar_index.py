@@ -142,6 +142,100 @@ def test_build_embedding_index_marks_changed_unembedded_entry_stale():
     assert index["notes/a.md"]["stale"] is True
 
 
+def test_stale_entry_heals_when_fresh_vector_available():
+    """Regression for the 2026-08-29 never-heal incident: a stale entry
+    (no embedding_b64) whose content_hash and embedding_model both still
+    match the note must be replaced with a fresh entry once a fresh vector
+    is available in this sweep, not carried forward unhealed forever."""
+    body = "unchanged body"
+    stale = {
+        "embedding_b64": "",
+        "embedding_model": "model-a",
+        "content_hash": content_hash(body),
+        "stale": True,
+    }
+
+    index, errors = build_embedding_index(
+        existing_index={"notes/a.md": stale},
+        survivors=[("notes/a.md", {}, body, object())],
+        embeddings=[[1.0, 0.0, 0.0]],
+        active_paths={"notes/a.md"},
+        active_model="model-a",
+    )
+
+    assert errors == []
+    entry = index["notes/a.md"]
+    assert entry.get("embedding_b64")
+    assert not entry.get("stale")
+
+
+def test_healthy_matching_entry_is_carried_forward_unchanged():
+    """A non-stale entry with matching content_hash and model is reused
+    as-is — no needless re-embed churn for notes that haven't changed."""
+    body = "unchanged body"
+    healthy = {
+        "embedding_b64": encode_embedding([1.0, 0.0, 0.0]),
+        "embedding_model": "model-a",
+        "content_hash": content_hash(body),
+    }
+
+    index, errors = build_embedding_index(
+        existing_index={"notes/a.md": healthy},
+        survivors=[("notes/a.md", {}, body, object())],
+        embeddings=[[9.0, 9.0, 9.0]],
+        active_paths={"notes/a.md"},
+        active_model="model-a",
+    )
+
+    assert errors == []
+    assert index["notes/a.md"] is healthy
+
+
+def test_changed_body_still_gets_fresh_entry():
+    """A note whose content changed always gets a fresh entry, regardless
+    of the prior entry's staleness."""
+    old_entry = {
+        "embedding_b64": encode_embedding([1.0, 0.0, 0.0]),
+        "embedding_model": "model-a",
+        "content_hash": content_hash("old body"),
+    }
+
+    index, errors = build_embedding_index(
+        existing_index={"notes/a.md": old_entry},
+        survivors=[("notes/a.md", {}, "new body", object())],
+        embeddings=[[2.0, 0.0, 0.0]],
+        active_paths={"notes/a.md"},
+        active_model="model-a",
+    )
+
+    assert errors == []
+    entry = index["notes/a.md"]
+    assert entry["content_hash"] == content_hash("new body")
+    assert not entry.get("stale")
+    assert entry["embedding_b64"] != old_entry["embedding_b64"]
+
+
+def test_no_embeddings_no_usable_entry_yields_stale_without_persisting_hash_as_embedded():
+    """Invariant: with no embeddings available at all, a note with no
+    usable stored entry still yields a stale entry — content_hash is
+    persisted, but never as though the note were actually embedded."""
+    body = "some body"
+
+    index, errors = build_embedding_index(
+        existing_index={},
+        survivors=[("notes/a.md", {}, body, object())],
+        embeddings=None,
+        active_paths={"notes/a.md"},
+        active_model="model-a",
+    )
+
+    assert errors == []
+    entry = index["notes/a.md"]
+    assert entry["content_hash"] == content_hash(body)
+    assert entry["stale"] is True
+    assert not entry.get("embedding_b64")
+
+
 def test_build_embedding_index_prunes_inactive_paths():
     index, errors = build_embedding_index(
         existing_index={
