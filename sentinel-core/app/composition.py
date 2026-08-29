@@ -35,6 +35,7 @@ from app.services.model_selector import (
 from app.services.note_classifier import classify_note
 from app.services.output_scanner import OutputScanner
 from app.services.provider_router import ProviderRouter
+from app.services.self_profile import profile_status
 from app.vault import ObsidianVault
 from sentinel_shared.model_profiles import get_profile
 
@@ -558,4 +559,47 @@ async def initialize_startup(
 
     _rebuild_task.add_done_callback(_clear_startup_rebuild_task)
 
+    # Onboarding (GH #38): non-blocking startup self-profile completeness
+    # check. Fires _startup_profile_check() in its own background task —
+    # same posture as the index rebuilds above: never awaited inline (so it
+    # cannot block boot), and internally wrapped so a vault failure can never
+    # escape into startup. It does not need the vault sweep lock (read-only,
+    # no write/relocate/trash), so it is scheduled independently rather than
+    # folded into _startup_rebuild_sequential.
+    _profile_check_task = asyncio.create_task(_startup_profile_check(graph.vault))
+    app.state.startup_profile_check_task = _profile_check_task
+
+    def _clear_startup_profile_check_task(_task: asyncio.Task) -> None:
+        app.state.startup_profile_check_task = None
+
+    _profile_check_task.add_done_callback(_clear_startup_profile_check_task)
+
     return StartupResult(graph=graph, warnings=warnings)
+
+
+async def _startup_profile_check(vault: "Vault") -> None:
+    """Log the self-profile completeness state at startup.
+
+    WARNING when incomplete (names the unfilled paths), INFO when complete.
+    Never raises: a ``profile_status`` failure (vault error) is caught and
+    logged non-fatally — identical posture to the embedding-index /
+    links-index startup rebuilds, which must never block or fail boot.
+    """
+    try:
+        status = await profile_status(vault)
+    except Exception as exc:
+        logger.warning("Startup self-profile check failed (non-fatal): %r", exc)
+        return
+
+    total = len(status.paths)
+    if status.complete:
+        logger.info("Self-profile complete (%d/%d files filled)", total, total)
+    else:
+        n_unfilled = len(status.unfilled)
+        logger.warning(
+            "Self-profile incomplete: %d of %d files are unfilled stubs (%s) — "
+            "the Sentinel has no personal context; run onboarding.",
+            n_unfilled,
+            total,
+            ", ".join(status.unfilled),
+        )

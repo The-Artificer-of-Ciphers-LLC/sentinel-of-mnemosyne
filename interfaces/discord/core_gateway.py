@@ -249,6 +249,43 @@ async def call_core_stats(*, user_id: str, core_url: str, api_key: str) -> str:
     )
 
 
+async def call_core_profile_status(*, core_url: str, api_key: str) -> dict | None:
+    """GET /self/profile/status (ungated). Returns the parsed status dict, or
+    None if Core is unreachable/erroring — callers must degrade (log + skip)
+    rather than crash, per the onboarding nudge/dialog resilience contract."""
+    try:
+        async with httpx.AsyncClient() as http_client:
+            resp = await http_client.get(
+                f"{core_url.rstrip('/')}/self/profile/status",
+                headers={"X-Sentinel-Key": api_key},
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            return resp.json()
+    except Exception as exc:
+        logger.warning("self/profile/status call failed: %s", exc)
+        return None
+
+
+async def call_core_profile_write(
+    *, user_id: str, path: str, content: str, sentinel_client, http_client, force: bool = False
+) -> dict:
+    """POST /self/profile via the module-proxy client.
+
+    Mirrors post_to_module's raise-on-error posture (NOT the swallow-to-string
+    posture of call_core_note/etc.) so callers can react to the domain-specific
+    409 ("already filled") without it being masked as a generic failure string.
+
+    Raises:
+        httpx.HTTPStatusError: On 4xx/5xx (e.g. 409 already-filled, 422 bad path).
+        httpx.ConnectError / httpx.TimeoutException: If sentinel-core is unreachable.
+    """
+    payload: dict = {"user_id": user_id, "path": path, "content": content}
+    if force:
+        payload["force"] = True
+    return await sentinel_client.post_to_module("self/profile", payload, http_client)
+
+
 async def call_core_check(*, user_id: str, core_url: str, api_key: str) -> str:
     try:
         async with httpx.AsyncClient() as http_client:

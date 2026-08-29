@@ -11,6 +11,7 @@ Command: /sen <message>
 Subcommands (prefix message with :):
   :help       — list available subcommands
   :capture    — capture text to Obsidian inbox
+  :onboard    — answer a few short questions to fill in your self/ profile
   :next       — what to work on next based on goals
   :health     — vault health check
   :goals      — show current active goals
@@ -60,6 +61,7 @@ import pathfinder_bridge
 import pathfinder_cli
 import pathfinder_error_mapper
 import response_renderer
+import self_profile_command
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -125,6 +127,12 @@ NOTIFY_CHANNEL_ID: int | None = int(_NOTIFY_CHANNEL_ID_RAW) if _NOTIFY_CHANNEL_I
 # Uses the parent channel ID set for allowlist checks on thread replies.
 SENTINEL_THREAD_IDS: set[int] = set()
 
+# 38-onboarding: guards the startup profile-incomplete nudge to at most one post
+# per process boot. In-process only — does NOT persist across bot restarts, so
+# a still-incomplete profile will nudge again on the next boot (acceptable: it
+# never nags twice within the SAME boot, which is the requirement).
+_ONBOARDING_NUDGE_POSTED = False
+
 # Module-level SentinelCoreClient — shared across all interactions
 _sentinel_client = SentinelCoreClient(
     base_url=SENTINEL_CORE_URL,
@@ -139,6 +147,7 @@ SUBCOMMAND_HELP = """\
 **Standard Commands**
 `:help` — show this command list
 `:capture <text>` — extract insights from source material; route to inbox/
+`:onboard` — answer a few short questions to fill in your self/ profile
 `:seed <text>` — drop raw content into inbox/ with zero friction
 `:ralph` — batch process inbox/ queue (Reduce + Reflect)
 `:pipeline` — run full 6 Rs pipeline (Record → Reduce → Reflect → Reweave → Verify → Rethink)
@@ -487,6 +496,30 @@ def build_ruling_embed(data: dict) -> "discord.Embed":
     return embed_builders.build_ruling_embed(data)
 
 
+async def _onboard_dispatch(
+    args: str,
+    user_id: str,
+    channel=None,
+    author_display_name: str | None = None,
+) -> "str | dict":
+    """Route ``:onboard`` / ``:onboard cancel`` to self_profile_command.
+
+    Owns its own httpx.AsyncClient (mirrors _pf_dispatch) so command_router
+    stays free of HTTP client lifecycle concerns.
+    """
+    async with httpx.AsyncClient() as http_client:
+        return await self_profile_command.dispatch_onboard(
+            args=args,
+            user_id=user_id,
+            channel=channel,
+            author_display_name=author_display_name,
+            sentinel_client=_sentinel_client,
+            http_client=http_client,
+            core_url=SENTINEL_CORE_URL,
+            api_key=SENTINEL_API_KEY,
+        )
+
+
 async def _pf_dispatch(
     args: str,
     user_id: str,
@@ -594,6 +627,7 @@ async def handle_sentask_subcommand(
             "call_core_pipeline_status": _call_core_pipeline_status,
             "call_core_migrate_start": _call_core_migrate_start,
             "call_core_migrate_status": _call_core_migrate_status,
+            "onboard_dispatch": _onboard_dispatch,
             "is_admin": _is_admin,
             "note_closed_vocab": _NOTE_CLOSED_VOCAB,
             "plugin_prompts": _PLUGIN_PROMPTS,
@@ -678,6 +712,57 @@ class SentinelBot(discord.Client):
         site = web.TCPSite(self._internal_runner, "0.0.0.0", internal_port)  # CR-01 fix: bind all interfaces so pf2e-module can reach via Docker bridge
         await site.start()
         logger.info("Internal notification server started on port %d", internal_port)
+
+        await self._maybe_post_onboarding_nudge()
+
+    async def _maybe_post_onboarding_nudge(self) -> None:
+        """Post a single "run :onboard" invitation on startup if the self/
+        profile is incomplete. Never enforces — invite, don't nag: at most one
+        post per process boot (module-level flag), and any failure (core
+        unreachable, no channel configured) degrades to a log line, never a
+        crash of startup.
+        """
+        global _ONBOARDING_NUDGE_POSTED
+        if _ONBOARDING_NUDGE_POSTED:
+            return
+        _ONBOARDING_NUDGE_POSTED = True
+        try:
+            status = await core_gateway.call_core_profile_status(
+                core_url=SENTINEL_CORE_URL, api_key=SENTINEL_API_KEY
+            )
+            if status is None:
+                logger.info("onboarding nudge: core unreachable — skipping")
+                return
+            if status.get("complete"):
+                return
+            unfilled = status.get("unfilled") or []
+            if not unfilled:
+                return
+
+            channel_id = discord_internal_notify.resolve_notify_channel_id(
+                NOTIFY_CHANNEL_ID, ALLOWED_CHANNEL_IDS
+            )
+            if channel_id is None:
+                logger.info(
+                    "onboarding nudge: no DISCORD_NOTIFY_CHANNEL_ID / "
+                    "DISCORD_ALLOWED_CHANNELS configured — skipping"
+                )
+                return
+            channel = self.get_channel(channel_id)
+            if channel is None:
+                logger.info(
+                    "onboarding nudge: channel %d not found or not cached — skipping",
+                    channel_id,
+                )
+                return
+            n = len(unfilled)
+            await channel.send(
+                f"Your 2nd-brain profile isn't fully set up yet ({n} file"
+                f"{'s' if n != 1 else ''} unfilled). Run `:onboard` to fill it "
+                "in — short factual answers are all it needs."
+            )
+        except Exception as exc:
+            logger.warning("onboarding nudge failed (non-fatal): %s", exc)
 
     async def _handle_internal_notify(self, request: "web.Request") -> "web.Response":
         """Handle POST /internal/notify from pf2e-module (D-14, FVT-02).

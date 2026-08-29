@@ -109,6 +109,61 @@ async def test_health_endpoint_probes_embedding_base_url_not_chat_base_url(monke
     )
 
 
+async def test_health_endpoint_reports_profile_incomplete_with_stubs(monkeypatch):
+    """/health reports profile="incomplete" when the canonical self/ files are
+    still unfilled stubs (onboarding, GH #38)."""
+    from app import main as main_module
+    from app.services.recall import build_self_stub
+    from app.services.self_profile import CANONICAL_PROFILE_PATHS
+    from tests.fakes.vault import FakeVault
+
+    async def _probe_loaded(*_args, **_kwargs):
+        return True
+
+    monkeypatch.setattr(main_module, "probe_embedding_model_loaded", _probe_loaded)
+
+    app.state.http_client = object()
+    app.state.vault = FakeVault(
+        notes={p: build_self_stub(p) for p in CANONICAL_PROFILE_PATHS}
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/health")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["profile"] == "incomplete"
+
+
+async def test_health_endpoint_reports_profile_complete_when_filled(monkeypatch):
+    """/health reports profile="complete" when all canonical self/ files hold
+    real (non-stub) content."""
+    from app import main as main_module
+    from app.services.self_profile import CANONICAL_PROFILE_PATHS
+    from tests.fakes.vault import FakeVault
+
+    async def _probe_loaded(*_args, **_kwargs):
+        return True
+
+    monkeypatch.setattr(main_module, "probe_embedding_model_loaded", _probe_loaded)
+
+    app.state.http_client = object()
+    app.state.vault = FakeVault(
+        notes={p: f"# {p}\n\nReal content.\n" for p in CANONICAL_PROFILE_PATHS}
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/health")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["profile"] == "complete"
+
+
 async def test_health_endpoint_graceful_degrade_when_probe_raises(monkeypatch):
     """Even if the probe raises, /health must return 200 with
     embedding_model="not_loaded" — graceful degrade rule."""
