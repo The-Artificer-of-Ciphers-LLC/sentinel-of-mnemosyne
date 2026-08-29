@@ -1175,6 +1175,54 @@ async def test_rebuild_embedding_index_model_not_loaded_returns_skipped():
     )
 
 
+@pytest.mark.asyncio
+async def test_rebuild_embedding_index_embedder_failure_reports_partial():
+    """When the embedder raises mid-run, rebuild_embedding_index must NOT
+    report success: report.status becomes 'partial', the failure is recorded
+    in report.errors (not just logged), and the sidecar is still written
+    (non-destructive contract unchanged — a corrupt/missing index self-heals).
+    """
+    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH, rebuild_embedding_index
+
+    note_paths = ["references/alpha.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+
+    async def _failing_embedder(texts):
+        raise RuntimeError("LM Studio offline")
+
+    report = await rebuild_embedding_index(fake, _failing_embedder, model_loaded=True)
+
+    assert report.status == "partial", (
+        f"expected report.status='partial' when the embedder raises; got {report.status!r}"
+    )
+    assert any("embedding endpoint failed" in e for e in report.errors), (
+        f"expected an embedding-failure message in report.errors; got {report.errors}"
+    )
+    assert EMBEDDING_INDEX_PATH in fake.notes, (
+        "index sidecar must still be written on a partial rebuild "
+        "(non-destructive contract unchanged)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_rebuild_embedding_index_embedder_success_reports_complete():
+    """Non-regression: a successful embedder call still yields status='complete'
+    with no embedding-failure entry in report.errors.
+    """
+    from app.services.vault_sweeper import rebuild_embedding_index
+
+    note_paths = ["references/alpha.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+    embedder = _CallCountingEmbedder()
+
+    report = await rebuild_embedding_index(fake, embedder, model_loaded=True)
+
+    assert report.status == "complete"
+    assert not any("embedding endpoint failed" in e for e in report.errors), (
+        f"unexpected embedding-failure error on a successful embed: {report.errors}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Phase 40 Plan 04 — Task 3: mandatory safe-to-mutate gate tests (RED phase)
 # ---------------------------------------------------------------------------

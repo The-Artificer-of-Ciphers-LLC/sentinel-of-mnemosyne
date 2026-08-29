@@ -43,6 +43,15 @@ class ReduceResult(BaseModel):
     claim_title: str
     body: str
     schema_type: str
+    durable: bool = True
+    """False when the entry holds no durable knowledge worth filing as a
+    permanent-vault note -- e.g. it is conversational meta-commentary about
+    the assistant/model itself, about the conversation or request, or a bare
+    acknowledgement/pleasantry (2026-08-29 production incident: notes titled
+    "The model's knowledge cutoff is prior to the current date" and "User is
+    seeking additional information about a specific project" were filed as
+    if they were durable knowledge). True for genuine knowledge about the
+    user's world, work, projects, decisions, or interests."""
 
 
 # T-46-INJECT: the captured entry text is placed ONLY in the user-message
@@ -65,10 +74,20 @@ original meaning
 one of "permanent" (a lasting, well-formed idea), "literature" (a note \
 about someone else's work/source), or "fleeting" (a quick, undeveloped \
 thought)
+- durable: whether this entry actually contains durable knowledge worth \
+filing as a permanent note. Set durable to FALSE when the entry is \
+conversational meta-commentary rather than knowledge -- specifically when \
+it is ABOUT THE ASSISTANT/MODEL ITSELF (e.g. its knowledge cutoff or its \
+capabilities -- false example: "The model's knowledge cutoff is prior to \
+the current date"), ABOUT THE CONVERSATION OR THE REQUEST ITSELF (e.g. \
+"the user is asking for X", "more information is needed" -- false example: \
+"User is seeking additional information about a specific project"), or is \
+a bare acknowledgement/pleasantry. Set durable to TRUE for genuine, lasting \
+knowledge about the user's world, work, projects, decisions, or interests.
 
 Respond ONLY with a JSON object of this exact shape (no prose, no code fences):
 
-{"claim_title": "<string>", "body": "<string>", "schema_type": "<permanent|literature|fleeting>"}
+{"claim_title": "<string>", "body": "<string>", "schema_type": "<permanent|literature|fleeting>", "durable": <true|false>}
 """
 
 _REDUCE_SCHEMA: dict = {
@@ -83,8 +102,9 @@ _REDUCE_SCHEMA: dict = {
                 "type": "string",
                 "enum": sorted(_VALID_SCHEMA_TYPES),
             },
+            "durable": {"type": "boolean"},
         },
-        "required": ["claim_title", "body", "schema_type"],
+        "required": ["claim_title", "body", "schema_type", "durable"],
         "additionalProperties": False,
     },
 }
@@ -127,7 +147,14 @@ def _fallback_result(entry_text: str) -> ReduceResult:
     first_line = stripped.splitlines()[0].strip() if stripped else ""
     claim_title = (first_line or "Untitled capture")[:120]
     body = stripped if stripped else "(empty capture)"
-    return ReduceResult(claim_title=claim_title, body=body, schema_type="fleeting")
+    # Fail SAFE: durable=True always, never False, on this fallback path.
+    # Reduce must never silently lose a note because a completion failed to
+    # parse -- the module docstring is explicit that Reduce never loses an
+    # entry, so an unparseable/failed completion must still be filed
+    # (as a draft) rather than discarded as "not durable".
+    return ReduceResult(
+        claim_title=claim_title, body=body, schema_type="fleeting", durable=True
+    )
 
 
 async def reduce_entry(entry_text: str) -> ReduceResult:
@@ -193,9 +220,20 @@ async def reduce_entry(entry_text: str) -> ReduceResult:
     if not isinstance(body, str) or not body.strip():
         body = _fallback_result(entry_text).body
 
+    durable = parsed.get("durable")
+    if not isinstance(durable, bool):
+        # Fail SAFE: an unparseable/missing durable flag must never cause
+        # a note to be silently discarded -- default True (file it).
+        durable = True
+
     try:
         return ReduceResult.model_validate(
-            {"claim_title": claim_title, "body": body, "schema_type": schema_type}
+            {
+                "claim_title": claim_title,
+                "body": body,
+                "schema_type": schema_type,
+                "durable": durable,
+            }
         )
     except Exception as exc:
         logger.warning("reduce_entry: ReduceResult validation failed: %s", exc)

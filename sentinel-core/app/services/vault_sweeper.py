@@ -132,7 +132,7 @@ def _resolve_embedding_dim(embeddings: "list[list[float]] | None") -> int | None
 
 class SweepReport(BaseModel):
     sweep_id: str
-    status: str = "complete"  # idle | running | complete | error
+    status: str = "complete"  # idle | running | complete | partial | skipped | blocked | error
     files_processed: int = 0
     files_total: int = 0
     duplicates_moved: int = 0
@@ -336,7 +336,12 @@ async def rebuild_embedding_index(
     ``run_sweep``).  The ``model_loaded`` keyword here governs ONLY whether
     the embedder is invoked:
 
-    - ``model_loaded=True``  → embed bodies and write a fresh index.
+    - ``model_loaded=True``  → embed bodies and write a fresh index. If the
+      embedder call itself raises (endpoint unreachable mid-run), the error
+      is logged at ERROR, recorded in ``report.errors``, and
+      ``report.status = "partial"`` — the sidecar is still written (carry-
+      forward / self-healing per ``_emit_embedding_index``), but the caller
+      MUST NOT treat this run as a full success.
     - ``model_loaded=False`` → skip embedding entirely, log a WARNING, set
       ``report.status = "skipped"``, and return WITHOUT writing fresh vectors.
       The degraded-index invariant governs carry-forward semantics in
@@ -394,21 +399,24 @@ async def rebuild_embedding_index(
         # 3. Embed all surviving bodies (NOMIC_DOCUMENT_PREFIX for nomic instruction space)
         bodies = [NOMIC_DOCUMENT_PREFIX + s[2] for s in survivors]
         embeddings: list[list[float]] | None = None
+        embedding_failed = False
         if bodies:
             try:
                 embeddings = await embedder(bodies)
             except Exception as exc:
-                logger.warning(
+                embedding_failed = True
+                logger.error(
                     "rebuild_embedding_index: embedding endpoint failed (%s); index will be partial",
                     exc,
                 )
+                report.errors.append(f"embedding endpoint failed; index is partial: {exc}")
                 embeddings = None
 
         # 4. Emit index sidecar — reuses the shared helper; no classify/relocate/trash
         active_paths: set[str] = {s[0] for s in survivors}
         await _emit_embedding_index(client, survivors, embeddings, active_paths, report)
 
-        report.status = "complete"
+        report.status = "partial" if embedding_failed else "complete"
         return report
     except SweepInProgressError:
         report.status = "blocked"

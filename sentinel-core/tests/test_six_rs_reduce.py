@@ -91,6 +91,68 @@ async def test_reduce_malformed_completion_still_filed_as_draft():
     assert result.schema_type in {"permanent", "literature", "fleeting"}
 
 
+def test_fallback_result_defaults_durable_true():
+    """Fail SAFE (2026-08-29 incident follow-up): ``_fallback_result`` must
+    default ``durable=True`` so an unparseable/failed completion is still
+    filed as a draft note rather than silently discarded as "not durable"."""
+    from app.services.six_rs.reduce import _fallback_result
+
+    result = _fallback_result("some raw captured text")
+
+    assert result.durable is True
+
+
+async def test_reduce_completion_durable_false_parses_through():
+    """A completion returning ``durable: false`` (conversational
+    meta-commentary, not knowledge) parses into ``ReduceResult.durable ==
+    False`` -- the escape hatch the orchestrator uses to skip filing."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.six_rs.reduce import reduce_entry
+
+    canned = {
+        "claim_title": "The model's knowledge cutoff is prior to the current date",
+        "body": "The model's knowledge cutoff is prior to the current date.",
+        "schema_type": "fleeting",
+        "durable": False,
+    }
+    fake_response = {"choices": [{"message": {"content": json.dumps(canned)}}]}
+
+    with patch(
+        "app.services.six_rs.reduce.acompletion_with_profile",
+        new=AsyncMock(return_value=fake_response),
+    ):
+        result = await reduce_entry("what's the deal with your knowledge cutoff?")
+
+    assert result.durable is False
+
+
+async def test_reduce_completion_durable_true_files_as_before():
+    """Non-regression: a completion returning ``durable: true`` still parses
+    through normally (the pre-existing always-file behaviour for genuine
+    knowledge)."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.six_rs.reduce import reduce_entry
+
+    canned = {
+        "claim_title": "Cosine floor governs hub attachment",
+        "body": "The hub-lookup floor is reused verbatim from RecallConfig.",
+        "schema_type": "permanent",
+        "durable": True,
+    }
+    fake_response = {"choices": [{"message": {"content": json.dumps(canned)}}]}
+
+    with patch(
+        "app.services.six_rs.reduce.acompletion_with_profile",
+        new=AsyncMock(return_value=fake_response),
+    ):
+        result = await reduce_entry("raw captured text about the hub cosine floor")
+
+    assert result.durable is True
+    assert result.claim_title == canned["claim_title"]
+
+
 def test_build_schema_block_round_trips_through_check_note_compliance():
     """Net-new build_schema_block() (Plan 46-04): the ONLY constructor for a
     trailing ```_schema fence -- Phase 45 shipped only parsers
