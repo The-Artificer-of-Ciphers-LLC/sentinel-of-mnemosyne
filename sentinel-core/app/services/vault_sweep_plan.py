@@ -53,10 +53,14 @@ def propose_topic_move(
     src_path: str, topic: str, *, today: str | None = None
 ) -> str | None:
     """Return the destination path a topic move would use."""
-    from app.services.note_classifier import topic_dir_for
+    from app.services.note_classifier import STAGING_DIRS, topic_dir_for
 
     topic_dir = topic_dir_for(topic, today=today)
     if not topic_dir:
+        return None
+    # Staging dirs are intake queues, never move an existing note into one
+    # (see STAGING_DIRS).
+    if topic_dir.rstrip("/") in STAGING_DIRS:
         return None
     if is_in_topic_dir(src_path, topic_dir):
         return None

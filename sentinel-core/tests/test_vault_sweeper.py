@@ -280,9 +280,11 @@ async def test_run_sweep_embedder_failure_continues_classification():
         fake, classifier, _failing_embedder, force_reclassify=True,
         safe_to_mutate=_true_probe,
     )
-    # D-03 reroute: learning now queues to inbox/ (learning/ is no longer its
-    # topic-canonical home) so the sweeper relocates the note there.
-    body = fake.store["inbox/x.md"]
+    # Staging-dir demotion guard (production incident 2026-08-01): "learning"
+    # maps to "inbox", an intake STAGING dir, not a canonical filing
+    # destination. An already-filed note must never be relocated INTO a
+    # staging dir, so this note stays at its original path.
+    body = fake.store["learning/x.md"]
     assert "topic: learning" in body
     assert "embedding_b64" not in body  # embed was skipped
     assert report.duplicates_moved == 0

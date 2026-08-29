@@ -62,6 +62,16 @@ TOPIC_VAULT_PATH: dict[str, str] = {
     "unsure": "inbox",  # _pending-classification.md
 }
 
+# Entries in TOPIC_VAULT_PATH that are intake STAGING areas rather than
+# canonical filing destinations. TOPIC_VAULT_PATH answers "where does NEW,
+# unprocessed content of topic X get staged", not "where does an
+# already-filed note belong". The vault sweeper must never relocate an
+# existing note INTO one of these dirs: ``inbox/`` is listed in
+# ``RecallConfig.exclude_prefixes``, so a note moved there becomes invisible
+# to warm-tier recall. See ``vault_sweep_plan.propose_topic_move``, which
+# guards against this using this constant.
+STAGING_DIRS: frozenset[str] = frozenset({"inbox"})
+
 
 def topic_dir_for(topic: str, *, today: str | None = None) -> str:
     """Return the vault directory for ``topic``.

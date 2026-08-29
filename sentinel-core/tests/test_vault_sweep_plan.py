@@ -129,6 +129,46 @@ def test_is_move_protected_false_for_ordinary_topic_plan():
     assert is_move_protected(plan) is False
 
 
+# --- propose_topic_move: staging-dir demotion guard (production incident 2026-08-01) ---
+#
+# TOPIC_VAULT_PATH maps the durable-knowledge topics "learning"/"reference"
+# (and the fallback "unsure") to "inbox", which is an intake STAGING area for
+# NEW unprocessed content, not a canonical filing destination. Before this
+# fix, propose_topic_move misread that mapping as "where does this note
+# belong" and relocated already-Reduced notes (e.g. notes/foo.md) back into
+# inbox/ — which is excluded from warm-tier recall (RecallConfig.exclude_prefixes),
+# permanently hiding the note. These tests pin that a note already living
+# outside inbox/ is never proposed for a move INTO a staging dir.
+
+
+def test_reduced_note_is_never_demoted_into_inbox():
+    """The actual production bug: a note Reduce already promoted to notes/
+    with topic 'reference' must NOT be dragged back into inbox/."""
+    assert propose_topic_move("notes/creative-reset.md", "reference") is None
+
+
+def test_reduced_learning_note_is_never_demoted_into_inbox():
+    assert propose_topic_move("notes/creative-reset.md", "learning") is None
+
+
+def test_unsure_topic_never_demotes_existing_note_into_inbox():
+    assert propose_topic_move("notes/creative-reset.md", "unsure") is None
+
+
+def test_accomplishment_topic_move_still_proposed_unchanged():
+    """Non-regression: topics with a real canonical filing dir (not a
+    staging dir) must keep proposing moves exactly as before."""
+    assert (
+        propose_topic_move("notes/x.md", "accomplishment")
+        == "ops/accomplishments/x.md"
+    )
+
+
+def test_already_correctly_placed_accomplishment_note_still_returns_none():
+    """Non-regression: a note already in its canonical dir is still a no-op."""
+    assert propose_topic_move("ops/accomplishments/x.md", "accomplishment") is None
+
+
 def test_is_move_protected_uses_segment_boundary_matching():
     """Near-miss paths that merely start with a protected prefix's letters
     (e.g. ``sentinelsomething/``) must NOT be flagged — proves is_move_protected
