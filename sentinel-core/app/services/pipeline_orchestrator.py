@@ -38,6 +38,7 @@ from typing import Any, Awaitable, Callable
 from pydantic import BaseModel, Field
 
 from app.errors import SweepInProgressError
+from app.markdown_frontmatter import split_frontmatter
 from app.services.embedding_sidecar_index import (
     EMBEDDING_INDEX_PATH,
     NOMIC_DOCUMENT_PREFIX,
@@ -92,6 +93,14 @@ class PipelineReport(BaseModel):
     # short-circuits filing for such entries; this counter makes that
     # discard observable in the pipeline report.
     discarded_not_durable: int = 0
+    # 2026-08-29 production gap: `note_classifier.TOPIC_VAULT_PATH` files
+    # HIGH-confidence `learning`/`reference` notes as standalone
+    # `inbox/{slug}-{date}.md` files, but only the queue file
+    # (`INBOX_PATH`) ever gets drained by Reduce -- those standalone notes
+    # had NO promotion path and were permanently invisible to recall
+    # (`RecallConfig.exclude_prefixes` excludes `inbox/`). This counter
+    # makes `absorb_standalone_inbox_notes`'s pre-pass observable.
+    absorbed_standalone: int = 0
     errors: list[str] = Field(default_factory=list)
 
 
@@ -284,6 +293,116 @@ async def _draft_reweave_addition(member_slug: str, claim_title: str, excerpt: s
     return fallback
 
 
+# --- Standalone inbox note absorption (2026-08-29 production gap) -----------
+
+
+def _classification_from_note_frontmatter(fm: dict) -> ClassificationResult:
+    """Reconstruct a ``ClassificationResult`` from a standalone note's own
+    frontmatter (written at intake by ``NoteIntake._build_filed_note_markdown``)
+    rather than re-running the classifier -- these notes were already
+    classified once; re-classifying costs an LLM call per note for no
+    benefit. Any missing/unparseable field falls back to a sane default
+    instead of raising, so one malformed note never crashes the pass.
+    """
+    fm = fm or {}
+    try:
+        confidence = float(fm.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    confidence = min(max(confidence, 0.0), 1.0)
+
+    title_slug = fm.get("title_slug")
+    if not isinstance(title_slug, str):
+        title_slug = ""
+    title_slug = title_slug[:60]
+
+    try:
+        return ClassificationResult(
+            topic=fm.get("topic", "unsure"), confidence=confidence, title_slug=title_slug
+        )
+    except Exception:
+        # topic wasn't one of the closed-vocabulary TopicSlug values --
+        # fall back to "unsure" (the same default the queue itself uses).
+        return ClassificationResult(topic="unsure", confidence=confidence, title_slug=title_slug)
+
+
+async def absorb_standalone_inbox_notes(vault: Any, report: PipelineReport) -> int:
+    """Pre-pass: convert standalone ``inbox/{slug}-{date}.md`` notes into
+    ordinary queue entries in ``INBOX_PATH`` (46-CONTEXT.md absorb-not-fork
+    design).
+
+    ``TOPIC_VAULT_PATH`` maps the durable-knowledge topics `learning` and
+    `reference` to the bare ``"inbox"`` directory, so ``NoteIntake`` files
+    those notes flat as standalone files rather than into the queue. Only
+    the queue file is ever drained by ``parse_inbox``/Reduce, so standalone
+    notes had no promotion path at all. Converting them into queue entries
+    HERE means Reduce, the ``durable`` gate, Reflect, the Verify gate,
+    Reweave, and requeue/retry all drain them completely unchanged -- no
+    second processing loop to drift out of sync with the first.
+
+    Ordering is load-bearing: the queue append+write MUST succeed before
+    the original is trashed. If disposal fails after a successful queue
+    write, the note would be absorbed AGAIN next run and duplicated -- so
+    a disposal failure is recorded as a visible error rather than retried
+    or silently swallowed. Never trash before the queue write.
+    """
+    queue_basename = INBOX_PATH.rsplit("/", 1)[-1]
+    absorbed = 0
+
+    try:
+        listing = await vault.list_under("inbox")
+    except Exception as exc:
+        report.errors.append(f"absorb_standalone_inbox_notes: list_under(inbox) failed: {exc}")
+        logger.warning("absorb_standalone_inbox_notes: list_under(inbox) failed: %s", exc)
+        return 0
+
+    for name in listing:
+        if not name or name.endswith("/") or not name.endswith(".md"):
+            continue
+        if name == queue_basename:
+            # CRITICAL: never absorb the queue file into itself.
+            continue
+
+        path = f"inbox/{name}"
+        try:
+            raw = await vault.read_note(path)
+            if not raw or not raw.strip():
+                continue
+            fm, body = split_frontmatter(raw)
+            candidate_text = (body or "").strip()
+            if not candidate_text:
+                continue
+
+            classification = _classification_from_note_frontmatter(fm)
+
+            # Read fresh per note so sequential appends accumulate rather
+            # than clobbering each other.
+            queue_body = await vault.read_note(INBOX_PATH)
+            queue_body = append_entry(queue_body, candidate_text, classification)
+            await vault.write_note(INBOX_PATH, queue_body)
+
+            try:
+                await vault.move_to_trash(path, reason="absorbed-into-queue")
+            except Exception as trash_exc:
+                # The queue write already succeeded -- disposal failure
+                # means this note will be re-absorbed (and duplicated) on
+                # the next run unless someone notices this error.
+                msg = (
+                    f"absorb_standalone_inbox_notes: trash failed for {path} after "
+                    f"successful queue append (will duplicate on next run): {trash_exc}"
+                )
+                report.errors.append(msg)
+                logger.error(msg)
+                continue
+
+            absorbed += 1
+        except Exception as exc:
+            report.errors.append(f"absorb_standalone_inbox_notes: {path}: {exc}")
+            logger.warning("absorb_standalone_inbox_notes: %s failed: %s", path, exc)
+
+    return absorbed
+
+
 # --- Mode branches -----------------------------------------------------------
 
 
@@ -296,6 +415,10 @@ async def _run_ralph(
     status_callback: "Callable[[PipelineReport], None] | None",
 ) -> None:
     """Reduce + Reflect over the inbox queue (PIPE-02). No Verify in ralph mode."""
+    # Must run BEFORE the queue read below: standalone inbox/ notes
+    # absorbed into the queue this run would otherwise be missed until the
+    # NEXT invocation (parse_inbox only sees what's in INBOX_PATH now).
+    report.absorbed_standalone += await absorb_standalone_inbox_notes(vault, report)
     inbox_body = await vault.read_note(INBOX_PATH)
     entries = parse_inbox(inbox_body)
     report.entries_total = len(entries)
@@ -360,6 +483,10 @@ async def _run_pipeline(
     left behind, and the entry is requeued to inbox/ with a bounded retry
     count (PIPE-07).
     """
+    # Must run BEFORE the queue read below: standalone inbox/ notes
+    # absorbed into the queue this run would otherwise be missed until the
+    # NEXT invocation (parse_inbox only sees what's in INBOX_PATH now).
+    report.absorbed_standalone += await absorb_standalone_inbox_notes(vault, report)
     inbox_body = await vault.read_note(INBOX_PATH)
     entries = parse_inbox(inbox_body)
     report.entries_total = len(entries)
