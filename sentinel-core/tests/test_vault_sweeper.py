@@ -1224,6 +1224,171 @@ async def test_rebuild_embedding_index_embedder_success_reports_complete():
 
 
 # ---------------------------------------------------------------------------
+# fix-embed-batch-chunking: EMBED_BATCH_SIZE chunked embedding tests.
+#
+# Production incident (2026-08-29): rebuild_embedding_index embedded every
+# note body in ONE embedder() call. The embedding backend (reached over an
+# LM Studio "LM Link" remote-device tunnel) intermittently drops large batch
+# requests, and a single failed call set embeddings=None for the WHOLE
+# rebuild — wiping every note's vector, not just the ones in the failed
+# batch. These tests pin the chunked-with-retry replacement.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rebuild_embedding_index_retries_transient_failure_then_succeeds():
+    """A chunk whose FIRST embedder call raises but whose retry succeeds must
+    NOT be treated as a failure: report.status stays 'complete' and every
+    note gets a fresh vector (proves the same-chunk retry works).
+    """
+    from app.services.vault_sweeper import EMBEDDING_INDEX_PATH, rebuild_embedding_index
+
+    note_paths = ["references/alpha.md", "references/beta.md"]
+    fake = _make_classifiable_note_vault(note_paths)
+
+    call_count = 0
+
+    async def _flaky_once_embedder(texts):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise RuntimeError("LM Link connection closed.")
+        return [[1.0, 0.0, 0.0, 0.0]] * len(texts)
+
+    report = await rebuild_embedding_index(fake, _flaky_once_embedder, model_loaded=True)
+
+    assert report.status == "complete", (
+        f"expected 'complete' after a successful same-chunk retry; got {report.status!r}"
+    )
+    assert call_count == 2, (
+        f"expected exactly 2 embedder calls (initial + 1 retry) for a single chunk; "
+        f"got {call_count}"
+    )
+
+    index = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
+    for path in note_paths:
+        entry = index[path]
+        assert entry.get("embedding_b64"), (
+            f"expected a fresh vector for {path} after the retry succeeded; entry={entry}"
+        )
+        assert not entry.get("stale"), f"entry for {path} must not be marked stale; entry={entry}"
+
+
+@pytest.mark.asyncio
+async def test_rebuild_embedding_index_one_bad_chunk_does_not_poison_others():
+    """A chunk that fails BOTH attempts must only degrade its own notes —
+    other (succeeding) chunks must still get fresh vectors. This is the core
+    fix: one bad chunk no longer wipes the whole rebuild's embeddings.
+    """
+    from app.services.vault_sweeper import (
+        EMBED_BATCH_SIZE,
+        EMBEDDING_INDEX_PATH,
+        rebuild_embedding_index,
+    )
+
+    # 10 notes with EMBED_BATCH_SIZE=8 → chunk 1 = notes[0:8], chunk 2 = notes[8:10].
+    note_paths = [f"references/note{i:02d}.md" for i in range(10)]
+    fake = _make_classifiable_note_vault(note_paths)
+
+    call_num = 0
+
+    async def _second_chunk_always_fails(texts):
+        nonlocal call_num
+        call_num += 1
+        # Call 1 = chunk 1 (succeeds). Calls 2 and 3 = chunk 2's initial
+        # attempt + its one retry (both fail).
+        if call_num >= 2:
+            raise RuntimeError("LM Link connection closed.")
+        return [[1.0, 0.0, 0.0, 0.0]] * len(texts)
+
+    report = await rebuild_embedding_index(fake, _second_chunk_always_fails, model_loaded=True)
+
+    assert report.status == "partial", f"expected 'partial'; got {report.status!r}"
+    assert call_num == 3, f"expected 3 embedder calls (chunk1, chunk2, chunk2-retry); got {call_num}"
+    assert any("chunk" in e for e in report.errors), (
+        f"expected a chunk-scoped failure message in report.errors; got {report.errors}"
+    )
+
+    index = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
+    succeeded_paths = note_paths[:EMBED_BATCH_SIZE]
+    failed_paths = note_paths[EMBED_BATCH_SIZE:]
+    assert failed_paths, "test setup must produce at least one note in the failing chunk"
+
+    for path in succeeded_paths:
+        entry = index[path]
+        assert entry.get("embedding_b64"), (
+            f"succeeding-chunk note {path} must still get a fresh vector; entry={entry}"
+        )
+        assert not entry.get("stale"), (
+            f"succeeding-chunk note {path} must not be marked stale; entry={entry}"
+        )
+
+    for path in failed_paths:
+        entry = index[path]
+        assert entry.get("stale") is True, (
+            f"failed-chunk note {path} must be left stale (no fresh vector persisted); entry={entry}"
+        )
+        assert not entry.get("embedding_b64"), (
+            f"failed-chunk note {path} must not carry a fresh embedding_b64; entry={entry}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_rebuild_embedding_index_respects_embed_batch_size():
+    """No single embedder() call may receive more than EMBED_BATCH_SIZE bodies,
+    given a vault with more notes than that.
+    """
+    from app.services.vault_sweeper import EMBED_BATCH_SIZE, rebuild_embedding_index
+
+    note_paths = [f"references/note{i:02d}.md" for i in range(2 * EMBED_BATCH_SIZE + 3)]
+    fake = _make_classifiable_note_vault(note_paths)
+
+    batch_sizes: list[int] = []
+
+    async def _size_recording_embedder(texts):
+        batch_sizes.append(len(texts))
+        return [[1.0, 0.0, 0.0, 0.0]] * len(texts)
+
+    report = await rebuild_embedding_index(fake, _size_recording_embedder, model_loaded=True)
+
+    assert report.status == "complete"
+    assert batch_sizes, "expected at least one embedder call"
+    assert all(size <= EMBED_BATCH_SIZE for size in batch_sizes), (
+        f"a batch exceeded EMBED_BATCH_SIZE={EMBED_BATCH_SIZE}: {batch_sizes}"
+    )
+    assert sum(batch_sizes) == len(note_paths), (
+        f"total bodies embedded ({sum(batch_sizes)}) must equal note count "
+        f"({len(note_paths)})"
+    )
+
+
+@pytest.mark.asyncio
+async def test_rebuild_embedding_index_multi_chunk_all_success_non_regression():
+    """Non-regression: with more notes than EMBED_BATCH_SIZE (forcing multiple
+    chunks) and no failures, every note still gets a fresh vector and
+    report.status is 'complete'.
+    """
+    from app.services.vault_sweeper import (
+        EMBED_BATCH_SIZE,
+        EMBEDDING_INDEX_PATH,
+        rebuild_embedding_index,
+    )
+
+    note_paths = [f"references/note{i:02d}.md" for i in range(EMBED_BATCH_SIZE + 2)]
+    fake = _make_classifiable_note_vault(note_paths)
+    embedder = _CallCountingEmbedder()
+
+    report = await rebuild_embedding_index(fake, embedder, model_loaded=True)
+
+    assert report.status == "complete"
+    index = _json.loads(fake.notes[EMBEDDING_INDEX_PATH])
+    for path in note_paths:
+        entry = index[path]
+        assert entry.get("embedding_b64"), f"expected a fresh vector for {path}; entry={entry}"
+        assert not entry.get("stale"), f"entry for {path} must not be marked stale; entry={entry}"
+
+
+# ---------------------------------------------------------------------------
 # Phase 40 Plan 04 — Task 3: mandatory safe-to-mutate gate tests (RED phase)
 # ---------------------------------------------------------------------------
 
