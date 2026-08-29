@@ -20,6 +20,8 @@ _PIPELINE_STATUS: dict[str, object] = {
     "reweave_edits": 0,
     "verify_failed": 0,
     "verify_requeued": 0,
+    "discarded_not_durable": 0,
+    "absorbed_standalone": 0,
     "errors": [],
 }
 
@@ -41,6 +43,8 @@ def set_pipeline_status_from_report(report) -> None:
         reweave_edits=report.reweave_edits,
         verify_failed=report.verify_failed,
         verify_requeued=report.verify_requeued,
+        discarded_not_durable=getattr(report, "discarded_not_durable", 0),
+        absorbed_standalone=getattr(report, "absorbed_standalone", 0),
         errors=list(report.errors),
     )
 
@@ -62,6 +66,8 @@ def reset_pipeline_status() -> None:
         reweave_edits=0,
         verify_failed=0,
         verify_requeued=0,
+        discarded_not_durable=0,
+        absorbed_standalone=0,
         errors=[],
     )
 
@@ -84,5 +90,7 @@ def _new_status(pipeline_id: str, status: str, mode: str) -> dict:
         "reweave_edits": 0,
         "verify_failed": 0,
         "verify_requeued": 0,
+        "discarded_not_durable": 0,
+        "absorbed_standalone": 0,
         "errors": [],
     }
