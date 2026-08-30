@@ -57,8 +57,22 @@ _NOVEL_TOKEN_MIN_REPEATS = 3
 # Log-excerpt cap used by callers (kept here so callers share one constant).
 EXCERPT_MAX_CHARS = 200
 
+# Chat-template delimiter markers must never leak into user-facing content.
+# google/gemma-4-31b's own chat_template.jinja (read directly 2026-08-30)
+# uses THREE distinct pipe-delimiter shapes for its markers -- pipe on both
+# sides (`<|name|>`), pipe on the right only (`<name|>`), and pipe on the
+# left only (`<|name>`) -- plus two literal turn markers. A live production
+# leak on 2026-08-30 ("...challenges.<tool_call|>", see
+# ops/sessions/2026-08-30/ratetest-00-06-59.md) was the pipe-on-the-right
+# shape, which the pipe-both-sides-only pattern missed. The distinguishing
+# feature of all three shapes is a pipe character immediately adjacent to
+# the angle bracket -- ordinary prose/HTML/code (`<br>`, `<your name here>`,
+# `Vec<String>`) never puts a `|` next to a `<`/`>`, so anchoring on that
+# adjacency avoids false positives on legitimate angle-bracket content.
 _CONTROL_TOKEN_PATTERN = re.compile(
-    r"<start_of_turn>|<end_of_turn>|<\|[^|>]{1,32}\|?>"
+    r"<start_of_turn>|<end_of_turn>"
+    r"|<\|[^<>|]{1,32}\|?>"  # <|name|> and <|name>
+    r"|<[^<>|]{1,32}\|>"  # <name|>
 )
 
 _WORD_PATTERN = re.compile(r"[A-Za-z0-9']+(?:-[A-Za-z0-9']+)*")
