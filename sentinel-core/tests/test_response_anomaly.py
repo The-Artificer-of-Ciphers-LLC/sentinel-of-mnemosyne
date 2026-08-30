@@ -32,6 +32,85 @@ def test_control_tokens_signal_fires_on_generic_pipe_marker():
     assert "control_tokens" in result.signals
 
 
+# ---------------------------------------------------------------------------
+# Real production leak, 2026-08-30 -- pipe-on-the-right delimiter shape.
+# ---------------------------------------------------------------------------
+
+# Source: ops/sessions/2026-08-30/ratetest-00-06-59.md -- a live production
+# response from google/gemma-4-31b ended with a raw chat-template delimiter
+# instead of stopping cleanly. The pipe-both-sides pattern (`<|name|>`)
+# missed this because the pipe is only on the right (`<name|>`).
+def test_real_leaked_tool_call_token_2026_08_30_is_detected():
+    content = (
+        "... seems like a tool you've highlighted to help manage those "
+        "challenges.<tool_call|>"
+    )
+    result = detect_anomalies(content)
+    assert result.suspicious is True
+    assert "control_tokens" in result.signals
+    assert result.metrics["control_token"] == "<tool_call|>"
+
+
+def test_control_tokens_signal_fires_on_pipe_both_sides_shape():
+    result = detect_anomalies("some text <|think|> more text")
+    assert result.suspicious is True
+    assert "control_tokens" in result.signals
+
+
+def test_control_tokens_signal_fires_on_pipe_right_only_shape():
+    result = detect_anomalies("some text <channel|> more text")
+    assert result.suspicious is True
+    assert "control_tokens" in result.signals
+
+
+def test_control_tokens_signal_fires_on_pipe_left_only_shape():
+    result = detect_anomalies("some text <|channel> more text")
+    assert result.suspicious is True
+    assert "control_tokens" in result.signals
+
+
+def test_control_tokens_signal_fires_on_start_of_turn_marker():
+    result = detect_anomalies("some text <start_of_turn> more text")
+    assert result.suspicious is True
+    assert "control_tokens" in result.signals
+
+
+def test_control_tokens_signal_fires_on_end_of_turn_marker():
+    result = detect_anomalies("some text <end_of_turn> more text")
+    assert result.suspicious is True
+    assert "control_tokens" in result.signals
+
+
+def test_control_tokens_signal_does_not_fire_on_html_br():
+    result = detect_anomalies("line one<br>line two")
+    assert "control_tokens" not in result.signals
+
+
+def test_control_tokens_signal_does_not_fire_on_html_b_em():
+    result = detect_anomalies("some <b>bold</b> and <em>emphasis</em> text")
+    assert "control_tokens" not in result.signals
+
+
+def test_control_tokens_signal_does_not_fire_on_bare_url_in_angle_brackets():
+    result = detect_anomalies("see <https://example.com> for details")
+    assert "control_tokens" not in result.signals
+
+
+def test_control_tokens_signal_does_not_fire_on_placeholder_prose():
+    result = detect_anomalies("use <your name here> when filling out the form")
+    assert "control_tokens" not in result.signals
+
+
+def test_control_tokens_signal_does_not_fire_on_comparison_prose():
+    result = detect_anomalies("a < b and c > d, so the ordering holds")
+    assert "control_tokens" not in result.signals
+
+
+def test_control_tokens_signal_does_not_fire_on_generic_type_code():
+    result = detect_anomalies("declare it as Vec<String> or list<int> in code")
+    assert "control_tokens" not in result.signals
+
+
 def test_consecutive_repetition_signal_fires_on_repeated_word():
     result = detect_anomalies("la la la la la, everything is fine")
     assert result.suspicious is True
