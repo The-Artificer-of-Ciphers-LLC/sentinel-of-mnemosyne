@@ -184,6 +184,14 @@ class ModelProfile:
     ``context_window_source`` names which rung of the context ladder produced
     ``context_window``, so an operator can tell a real loaded window from a
     declared floor without re-deriving it.
+
+    ``capabilities_observed`` says whether ``capabilities`` came from a backend
+    that was ASKED, or from configuration that merely declared. It is True for
+    everything :class:`LMStudioModelSource` parses — including an entry that
+    reports no capabilities at all, because a live backend staying silent about
+    tool use IS an observation, and the destructive-sweep gate reads it as one.
+    It is False for :class:`StaticModelSource`, where there is no backend to
+    ask; see :meth:`ActiveModel._run_ladder` for what the distinction buys.
     """
 
     model_id: str
@@ -197,6 +205,7 @@ class ModelProfile:
     task_kind: str = ""
     context_window_source: str = CONTEXT_SOURCE_DECLARED
     loaded: bool = True
+    capabilities_observed: bool = True
 
     def supports(self, capability: str) -> bool:
         return capability in self.capabilities
@@ -479,6 +488,11 @@ class StaticModelSource:
 
     It is also the test substitute, which is why it is constructible from a
     plain list of profiles.
+
+    Profiles built by :func:`build_static_profiles` carry
+    ``capabilities_observed=False``: this adapter asks nothing, so its
+    capability set is a declaration rather than evidence, and the task filter
+    treats it accordingly.
     """
 
     def __init__(self, profiles: Sequence[ModelProfile]) -> None:
@@ -558,6 +572,12 @@ async def build_static_profiles(
             family="",
             context_window_source=window_source,
             loaded=True,
+            # Nothing was asked. ``models-seed.json``'s ``function_calling``
+            # flags are a claim about a NAME (the seed's ``local-model`` entry
+            # says false about a placeholder id), not an observation of the
+            # model a backend is serving — so they must not be able to veto a
+            # task the way a live backend's silence does.
+            capabilities_observed=False,
         )
     ]
 
@@ -787,8 +807,26 @@ class ActiveModel:
     ) -> ModelProfile | None:
         required = TASK_CAPABILITY_REQUIREMENTS.get(kind, frozenset())
         filtered = [
-            profile for profile in tier if required.issubset(profile.capabilities)
+            profile
+            for profile in tier
+            if required.issubset(profile.capabilities) or not profile.capabilities_observed
         ]
+        if required:
+            for profile in filtered:
+                if not profile.capabilities_observed and not required.issubset(
+                    profile.capabilities
+                ):
+                    logger.info(
+                        "Config-derived candidate %r admitted for task %r without "
+                        "evidence of %s — no backend was reachable to ask, and "
+                        "refusing here would make an offline deployment unable to do "
+                        "structured work at all. The destructive-sweep gate does NOT "
+                        "take this path: probe_classifier_model_ready asks a live "
+                        "backend only, so it still fails closed",
+                        profile.model_id,
+                        kind,
+                        ", ".join(sorted(required - profile.capabilities)) or "unknown",
+                    )
         filtered_ids = {profile.model_id for profile in filtered}
         by_id = {profile.model_id: profile for profile in tier}
 

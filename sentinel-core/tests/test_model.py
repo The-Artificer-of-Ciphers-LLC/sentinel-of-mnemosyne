@@ -1082,6 +1082,52 @@ async def test_static_model_source_alone_resolves_when_there_is_no_backend():
     assert resolved.reasoning is None
 
 
+async def test_a_declared_capability_set_cannot_veto_a_task(caplog):
+    """A capability set nobody OBSERVED must not filter a candidate out.
+
+    ADR-0007 step 4 moved the five structured call sites onto the seam and this
+    was the first thing that broke: ``models-seed.json``'s ``local-model`` entry
+    declares ``function_calling: false``, so an offline deployment resolved
+    ``for_task("structured")`` to nothing and RAISED — the six_rs stages fell
+    back on every entry and note_classifier could not classify at all. A live
+    backend's silence about tool use is evidence and still vetoes; a seed file's
+    claim about a placeholder name is not.
+    """
+    source = await static_model_source(
+        settings(model_name="local-model"), provider="lmstudio"
+    )
+    profiles = await build_static_profiles(
+        settings(model_name="local-model"), provider="lmstudio"
+    )
+    assert "tool_use" not in profiles[0].capabilities, (
+        "premise: the seed genuinely declares no function calling for this id"
+    )
+    assert profiles[0].capabilities_observed is False
+
+    model = ActiveModel([source], settings(model_name="local-model"))
+    with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+        resolved = await model.for_task("structured")
+
+    assert resolved.model_id == "local-model"
+    assert "no backend was reachable to ask" in caplog.text, (
+        "admitting an unevidenced candidate must be logged, never silent"
+    )
+
+
+async def test_a_live_backend_reporting_no_tool_use_still_vetoes_structured():
+    """The other half: OBSERVED absence of tool_use is still disqualifying.
+
+    Without this, the leniency above would be a hole rather than a distinction
+    — and ``probe_classifier_model_ready``, which gates a destructive vault
+    sweep, would be answering about a model the backend said cannot do the job.
+    """
+    backend = FakeLMStudio(v0=[v0_chat(capabilities=[])])
+    model = ActiveModel([backend.source()], settings(model_name=QWEN_ID))
+
+    with pytest.raises(ModelSelectorError):
+        await model.for_task("structured")
+
+
 async def test_static_model_source_does_no_io():
     """It is the test substitute, so it must be constructible from a plain list."""
     source = StaticModelSource([profile("a/model"), profile("b/model")])

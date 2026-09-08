@@ -3,13 +3,20 @@ import os
 from types import SimpleNamespace
 from typing import Any, Callable
 
+import httpx
 import pytest
 from unittest.mock import AsyncMock
 
 # Set env vars before any app import so pydantic-settings picks them up
 os.environ.setdefault("SENTINEL_API_KEY", "test-key-for-pytest")
 
-from app.model import ActiveModel, ModelProfile, StaticModelSource  # noqa: E402
+from app.model import (  # noqa: E402
+    ActiveModel,
+    LMStudioModelSource,
+    ModelProfile,
+    StaticModelSource,
+    static_model_source,
+)
 from app.state import RouteContext  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -144,6 +151,93 @@ def build_test_route_context(
     if recall is not None:
         kwargs["recall"] = recall
     return RouteContext(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# The two backend failure modes ADR-0007 decision 4 (as amended 2026-09-08)
+# keeps apart, as seams the five structured call sites can be pointed at.
+#
+# They are helpers rather than fixtures because each call site asserts on BOTH
+# in the same module, and a fixture would make the pairing implicit.
+# ---------------------------------------------------------------------------
+
+
+class _UnreachableSource:
+    """A ModelSource standing in for a backend that is simply not there."""
+
+    async def candidates(self):
+        raise httpx.ConnectError("connection refused")
+
+
+async def unreachable_structured_seam(model_id: str = "local-model") -> ActiveModel:
+    """UNREACHABLE: the live source raises, the static one answers, nothing raises.
+
+    Built over the REAL ``static_model_source`` — not a hand-made profile —
+    because the guarantee under test is that a config-derived candidate is
+    usable for structured work when no backend could be asked. A fake profile
+    with ``tool_use`` set would assert nothing.
+    """
+    config = SimpleNamespace(
+        ai_provider="lmstudio",
+        model_name=model_id,
+        lmstudio_base_url="http://lmstudio.test/v1",
+        model_preferred=None,
+    )
+    return ActiveModel(
+        [_UnreachableSource(), await static_model_source(config, provider="lmstudio")],
+        config,
+    )
+
+
+def ambiguous_structured_seam() -> ActiveModel:
+    """AMBIGUOUS LIVE: two equally-capable loaded models and nothing to choose.
+
+    ``for_task("structured")`` RAISES here. Configuration may disambiguate among
+    loaded candidates; it may not name one, and there is nothing to name.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/api/v1/models"):
+            return httpx.Response(404, json={"error": "no v1"})
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": name,
+                        "type": "llm",
+                        "arch": "qwen3_5",
+                        "state": "loaded",
+                        "max_context_length": 32768,
+                        "capabilities": ["tool_use"],
+                    }
+                    for name in ("first/capable", "second/capable")
+                ]
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    return ActiveModel(
+        [LMStudioModelSource(client, "http://lmstudio.test/v1")],
+        SimpleNamespace(model_name="", model_preferred=None),
+    )
+
+
+@pytest.fixture(autouse=True)
+def reset_structured_model_seam():
+    """Drop the process-wide structured seam around every test.
+
+    ``composition.initialize_startup`` registers one so the five structured
+    call sites share the chat path's ``ActiveModel``. A process global that
+    survived a test would let one test's backend answer another's resolution —
+    the same cross-contamination the deleted module-level ``_model_cache`` used
+    to cause, arriving by a different door.
+    """
+    from app.services.structured_model import reset_structured_active_model
+
+    reset_structured_active_model()
+    yield
+    reset_structured_active_model()
 
 
 @pytest.fixture

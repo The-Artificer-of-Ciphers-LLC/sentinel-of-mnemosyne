@@ -4,7 +4,7 @@ import httpx
 from unittest.mock import AsyncMock, patch, MagicMock
 import litellm
 
-from app.clients.litellm_provider import LiteLLMProvider, get_context_window_from_lmstudio
+from app.clients.litellm_provider import LiteLLMProvider
 
 
 @pytest.fixture
@@ -189,19 +189,15 @@ async def test_no_profile_falls_back_to_construction_time_configuration(
     assert kwargs["api_base"] == "http://test-lmstudio/v1"
 
 
-async def test_get_context_window_from_lmstudio_returns_value():
-    import httpx
-    def handler(request):
-        return httpx.Response(200, json={"max_context_length": 32768, "id": "test-model"})
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        result = await get_context_window_from_lmstudio(client, "http://test/v1", "test-model")
-    assert result == 32768
-
-
-async def test_get_context_window_from_lmstudio_returns_4096_on_error():
-    import httpx
-    transport = httpx.MockTransport(lambda r: (_ for _ in ()).throw(httpx.ConnectError("refused")))
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        result = await get_context_window_from_lmstudio(client, "http://test/v1", "test-model")
-    assert result == 4096
+# ``test_get_context_window_from_lmstudio_returns_value`` and
+# ``..._returns_4096_on_error`` were deleted with their subject in ADR-0007 step
+# 4. ``get_context_window_from_lmstudio`` issued a per-model
+# ``GET /api/v0/models/{id}`` to answer "how big is this model's window" — the
+# question ``app/model.py`` now answers off a single model-LIST call, and once
+# the registry's live path went it had no caller left. Both guarantees have
+# successors in tests/test_model.py: the value case is
+# ``test_context_window_falls_back_to_max_context_length`` (same
+# ``max_context_length`` field, same backend, read through the seam) and the
+# error case is ``test_context_window_falls_back_to_declared_4096`` plus the
+# cold last-known-good case, which assert the same conservative 4096 floor
+# without pretending a failed fetch produced a real number.

@@ -125,3 +125,65 @@ async def test_rethink_coerces_malformed_completion_to_keep():
     by_path = {item["path"]: item["disposition"] for item in results}
     assert by_path[good_path] == "PROMOTE"
     assert by_path[bad_path] == "KEEP"
+
+
+# --- ADR-0007 step 4: the two backend failure modes, at THIS call site -------
+
+
+async def test_rethink_triages_against_the_static_profile_when_backend_unreachable():
+    """UNREACHABLE → resolution does not raise; the triage completion happens."""
+    import json
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.six_rs.rethink import triage_observations
+    from app.services.structured_model import set_structured_active_model
+    from tests.conftest import unreachable_structured_seam
+    from tests.fakes.vault import FakeVault
+
+    set_structured_active_model(await unreachable_structured_seam())
+
+    path = "ops/observations/2026-07-06-observation.md"
+    vault = FakeVault(notes={path: "A well-formed observation.\n"})
+    vault.dirs["ops/observations"] = ["2026-07-06-observation.md"]
+
+    canned = {"disposition": "PROMOTE", "reasoning": "durable knowledge"}
+    with patch(
+        "app.services.six_rs.rethink.acompletion_with_profile",
+        new=AsyncMock(
+            return_value={"choices": [{"message": {"content": json.dumps(canned)}}]}
+        ),
+    ) as completion:
+        results = await triage_observations(vault)
+
+    assert completion.await_count == 1
+    assert completion.await_args.kwargs["profile"].model_id == "local-model"
+    assert results[0]["disposition"] == "PROMOTE"
+
+
+async def test_rethink_coerces_to_keep_without_completing_on_an_ambiguous_backend():
+    """AMBIGUOUS LIVE → KEEP, and no completion is issued.
+
+    KEEP is the never-crash-the-loop default, so on its own it proves nothing
+    about which failure occurred. The load-bearing assertion is that no model
+    was called: an item must never be triaged — and so never archived — by a
+    model nothing chose.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.six_rs.rethink import triage_observations
+    from app.services.structured_model import set_structured_active_model
+    from tests.conftest import ambiguous_structured_seam
+    from tests.fakes.vault import FakeVault
+
+    set_structured_active_model(ambiguous_structured_seam())
+
+    path = "ops/observations/2026-07-06-observation.md"
+    vault = FakeVault(notes={path: "A well-formed observation.\n"})
+    vault.dirs["ops/observations"] = ["2026-07-06-observation.md"]
+
+    completion = AsyncMock()
+    with patch("app.services.six_rs.rethink.acompletion_with_profile", new=completion):
+        results = await triage_observations(vault)  # must not raise
+
+    assert completion.await_count == 0
+    assert results[0]["disposition"] == "KEEP"

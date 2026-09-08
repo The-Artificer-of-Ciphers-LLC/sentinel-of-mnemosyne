@@ -40,6 +40,7 @@ from app.services.note_classifier import classify_note
 from app.services.output_scanner import OutputScanner
 from app.services.provider_router import ProviderRouter
 from app.services.self_profile import profile_status
+from app.services.structured_model import set_structured_active_model
 from app.vault import ObsidianVault
 from sentinel_shared.model_profiles import get_profile
 
@@ -559,6 +560,13 @@ async def initialize_startup(
 ) -> StartupResult:
     """Build graph, pin runtime state, and enforce startup policy."""
     graph = await build_application(settings, http_client)
+
+    # ADR-0007 step 4. The five structured-completion call sites are module-level
+    # coroutines with no graph reference, so the seam is registered for them here
+    # rather than threaded through. Registering the SAME object the chat path uses
+    # is what makes "at most one model-list fetch per TTL window" true across a
+    # whole 6 Rs run instead of once per stage.
+    set_structured_active_model(getattr(graph, "active_model", None))
 
     app.state.route_ctx = RouteContext(
         vault=graph.vault,

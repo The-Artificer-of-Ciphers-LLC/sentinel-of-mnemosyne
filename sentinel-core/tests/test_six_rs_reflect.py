@@ -152,3 +152,58 @@ async def test_reflect_fallback_creates_hub_when_no_candidate_clears_floor():
     _, create_kwargs = create_mock.await_args
     assert create_kwargs["concept_slug"] == "new-concept"
     assert create_kwargs["member_slug"] == "member-note"
+
+
+# --- ADR-0007 step 4: the two backend failure modes, at THIS call site -------
+#
+# Reflect's LLM-naming fallback resolves through the Active model seam. The
+# UNREACHABLE and AMBIGUOUS cases must not be conflated: one is an offline dev
+# box (must still work), the other is a live backend the operator has not
+# disambiguated (must refuse rather than pick).
+
+
+async def test_reflect_completion_resolves_through_the_seam_when_backend_unreachable():
+    """UNREACHABLE → the completion is still issued, against the static profile."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.six_rs.reflect import _default_completion_fn
+    from app.services.structured_model import set_structured_active_model
+    from tests.conftest import unreachable_structured_seam
+
+    set_structured_active_model(await unreachable_structured_seam())
+
+    with patch(
+        "app.services.six_rs.reflect.acompletion_with_profile",
+        new=AsyncMock(return_value={"choices": [{"message": {"content": "{}"}}]}),
+    ) as completion:
+        await _default_completion_fn(messages=[], response_format={})
+
+    assert completion.await_count == 1
+    kwargs = completion.await_args.kwargs
+    assert kwargs["model"] == "openai/local-model", (
+        "MODEL_NAME is served as StaticModelSource data when nothing live answers"
+    )
+    assert kwargs["profile"].model_id == "local-model"
+
+
+async def test_reflect_completion_refuses_an_ambiguous_live_backend():
+    """AMBIGUOUS LIVE → raises, and no completion is issued at all."""
+    from unittest.mock import AsyncMock, patch
+
+    import pytest
+
+    from app.errors import ModelSelectorError
+    from app.services.six_rs.reflect import _default_completion_fn
+    from app.services.structured_model import set_structured_active_model
+    from tests.conftest import ambiguous_structured_seam
+
+    set_structured_active_model(ambiguous_structured_seam())
+
+    completion = AsyncMock()
+    with patch(
+        "app.services.six_rs.reflect.acompletion_with_profile", new=completion
+    ):
+        with pytest.raises(ModelSelectorError):
+            await _default_completion_fn(messages=[], response_format={})
+
+    assert completion.await_count == 0

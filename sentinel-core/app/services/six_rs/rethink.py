@@ -4,8 +4,8 @@ Triages ``ops/observations/`` (+ optionally-empty ``ops/tensions/`` -- A3,
 no writer exists for tensions anywhere in the codebase today, never a hard
 dependency) into one of five dispositions per item: PROMOTE / IMPLEMENT /
 METHODOLOGY / ARCHIVE / KEEP. One schema-constrained completion per item
-(D-05, Pattern 1), resolved via the single shared
-``model_resolution.resolve_structured_model`` helper. Item text is
+(D-05, Pattern 1), resolved through the Active model seam
+(``structured_model.structured_profile``, ADR-0007). Item text is
 untrusted DATA ONLY (user-message slot, T-46-INJECT framing, mirrors
 ``moc_maintenance.propose_hub_slug``). A malformed/failed completion for
 one item coerces to ``KEEP`` rather than aborting the batch
@@ -18,7 +18,7 @@ import json
 import logging
 from typing import Any
 
-from app.services.model_resolution import resolve_structured_model
+from app.services.structured_model import structured_profile
 from sentinel_shared.llm_call import (
     acompletion_with_profile,
     extract_completion_text,
@@ -92,19 +92,24 @@ async def _list_items(vault: Any, dir_path: str) -> list[str]:
 
 async def _triage_one(item_path: str, item_text: str) -> dict:
     """Triage a single item; coerce ANY failure to a safe KEEP disposition
-    rather than raising -- a bad completion must never abort the batch."""
+    rather than raising -- a bad completion must never abort the batch.
+
+    That includes a resolution refusal: an AMBIGUOUS LIVE backend raises out of
+    ``structured_profile`` and is coerced to KEEP with no completion issued,
+    while an UNREACHABLE one resolves through ``StaticModelSource`` and the
+    completion is still attempted."""
     disposition = "KEEP"
     reasoning = ""
     try:
-        model_id, profile, api_base = await resolve_structured_model()
+        profile = await structured_profile()
         response = await acompletion_with_profile(
-            model=model_id,
+            model=profile.litellm_model,
             messages=[
                 {"role": "system", "content": _RETHINK_SYSTEM_PROMPT},
                 {"role": "user", "content": item_text or ""},
             ],
             profile=profile,
-            api_base=api_base,
+            api_base=profile.api_base,
             api_key="lmstudio",
             response_format={"type": "json_schema", "json_schema": _RETHINK_SCHEMA},
             temperature=0.0,

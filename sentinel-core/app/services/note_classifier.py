@@ -25,13 +25,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.services.model_resolution import resolve_structured_model
-from app.services.model_selector import get_loaded_models, select_model
+from app.services.structured_model import structured_profile
 from sentinel_shared.llm_call import (
     acompletion_with_profile,
     extract_completion_text,
 )
-from sentinel_shared.model_profiles import get_profile
 
 logger = logging.getLogger(__name__)
 
@@ -195,29 +193,6 @@ with confidence < 0.5. Do not invent new slugs.
 """
 
 
-async def _resolve_model_for_classification() -> tuple[str, object | None, str | None]:
-    """Resolve (model_id, profile, api_base) for a structured-output classification call.
-
-    Thin delegation to the shared ``model_resolution.resolve_structured_model``
-    helper (Phase 46 Plan 02) — kept as a named module-level wrapper, not a
-    bare alias, so this module's own ``get_loaded_models`` / ``select_model`` /
-    ``get_profile`` bindings (and any ``mock.patch`` overrides of them) are
-    forwarded into the single shared implementation. This preserves the
-    pre-refactor patch surface for existing tests and any external callers
-    patching by name, while there is exactly ONE implementation of the
-    resolution logic itself (in ``model_resolution.py``).
-
-    Falls back gracefully when LM Studio is unreachable — returns a best-effort
-    model string from settings; the LLM call may still fail, in which case
-    classify_note() coerces to ``unsure``.
-    """
-    return await resolve_structured_model(
-        get_loaded_models=get_loaded_models,
-        select_model=select_model,
-        get_profile=get_profile,
-    )
-
-
 async def classify_note(
     candidate_text: str, user_topic: str | None = None
 ) -> ClassificationResult:
@@ -227,6 +202,17 @@ async def classify_note(
     is bypassed and confidence is 1.0. Otherwise, the cheap pre-filter runs
     first; survivors are sent to the LLM in JSON mode. JSON parse errors and
     unknown slugs coerce to ``unsure`` with confidence 0.0.
+
+    **The coerce-to-``unsure`` discipline covers the COMPLETION, not the model
+    resolution.** An UNREACHABLE backend never reaches a raise — the seam
+    resolves through ``StaticModelSource`` and the completion is attempted, so
+    the ordinary graceful path still ends in ``unsure``. An AMBIGUOUS LIVE
+    backend is different in kind and PROPAGATES: the backend is up and offering
+    candidates nothing disambiguates, and classifying on a model the operator
+    never chose is how vault notes end up filed by a phantom (ADR-0007 decision
+    4 as amended 2026-09-08). The destructive sweep is already gated separately
+    by ``probe_classifier_model_ready``, which fails closed on the same
+    condition.
     """
     text = candidate_text or ""
 
@@ -251,7 +237,7 @@ async def classify_note(
         )
 
     # 3. LLM classification
-    model_id, profile, api_base = await _resolve_model_for_classification()
+    profile = await structured_profile()
 
     messages = [
         {"role": "system", "content": _CLASSIFIER_SYSTEM_PROMPT},
@@ -260,10 +246,10 @@ async def classify_note(
 
     try:
         response = await acompletion_with_profile(
-            model=model_id,
+            model=profile.litellm_model,
             messages=messages,
             profile=profile,
-            api_base=api_base,
+            api_base=profile.api_base,
             api_key="lmstudio",  # LM Studio dummy key — litellm requires this even though LM Studio ignores it
             # LM Studio's OpenAI-compatible API rejects {"type": "json_object"};
             # use json_schema with explicit shape instead. Falls back to JSON parse + coerce-to-unsure.

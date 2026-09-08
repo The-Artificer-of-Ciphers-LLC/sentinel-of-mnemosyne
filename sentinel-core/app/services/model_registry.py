@@ -1,15 +1,23 @@
 """
-Model registry — hybrid live-fetch + seed fallback.
+Model registry — seed data, plus a live fetch for the providers that have one.
 
-Fetches context window sizes from provider APIs at startup.
-Falls back to models-seed.json on any fetch failure (non-fatal).
-Stored in app.state.model_registry as dict[str, ModelInfo].
+Loads models-seed.json (always) and merges whatever a provider's own API can
+add. Stored in app.state.model_registry as dict[str, ModelInfo].
 
 Per-provider live fetch:
-  LM Studio: GET /api/v0/models/{model_name} → max_context_length
+  LM Studio: none of its own — see below.
   Claude:    Anthropic SDK models.list() → max_input_tokens (or seed fallback)
   Ollama:    POST /api/show → model_info.llama.context_length (stub — seed only)
   llama.cpp: GET /props → n_ctx (stub — seed only)
+
+**ADR-0007 step 4 removed this module's LM Studio live path.** It used to call
+``discover_active_model`` (a ``/v1/models`` fetch plus a scoring pass) and then
+``get_context_window_from_lmstudio`` (a second, per-model
+``/api/v0/models/{id}`` fetch) — two of the three independent startup fetches
+the Active model seam collapsed into one model-list call. LM Studio's model
+identity and window are now resolved by ``ActiveModel`` and handed in through
+``lmstudio_model`` / ``lmstudio_context_window``; the registry keeps only its
+seed role, which is what ``StaticModelSource`` reads.
 """
 import json
 import logging
@@ -19,14 +27,7 @@ from pathlib import Path
 import httpx
 
 from app.clients.anthropic_registry import fetch_anthropic_models
-from app.clients.litellm_provider import get_context_window_from_lmstudio
 from app.config import Settings
-from sentinel_shared.model_profiles import get_profile
-from app.services.model_selector import (
-    _ORIGINAL_PREFIXES,
-    discover_active_model,
-    strip_litellm_prefix,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -67,69 +68,6 @@ def _load_seed() -> dict[str, "ModelInfo"]:
         return {}
 
 
-async def _fetch_lmstudio(
-    settings: Settings, client: httpx.AsyncClient, discovered_name: str
-) -> dict[str, "ModelInfo"]:
-    """Fetch context window from LM Studio. Returns partial dict (discovered_name → ModelInfo).
-
-    On failure, falls back to model_profiles family-based context window
-    (e.g. qwen2.5 → 32768) before resorting to the conservative 4096 default —
-    a 14B+ modern model is virtually never an honest 4K context model and
-    using 4096 there causes aggressive context truncation downstream.
-    """
-    ctx = await get_context_window_from_lmstudio(
-        client, settings.lmstudio_base_url, discovered_name
-    )
-    notes = "Fetched from LM Studio at startup"
-    if ctx == 4096:
-        # Sentinel value: LM Studio fetch failed (or the model genuinely
-        # advertises 4096 — rare on modern releases). Try the model_profiles
-        # substring database for a family-aware default before giving up.
-        try:
-            profile = await get_profile(
-                discovered_name, api_base=settings.lmstudio_base_url
-            )
-            if profile.context_window and profile.context_window != 4096:
-                logger.warning(
-                    "LM Studio context window fetch failed for '%s' — using "
-                    "%d from model_profiles family '%s'",
-                    discovered_name,
-                    profile.context_window,
-                    profile.family,
-                )
-                ctx = profile.context_window
-                notes = (
-                    f"LM Studio fetch failed; context inferred from model_profiles "
-                    f"family '{profile.family}'"
-                )
-            else:
-                logger.warning(
-                    "LM Studio context window fetch failed — using 4096 default for model '%s' "
-                    "(model_profiles also has no better value)",
-                    discovered_name,
-                )
-        except Exception as exc:
-            logger.warning(
-                "LM Studio context window fetch failed and model_profiles fallback "
-                "errored (%s) — using 4096 default for model '%s'",
-                exc,
-                discovered_name,
-            )
-    else:
-        logger.info(
-            f"LM Studio: model '{discovered_name}' has {ctx} token context window"
-        )
-    return {
-        discovered_name: ModelInfo(
-            id=discovered_name,
-            provider="lmstudio",
-            context_window=ctx,
-            capabilities={"chat": True},
-            notes=notes,
-        )
-    }
-
-
 async def _fetch_claude(settings: Settings) -> dict[str, "ModelInfo"]:
     """
     Fetch model list from Anthropic API via app/clients/anthropic_registry.py.
@@ -162,18 +100,20 @@ async def build_model_registry(
     """
     Build the model registry at startup.
     1. Load seed data (always)
-    2. Fetch live data from active provider (best-effort, non-fatal)
+    2. Fetch live data from the active provider where that provider has a live
+       source of its own (best-effort, non-fatal)
     3. Merge: live data takes precedence over seed for overlapping model ids
     Returns dict[model_id, ModelInfo] stored in app.state.model_registry.
 
-    ``lmstudio_model`` / ``lmstudio_context_window``: when the caller has ALREADY
-    resolved LM Studio's model through the Active model seam (ADR-0007), it
-    passes both here and this function performs no LM Studio HTTP of its own.
-    Without them the registry would repeat the discovery call and the
-    per-model ``/api/v0/models/{id}`` context fetch that the seam has just done
-    — the fan-out ADR-0007 step 2 exists to collapse. Both must be supplied
-    together; either alone leaves the original fetch path in place, which is
-    what every caller that has not adopted the seam still gets.
+    ``lmstudio_model`` / ``lmstudio_context_window``: LM Studio's model identity
+    and window are resolved by the Active model seam (ADR-0007), never by this
+    function. When the caller passes both, the resolved answer is recorded here
+    so downstream registry readers see the model that is actually loaded. When
+    it does not, LM Studio contributes NOTHING and the registry is seed-only for
+    that provider — deliberately, because the alternative is this module making
+    its own discovery + per-model context fetch, which is the duplicate
+    implementation step 4 removes. This function issues no LM Studio HTTP under
+    any argument combination.
     """
     registry = _load_seed()
 
@@ -187,17 +127,10 @@ async def build_model_registry(
                 notes="Resolved by the Active model seam (ADR-0007)",
             )
         else:
-            # Discover active model name (non-fatal; falls back to settings.model_name).
-            # discover_active_model returns a litellm-prefixed string such as
-            # "openai/qwen/qwen2.5-coder-14b". Strip ONLY the provider tag — NOT
-            # any HuggingFace-style namespace within the model id, which LM Studio's
-            # /api/v0/models/{id} endpoint requires verbatim to avoid a 400.
-            model_str = await discover_active_model(settings, http_client)
-            discovered_lmstudio_name = strip_litellm_prefix(
-                model_str, prefixes=_ORIGINAL_PREFIXES
+            logger.info(
+                "LM Studio registry entry not supplied by the Active model seam — "
+                "using seed data only; no discovery or context fetch is performed here"
             )
-            live = await _fetch_lmstudio(settings, http_client, discovered_lmstudio_name)
-            registry.update(live)
     elif settings.ai_provider == "claude":
         live = await _fetch_claude(settings)
         registry.update(live)

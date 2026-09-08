@@ -46,7 +46,7 @@ from app.services.embedding_sidecar_index import (
 )
 from app.services.graph_analysis import NOTES_ROOT
 from app.services.inbox import INBOX_PATH, append_entry, parse_inbox, remove_entry
-from app.services.model_resolution import resolve_structured_model
+from app.services.structured_model import structured_profile
 from app.services.moc_maintenance import _slugify as _title_slugify
 from app.services.moc_maintenance import detach_from_hub, find_hub_candidate
 from app.services.note_classifier import ClassificationResult
@@ -255,20 +255,24 @@ async def _draft_reweave_addition(member_slug: str, claim_title: str, excerpt: s
     orchestrator drafts ``addition_text`` via its own schema-constrained
     completion (mirrors ``reduce_entry``/``rethink._triage_one``) before
     calling it. On any resolution/completion/parse failure, falls back to a
-    deterministic, non-empty string derived from the member/claim.
+    deterministic, non-empty string derived from the member/claim -- including
+    an AMBIGUOUS LIVE backend, whose refusal raises out of
+    ``structured_profile`` before any completion is issued. An UNREACHABLE
+    backend does not raise: it resolves through ``StaticModelSource`` and the
+    completion is attempted.
     """
     display = member_slug.replace("-", " ").replace("_", " ").title() or member_slug
     fallback = f"New related note added: [[{display}]] — {claim_title}".strip(" —")
     try:
-        model_id, profile, api_base = await resolve_structured_model()
+        profile = await structured_profile()
         response = await acompletion_with_profile(
-            model=model_id,
+            model=profile.litellm_model,
             messages=[
                 {"role": "system", "content": _REWEAVE_SYSTEM_PROMPT},
                 {"role": "user", "content": f"{claim_title}\n\n{excerpt}"},
             ],
             profile=profile,
-            api_base=api_base,
+            api_base=profile.api_base,
             api_key="lmstudio",
             response_format={"type": "json_schema", "json_schema": _REWEAVE_DRAFT_SCHEMA},
             temperature=0.0,
