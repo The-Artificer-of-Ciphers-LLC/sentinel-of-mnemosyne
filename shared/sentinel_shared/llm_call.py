@@ -1,4 +1,4 @@
-"""Single wrapper around litellm.acompletion that applies ModelProfile stop
+"""Single wrapper around litellm.acompletion that applies a profile's stop
 sequences and api_base overrides, plus the single reader of the response it
 returns. Subsumes the duplicate _stop_for helpers that previously lived in
 llm.py and foundry.py.
@@ -27,20 +27,39 @@ changed return type.
 """
 
 import logging
-from typing import Any
+from typing import Any, Protocol, Sequence, runtime_checkable
 
 import litellm
 
-from sentinel_shared.model_profiles import ModelProfile
-
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class HasStopSequences(Protocol):
+    """The only thing this wrapper needs from a profile.
+
+    Declared structurally rather than by importing a concrete class, because
+    there are two legitimate profile types and this module must not depend on
+    either. ``app.model.ModelProfile`` — the ADR-0007 per-request seam value —
+    is what every production caller actually passes;
+    ``sentinel_shared.model_profiles.FamilyProfile`` is the family constants
+    table that feeds the seam's stop sequences.
+
+    Until ADR-0007 step 5 this parameter was annotated as the family table
+    while every live caller passed the seam value. The two types shared the
+    name ``ModelProfile`` between steps 2 and 5, which is exactly how the
+    annotation went wrong unnoticed; naming what is actually required removes
+    the ability for it to go wrong again.
+    """
+
+    stop_sequences: Sequence[str]
 
 
 async def acompletion_with_profile(
     *,
     model: str,
     messages: list[dict],
-    profile: ModelProfile | None = None,
+    profile: HasStopSequences | None = None,
     api_base: str | None = None,
     timeout: float = 60.0,
     **extra: Any,
@@ -87,7 +106,7 @@ def extract_completion_text(response: Any) -> str:
     ``Accumulated 31 tokens in reasoning content { "topic": "learning", ...``).
 
     **This is deliberately SHAPE-based and does not branch on
-    ``ModelProfile.reasoning``.** ADR-0007 puts LM Studio v1's
+    ``app.model.ModelProfile.reasoning``.** ADR-0007 puts LM Studio v1's
     ``capabilities.reasoning`` on the profile, which is real corroboration — a
     model the backend itself calls a reasoning model is exactly the model that
     returns empty ``content``. It is still not worth branching on: that field is

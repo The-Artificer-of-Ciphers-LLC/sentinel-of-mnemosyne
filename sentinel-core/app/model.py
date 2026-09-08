@@ -25,11 +25,12 @@ Deliberate absences, each load-bearing:
   refusal rung never fires (ADR decision 4).
 - **No family-constant context rung.** The ladder is
   ``loaded window -> max_context_length -> a declared 4096``, each logged. A
-  family rung would consume ``FamilyProfile.context_window`` — the field this
-  same design removes — it is unreachable in practice because both API
-  generations always return ``max_context_length``, and the constants are wrong
-  exactly where it would matter (the qwen2 entry declares 32768 against a real
-  262144/119552). ``FAMILY_PROFILES`` is read here for **stop sequences only**.
+  family rung would consume ``FamilyProfile.context_window``, and ADR-0007
+  step 5 DELETED that field — it was unreachable in practice because both API
+  generations always return ``max_context_length``, and the constants were
+  wrong exactly where it would have mattered (the qwen2 entry declared 32768
+  against a real 262144 max / 119552 loaded). ``FAMILY_PROFILES`` is read here
+  for **stop sequences only**, and there is no longer a window on it to read.
 - **No embedding re-pointing.** ADR decision 5: the embedding model is observed,
   never re-pointed. Nothing here touches ``settings.embedding_model``.
 """

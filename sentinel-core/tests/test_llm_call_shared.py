@@ -14,17 +14,19 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from sentinel_shared.llm_call import acompletion_with_profile, extract_completion_text
-from sentinel_shared.model_profiles import ModelProfile
+from sentinel_shared.model_profiles import FamilyProfile
 
 
-def _make_profile(stop: list[str] | None) -> ModelProfile:
-    """Build a minimal ModelProfile carrying just the stop_sequences we care about."""
-    # ModelProfile is a dataclass with default-able fields; pass a dict that
-    # tolerates either dataclass or pydantic-style construction.
+def _make_profile(stop: list[str] | None) -> FamilyProfile:
+    """Build a minimal profile carrying just the stop_sequences we care about."""
+    # ADR-0007 step 5: the wrapper's parameter is the structural
+    # ``HasStopSequences`` protocol, not a named class — there are two
+    # legitimate profile types and this helper only has to satisfy the one
+    # attribute the wrapper reads.
     try:
-        return ModelProfile(family="test", stop_sequences=stop)  # type: ignore[call-arg]
+        return FamilyProfile(family="test", stop_sequences=stop)  # type: ignore[call-arg]
     except TypeError:
-        # Fallback: SimpleNamespace-style if dataclass signature differs.
+        # Fallback: SimpleNamespace-style if the dataclass signature differs.
         from types import SimpleNamespace
 
         return SimpleNamespace(stop_sequences=stop)  # type: ignore[return-value]
