@@ -19,6 +19,11 @@ from app.services.message_processing import (
     MessageResult,
 )
 from app.services.provider_router import ContextLengthError, ProviderUnavailableError
+from tests.conftest import build_test_active_model
+
+#: Distinguishes "the test did not ask for a particular seam" from the test
+#: deliberately wiring none — which is now its own refusal, not a bridge.
+_UNSET = object()
 
 
 # ---------------------------------------------------------------------------
@@ -107,10 +112,27 @@ def make_processor(
     ai_response: str = "AI says hi.",
     ai_raises: BaseException | None = None,
     output_safe: bool = True,
-    active_model=None,
+    active_model=_UNSET,
+    context_window: int = 8192,
+    stop_sequences: tuple[str, ...] = (),
 ) -> tuple[MessageProcessor, FakeObsidian, FakeAIProvider]:
+    """A processor over a REAL ``ActiveModel`` unless the test supplies its own.
+
+    ``context_window`` and ``stop_sequences`` moved here from ``make_request``
+    when ADR-0007 step 4 removed them from ``MessageRequest``. That is not a
+    cosmetic move: they are now facts about the model that will answer, so a
+    test that wants a tiny window says so by describing the MODEL, which is the
+    only thing the processor budgets against.
+
+    ``active_model=None`` still means "no seam wired" — a distinct case with its
+    own tests — so the default is a sentinel rather than None.
+    """
     obsidian = FakeObsidian(persona=persona, self_files=self_files)
     ai = FakeAIProvider(response=ai_response, raise_exc=ai_raises)
+    if active_model is _UNSET:
+        active_model = build_test_active_model(
+            context_window=context_window, stop_sequences=stop_sequences
+        )
     proc = MessageProcessor(
         vault=obsidian,
         ai_provider=ai,
@@ -121,18 +143,8 @@ def make_processor(
     return proc, obsidian, ai
 
 
-def make_request(
-    content: str = "hello",
-    context_window: int = 8192,
-    stop_sequences: list[str] | None = None,
-) -> MessageRequest:
-    return MessageRequest(
-        content=content,
-        user_id="trekkie",
-        model_name="test-model",
-        context_window=context_window,
-        stop_sequences=stop_sequences,
-    )
+def make_request(content: str = "hello") -> MessageRequest:
+    return MessageRequest(content=content, user_id="trekkie", model_name="test-model")
 
 
 # ---------------------------------------------------------------------------
@@ -144,9 +156,10 @@ async def test_context_overflow_raises_with_correct_code():
     """Token guard fires when messages plus a tiny context_window exceed capacity.
 
     Behavioral assertion: MessageProcessingError raised with code='context_overflow'."""
-    proc, _, _ = make_processor()
-    # context_window=10 — system fallback persona alone exceeds this comfortably.
-    req = make_request(content="some content here", context_window=10)
+    # A model with a 10-token window — the system fallback persona alone exceeds
+    # it comfortably. The window is the MODEL's, not the request's (step 4).
+    proc, _, _ = make_processor(context_window=10)
+    req = make_request(content="some content here")
 
     with pytest.raises(MessageProcessingError) as excinfo:
         await proc.process(req)
@@ -240,10 +253,16 @@ async def test_persona_fallback_when_vault_returns_empty(caplog):
 
 
 async def test_stop_sequences_reach_the_provider():
-    """req.stop_sequences must be forwarded to ai_provider.complete() as stop=,
-    not silently dropped."""
-    proc, _, ai = make_processor()
-    req = make_request(stop_sequences=["<end_of_turn>"])
+    """The resolved model's stop sequences must be forwarded as stop=.
+
+    Regression guard for 93df616, where the chat path silently DROPPED stop
+    sequences because the provider Protocol did not declare the parameter. The
+    source moved from ``req.stop_sequences`` to the resolved profile in
+    ADR-0007 step 4; the assertion — that they arrive — is unchanged, and that
+    is the part that was ever load-bearing.
+    """
+    proc, _, ai = make_processor(stop_sequences=("<end_of_turn>",))
+    req = make_request()
 
     await proc.process(req)
 
@@ -251,7 +270,7 @@ async def test_stop_sequences_reach_the_provider():
 
 
 async def test_no_stop_sequences_passes_none():
-    """When the request carries no stop_sequences, the provider receives
+    """When the resolved model has no stop sequences, the provider receives
     stop=None rather than a missing/omitted argument."""
     proc, _, ai = make_processor()
     req = make_request()
@@ -313,6 +332,7 @@ async def test_empty_body_session_does_not_introduce_stray_separator():
         injection_filter=FakeInjectionFilter(),
         output_scanner=FakeOutputScanner(safe=True),
         recall=recall,
+        active_model=build_test_active_model(),
     )
     req = make_request(content="test")
     await proc.process(req)
@@ -430,8 +450,6 @@ def _ctx_with_resolved_model(resolved_id: str, configured_id: str):
     seam = ActiveModel([source], SimpleNamespace())
     return seam, SimpleNamespace(
         settings=SimpleNamespace(model_name=configured_id),
-        context_window=8192,
-        lmstudio_stop_sequences=[],
         active_model=seam,
     )
 
@@ -446,7 +464,9 @@ async def test_session_summary_frontmatter_records_the_model_that_answered():
     req = build_message_request(
         ctx, MessageEnvelope(content="hello", user_id="trekkie")
     )
-    proc, _, _ = make_processor(ai_response="Noted.")
+    # The SAME seam the factory read, which is how composition wires it: one
+    # object answers "which model" for the recorded name and for the completion.
+    proc, _, _ = make_processor(ai_response="Noted.", active_model=seam)
 
     result = await proc.process(req)
 
@@ -472,7 +492,7 @@ async def test_response_anomaly_warning_records_the_model_that_answered(caplog):
         "This covers la-system methodology, la-system principles, and "
         "la-system markers for managing active requests."
     )
-    proc, _, _ = make_processor(ai_response=degenerate)
+    proc, _, _ = make_processor(ai_response=degenerate, active_model=seam)
 
     with caplog.at_level(logging.WARNING, logger="app.services.message_processing"):
         await proc.process(req)
@@ -559,14 +579,32 @@ async def test_resolved_profile_is_passed_to_the_provider():
     seam = ActiveModel([StaticModelSource([resolved])], SimpleNamespace())
     proc, _, ai = make_processor(active_model=seam)
 
-    # The request's own scalars name a DIFFERENT model with a different window —
-    # the seam must win over both.
-    await proc.process(make_request(context_window=262144))
+    # The request names a DIFFERENT model (``test-model``) and carries no window
+    # of its own at all any more — the profile is the single source of both.
+    await proc.process(make_request())
 
     assert ai.received_profile is not None
     assert ai.received_profile.model_id == "qwen/qwen3.8-27b"
     assert ai.received_profile.context_window == 119552
     assert ai.received_stop == ["<|im_end|>"]
+
+
+async def test_a_processor_with_no_seam_refuses_rather_than_guessing_a_window():
+    """No ActiveModel is a refusal, not a fallback.
+
+    Until ADR-0007 step 4 this bridged from ``MessageRequest``'s own
+    ``context_window`` / ``stop_sequences``. Those are gone, and the tempting
+    replacement — a declared 4096-token profile — would silently truncate
+    context on a real deployment while every test stayed green. Composition
+    always wires a seam, so reaching here at all is a wiring bug and must say so.
+    """
+    proc, _, ai = make_processor(active_model=None)
+
+    with pytest.raises(MessageProcessingError) as excinfo:
+        await proc.process(make_request())
+
+    assert excinfo.value.code == "model_unresolved"
+    assert ai.received_messages == [], "no completion may be attempted"
 
 
 # Mark all tests in this module as async — pytest-asyncio is in auto mode per

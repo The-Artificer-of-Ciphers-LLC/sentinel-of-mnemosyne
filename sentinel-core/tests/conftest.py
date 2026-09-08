@@ -122,23 +122,19 @@ def build_test_route_context(
     ai_provider: Any = None,
     ai_provider_name: str | None = None,
     active_model: ActiveModel | None = None,
-    context_window: int = 8192,
-    lmstudio_stop_sequences: list[str] | None = None,
     http_client: Any = None,
 ) -> RouteContext:
     """Build a real ``RouteContext`` for route-level tests.
 
-    ``context_window`` and ``lmstudio_stop_sequences`` are the two scalars
-    ADR-0007 step 4 removes from ``RouteContext``; they are still accepted here
-    because ``build_message_request`` still reads them. When ``active_model`` is
-    wired the chat path resolves through it and these two are inert — which is
-    the whole point of passing a real seam.
+    ADR-0007 step 4 removed ``context_window`` and ``lmstudio_stop_sequences``
+    from ``RouteContext``, and with them this helper's two pass-through kwargs.
+    Both facts now come off the profile ``active_model`` resolves, which is why
+    passing a real seam (see ``build_test_active_model``) is the way to steer a
+    route test's context window.
     """
     kwargs: dict[str, Any] = {
         "vault": vault,
         "settings": settings,
-        "context_window": context_window,
-        "lmstudio_stop_sequences": lmstudio_stop_sequences or [],
         "active_model": active_model,
         "ai_provider": ai_provider,
         "ai_provider_name": ai_provider_name,

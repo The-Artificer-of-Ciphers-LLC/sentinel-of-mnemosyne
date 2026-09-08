@@ -150,6 +150,59 @@ async def test_context_sessions_serializes_typed_fields():
     )
 
 
+async def test_context_budgets_from_the_seam_not_a_startup_scalar():
+    """The debug view assembles against the LOADED window, per request.
+
+    It used to read ``ctx.context_window`` — a scalar ``build_provider_router``
+    resolved once and pinned for the process lifetime. ADR-0007 step 4 removed
+    it, so this endpoint now shows what the real chat path would actually
+    assemble rather than what configuration said at boot.
+    """
+    from types import SimpleNamespace
+
+    from app.model import ActiveModel, ModelProfile, StaticModelSource
+
+    seam = ActiveModel(
+        [
+            StaticModelSource(
+                [
+                    ModelProfile(
+                        model_id="qwen/qwen3.8-27b",
+                        litellm_model="openai/qwen/qwen3.8-27b",
+                        context_window=119552,
+                    )
+                ]
+            )
+        ],
+        SimpleNamespace(),
+    )
+    recall = Recall(vault=app.state.vault)
+    seen: dict[str, int] = {}
+    real_assemble = recall.assemble
+
+    async def _recording_assemble(req, budget):
+        seen["budget"] = budget
+        return await real_assemble(req, budget)
+
+    recall.assemble = _recording_assemble  # type: ignore[method-assign]
+    app.state.route_ctx = RouteContext(
+        vault=app.state.vault,
+        settings=app.state.settings,
+        http_client=app.state.http_client,
+        ai_provider_name="lmstudio",
+        recall=recall,
+        active_model=seam,
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/context/testuser", headers=AUTH_HEADERS)
+
+    assert resp.status_code == 200
+    assert seen["budget"] == 119552, (
+        "the budget must come from the resolved profile, not a pinned scalar"
+    )
+
+
 async def test_context_requires_auth():
     """GET /context/testuser without X-Sentinel-Key returns 401."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

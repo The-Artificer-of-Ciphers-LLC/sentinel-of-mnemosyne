@@ -35,11 +35,17 @@ def recorded_model_name(ctx) -> str:
 
 
 def build_message_request(ctx, envelope: MessageEnvelope) -> MessageRequest:
-    stop_sequences = getattr(ctx, "lmstudio_stop_sequences", None) or None
+    """Transport in, ``MessageRequest`` out — and no model facts along the way.
+
+    This used to copy ``ctx.context_window`` and
+    ``getattr(ctx, "lmstudio_stop_sequences", ...)`` onto the request. Both are
+    gone with ADR-0007 step 4: the processor resolves a profile per request and
+    reads them off it. The ``getattr`` in particular existed only because three
+    hand-rolled fake route contexts might not define the attribute, and those
+    fakes were replaced by a real ``RouteContext`` in step 3.
+    """
     return MessageRequest(
         content=envelope.content,
         user_id=envelope.user_id,
         model_name=recorded_model_name(ctx),
-        context_window=ctx.context_window,
-        stop_sequences=stop_sequences,
     )
