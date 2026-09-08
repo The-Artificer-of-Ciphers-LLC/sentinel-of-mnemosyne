@@ -256,7 +256,7 @@ outside `composition.py` and the ADR itself.
       site, the seam's last-known-good or static fallback must produce an equivalent.
       `note_classifier` in particular must still coerce to its safe default rather
       than raising.
-    - A 6 Rs pipeline run issues at most one `/api/v0/models` metadata fetch per TTL
+    - A 6 Rs pipeline run issues at most one model-list metadata fetch per TTL
       window, down from roughly five times (1 + N + 1). Assert this with a
       call-counting fake across a simulated multi-stage run — this is the ADR's
       stated latency consequence and the only place it is directly observable.
@@ -413,10 +413,10 @@ outside `composition.py` and the ADR itself.
 
     | # | Deleted test | Disposition |
     |---|---|---|
-    | 1 | `test_model_selector.py::test_get_loaded_models_queries_and_caches` | **Replaced** — `test_model.py` TTL case (two `for_task` calls inside the window issue one `/api/v0/models` fetch). Plan 01. |
+    | 1 | `test_model_selector.py::test_get_loaded_models_queries_and_caches` | **Replaced** — `test_model.py` TTL case (two `for_task` calls inside the window issue one model-list fetch, whichever generation answered). Plan 01. |
     | 2 | `::test_get_loaded_models_force_refresh_bypasses_cache` | **Replaced** — `test_model.py` `invalidate()` case. Plan 01. |
     | 3 | `::test_get_loaded_models_returns_empty_on_network_error` | **Replaced** — `test_model.py` cold last-known-good case (HTTP raises → falls through to `StaticModelSource`, never raises). Plan 01. |
-    | 4 | `::test_get_loaded_models_filters_malformed_entries` | **Replaced — WRITE IT HERE.** Plan 01 has no malformed-entry case. Add to `test_model.py`: an `/api/v0/models` payload containing an entry with no `id`, an entry with `id: null`, a non-dict entry and an empty-string `id` yields only the valid candidates, and does not raise. |
+    | 4 | `::test_get_loaded_models_filters_malformed_entries` | **Replaced — WRITE IT HERE, for BOTH API generations.** Plan 01 has no malformed-entry case. Add to `test_model.py`: a payload containing an entry with no identity field, one whose identity is `null`, a non-dict entry, and one with an empty-string identity yields only the valid candidates and does not raise. Write it twice — once against a `/api/v1/models` payload keyed on `key`, once against `/api/v0/models` keyed on `id`. v1 is the preferred generation, so a malformed-entry guard that only covers v0 guards the fallback path and leaves the primary one unprotected. |
     | 5 | `::test_select_chat_prefers_large_context` | **Behaviour deleted with the module** — `_score`'s max_tokens ranking. ADR decision 4: scoring always produces a winner, so keeping it means the refusal rung never fires. |
     | 6 | `::test_select_structured_requires_function_calling` | **Replaced** — `test_model.py` `for_task("structured")` includes a `tool_use` candidate and excludes one without. Plan 01. The one scoring behaviour that survives, as a filter. |
     | 7 | `::test_select_fast_prefers_smaller_context_above_minimum` | **Behaviour deleted with the module** — the fast-tier 4K floor was a scoring heuristic. `fast` now imposes no capability requirement (Plan 01 Flagged calls 2) and the operator expresses a fast tier with `model_task_fast`. |

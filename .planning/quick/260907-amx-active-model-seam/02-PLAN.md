@@ -40,11 +40,11 @@ requirements: [ADR-0007-S3, ADR-0007-D1, ADR-0007-CONSEQ-SIGNATURE]
 verification:
   core: "cd /Users/trekkie/projects/sentinel-of-mnemosyne/.claude/worktrees/active-model-seam/sentinel-core && /Users/trekkie/projects/sentinel-of-mnemosyne/sentinel-core/.venv/bin/python -m pytest tests/ -q"
   pathfinder: "cd /Users/trekkie/projects/sentinel-of-mnemosyne/.claude/worktrees/active-model-seam/modules/pathfinder && /Users/trekkie/projects/sentinel-of-mnemosyne/modules/pathfinder/.venv/bin/python -m pytest tests/ -q"
-  baseline_in: "whatever 01-SUMMARY.md recorded (717 + N01 passed, 12 skipped; N01 >= 24); pathfinder 405 passed"
+  baseline_in: "whatever 01-SUMMARY.md recorded (717 + N01 passed, 12 skipped; N01 >= 37); pathfinder 405 passed"
   expected_out: |
-    Concrete arithmetic, not a placeholder. Taking N01 = 24 (Plan 01's floor):
+    Concrete arithmetic, not a placeholder. Taking N01 = 37 (Plan 01's floor):
 
-      sentinel-core = 717 + N01 + N02  = 741 + 15 = 756 passed, 12 skipped, 0 failed
+      sentinel-core = 717 + N01 + N02  = 754 + 15 = 769 passed, 12 skipped, 0 failed
       pathfinder    = 405 + N02pf      = 405 + 2  = 407 passed, 0 failed
 
     N02 = 15 expected, floor 13, itemised: Task 1 adds 6 (404-with-ActiveModel
@@ -58,7 +58,7 @@ verification:
     or api_base). Task 3 adds 5 (the extraction helper's five shapes).
     N02pf = 2 expected: the `task` keyword reaches the wire, and no model/api_base/
     profile value appears in the request body.
-    If N01 differs from 24, substitute it — the formula, not the literal, is the
+    If N01 differs from 37, substitute it — the formula, not the literal, is the
     contract. ZERO tests are deleted by this plan; the three _LazyRouteCtx fakes are
     REPLACED in place, not removed, so they contribute 0 to the delta. Record exact
     numbers in 02-SUMMARY.md as N02 and N02pf — Plan 03 chains off both.
@@ -514,6 +514,17 @@ Pathfinder facts (verified by exhaustive search of `modules/pathfinder/app/`):
     a json_schema response format is applied the schema constraint lands on
     reasoning_content instead. Both are load-bearing; neither is a workaround to be
     tidied away.
+
+    **The helper stays shape-based, and is NOT restructured around
+    `profile.reasoning`.** Plan 01 puts LM Studio v1's `capabilities.reasoning` on the
+    `ModelProfile` as an observed field, which means the fallback is now corroborated
+    by real backend data rather than being a pure heuristic — a model the backend
+    itself calls a reasoning model is exactly the model that returns empty `content`.
+    That is worth knowing and worth recording in the SUMMARY. It is NOT worth
+    branching on: the field is unset on the v0 API generation, unset on
+    `StaticModelSource`, and unset for every non-LM-Studio backend, so a helper that
+    keyed off it would stop extracting text on precisely the backends with the least
+    metadata. Handle the response shape, always, for everyone.
 
     This task deletes no tests. If consolidating makes an existing per-module
     extraction test redundant, repoint it rather than removing it — six call sites
