@@ -25,11 +25,12 @@ Deliberate absences, each load-bearing:
   refusal rung never fires (ADR decision 4).
 - **No family-constant context rung.** The ladder is
   ``loaded window -> max_context_length -> a declared 4096``, each logged. A
-  family rung would consume ``FamilyProfile.context_window`` — the field this
-  same design removes — it is unreachable in practice because both API
-  generations always return ``max_context_length``, and the constants are wrong
-  exactly where it would matter (the qwen2 entry declares 32768 against a real
-  262144/119552). ``FAMILY_PROFILES`` is read here for **stop sequences only**.
+  family rung would consume ``FamilyProfile.context_window``, and ADR-0007
+  step 5 DELETED that field — it was unreachable in practice because both API
+  generations always return ``max_context_length``, and the constants were
+  wrong exactly where it would have mattered (the qwen2 entry declared 32768
+  against a real 262144 max / 119552 loaded). ``FAMILY_PROFILES`` is read here
+  for **stop sequences only**, and there is no longer a window on it to read.
 - **No embedding re-pointing.** ADR decision 5: the embedding model is observed,
   never re-pointed. Nothing here touches ``settings.embedding_model``.
 """
@@ -58,6 +59,16 @@ DEFAULT_TTL_SECONDS = 60.0
 
 CAPABILITY_TOOL_USE = "tool_use"
 CAPABILITY_VISION = "vision"
+
+#: The tiktoken encoding token counts are taken with, DECLARED on every profile
+#: rather than derived per family. ADR-0007's Known Limitations accept the
+#: approximation: cl100k_base is not Qwen's tokenizer, counting stays
+#: approximate, and shipping a real per-family tokenizer is a container-weight
+#: decision left deliberately open. Naming it on the profile is what changes —
+#: an operator can now see which encoding produced a count instead of inferring
+#: it, and ``TokenBudget`` degrades loudly on a name tiktoken does not know
+#: rather than raising on the chat path.
+DECLARED_TOKENIZER_ENCODING = "cl100k_base"
 
 #: Which capabilities each task kind REQUIRES. ``structured`` needs tool use;
 #: ``chat`` and ``fast`` impose no requirement, so every non-embedding model the
@@ -207,6 +218,11 @@ class ModelProfile:
     tool use IS an observation, and the destructive-sweep gate reads it as one.
     It is False for :class:`StaticModelSource`, where there is no backend to
     ask; see :meth:`ActiveModel._run_ladder` for what the distinction buys.
+
+    ``tokenizer_encoding`` names the tiktoken encoding token counts against this
+    profile are taken with. It is DECLARED, not observed — no backend reports a
+    tiktoken name — and it exists so the approximation is stated rather than
+    assumed. See :data:`DECLARED_TOKENIZER_ENCODING`.
     """
 
     model_id: str
@@ -221,6 +237,7 @@ class ModelProfile:
     context_window_source: str = CONTEXT_SOURCE_DECLARED
     loaded: bool = True
     capabilities_observed: bool = True
+    tokenizer_encoding: str = DECLARED_TOKENIZER_ENCODING
 
     def supports(self, capability: str) -> bool:
         return capability in self.capabilities

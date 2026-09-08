@@ -34,6 +34,7 @@ from app.model import (
     build_static_profiles,
     static_model_source,
 )
+from app.services.model_registry import ModelInfo
 
 LOGGER_NAME = "app.model"
 BASE_URL = "http://lmstudio.test/v1"
@@ -1087,30 +1088,76 @@ async def test_a_declared_capability_set_cannot_veto_a_task(caplog):
 
     ADR-0007 step 4 moved the five structured call sites onto the seam and this
     was the first thing that broke: ``models-seed.json``'s ``local-model`` entry
-    declares ``function_calling: false``, so an offline deployment resolved
+    declared ``function_calling: false``, so an offline deployment resolved
     ``for_task("structured")`` to nothing and RAISED — the six_rs stages fell
     back on every entry and note_classifier could not classify at all. A live
     backend's silence about tool use is evidence and still vetoes; a seed file's
-    claim about a placeholder name is not.
+    claim about a name is not.
+
+    Step 5 then trimmed ``local-model`` out of the seed, which would have made
+    this case pass for the WRONG reason — an id with no seed entry has no
+    declared capabilities to be vetoed by, so the distinction under test would
+    never be exercised. The declaring seed entry is therefore supplied
+    EXPLICITLY here rather than read off the shipped file. That is stronger
+    than the original: the property is "a declared false cannot veto", and this
+    now tests exactly that instead of depending on which ids happen to be in a
+    data file.
     """
+    declaring_seed = {
+        "declared-no-tools": ModelInfo(
+            id="declared-no-tools",
+            provider="lmstudio",
+            context_window=8192,
+            capabilities={"chat": True, "function_calling": False, "vision": False},
+            notes="Declares no function calling — and must not be able to veto",
+        )
+    }
+    config = settings(model_name="declared-no-tools")
     source = await static_model_source(
-        settings(model_name="local-model"), provider="lmstudio"
+        config, provider="lmstudio", seed=declaring_seed
     )
     profiles = await build_static_profiles(
-        settings(model_name="local-model"), provider="lmstudio"
+        config, provider="lmstudio", seed=declaring_seed
     )
     assert "tool_use" not in profiles[0].capabilities, (
-        "premise: the seed genuinely declares no function calling for this id"
+        "premise: the seed entry genuinely declares no function calling"
     )
     assert profiles[0].capabilities_observed is False
 
-    model = ActiveModel([source], settings(model_name="local-model"))
+    model = ActiveModel([source], config)
+    with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
+        resolved = await model.for_task("structured")
+
+    assert resolved.model_id == "declared-no-tools"
+    assert "no backend was reachable to ask" in caplog.text, (
+        "admitting an unevidenced candidate must be logged, never silent"
+    )
+
+
+async def test_the_trimmed_seed_still_leaves_an_offline_local_model_usable(caplog):
+    """The other half of the trim: no seed entry at all is also not a veto.
+
+    After step 5 no local id has a seed entry, so an offline LM Studio /
+    llama.cpp deployment resolves ``for_task("structured")`` against a profile
+    with an EMPTY capability set. ``capabilities_observed=False`` is what keeps
+    that admissible — without it the trim would reproduce the step-4 breakage it
+    was written to fix, and every six_rs stage would fall back on every entry.
+    """
+    config = settings(model_name="local-model")
+    profiles = await build_static_profiles(config, provider="lmstudio")
+    assert profiles[0].capabilities == frozenset(), (
+        "premise: the trimmed seed carries nothing for this id"
+    )
+    assert profiles[0].capabilities_observed is False
+
+    source = await static_model_source(config, provider="lmstudio")
+    model = ActiveModel([source], config)
     with caplog.at_level(logging.INFO, logger=LOGGER_NAME):
         resolved = await model.for_task("structured")
 
     assert resolved.model_id == "local-model"
-    assert "no backend was reachable to ask" in caplog.text, (
-        "admitting an unevidenced candidate must be logged, never silent"
+    assert resolved.context_window == DECLARED_DEFAULT_CONTEXT_WINDOW, (
+        "the trim removed this id's 8192 seed window; it is a declared floor now"
     )
 
 

@@ -98,9 +98,13 @@ async def test_lmstudio_registry_is_seed_only_without_the_seam(lmstudio_settings
     async with httpx.AsyncClient(transport=_forbidden_transport()) as client:
         registry = await build_model_registry(lmstudio_settings, client)
 
-    assert "local-model" in registry, "the seed must survive intact"
+    assert "claude-haiku-4-5" in registry, "the seed must survive intact"
     assert "test-model" not in registry, (
         "an unconfirmed MODEL_NAME must not be invented into the registry"
+    )
+    assert "local-model" not in registry, (
+        "ADR-0007 step 5 trimmed the seed to cloud models — LM Studio's identity "
+        "comes from LMStudioModelSource, never from seed data"
     )
 
 
@@ -112,11 +116,21 @@ async def test_claude_registry_skips_live_fetch_without_key(claude_settings_no_k
 
 
 async def test_seed_always_present_in_registry(lmstudio_settings):
+    """The seed survives a dead network — on the TRIMMED seed's contents.
+
+    ADR-0007 step 5 cut ``local-model`` (lmstudio) and ``qwen2.5:14b`` (ollama)
+    from the seed, so the example model ids change. The property this case
+    guards does not: whatever the seed holds is in the registry even when every
+    live fetch fails.
+    """
     def raise_connect_error(request):
         raise httpx.ConnectError("refused")
     transport = httpx.MockTransport(raise_connect_error)
     async with httpx.AsyncClient(transport=transport) as client:
         registry = await build_model_registry(lmstudio_settings, client)
-    # Seed contains local-model, claude-haiku-4-5, etc.
-    assert "local-model" in registry
+    # The trimmed seed is cloud models only.
     assert "claude-haiku-4-5" in registry
+    assert "claude-sonnet-4-5" in registry
+    assert "claude-sonnet-4-6" in registry
+    assert "local-model" not in registry
+    assert "qwen2.5:14b" not in registry

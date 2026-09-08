@@ -176,9 +176,20 @@ capabilities — everything a call needs. Providers take it as one argument:
   planning:** this was factually wrong when written. `modules/pathfinder/app/` has **zero**
   `litellm.acompletion` call sites — every completion already goes through
   `SentinelCoreClient.complete()` to `POST /provider/complete`, and embeddings through core's
-  `/embeddings`. `classify_rule_topic` (`llm.py:474-548`) calls `_core_client.complete(...)`; the
-  `import litellm` at `llm.py:33` is vestigial, and `llm.py:432-440` documents its own
-  `model`/`api_base`/`profile` parameters as accepted-but-not-forwarded.
+  `/embeddings`. `classify_rule_topic` calls `_core_client.complete(...)`, and at the close of the
+  plan set there are twelve `_core_client.complete` sites and zero completion calls to litellm.
+
+  *Citations corrected 2026-09-08, at the end of the plan set.* Two supporting details in this
+  paragraph were wrong or have since gone stale, and are fixed here rather than left to mislead a
+  reader who trusts the file:
+
+  - The `import litellm` was cited at `llm.py:33` and called **vestigial**. It is at `llm.py:41`, and
+    it is **not** vestigial — `llm.py:63` uses it for `litellm.suppress_debug_info = True`. It is not
+    a completion call site, which is the claim that matters, but "unused" was wrong.
+  - `llm.py:432-440` was cited as documenting accepted-but-not-forwarded `model`/`api_base`/`profile`
+    parameters. Plan 02 deleted those parameters — from eleven functions, not the six that plan
+    predicted — so the evidence no longer exists. The conclusion it supported still holds, now by
+    the stronger fact that the parameters are gone entirely.
 
   Consequences: decision 7 is already satisfied rather than aspirational; deleting
   `modules/pathfinder/app/resolve_model.py` is dead-parameter removal, not a rewrite, and needs no

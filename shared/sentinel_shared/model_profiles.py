@@ -1,9 +1,27 @@
-"""Model profile library — stop sequences and context metadata per model family.
+"""Family constants library — stop sequences and chat-template facts per family.
+
+This table is keyed by model FAMILY, not by model. It answers "how does this
+family terminate a generation, and what shape is its chat template" — nothing
+here is a fact about the model a backend is currently serving. The per-request
+answer to that question is ``app.model.ModelProfile``, the ADR-0007 seam value;
+these two types shared the name ``ModelProfile`` between ADR-0007 steps 2 and 5,
+and the rename is the point of step 5's cleanup.
+
+**There is deliberately no context-window field.** It carried one until
+ADR-0007 step 5 and nothing consumed it: family constants disagreed with what
+the backend actually served (the gemma2 entry declared 8192 against a live
+gemma-4 serving 262144; the qwen2 entry declared 32768 against a real 262144
+max / 119552 loaded), and a second, disagreeing source of the same number is
+how that divergence happened. Context windows come from the backend, resolved
+by ``app.model.LMStudioModelSource`` in three rungs — the answering API
+generation's loaded-window field → ``max_context_length`` → a declared, logged
+4096. ADR decision 2 was amended 2026-09-07 to remove the family rung precisely
+so this field could go.
 
 Resolution order for get_profile(model_id, api_base):
   1. LM Studio /api/v0/models/{model_id} → arch field → FAMILY_PROFILES[arch]
   2. Substring match on model_id → FAMILY_PROFILES[matched_family]
-  3. SAFE_DEFAULT (no stop sequences, 4096 context)
+  3. SAFE_DEFAULT (no stop sequences)
 
 Profiles are cached per (model_id, api_base) after first fetch. Use
 force_refresh=True to invalidate (e.g., after model swap in LM Studio UI).
@@ -18,15 +36,16 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_profile_cache: dict[tuple[str, str], "ModelProfile"] = {}
+_profile_cache: dict[tuple[str, str], "FamilyProfile"] = {}
 _profile_cache_lock = asyncio.Lock()
 
 
 @dataclass
-class ModelProfile:
+class FamilyProfile:
+    """Constants for one model family. Not a fact about a loaded model."""
+
     family: str
     stop_sequences: list[str]
-    context_window: int
     supports_system_prompt: bool
     chat_template_format: str
     notes: str = ""
@@ -35,34 +54,31 @@ class ModelProfile:
 # Keyed by the LM Studio `arch` field value AND by substring match keys.
 # arch strings: qwen2 confirmed via LM Studio docs; others are best-effort
 # based on common GGUF metadata conventions — safe default applies if wrong.
-FAMILY_PROFILES: dict[str, ModelProfile] = {
-    "qwen2": ModelProfile(
+FAMILY_PROFILES: dict[str, FamilyProfile] = {
+    "qwen2": FamilyProfile(
         family="qwen2",
         stop_sequences=["<|im_end|>", "<|endoftext|>"],
-        context_window=32768,
         supports_system_prompt=True,
         chat_template_format="chatml",
         notes="Qwen2/2.5 ChatML — instruct variant; base models only need <|endoftext|>",
     ),
-    "llama3": ModelProfile(
+    "llama3": FamilyProfile(
         family="llama3",
         stop_sequences=["<|eot_id|>", "<|end_of_text|>"],
-        context_window=8192,
         supports_system_prompt=True,
         chat_template_format="llama3",
     ),
-    "llama": ModelProfile(
+    "llama": FamilyProfile(
         family="llama",
         # Same fix as the mistral profile: [INST]/[/INST] are template
         # delimiters, not stop tokens. Llama 2's EOS is </s>; LM Studio
         # applies the chat template server-side, so the model output never
         # contains [INST]/[/INST] legitimately.
         stop_sequences=["</s>"],
-        context_window=4096,
         supports_system_prompt=False,
         chat_template_format="llama2",
     ),
-    "mistral": ModelProfile(
+    "mistral": FamilyProfile(
         family="mistral",
         # ONLY </s> — [INST] and [/INST] are template DELIMITERS in the input
         # prompt, not output stop tokens. Including them as stops causes
@@ -71,31 +87,27 @@ FAMILY_PROFILES: dict[str, ModelProfile] = {
         # the chat template server-side; the model's output never legitimately
         # contains [INST] / [/INST].
         stop_sequences=["</s>"],
-        context_window=32768,
         # Mistral Small 3+ and recent Mistral fine-tunes (Magnum-v4 etc.)
         # support system prompts via the chat template. Older Mistral 7B v0.1
         # did not, but those are not in current circulation in LM Studio.
         supports_system_prompt=True,
         chat_template_format="mistral",
     ),
-    "gemma2": ModelProfile(
+    "gemma2": FamilyProfile(
         family="gemma2",
         stop_sequences=["<end_of_turn>"],
-        context_window=8192,
         supports_system_prompt=True,
         chat_template_format="gemma",
     ),
-    "phi3": ModelProfile(
+    "phi3": FamilyProfile(
         family="phi3",
         stop_sequences=["<|end|>", "<|endoftext|>"],
-        context_window=131072,
         supports_system_prompt=True,
         chat_template_format="phi3",
     ),
-    "deepseek2": ModelProfile(
+    "deepseek2": FamilyProfile(
         family="deepseek2",
         stop_sequences=["<|end▁of▁sentence|>"],
-        context_window=32768,
         supports_system_prompt=True,
         chat_template_format="deepseek",
     ),
@@ -121,10 +133,9 @@ FAMILY_PROFILES["gemma4"] = FAMILY_PROFILES["gemma2"]
 FAMILY_PROFILES["phi3_5"] = FAMILY_PROFILES["phi3"]
 
 # Conservative default — no stop sequences (LM Studio handles termination via chat template)
-SAFE_DEFAULT = ModelProfile(
+SAFE_DEFAULT = FamilyProfile(
     family="unknown",
     stop_sequences=[],
-    context_window=4096,
     supports_system_prompt=True,
     chat_template_format="unknown",
     notes="No recognized arch — relying on server-side chat template termination",
@@ -154,7 +165,7 @@ _SUBSTRING_PATTERNS: list[tuple[str, str]] = [
 ]
 
 
-def _substring_match(model_id: str) -> ModelProfile | None:
+def _substring_match(model_id: str) -> FamilyProfile | None:
     """Try longest-pattern-first substring match on model_id (case-insensitive)."""
     lower = model_id.lower()
     for pattern, family_key in _SUBSTRING_PATTERNS:
@@ -174,8 +185,8 @@ async def get_profile(
     api_base: str | None = None,
     *,
     force_refresh: bool = False,
-) -> ModelProfile:
-    """Return ModelProfile for model_id, fetching arch from LM Studio if possible.
+) -> FamilyProfile:
+    """Return the FamilyProfile for model_id, fetching arch from LM Studio if possible.
 
     Resolution order:
       1. LM Studio /api/v0/models/{model_id} → arch → FAMILY_PROFILES[arch]
@@ -191,7 +202,7 @@ async def get_profile(
         if not force_refresh and cache_key in _profile_cache:
             return _profile_cache[cache_key]
 
-    profile: ModelProfile | None = None
+    profile: FamilyProfile | None = None
 
     # Step 1: LM Studio arch lookup
     if api_base:

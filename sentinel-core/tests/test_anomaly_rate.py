@@ -14,14 +14,25 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.anomaly_rate import emit, scan  # noqa: E402
+from scripts.anomaly_rate import UNKNOWN_MODEL, emit, scan  # noqa: E402
 
 from tests.fakes.vault import FakeVault  # noqa: E402
 
 
-def _note(*, user_id: str = "trekkie", prompt: str = "Hello", response: str = "Hi there!") -> str:
+def _note(
+    *,
+    user_id: str = "trekkie",
+    prompt: str = "Hello",
+    response: str = "Hi there!",
+    model: str | None = None,
+) -> str:
+    """A session summary. ``model=None`` omits the frontmatter line entirely —
+    the shape every summary had before ADR-0007 put a truthful one there."""
+    fm = f"user_id: {user_id}"
+    if model is not None:
+        fm += f"\nmodel: {model}"
     return (
-        f"---\nuser_id: {user_id}\n---\n\n"
+        f"---\n{fm}\n---\n\n"
         f"## User\n{prompt}\n\n"
         f"## Sentinel\n{response}\n"
     )
@@ -152,6 +163,138 @@ async def test_summary_without_sentinel_section_excluded_from_denominator():
     assert result["total"] == 1
     assert result["excluded"] == 2
     assert result["skipped"] == 0
+
+
+# ---------------------------------------------------------------------------
+# ADR-0007 step 5 — the rate, attributable to the model that produced it.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_breakdown_attributes_the_rate_to_each_model():
+    """Two models, different rates, and the split is visible.
+
+    This is the measurement the ADR's staged sequencing exists to feed: step 1
+    landed the stop-sequence fix alone so a change in this rate could be
+    attributed to it. An aggregate of 33.3% across both models here would hide
+    that one model is clean and the other is not.
+    """
+    vault = FakeVault()
+    _populate(
+        vault,
+        "ops/sessions/2026-09-06/trekkie-10-00-00.md",
+        _note(model="qwen/qwen3.8-27b", response="A clean, ordinary reply."),
+    )
+    _populate(
+        vault,
+        "ops/sessions/2026-09-06/trekkie-11-00-00.md",
+        _note(model="qwen/qwen3.8-27b", response="Another clean reply."),
+    )
+    _populate(
+        vault,
+        "ops/sessions/2026-09-07/trekkie-09-00-00.md",
+        _note(model="google/gemma-4-31b", response="la la la"),
+    )
+
+    result = await scan(vault)
+
+    assert result["total"] == 3
+    assert result["flagged"] == 1
+    assert result["by_model"] == {
+        "qwen/qwen3.8-27b": {"total": 2, "flagged": 0, "percentage": 0.0},
+        "google/gemma-4-31b": {"total": 1, "flagged": 1, "percentage": 100.0},
+    }
+    # Busiest first — repeated runs must order identically so two outputs diff.
+    assert list(result["by_model"]) == ["qwen/qwen3.8-27b", "google/gemma-4-31b"]
+    assert sum(s["total"] for s in result["by_model"].values()) == result["total"], (
+        "the breakdown must account for every scored response"
+    )
+
+
+@pytest.mark.asyncio
+async def test_missing_or_malformed_model_line_lands_in_the_unknown_bucket():
+    """No model line, malformed frontmatter, and an empty value all bucket —
+    and none of them ends the run.
+
+    Dropping these would make the per-model totals disagree with the aggregate,
+    which is how a breakdown becomes a number nobody trusts. Every summary
+    written before ADR-0007 step 2 has no model line at all.
+    """
+    vault = FakeVault()
+    _populate(
+        vault,
+        "ops/sessions/2026-08-20/trekkie-10-00-00.md",
+        _note(response="A clean reply."),  # no model: line at all
+    )
+    _populate(
+        vault,
+        "ops/sessions/2026-08-20/trekkie-11-00-00.md",
+        "## User\nHello\n\n## Sentinel\nla la la\n",  # no frontmatter block
+    )
+    _populate(
+        vault,
+        "ops/sessions/2026-08-20/trekkie-12-00-00.md",
+        "---\nuser_id: trekkie\nmodel:   \n---\n\n## User\nHi\n\n## Sentinel\nFine.\n",
+    )
+    _populate(
+        vault,
+        "ops/sessions/2026-08-20/trekkie-13-00-00.md",
+        _note(model="qwen/qwen3.8-27b", response="A named clean reply."),
+    )
+
+    result = await scan(vault)  # must not raise
+
+    assert result["total"] == 4
+    assert result["skipped"] == 0
+    assert result["by_model"][UNKNOWN_MODEL] == {
+        "total": 3,
+        "flagged": 1,
+        "percentage": 33.3,
+    }
+    assert result["by_model"]["qwen/qwen3.8-27b"]["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_aggregate_figures_are_unchanged_by_the_breakdown():
+    """Every pre-existing figure is byte-identical for a single-model fixture.
+
+    The breakdown is an ADDITION. Pinned field by field rather than by spot
+    check, because the aggregate is the number an operator compares across a
+    cutover and a silent shift in it would invalidate every prior measurement.
+    """
+    vault = FakeVault()
+    _populate(
+        vault,
+        "ops/sessions/2026-09-06/trekkie-10-00-00.md",
+        _note(model="qwen/qwen3.8-27b", response="A clean, ordinary reply."),
+    )
+    _populate(
+        vault,
+        "ops/sessions/2026-09-06/trekkie-11-00-00.md",
+        _note(model="qwen/qwen3.8-27b", response="la la la"),
+    )
+
+    result = await scan(vault)
+
+    aggregate = {k: v for k, v in result.items() if k != "by_model"}
+    assert aggregate == {
+        "total": 2,
+        "flagged": 1,
+        "percentage": 50.0,
+        "skipped": 0,
+        "excluded": 0,
+        "signal_counts": {"consecutive_repetition": 1},
+        "flagged_files": [
+            {
+                "path": "ops/sessions/2026-09-06/trekkie-11-00-00.md",
+                "signals": ["consecutive_repetition"],
+            }
+        ],
+    }
+    # One model in, one row out — and it carries the same rate as the whole.
+    assert result["by_model"] == {
+        "qwen/qwen3.8-27b": {"total": 2, "flagged": 1, "percentage": 50.0}
+    }
 
 
 @pytest.mark.asyncio

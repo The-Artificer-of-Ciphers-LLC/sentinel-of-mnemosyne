@@ -12,15 +12,42 @@ import logging
 
 import pytest
 
+import dataclasses
+
 from sentinel_shared.model_profiles import (
     FAMILY_PROFILES,
+    SAFE_DEFAULT,
+    FamilyProfile,
     _substring_match,
     get_profile,
 )
 
 
+def test_family_profiles_carry_no_context_window():
+    """ADR-0007 step 5: a family constant must not be a second source of the window.
+
+    The field this asserts absent declared 8192 for gemma2 while the live
+    gemma-4 served 262144, and 32768 for qwen2 against a real 262144 max /
+    119552 loaded. Context windows come from the backend, resolved by
+    ``app.model.LMStudioModelSource``'s three-rung ladder; ADR decision 2 was
+    amended 2026-09-07 to drop the family rung precisely so this field could
+    go.
+
+    Asserted as an ABSENCE on the dataclass rather than against any particular
+    number — a test pinning a value would re-create the disagreement.
+    """
+    field_names = {f.name for f in dataclasses.fields(FamilyProfile)}
+    assert "context_window" not in field_names, (
+        "FamilyProfile grew a context-window field back. The backend is the "
+        "only source of a context window (ADR-0007 decision 2 as amended)."
+    )
+    for key, profile in FAMILY_PROFILES.items():
+        assert not hasattr(profile, "context_window"), f"{key} carries a context window"
+    assert not hasattr(SAFE_DEFAULT, "context_window")
+
+
 def test_qwen3_5_moe_arch_returns_qwen2_profile():
-    """Primary arch lookup for qwen3_5_moe must return the qwen2 ModelProfile.
+    """Primary arch lookup for qwen3_5_moe must return the qwen2 FamilyProfile.
 
     This is the exact arch string LM Studio emits for qwen3.6-35b-a3b — the
     one that was firing the FAMILY_PROFILES-miss warning before this fix.
