@@ -4,11 +4,20 @@ Model registry — seed data, plus a live fetch for the providers that have one.
 Loads models-seed.json (always) and merges whatever a provider's own API can
 add. Stored in app.state.model_registry as dict[str, ModelInfo].
 
+**ADR-0007 step 5 trimmed the seed to CLOUD MODELS ONLY.** It is
+``StaticModelSource``'s data, and the local backends do not belong in it: LM
+Studio's identity and window come from ``LMStudioModelSource``, and ollama /
+llama.cpp get declared 4096-token profiles from ``StaticModelSource``. The
+consequence here is that a local-provider deployment gets an EMPTY registry
+contribution from the seed, which is correct — an empty registry is honest
+about knowing nothing, where the old ``local-model`` entry's 8192 was a guess
+that disagreed with every real backend.
+
 Per-provider live fetch:
   LM Studio: none of its own — see below.
   Claude:    Anthropic SDK models.list() → max_input_tokens (or seed fallback)
-  Ollama:    POST /api/show → model_info.llama.context_length (stub — seed only)
-  llama.cpp: GET /props → n_ctx (stub — seed only)
+  Ollama:    POST /api/show → model_info.llama.context_length (stub — none)
+  llama.cpp: GET /props → n_ctx (stub — none)
 
 **ADR-0007 step 4 removed this module's LM Studio live path.** It used to call
 ``discover_active_model`` (a ``/v1/models`` fetch plus a scoring pass) and then
@@ -135,9 +144,17 @@ async def build_model_registry(
         live = await _fetch_claude(settings)
         registry.update(live)
     elif settings.ai_provider == "ollama":
-        logger.info("Ollama registry fetch: stub only — using seed data")
+        logger.info(
+            "Ollama registry fetch: stub only — and ADR-0007 step 5 trimmed the "
+            "seed to cloud models, so ollama contributes no registry entry. Its "
+            "profile is a declared 4096 from StaticModelSource"
+        )
     elif settings.ai_provider == "llamacpp":
-        logger.info("llama.cpp registry fetch: stub only — using seed data")
+        logger.info(
+            "llama.cpp registry fetch: stub only — and ADR-0007 step 5 trimmed "
+            "the seed to cloud models, so llama.cpp contributes no registry "
+            "entry. Its profile is a declared 4096 from StaticModelSource"
+        )
     else:
         logger.warning(
             f"Unknown AI_PROVIDER '{settings.ai_provider}' — using seed-only registry"

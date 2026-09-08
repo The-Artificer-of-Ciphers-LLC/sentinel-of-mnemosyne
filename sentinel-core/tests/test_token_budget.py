@@ -1,6 +1,10 @@
 """Tests for token budget service (CORE-05)."""
+import logging
+
 import pytest
-from app.services.token_budget import TokenBudget, TokenLimitError
+
+from app.model import ModelProfile
+from app.services.token_budget import DEFAULT_ENCODING, TokenBudget, TokenLimitError
 
 
 @pytest.fixture()
@@ -97,3 +101,62 @@ def test_custom_encoding():
     """TokenBudget accepts a custom encoding name."""
     custom = TokenBudget(encoding="p50k_base")
     assert custom.encoding_name == "p50k_base"
+
+
+# ---------------------------------------------------------------------------
+# ADR-0007 step 5 — the encoding is NAMED on the profile, and an unknown name
+# degrades instead of raising. The approximation itself is accepted (cl100k_base
+# is not Qwen's tokenizer); what these pin is that it is stated, and that a
+# tokenizer name can never take down the chat path.
+# ---------------------------------------------------------------------------
+
+
+def test_profile_encoding_is_used_and_reported():
+    """A profile naming an encoding tiktoken knows gets that encoding."""
+    profile = ModelProfile(
+        model_id="m", litellm_model="openai/m", tokenizer_encoding="p50k_base"
+    )
+    budget = TokenBudget.for_profile(profile)
+
+    assert budget.encoding_name == "p50k_base"
+    # Really that encoding, not merely a label: p50k_base and cl100k_base
+    # tokenise this string to different lengths.
+    assert budget.count([{"role": "user", "content": "  indented\tand\ttabbed"}]) != (
+        TokenBudget(encoding=DEFAULT_ENCODING).count(
+            [{"role": "user", "content": "  indented\tand\ttabbed"}]
+        )
+    )
+
+
+def test_unknown_profile_encoding_degrades_with_a_warning(caplog):
+    """An unrecognised name warns and falls back — it must never raise.
+
+    ``tiktoken.get_encoding`` raises ValueError on an unknown name, and this
+    runs inside message processing. A raise here would turn a cosmetic
+    misconfiguration into a failed conversation.
+    """
+    profile = ModelProfile(
+        model_id="m", litellm_model="openai/m", tokenizer_encoding="qwen-bpe-does-not-exist"
+    )
+
+    with caplog.at_level(logging.WARNING, logger="app.services.token_budget"):
+        budget = TokenBudget.for_profile(profile)
+
+    assert budget.encoding_name == DEFAULT_ENCODING, (
+        "encoding_name must report what is IN USE, not what was asked for"
+    )
+    assert "qwen-bpe-does-not-exist" in caplog.text
+    assert budget.count([{"role": "user", "content": "hello"}]) > 0
+
+
+def test_profile_naming_no_encoding_is_the_default_and_silent(caplog):
+    """No encoding named → cl100k_base, and no warning: this is the normal case."""
+    profile = ModelProfile(
+        model_id="m", litellm_model="openai/m", tokenizer_encoding=""
+    )
+
+    with caplog.at_level(logging.WARNING, logger="app.services.token_budget"):
+        budget = TokenBudget.for_profile(profile)
+
+    assert budget.encoding_name == DEFAULT_ENCODING
+    assert caplog.text == "", f"unexpected warning: {caplog.text}"

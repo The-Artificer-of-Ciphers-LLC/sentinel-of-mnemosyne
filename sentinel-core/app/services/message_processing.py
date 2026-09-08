@@ -14,7 +14,7 @@ from app.errors import (
 )
 from app.model import ModelProfile
 from app.services.response_anomaly import EXCERPT_MAX_CHARS, detect_anomalies
-from app.services.token_budget import TokenBudget, TokenLimitError
+from app.services.token_budget import DEFAULT_ENCODING, TokenBudget, TokenLimitError
 
 if TYPE_CHECKING:
     from app.model import ActiveModel
@@ -101,6 +101,13 @@ class MessageProcessor:
         # request then falls back to the request's own scalars exactly as before.
         self._active_model = active_model
         self._budget = TokenBudget()
+        # One TokenBudget per distinct encoding, memoised. Building a tiktoken
+        # encoding is not free and the resolved profile is stable across
+        # requests in the ordinary case, so this is a per-encoding cache rather
+        # than a per-request construction.
+        self._budgets: dict[str, TokenBudget] = {
+            self._budget.encoding_name: self._budget
+        }
         if recall is not None:
             self._recall = recall
         else:
@@ -150,6 +157,27 @@ class MessageProcessor:
                 MODEL_UNRESOLVED_CODE, _MODEL_UNRESOLVED_DETAIL
             ) from exc
 
+    def _budget_for(self, profile: ModelProfile) -> TokenBudget:
+        """The TokenBudget for this profile's declared encoding, memoised.
+
+        Keyed on the encoding NAME rather than the model, because two models
+        counted with the same encoding want the same budget object and building
+        a tiktoken encoding per request is waste. The memo is keyed on the name
+        the budget ENDED UP with, so an unrecognised name that degraded to
+        cl100k_base does not re-warn on every subsequent request.
+        """
+        requested = getattr(profile, "tokenizer_encoding", "") or DEFAULT_ENCODING
+        existing = self._budgets.get(requested)
+        if existing is not None:
+            return existing
+        budget = TokenBudget.for_profile(profile)
+        # Memoise under BOTH the requested name and the effective one: the
+        # requested key is what the next lookup presents, and the effective key
+        # keeps a degraded budget shared with everything else using cl100k_base.
+        self._budgets.setdefault(requested, budget)
+        self._budgets.setdefault(budget.encoding_name, budget)
+        return budget
+
     async def process(self, req: MessageRequest) -> MessageResult:
         # ADR-0007: one resolution per request, before any budgeting, so every
         # token count below is against the window the backend will actually
@@ -157,6 +185,11 @@ class MessageProcessor:
         profile = await self._resolve_profile(req)
         context_window = profile.context_window
         model_name = profile.model_id or req.model_name
+        # ADR-0007 step 5: count against the encoding the profile NAMES, so the
+        # approximation is stated rather than assumed. An unrecognised name
+        # degrades to cl100k_base with a warning inside TokenBudget; it never
+        # fails the request.
+        budget = self._budget_for(profile)
 
         # Delegate hot+warm assembly to Recall (MEM-01).
         recalled = await self._recall.assemble(req, context_window)
@@ -197,7 +230,7 @@ class MessageProcessor:
                 )
         if context_parts:
             raw_context = "\n\n".join(context_parts)
-            safe_context = self._budget.truncate(raw_context, sessions_budget)
+            safe_context = budget.truncate(raw_context, sessions_budget)
             filtered_context = self._injection_filter.wrap_context(safe_context)
             messages.append({"role": "user", "content": filtered_context})
             messages.append({"role": "assistant", "content": "Understood."})
@@ -210,7 +243,7 @@ class MessageProcessor:
                 "Vault contents (the notes currently in the user's second brain):\n"
                 + recalled.inventory
             )
-            safe_inventory = self._budget.truncate(inventory_block, search_budget)
+            safe_inventory = budget.truncate(inventory_block, search_budget)
             filtered_inventory = self._injection_filter.wrap_context(safe_inventory)
             messages.append({"role": "user", "content": filtered_inventory})
             messages.append({"role": "assistant", "content": "Understood."})
@@ -218,7 +251,7 @@ class MessageProcessor:
         # Warm-tier injection (presentation, D-04).
         if recalled.warm:
             vault_block = self._format_search_results(recalled.warm)
-            safe_vault = self._budget.truncate(vault_block, search_budget)
+            safe_vault = budget.truncate(vault_block, search_budget)
             filtered_vault = self._injection_filter.wrap_context(safe_vault)
             messages.append({"role": "user", "content": filtered_vault})
             messages.append({"role": "assistant", "content": "Understood."})
@@ -227,7 +260,7 @@ class MessageProcessor:
         messages.append({"role": "user", "content": safe_input})
 
         try:
-            self._budget.check(messages, context_window)
+            budget.check(messages, context_window)
         except TokenLimitError as exc:
             raise MessageProcessingError("context_overflow", str(exc)) from exc
 
