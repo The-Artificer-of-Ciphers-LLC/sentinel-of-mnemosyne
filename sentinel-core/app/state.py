@@ -53,8 +53,6 @@ class RouteContext:
     processor: "MessageProcessor | None" = None
     settings: "Settings | None" = None
     http_client: "httpx.AsyncClient | None" = None
-    context_window: int = 4096
-    lmstudio_stop_sequences: list[str] = field(default_factory=list)
     classify: Callable[[str], Awaitable[Any]] = _missing_classifier
     embedder: Callable[[list[str]], Awaitable[list[float]]] = _missing_embedder
     module_registry: dict[str, Any] = field(default_factory=dict)
@@ -68,10 +66,12 @@ class RouteContext:
     # to narrow completion routes (e.g. the pf2e chat-handoff endpoint, D-09
     # prerequisite). Pinned in initialize_startup() from graph.ai_provider.
     ai_provider: "ProviderRouter | None" = None
-    # The Active model seam (ADR-0007). This is what replaces context_window and
-    # lmstudio_stop_sequences above once step 4 removes them: instead of three
-    # scalars pinned at startup, the request path asks this object which model
-    # is loaded right now. None only in test fixtures that never resolve a model.
+    # The Active model seam (ADR-0007). It REPLACED ``context_window`` and
+    # ``lmstudio_stop_sequences``, which used to sit on this dataclass as
+    # scalars resolved once by ``build_provider_router`` and pinned for the
+    # process lifetime — the exact staleness the ADR opens with. The request
+    # path asks this object which model is loaded right now instead. None only
+    # in test fixtures that never resolve a model.
     active_model: "ActiveModel | None" = None
 
 

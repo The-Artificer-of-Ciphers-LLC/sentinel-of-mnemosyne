@@ -178,6 +178,71 @@ def test_build_schema_block_round_trips_through_check_note_compliance():
     assert "missing type key in _schema block" not in result["failures"]
 
 
+# --- ADR-0007 step 4: the two backend failure modes, at THIS call site -------
+#
+# Both end in a fileable ReduceResult (Pitfall 6 — reduce_entry never raises),
+# but they are NOT the same event and the tests say which happened: with an
+# unreachable backend the completion is attempted against the static profile;
+# with an ambiguous live backend resolution refuses and no completion is made.
+
+
+async def test_reduce_completes_against_the_static_profile_when_backend_unreachable():
+    """UNREACHABLE → resolution does not raise; the completion is issued."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.six_rs.reduce import reduce_entry
+    from app.services.structured_model import set_structured_active_model
+    from tests.conftest import unreachable_structured_seam
+
+    set_structured_active_model(await unreachable_structured_seam())
+
+    canned = {
+        "claim_title": "Offline boxes still reduce",
+        "body": "Resolution degraded to the configured model rather than refusing.",
+        "schema_type": "permanent",
+        "durable": True,
+    }
+    with patch(
+        "app.services.six_rs.reduce.acompletion_with_profile",
+        new=AsyncMock(
+            return_value={"choices": [{"message": {"content": json.dumps(canned)}}]}
+        ),
+    ) as completion:
+        result = await reduce_entry("raw captured text")
+
+    assert completion.await_count == 1, (
+        "an unreachable backend must not stop the completion being attempted"
+    )
+    assert completion.await_args.kwargs["profile"].model_id == "local-model"
+    assert result.claim_title == canned["claim_title"]
+
+
+async def test_reduce_falls_back_without_completing_on_an_ambiguous_live_backend():
+    """AMBIGUOUS LIVE → safe fallback, and NO completion is issued.
+
+    The distinction is the whole point: a fallback result on its own would look
+    identical to the unreachable case, so the assertion that matters is that no
+    model was called, because none was chosen.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from app.services.six_rs.reduce import reduce_entry
+    from app.services.structured_model import set_structured_active_model
+    from tests.conftest import ambiguous_structured_seam
+
+    set_structured_active_model(ambiguous_structured_seam())
+
+    completion = AsyncMock()
+    with patch("app.services.six_rs.reduce.acompletion_with_profile", new=completion):
+        result = await reduce_entry("raw captured text")
+
+    assert completion.await_count == 0, (
+        "no completion may be issued against a model nothing chose"
+    )
+    assert result.claim_title, "reduce_entry must still yield a fileable result"
+    assert result.schema_type == "fleeting"
+
+
 def test_build_schema_block_hub_kwarg_included_only_when_provided():
     """hub kwarg round-trips into the parsed dict when provided; omitted
     entirely (not merely null) when absent -- both cases still has_type True."""

@@ -99,13 +99,17 @@ def make_recall(
 
 
 def make_request(content: str = "hello", budget: int = 8192) -> MessageRequest:
-    """Build a minimal MessageRequest for test use."""
+    """Build a minimal MessageRequest for test use.
+
+    ``budget`` is accepted and ignored: ADR-0007 step 4 removed
+    ``context_window`` from ``MessageRequest``, and every caller in this module
+    passes the budget to ``recall.assemble(req, budget)`` separately — which is
+    where Recall has always read it from.
+    """
     return MessageRequest(
         content=content,
         user_id="trekkie",
         model_name="test-model",
-        context_window=budget,
-        stop_sequences=None,
     )
 
 

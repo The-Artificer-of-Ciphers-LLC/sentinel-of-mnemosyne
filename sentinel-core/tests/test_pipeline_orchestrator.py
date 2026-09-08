@@ -644,6 +644,62 @@ async def test_absorb_trash_failure_after_successful_queue_write_records_error()
     assert standalone_path in vault.notes, "original stays put when disposal fails"
 
 
+# --- ADR-0007 step 4: the two backend failure modes, at THIS call site -------
+#
+# ``_draft_reweave_addition`` is the orchestrator's own structured completion.
+# It never raises (Pitfall 6), so the deterministic fallback string alone does
+# not say which failure occurred — whether a completion was ISSUED does.
+
+
+async def test_reweave_draft_completes_against_the_static_profile_when_unreachable():
+    """UNREACHABLE → resolution does not raise; the draft completion is issued."""
+    import json
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import pipeline_orchestrator
+    from app.services.structured_model import set_structured_active_model
+    from tests.conftest import unreachable_structured_seam
+
+    set_structured_active_model(await unreachable_structured_seam())
+
+    canned = {"addition_text": "Drafted while the backend was down."}
+    with patch(
+        "app.services.pipeline_orchestrator.acompletion_with_profile",
+        new=AsyncMock(
+            return_value={"choices": [{"message": {"content": json.dumps(canned)}}]}
+        ),
+    ) as completion:
+        text = await pipeline_orchestrator._draft_reweave_addition(
+            "member-note", "A claim title", "an excerpt"
+        )
+
+    assert completion.await_count == 1
+    assert completion.await_args.kwargs["profile"].model_id == "local-model"
+    assert text == canned["addition_text"]
+
+
+async def test_reweave_draft_falls_back_without_completing_on_an_ambiguous_backend():
+    """AMBIGUOUS LIVE → deterministic fallback, and NO completion is issued."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.services import pipeline_orchestrator
+    from app.services.structured_model import set_structured_active_model
+    from tests.conftest import ambiguous_structured_seam
+
+    set_structured_active_model(ambiguous_structured_seam())
+
+    completion = AsyncMock()
+    with patch(
+        "app.services.pipeline_orchestrator.acompletion_with_profile", new=completion
+    ):
+        text = await pipeline_orchestrator._draft_reweave_addition(
+            "member-note", "A claim title", "an excerpt"
+        )
+
+    assert completion.await_count == 0
+    assert text.startswith("New related note added: [[Member Note]]")
+
+
 async def test_pipeline_mode_absorbs_standalone_note_end_to_end():
     """End-to-end in pipeline mode: a standalone inbox note that previously
     had NO promotion path now ends up as a notes/ note, and

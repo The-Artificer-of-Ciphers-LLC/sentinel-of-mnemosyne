@@ -40,9 +40,8 @@ from app.services.note_classifier import classify_note
 from app.services.output_scanner import OutputScanner
 from app.services.provider_router import ProviderRouter
 from app.services.self_profile import profile_status
+from app.services.structured_model import set_structured_active_model
 from app.vault import ObsidianVault
-from sentinel_shared.model_profiles import get_profile
-
 if TYPE_CHECKING:
     import httpx
 
@@ -59,6 +58,10 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+#: Every provider composition can actually build an entry for. Kept beside the
+#: provider_map below so the two cannot drift apart silently.
+_KNOWN_PROVIDERS = frozenset({"lmstudio", "claude", "ollama", "llamacpp"})
 
 
 @dataclass(frozen=True)
@@ -84,8 +87,6 @@ class AppGraph:
     settings: "Settings"
     http_client: "httpx.AsyncClient"
     model_registry: "dict[str, ModelInfo]"
-    context_window: int
-    lmstudio_stop_sequences: list[str]
     ai_provider: "ProviderRouter"
     ai_provider_name: str
     vault: "Vault"
@@ -97,40 +98,35 @@ class AppGraph:
     module_registry: dict[str, Any]
     embeddings: "Embeddings"
     note_classifier_fn: Callable[[str], Awaitable[Any]]
-    # The Active model seam (ADR-0007). Carried through to RouteContext so the
-    # request path can ask "which model is loaded" instead of reading a scalar
-    # pinned at startup. Defaulted so test fakes constructed before this field
-    # existed keep working.
+    # The Active model seam (ADR-0007). ``context_window`` and
+    # ``lmstudio_stop_sequences`` used to sit here as scalars pinned at startup;
+    # step 4 removed them, and the request path asks this object instead.
+    # Defaulted so test fakes constructed before this field existed keep working.
     active_model: "ActiveModel | None" = None
-    # See ProviderRouterBundle.primary_model — the seam the chat path may resolve
-    # through, which is ``active_model`` only when LM Studio is the primary.
+    # The seam describing the PRIMARY provider. Usually the same object as
+    # ``active_model``, which is LM STUDIO's seam whatever AI_PROVIDER says
+    # (SC-3); for any other primary it is a separate, I/O-free seam over that
+    # provider's own config-derived profile, so the chat path never budgets
+    # against — or names — a model from the wrong catalogue.
     primary_model: "ActiveModel | None" = None
 
 
 @dataclass(frozen=True)
-class ProviderRouterBundle:
-    """Result of :func:`build_provider_router`.
+class ProviderGraph:
+    """What :func:`build_provider_router` hands back.
 
-    The bundle exposes everything the lifespan needs to pin onto ``app.state``
-    after constructing the provider router: the router itself, the model
-    registry it consulted, the active model's context window, the stop
-    sequences for that model, and the configured provider name.
+    ADR-0007 step 4 deleted ``ProviderRouterBundle``, whose job was carrying
+    three separately-fetched scalars — the model name, its context window and
+    its stop sequences — from startup to the request path. The seam answers all
+    three, so what is left is the router, the registry (seed data plus whatever
+    a provider API could add) and the two seams. Nothing here is a pinned fact
+    about which model is loaded; that question has one owner now.
     """
 
     router: ProviderRouter
     model_registry: "dict[str, ModelInfo]"
-    context_window: int
-    lmstudio_stop_sequences: list[str]
-    ai_provider_name: str
-    # The seam the three scalars above are on their way to being replaced by
-    # (ADR-0007 step 4). Present from step 2 so the request path can reach it.
-    active_model: "ActiveModel | None" = None
-    # The subset of ``active_model`` that describes the PRIMARY provider: the same
-    # object when AI_PROVIDER is lmstudio, and None otherwise. ``active_model`` is
-    # LM Studio's seam whatever AI_PROVIDER says (SC-3), so the chat path must not
-    # resolve through it for a different backend — it would budget against, and
-    # name, models from the wrong catalogue.
-    primary_model: "ActiveModel | None" = None
+    active_model: ActiveModel
+    primary_model: ActiveModel
 
 
 async def build_active_model(
@@ -199,15 +195,66 @@ async def _resolve_lmstudio_profile(
         )
 
 
+def _warn_if_provider_unrecognised(settings: "Settings") -> None:
+    """One WARNING when AI_PROVIDER names a backend composition cannot build.
+
+    ADR-0007 step 4 deleted the two provider-keyed tables whose Pitfall-1/2/3
+    fixes existed to stop an unlisted ``ai_provider`` silently falling through
+    to another backend's model name or base URL. The tables are gone; the
+    guarantee is not. ``Settings.ai_provider`` is a validated ``Literal``, so an
+    unrecognised value cannot normally get this far — but the check is cheap and
+    the alternative is that a future widening of that field re-opens the exact
+    hole the tables were introduced to close, silently.
+    """
+    if settings.ai_provider not in _KNOWN_PROVIDERS:
+        logger.warning(
+            "Unknown AI_PROVIDER=%r — no provider entry can be built for it; "
+            "falling back to LM Studio rather than adopting another backend's "
+            "model or base URL",
+            settings.ai_provider,
+        )
+
+
+async def _build_primary_model(
+    settings: "Settings",
+    active_model: ActiveModel,
+    model_registry: "dict[str, ModelInfo]",
+) -> ActiveModel:
+    """The seam describing the PRIMARY provider.
+
+    For LM Studio that is ``active_model`` itself. For any other primary it is a
+    separate seam over that provider's own config-derived profile — I/O-free,
+    because those backends are not discoverable — seeded from the model registry
+    so a live Anthropic fetch still supplies Claude's real window rather than
+    the seed's.
+
+    This is what replaced ``RouteContext.context_window`` and
+    ``lmstudio_stop_sequences``. Handing an ollama primary LM Studio's seam
+    would make the not-served retry re-resolve into a model that backend has
+    never heard of, so the two seams stay distinct (SC-3).
+    """
+    if settings.ai_provider == "lmstudio":
+        return active_model
+    return ActiveModel(
+        [
+            await static_model_source(
+                settings, provider=settings.ai_provider, seed=model_registry
+            )
+        ],
+        settings,
+    )
+
+
 async def build_provider_router(
     settings: "Settings", http_client: "httpx.AsyncClient"
-) -> ProviderRouterBundle:
-    """Construct the ProviderRouter and the metadata pinned alongside it.
+) -> ProviderGraph:
+    """Construct the ProviderRouter, the registry and the two model seams.
 
     Performs:
-      * Model registry build (live fetch + seed fallback).
       * ONE metadata refresh through the Active model seam, which answers the
         model id, the context window and the stop sequences together.
+      * Model registry build (seed data plus a live fetch where a provider has
+        one of its own).
       * Provider map construction (4 backends route through LiteLLMProvider).
       * Primary + fallback selection per ``settings.ai_provider`` and
         ``settings.ai_fallback_provider``.
@@ -216,11 +263,15 @@ async def build_provider_router(
     of its own for those three facts — a ``/v1/models`` discovery call, a
     registry context-window lookup backed by ``/api/v0/models/{id}``, and a
     second ``/api/v0/models/{id}`` fetch for the stop-sequence profile. They are
-    now one ``ActiveModel.for_task("chat")``.
+    now one ``ActiveModel.for_task("chat")``. Step 4 removed the last of the
+    machinery that existed to reconcile those three separately-fetched scalars
+    against ``settings.ai_provider``.
 
     Non-fatal where the pre-refactor code was non-fatal (model resolution,
     profile fetch, fallback instantiation). The function never raises.
     """
+    _warn_if_provider_unrecognised(settings)
+
     # ONE metadata refresh. Everything below reads the resolved profile —
     # including the registry, which is handed the answer rather than repeating
     # the discovery call and the per-model context fetch itself.
@@ -228,6 +279,13 @@ async def build_provider_router(
     lmstudio_profile = await _resolve_lmstudio_profile(active_model, settings)
     lmstudio_model_name = lmstudio_profile.model_id
     lmstudio_model_str = lmstudio_profile.litellm_model
+    logger.info(
+        "LM Studio model: %s (%d tokens, resolved from %s); stop sequences: %s",
+        lmstudio_model_name,
+        lmstudio_profile.context_window,
+        lmstudio_profile.context_window_source,
+        list(lmstudio_profile.stop_sequences),
+    )
 
     # Build model registry (seed + cloud fetch) — non-fatal if providers unavailable
     model_registry = await build_model_registry(
@@ -236,70 +294,6 @@ async def build_provider_router(
         lmstudio_model=lmstudio_model_name,
         lmstudio_context_window=lmstudio_profile.context_window,
     )
-
-    # Table-driven active_model lookup (Pitfall 1 fix) — replaces the ternary
-    # chain that silently fell through to llamacpp_model for any unlisted
-    # ai_provider. ProviderRouterBundle and these tables are on ADR-0007's
-    # deletion list, but that is step 4; deleting them here would drag the
-    # RouteContext rewiring into this step and break "green on its own".
-    active_model_table = {
-        "lmstudio": lmstudio_model_name,
-        "claude": settings.claude_model,
-        "ollama": settings.ollama_model,
-        "llamacpp": settings.llamacpp_model,
-    }
-    active_model_name = active_model_table.get(settings.ai_provider, settings.ai_provider)
-
-    lmstudio_stop_sequences: list[str]
-    if settings.ai_provider == "lmstudio":
-        # Both facts come off the one resolved profile.
-        context_window = lmstudio_profile.context_window
-        lmstudio_stop_sequences = list(lmstudio_profile.stop_sequences)
-        logger.info(
-            "Context window: %d tokens (model: %s, resolved from %s); stop sequences: %s",
-            context_window,
-            lmstudio_model_name,
-            lmstudio_profile.context_window_source,
-            lmstudio_stop_sequences,
-        )
-    else:
-        # Non-LM-Studio providers are not discoverable, so the registry still
-        # answers for their context window and the family table (no I/O —
-        # api_base=None) answers for their stop sequences.
-        model_info = model_registry.get(active_model_name)
-        context_window = model_info.context_window if model_info else 4096
-        if not model_info:
-            logger.warning(
-                f"Active model '{active_model_name}' not found in registry — "
-                "using 4096 token default"
-            )
-        else:
-            logger.info(
-                f"Context window: {context_window} tokens (model: {active_model_name})"
-            )
-        stop_seq_model_table = {
-            "lmstudio": lmstudio_model_name,
-            "ollama": settings.ollama_model,
-            "llamacpp": settings.llamacpp_model,
-        }
-        active_profile_model = stop_seq_model_table.get(
-            settings.ai_provider, lmstudio_model_name
-        )
-        try:
-            profile = await get_profile(active_profile_model, api_base=None)
-            lmstudio_stop_sequences = profile.stop_sequences or []
-            logger.info(
-                "Model stop sequences: %s (family: %s)",
-                profile.stop_sequences,
-                profile.family,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Model profile lookup failed for %r — no stop sequences will be sent: %s",
-                active_profile_model,
-                exc,
-            )
-            lmstudio_stop_sequences = []
 
     # All backends route through LiteLLMProvider (RD-02 — eliminate stub providers).
     # lmstudio is an openai_compatible entry (D-01/D-02/D-03).
@@ -345,14 +339,11 @@ async def build_provider_router(
                 settings.ai_fallback_provider,
             )
 
-    # ADR-0007 step 3. `active_model` is LM STUDIO's seam unconditionally (SC-3:
-    # provider_map["lmstudio"] must name a model LM Studio serves whatever
-    # AI_PROVIDER says). It is therefore handed to the router ONLY when LM Studio
-    # is also the primary — giving an ollama primary a seam that answers with LM
-    # Studio's catalogue would make the not-served retry re-resolve into a model
-    # that backend has never heard of, which is a worse failure than the 404 it
-    # is trying to recover from.
-    primary_model = active_model if settings.ai_provider == "lmstudio" else None
+    # ADR-0007 step 3/4. `active_model` is LM STUDIO's seam unconditionally
+    # (SC-3: provider_map["lmstudio"] must name a model LM Studio serves whatever
+    # AI_PROVIDER says), so a non-LM-Studio primary gets its OWN seam rather than
+    # this one — see _build_primary_model.
+    primary_model = await _build_primary_model(settings, active_model, model_registry)
 
     # The fallback's OWN seam (ADR decision 8 / Flagged call 12). Config-derived
     # and I/O-free: `StaticModelSource` is the whole source list, so resolving it
@@ -379,12 +370,9 @@ async def build_provider_router(
         f"(fallback: {settings.ai_fallback_provider})"
     )
 
-    return ProviderRouterBundle(
+    return ProviderGraph(
         router=router,
         model_registry=model_registry,
-        context_window=context_window,
-        lmstudio_stop_sequences=lmstudio_stop_sequences,
-        ai_provider_name=settings.ai_provider,
         active_model=active_model,
         primary_model=primary_model,
     )
@@ -396,7 +384,7 @@ async def build_application(
     *,
     vault: "Vault | None" = None,
     ai_provider: "ProviderRouter | None" = None,
-    provider_bundle: "ProviderRouterBundle | None" = None,
+    provider_graph: "ProviderGraph | None" = None,
     injection_filter: "InjectionFilter | None" = None,
     output_scanner: "OutputScanner | None" = None,
     recall: "Recall | None" = None,
@@ -422,38 +410,23 @@ async def build_application(
     a startup-failure decision and stays in lifespan(); ``build_application``
     only constructs the graph.
     """
-    # Provider router — supplied bundle wins; explicit ai_provider override is
-    # honored (no metadata in that path); otherwise build from scratch.
-    if provider_bundle is None and ai_provider is None:
-        provider_bundle = await build_provider_router(settings, http_client)
-    if ai_provider is None:
-        assert provider_bundle is not None  # narrowed for type-checkers
-        ai_provider = provider_bundle.router
-        model_registry = provider_bundle.model_registry
-        context_window = provider_bundle.context_window
-        lmstudio_stop_sequences = provider_bundle.lmstudio_stop_sequences
-        ai_provider_name = provider_bundle.ai_provider_name
-        active_model = provider_bundle.active_model
-        primary_model = provider_bundle.primary_model
+    # Provider router — a supplied graph wins; an explicit ai_provider override
+    # is honored (no metadata in that path); otherwise build from scratch.
+    if provider_graph is None and ai_provider is None:
+        provider_graph = await build_provider_router(settings, http_client)
+    ai_provider_name = settings.ai_provider
+    if provider_graph is not None:
+        ai_provider = ai_provider or provider_graph.router
+        model_registry = provider_graph.model_registry
+        active_model = provider_graph.active_model
+        primary_model = provider_graph.primary_model
     else:
-        # Caller supplied an ai_provider directly (test fake) — derive
-        # registry/context/stop_sequences from the supplied bundle if any,
-        # otherwise fall back to empty/default values that match the
-        # pre-refactor non-fatal posture.
-        if provider_bundle is not None:
-            model_registry = provider_bundle.model_registry
-            context_window = provider_bundle.context_window
-            lmstudio_stop_sequences = provider_bundle.lmstudio_stop_sequences
-            ai_provider_name = provider_bundle.ai_provider_name
-            active_model = provider_bundle.active_model
-            primary_model = provider_bundle.primary_model
-        else:
-            model_registry = {}
-            context_window = 4096
-            lmstudio_stop_sequences = []
-            ai_provider_name = settings.ai_provider
-            active_model = None
-            primary_model = None
+        # Caller supplied an ai_provider directly (test fake) and no graph. The
+        # seam is left unwired, which is the pre-seam posture: a processor with
+        # no ActiveModel resolves nothing and says so.
+        model_registry = {}
+        active_model = None
+        primary_model = None
 
     if vault is None:
         vault = ObsidianVault(
@@ -536,8 +509,6 @@ async def build_application(
         settings=settings,
         http_client=http_client,
         model_registry=model_registry,
-        context_window=context_window,
-        lmstudio_stop_sequences=lmstudio_stop_sequences,
         ai_provider=ai_provider,
         ai_provider_name=ai_provider_name,
         vault=vault,
@@ -560,13 +531,18 @@ async def initialize_startup(
     """Build graph, pin runtime state, and enforce startup policy."""
     graph = await build_application(settings, http_client)
 
+    # ADR-0007 step 4. The five structured-completion call sites are module-level
+    # coroutines with no graph reference, so the seam is registered for them here
+    # rather than threaded through. Registering the SAME object the chat path uses
+    # is what makes "at most one model-list fetch per TTL window" true across a
+    # whole 6 Rs run instead of once per stage.
+    set_structured_active_model(getattr(graph, "active_model", None))
+
     app.state.route_ctx = RouteContext(
         vault=graph.vault,
         processor=graph.message_processor,
         settings=graph.settings,
         http_client=graph.http_client,
-        context_window=graph.context_window,
-        lmstudio_stop_sequences=graph.lmstudio_stop_sequences,
         classify=graph.note_classifier_fn,
         embedder=graph.embeddings.embed,
         module_registry=graph.module_registry,

@@ -15,26 +15,20 @@ before, re-expressed against the real backend payloads instead of a patched
 scoring function. Four cases are new: an absent-capabilities entry, an operator
 pin that wins the ladder without being capable, a resolution that RAISES, and
 probe/resolver parity.
+
+ADR-0007 step 4 added two more — the first cases to exercise the gate on the
+PREFERRED ``/api/v1/models`` generation rather than the v0 fallback — and
+removed ``test_score_cloud_model_via_litellm_unchanged``, which was never a
+probe test: it tested ``_score``, and ``_score`` is gone.
 """
 from __future__ import annotations
 
 import httpx
 import pytest
 
-from app.services.model_selector import (
-    _reset_cache_for_tests,
-    probe_classifier_model_ready,
-)
+from app.services.model_selector import probe_classifier_model_ready
 
 BASE_URL = "http://lmstudio.test/v1"
-
-
-@pytest.fixture(autouse=True)
-def reset_model_cache():
-    """Clear the module-level model cache between tests."""
-    _reset_cache_for_tests()
-    yield
-    _reset_cache_for_tests()
 
 
 # --- Helpers ---------------------------------------------------------------
@@ -374,27 +368,79 @@ async def test_probe_and_structured_resolution_agree_on_the_same_model():
     )
 
 
-def test_score_cloud_model_via_litellm_unchanged():
-    """A well-known cloud model id (present in litellm's static registry)
-    must keep scoring via litellm exactly as before — with no live_capabilities
-    argument (existing sync callers), and even when a live_capabilities dict
-    is supplied but doesn't contain this model id (it isn't a local model)."""
-    from app.services.model_selector import _score
+# --- The v1 API generation ------------------------------------------------
+#
+# Every case above reaches the backend through the v0 FALLBACK: `lmstudio_handler`
+# answers 404 on /api/v1/models on purpose, because that is the shape the probe's
+# original tests were written against. v1 is the PREFERRED generation and the one
+# the live box answers on, so until these two cases the destructive-sweep gate was
+# only ever exercised on its fallback path. Added by ADR-0007 step 4, which deletes
+# the probe/resolver parity case that used to live in test_model_resolution.py —
+# probe coverage must not fall, and the honest way to hold it up is a case that
+# covers something the deleted one did not.
 
-    score_without_live_caps = _score("structured", "gpt-4o")
-    assert score_without_live_caps > 0, (
-        "cloud model 'gpt-4o' must keep scoring > 0 for 'structured' via "
-        "litellm — this must be unaffected by the local-capability fix"
+
+def v1_entry(model_id: str, *, tool_use: bool = True, loaded: bool = True) -> dict:
+    """An /api/v1/models entry in LM Studio's real shape."""
+    return {
+        "key": model_id,
+        "type": "llm",
+        "architecture": "qwen3_5",
+        "max_context_length": 262144,
+        "loaded_instances": (
+            [{"config": {"context_length": 119552}}] if loaded else []
+        ),
+        "capabilities": {
+            "trained_for_tool_use": tool_use,
+            "vision": False,
+            "reasoning": True,
+        },
+    }
+
+
+def v1_handler(entries: list[dict]):
+    """A fake LM Studio that DOES serve the v1 model API."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/api/v1/models"):
+            return httpx.Response(200, json={"data": entries})
+        return httpx.Response(404, json={"error": "unmocked"})
+
+    return handler
+
+
+@pytest.mark.asyncio
+async def test_probe_classifier_ready_true_on_the_v1_generation():
+    """The preferred generation reports tool use under a different key.
+
+    v1 nests it at ``capabilities.trained_for_tool_use``; v0 puts the string
+    ``"tool_use"`` in a list. A probe that only ever ran against v0 would keep
+    passing while silently answering not-ready on every modern backend — which
+    disables destructive sweeps rather than enabling them wrongly, but is still
+    a failure of the gate to do its job.
+    """
+    result = await probe(
+        v1_handler([v1_entry("qwen/qwen3.8-27b")]), model_name="qwen/qwen3.8-27b"
     )
 
-    # Presence of an (unrelated) live_capabilities mapping must not change
-    # the cloud model's score — it isn't in the mapping, so _score falls
-    # through to the litellm path exactly as when live_capabilities=None.
-    score_with_unrelated_live_caps = _score(
-        "structured",
-        "gpt-4o",
-        {"google/gemma-4-31b": {"max_tokens": 262144, "supports_function_calling": True}},
+    assert result is True, (
+        "a loaded, tool_use-capable model reported by /api/v1/models must be "
+        "reported ready"
     )
-    assert score_with_unrelated_live_caps == score_without_live_caps, (
-        "an unrelated live_capabilities mapping must not change cloud model scoring"
+
+
+@pytest.mark.asyncio
+async def test_probe_classifier_ready_false_on_the_v1_generation_without_tool_use():
+    """v1 reporting ``trained_for_tool_use: false`` is still not ready.
+
+    The fail-closed half of the case above: reading the preferred generation
+    must not become permissive, and an absent nested flag is not permission.
+    """
+    result = await probe(
+        v1_handler([v1_entry("qwen/qwen3.8-27b", tool_use=False)]),
+        model_name="qwen/qwen3.8-27b",
+    )
+
+    assert result is False, (
+        "a v1-reported model without trained_for_tool_use must not be ready"
     )

@@ -38,7 +38,6 @@ from app.llm import (
     update_npc_fields,
 )
 from app.pdf import build_npc_pdf
-from app.resolve_model import resolve
 
 logger = logging.getLogger(__name__)
 
@@ -361,7 +360,6 @@ async def create_npc(req: NPCCreateRequest) -> JSONResponse:
     # LLM field extraction — D-06, D-07
     # Task kind "structured" — requires function-calling-capable model for reliable JSON
     try:
-        r = await resolve("structured")  # noqa: F841 - deleted in ADR-0007 step 4
         fields = await extract_npc_fields(
             name=req.name,
             description=req.description,
@@ -412,7 +410,6 @@ async def update_npc(req: NPCUpdateRequest) -> JSONResponse:
     # LLM extracts changed fields from correction string (D-10)
     # Task kind "structured" — same JSON-extraction profile as /create
     try:
-        r = await resolve("structured")  # noqa: F841 - deleted in ADR-0007 step 4
         changed = await update_npc_fields(
             current_note=note_text,
             correction=req.correction,
@@ -699,10 +696,6 @@ async def token_prompt(req: NPCOutputRequest) -> JSONResponse:
     if note_text is None:
         raise HTTPException(status_code=404, detail={"error": "NPC not found", "slug": slug})
     fields = _parse_frontmatter(note_text)
-    # ADR-0007 step 3: the "fast" tier is now named by generate_mj_description
-    # itself on the wire, not resolved here. This call survives only because
-    # `resolve` is step 4's to delete.
-    r = await resolve("fast")  # noqa: F841 - deleted in ADR-0007 step 4
     description = await generate_mj_description(fields=fields)
     prompt = build_mj_prompt(fields, description)
     return JSONResponse({"prompt": prompt, "slug": slug})
@@ -896,12 +889,7 @@ async def say_npc(req: NPCSayRequest) -> JSONResponse:
         scene_id, scene_roster, len(req.party_line), len(capped_history),
     )
 
-    # Step 4: ADR-0007 step 3 — generate_npc_reply names the chat tier on the
-    # wire and core resolves. This call survives only because `resolve` is
-    # step 4's to delete.
-    r_chat = await resolve("chat")  # noqa: F841 - deleted in ADR-0007 step 4
-
-    # Step 5: Serial round-robin (D-19) — each NPC sees prior NPCs' replies in this turn.
+    # Step 4: Serial round-robin (D-19) — each NPC sees prior NPCs' replies in this turn.
     this_turn_replies: list[dict] = []
     response_replies: list[dict] = []
     for npc in npcs_data:
@@ -970,7 +958,7 @@ async def say_npc(req: NPCSayRequest) -> JSONResponse:
             "new_mood": new_mood,
         })
 
-    # Step 6: Soft cap warning (D-18) — exact string per CONTEXT.md D-18.
+    # Step 5: Soft cap warning (D-18) — exact string per CONTEXT.md D-18.
     warning = None
     if len(scene_roster) >= 5:
         warning = f"⚠ {len(scene_roster)} NPCs in scene — consider splitting for clarity."

@@ -172,13 +172,7 @@ async def test_load_inventory_fails_soft_on_non_dict_json():
 
 
 def _make_request(content: str) -> MessageRequest:
-    return MessageRequest(
-        content=content,
-        user_id="trekkie",
-        model_name="test-model",
-        context_window=8192,
-        stop_sequences=None,
-    )
+    return MessageRequest(content=content, user_id="trekkie", model_name="test-model")
 
 
 async def test_recall_assemble_populates_inventory_for_inventory_query():

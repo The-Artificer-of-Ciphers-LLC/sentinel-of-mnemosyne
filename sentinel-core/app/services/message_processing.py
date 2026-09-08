@@ -38,11 +38,21 @@ _MODEL_UNRESOLVED_DETAIL = (
 
 @dataclass(frozen=True)
 class MessageRequest:
+    """The transport input. Carries no model facts beyond a recorded name.
+
+    ``context_window`` and ``stop_sequences`` used to ride along here, copied
+    off ``RouteContext``'s startup-pinned scalars; ADR-0007 step 4 removed both.
+    The processor resolves a :class:`~app.model.ModelProfile` per request and
+    budgets against THAT window, so a request cannot carry a stale one.
+
+    ``model_name`` survives for a different reason: it is what gets RECORDED
+    (session-summary frontmatter, the response-anomaly log) when no seam is
+    wired, and the factory fills it from the seam's cached profile when one is.
+    """
+
     content: str
     user_id: str
     model_name: str
-    context_window: int
-    stop_sequences: list[str] | None
 
 
 @dataclass(frozen=True)
@@ -99,25 +109,8 @@ class MessageProcessor:
             from app.services.recall import Recall  # noqa: PLC0415
             self._recall = Recall(vault=vault)
 
-    def _profile_from_request(self, req: MessageRequest) -> ModelProfile:
-        """The transitional bridge for callers with no seam wired.
-
-        ``MessageRequest``'s three scalars survive this change (ADR-0007 step 4
-        removes them, together with ``ProviderRouterBundle``). Until then, a
-        processor built without an ``ActiveModel`` reads them and presents them as
-        a profile, so every path below this line deals in ONE value regardless of
-        where the facts came from.
-        """
-        return ModelProfile(
-            model_id=req.model_name,
-            litellm_model=req.model_name,
-            context_window=req.context_window,
-            stop_sequences=tuple(req.stop_sequences or ()),
-            task_kind="chat",
-        )
-
     async def _resolve_profile(self, req: MessageRequest) -> ModelProfile:
-        """Ask the seam which model will answer, or bridge from the request.
+        """Ask the seam which model will answer.
 
         A resolution failure surfaces as a clean ``MessageProcessingError`` rather
         than an unhandled 500 — and it deliberately does NOT fall back to the
@@ -126,9 +119,23 @@ class MessageProcessor:
         diverting it to the paid provider would convert an operator error into a
         bill while hiding the very condition ADR decision 4's raise exists to
         announce (ADR-0007 decision 4 as amended 2026-09-08).
+
+        A processor built with NO seam is the same refusal rather than a
+        different code path. Until step 4 it could bridge from
+        ``MessageRequest``'s own ``context_window`` / ``stop_sequences``; those
+        scalars are gone, and inventing a declared-4096 profile in their place
+        would silently truncate context on a real deployment. Composition always
+        wires a seam — LM Studio's when it is primary, that provider's own
+        config-derived one otherwise.
         """
         if self._active_model is None:
-            return self._profile_from_request(req)
+            logger.error(
+                "MessageProcessor has no ActiveModel — cannot determine which "
+                "model will answer, and will not guess a context window"
+            )
+            raise MessageProcessingError(
+                MODEL_UNRESOLVED_CODE, _MODEL_UNRESOLVED_DETAIL
+            )
         try:
             return await self._active_model.for_task("chat")
         except Exception as exc:

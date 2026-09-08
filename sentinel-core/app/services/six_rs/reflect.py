@@ -20,7 +20,7 @@ import logging
 from typing import Any
 
 from app.services.graph_analysis import NOTES_ROOT
-from app.services.model_resolution import resolve_structured_model
+from app.services.structured_model import structured_profile
 from app.services.moc_maintenance import (
     add_hub_backlink_to_member,
     attach_to_hub,
@@ -61,13 +61,18 @@ async def _default_completion_fn(*, messages: list[dict], response_format: dict)
 
     Used only on the ``propose_hub_slug`` LLM-naming fallback path (D-07) --
     never on the embedding-first match path, which makes zero LLM calls.
+
+    An UNREACHABLE backend degrades through ``StaticModelSource`` and still
+    attempts the call; an AMBIGUOUS LIVE backend raises out of here, which
+    ``find_and_attach_hub``'s caller absorbs as "no hub named". The two are
+    deliberately not conflated (ADR-0007 decision 4 as amended).
     """
-    model_id, profile, api_base = await resolve_structured_model()
+    profile = await structured_profile()
     return await acompletion_with_profile(
-        model=model_id,
+        model=profile.litellm_model,
         messages=messages,
         profile=profile,
-        api_base=api_base,
+        api_base=profile.api_base,
         api_key="lmstudio",
         response_format=response_format,
         temperature=0.0,

@@ -57,7 +57,6 @@ class RuleQueryDependencies:
     rules_index: RulesIndex
     aon_url_map: dict
     settings: Any
-    resolve_model: Callable[[str], Awaitable[Any]]
     keyword_classify_topic: Callable[[str], str | None]
     classify_rule_topic: Callable[..., Awaitable[str]]
     embed_texts: Callable[..., Awaitable[list[list[float]]]]
@@ -117,13 +116,6 @@ async def execute_rule_query(
 
     q_norm = normalize_query(query)
     q_hash = query_hash(query)
-    # ADR-0007 step 3: nothing below consumes these any more — the llm.py
-    # helpers name a task tier and sentinel-core resolves the model (decision 7).
-    # The two calls survive this step ONLY because `resolve_model` and the
-    # `RuleQueryDependencies.resolve_model` field are step 4's to delete; keeping
-    # them here is what makes that step a pure deletion rather than a rewrite.
-    r_chat = await deps.resolve_model("chat")  # noqa: F841 - deleted in ADR-0007 step 4
-    r_structured = await deps.resolve_model("structured")  # noqa: F841 - ditto
 
     topic = deps.keyword_classify_topic(query)
     if topic is None:

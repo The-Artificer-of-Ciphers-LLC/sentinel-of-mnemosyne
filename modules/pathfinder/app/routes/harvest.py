@@ -32,7 +32,6 @@ from app.harvest import (
     lookup_seed,
 )
 from app.llm import generate_harvest_fallback
-from app.resolve_model import resolve
 from app.routes.npc import slugify  # Don't Hand-Roll — reuse the existing slug fn
 
 logger = logging.getLogger(__name__)
@@ -182,11 +181,6 @@ async def harvest(req: HarvestRequest) -> JSONResponse:
         )
 
     per_monster_results: list[dict] = []
-    # ADR-0007 step 3: generate_harvest_fallback names the chat tier on the wire
-    # and core resolves. This call survives only because `resolve` is step 4's to
-    # delete.
-    r_chat = await resolve("chat")  # noqa: F841 - deleted in ADR-0007 step 4
-
     for name in req.names:
         slug = slugify(name)
         cache_path = f"{HARVEST_CACHE_PATH_PREFIX}/{slug}.md"

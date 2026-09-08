@@ -21,11 +21,15 @@ def _seam_with_resolved_chat_model(model_id: str) -> ActiveModel:
 
 
 def test_build_message_request_from_context_and_envelope():
-    ctx = SimpleNamespace(
-        settings=SimpleNamespace(model_name="test-model"),
-        context_window=8192,
-        lmstudio_stop_sequences=["</s>"],
-    )
+    """The request carries transport facts and a recorded name — nothing else.
+
+    ADR-0007 step 4 removed ``context_window`` and ``stop_sequences`` from
+    ``MessageRequest``; the context no longer supplies them and the processor
+    reads both off the profile it resolves. Asserting their ABSENCE is the point:
+    a request that could still carry a window is a request that could carry a
+    stale one.
+    """
+    ctx = SimpleNamespace(settings=SimpleNamespace(model_name="test-model"))
     envelope = MessageEnvelope(content="hello", user_id="user-1")
 
     req = build_message_request(ctx, envelope)
@@ -33,8 +37,8 @@ def test_build_message_request_from_context_and_envelope():
     assert req.content == "hello"
     assert req.user_id == "user-1"
     assert req.model_name == "test-model"
-    assert req.context_window == 8192
-    assert req.stop_sequences == ["</s>"]
+    assert not hasattr(req, "context_window")
+    assert not hasattr(req, "stop_sequences")
 
 
 async def test_build_message_request_records_the_resolved_model_not_model_name():
@@ -50,8 +54,6 @@ async def test_build_message_request_records_the_resolved_model_not_model_name()
 
     ctx = SimpleNamespace(
         settings=SimpleNamespace(model_name="google/gemma-4-31b"),
-        context_window=119552,
-        lmstudio_stop_sequences=["<|im_end|>"],
         active_model=seam,
     )
 
@@ -64,14 +66,15 @@ async def test_build_message_request_records_the_resolved_model_not_model_name()
 async def test_build_message_request_falls_back_to_model_name_without_a_seam():
     """A context with no seam still records a name.
 
-    Reachable in production whenever AI_PROVIDER is not lmstudio: the seam is LM
-    Studio's unconditionally (SC-3), so composition deliberately does not wire it
-    to a chat path talking to a different backend.
+    Composition wires one for every provider as of ADR-0007 step 4 (LM Studio's
+    own when it is primary, a config-derived seam for that backend otherwise),
+    so this is now a defensive path rather than an ordinary deployment. It is
+    kept because ``recorded_model_name`` is on the transport path and must
+    never blank the recorded model just because the seam is absent — a blank
+    name in session frontmatter is worse than a stale one.
     """
     ctx = SimpleNamespace(
         settings=SimpleNamespace(model_name="configured-model"),
-        context_window=8192,
-        lmstudio_stop_sequences=[],
     )
 
     req = build_message_request(ctx, MessageEnvelope(content="hi", user_id="u"))
@@ -84,8 +87,6 @@ async def test_build_message_request_falls_back_when_the_seam_has_not_resolved_y
     seam = _seam_with_resolved_chat_model("qwen/qwen3.8-27b")  # never awaited
     ctx = SimpleNamespace(
         settings=SimpleNamespace(model_name="configured-model"),
-        context_window=8192,
-        lmstudio_stop_sequences=[],
         active_model=seam,
     )
 

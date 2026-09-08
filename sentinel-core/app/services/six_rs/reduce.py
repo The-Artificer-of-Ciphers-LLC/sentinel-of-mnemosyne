@@ -3,9 +3,10 @@
 Turns one raw inbox entry into a durable-knowledge claim ({claim_title,
 body, schema_type}) via a single schema-constrained completion (D-05,
 Pattern 1, mirroring note_classifier.classify_note's structured-completion
-shape). Resolves its model through the single shared
-``model_resolution.resolve_structured_model`` helper (D-05) -- there is
-exactly ONE implementation of model-resolution logic in the codebase.
+shape). Resolves its model through the Active model seam
+(``structured_model.structured_profile`` -> ``ActiveModel.for_task``, ADR-0007)
+-- there is exactly ONE implementation of model-resolution logic in the
+codebase, and it is the same object the chat path resolves through.
 
 Pitfall 6 (enforcement belongs at Verify, never at Reduce): this module
 NEVER raises into the caller and NEVER calls
@@ -29,7 +30,7 @@ import logging
 import yaml
 from pydantic import BaseModel
 
-from app.services.model_resolution import resolve_structured_model
+from app.services.structured_model import structured_profile
 from sentinel_shared.llm_call import (
     acompletion_with_profile,
     extract_completion_text,
@@ -147,16 +148,21 @@ async def reduce_entry(entry_text: str) -> ReduceResult:
     """Extract a durable-knowledge claim from one raw inbox entry (PIPE-02).
 
     Single schema-constrained completion (D-05, Pattern 1). Resolves the
-    model via ``model_resolution.resolve_structured_model`` and calls
-    ``acompletion_with_profile`` with a strict ``json_schema`` response
-    format. Never raises — on ANY resolution, completion, parse, or
+    model via the Active model seam (``structured_model.structured_profile``)
+    and calls ``acompletion_with_profile`` with a strict ``json_schema``
+    response format. Never raises — on ANY resolution, completion, parse, or
     validation failure this returns a safe fallback ``ReduceResult`` (Pitfall
     6) rather than dropping the entry or blocking capture. Never calls
     ``note_schema.check_note_compliance`` — compliance enforcement is
     Verify's job only.
+
+    The two backend failure modes stay distinct here even though both end in a
+    safe result: an UNREACHABLE backend resolves through ``StaticModelSource``
+    and the completion is attempted, while an AMBIGUOUS LIVE backend raises at
+    resolution and no completion is issued at all.
     """
     try:
-        model_id, profile, api_base = await resolve_structured_model()
+        profile = await structured_profile()
     except Exception as exc:
         logger.warning("reduce_entry: model resolution failed: %s", exc)
         return _fallback_result(entry_text)
@@ -168,10 +174,10 @@ async def reduce_entry(entry_text: str) -> ReduceResult:
 
     try:
         response = await acompletion_with_profile(
-            model=model_id,
+            model=profile.litellm_model,
             messages=messages,
             profile=profile,
-            api_base=api_base,
+            api_base=profile.api_base,
             # LM Studio dummy key — litellm requires this even though LM
             # Studio itself ignores it (mirrors note_classifier.classify_note).
             api_key="lmstudio",

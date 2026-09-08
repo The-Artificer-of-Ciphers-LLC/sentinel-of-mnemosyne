@@ -106,13 +106,12 @@ async def test_build_application_constructs_default_provider_when_not_overridden
 
     assert isinstance(graph.ai_provider, ProviderRouter)
     assert graph.ai_provider_name == "lmstudio"
-    # The graph should expose all 15 fields populated
+    # ADR-0007 step 4 removed `context_window` and `lmstudio_stop_sequences`
+    # from AppGraph; `active_model` answers both, per request.
     for field in (
         "settings",
         "http_client",
         "model_registry",
-        "context_window",
-        "lmstudio_stop_sequences",
         "ai_provider",
         "ai_provider_name",
         "vault",
@@ -123,11 +122,12 @@ async def test_build_application_constructs_default_provider_when_not_overridden
         "module_registry",
         "embeddings",
         "note_classifier_fn",
+        "active_model",
+        "primary_model",
     ):
-        assert getattr(graph, field) is not None or field in (
-            "lmstudio_stop_sequences",
-            "module_registry",
-        )
+        assert getattr(graph, field) is not None or field == "module_registry"
+    assert not hasattr(graph, "context_window")
+    assert not hasattr(graph, "lmstudio_stop_sequences")
 
 
 async def test_build_provider_router_picks_primary_from_settings(http_client):
@@ -135,15 +135,20 @@ async def test_build_provider_router_picks_primary_from_settings(http_client):
     settings_lm = _settings(ai_provider="lmstudio", ai_fallback_provider="none")
     settings_ollama = _settings(ai_provider="ollama", ai_fallback_provider="none")
 
-    bundle_lm = await build_provider_router(settings_lm, http_client)
-    bundle_ollama = await build_provider_router(settings_ollama, http_client)
+    graph_lm = await build_provider_router(settings_lm, http_client)
+    graph_ollama = await build_provider_router(settings_ollama, http_client)
 
-    assert isinstance(bundle_lm.router, ProviderRouter)
-    assert isinstance(bundle_ollama.router, ProviderRouter)
-    assert bundle_lm.ai_provider_name == "lmstudio"
-    assert bundle_ollama.ai_provider_name == "ollama"
+    assert isinstance(graph_lm.router, ProviderRouter)
+    assert isinstance(graph_ollama.router, ProviderRouter)
     # Distinct configurations produce distinct router instances
-    assert bundle_lm.router is not bundle_ollama.router
+    assert graph_lm.router is not graph_ollama.router
+    # ADR-0007 step 4: `ai_provider_name` left the bundle with the two scalars —
+    # it is `settings.ai_provider`, which the caller already has. What each
+    # configuration DOES produce differently is its primary seam: LM Studio's own
+    # when it is primary, and a separate config-derived one for ollama, so the
+    # chat path can never budget against the wrong backend's catalogue (SC-3).
+    assert graph_lm.primary_model is graph_lm.active_model
+    assert graph_ollama.primary_model is not graph_ollama.active_model
 
 
 async def test_lmstudio_provider_construction_args_pinned_after_openai_compatible_refactor(
@@ -694,13 +699,20 @@ async def test_build_provider_router_names_the_discovered_model_and_loaded_windo
     client = httpx.AsyncClient(transport=httpx.MockTransport(_live_lmstudio_handler(calls)))
     settings = _settings(model_auto_discover=True, model_name="google/gemma-4-31b")
 
-    bundle = await build_provider_router(settings, client)
+    graph = await build_provider_router(settings, client)
 
-    assert bundle.context_window == 119552
-    assert bundle.lmstudio_stop_sequences == ["<|im_end|>", "<|endoftext|>"]
-    resolved = bundle.active_model.cached_profile("chat")
+    # ADR-0007 step 4 removed the two scalars this used to read off the bundle
+    # (``context_window`` and ``lmstudio_stop_sequences``). Both facts are on the
+    # resolved profile, and asserting them THERE is the point of the change: a
+    # scalar could be pinned at startup and go stale, a profile is re-resolved.
+    resolved = graph.active_model.cached_profile("chat")
     assert resolved.model_id == "qwen/qwen3.8-27b"
     assert resolved.model_id != settings.model_name
+    assert resolved.context_window == 119552, "the LOADED window, not the maximum"
+    assert resolved.stop_sequences == ("<|im_end|>", "<|endoftext|>")
+    assert graph.primary_model is graph.active_model, (
+        "with LM Studio primary the chat path resolves through the same seam"
+    )
 
 
 async def test_build_provider_router_makes_one_model_metadata_refresh():
@@ -729,17 +741,50 @@ async def test_build_provider_router_never_raises_on_unreachable_backend():
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
-    bundle = await build_provider_router(
+    graph = await build_provider_router(
         _settings(model_auto_discover=True, model_name="fallback-model"), client
     )
 
-    assert isinstance(bundle.router, ProviderRouter)
-    assert bundle.active_model is not None
+    assert isinstance(graph.router, ProviderRouter)
+    assert graph.active_model is not None
+
+
+async def test_unknown_ai_provider_still_warns_after_the_tables_were_deleted(caplog):
+    """The Pitfall-1/2/3 guarantee outlives the tables that introduced it.
+
+    ADR-0007 step 4 deleted the provider-keyed tables in ``build_provider_router``
+    whose whole job was reconciling three separately-fetched scalars against
+    ``settings.ai_provider`` — and whose Pitfall fixes had replaced a ternary
+    chain that silently fell through to another backend's model or base URL.
+    Deleting the tables must not sell that back, so composition checks
+    explicitly. ``Settings.ai_provider`` is a validated Literal, so this is
+    belt-and-braces against a future widening of that field — which is exactly
+    how the hole was opened the first time.
+    """
+    import logging
+    from types import SimpleNamespace
+
+    from app.composition import _warn_if_provider_unrecognised
+
+    with caplog.at_level(logging.WARNING, logger="app.composition"):
+        _warn_if_provider_unrecognised(SimpleNamespace(ai_provider="totally-unknown"))
+
+    assert "Unknown AI_PROVIDER" in caplog.text
+    assert "totally-unknown" in caplog.text
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="app.composition"):
+        _warn_if_provider_unrecognised(SimpleNamespace(ai_provider="ollama"))
+
+    assert "Unknown AI_PROVIDER" not in caplog.text, "a real provider must be silent"
 
 
 async def test_route_context_exposes_the_active_model(http_client):
-    """Plan 02 reads this to resolve a profile per request; Plan 03 reads it
-    when the bundle's three scalars go away."""
+    """The request path resolves a profile per request through this object.
+
+    It is what replaced ``RouteContext.context_window`` and
+    ``lmstudio_stop_sequences`` when step 4 removed them.
+    """
     graph = await build_application(_settings(), http_client, vault=_FakeVault())
 
     app = SimpleNamespace(state=SimpleNamespace())
