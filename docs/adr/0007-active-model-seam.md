@@ -144,10 +144,19 @@ capabilities — everything a call needs. Providers take it as one argument:
   The profile names an encoding and `TokenBudget` falls back to `cl100k_base` when it does not
   recognise one. Counting stays approximate; adding a real tokenizer is a container-weight decision
   deliberately left open.
-- Pathfinder continues to call LM Studio directly for `rule_query`. Model facts come from core; the
-  call does not. Routing it through core requires designing structured output into
-  `POST /provider/complete`, which accepts only `messages`, `stop` and `temperature` today. That is
-  its own decision.
+- ~~Pathfinder continues to call LM Studio directly for `rule_query`.~~ **Corrected 2026-09-07 during
+  planning:** this was factually wrong when written. `modules/pathfinder/app/` has **zero**
+  `litellm.acompletion` call sites — every completion already goes through
+  `SentinelCoreClient.complete()` to `POST /provider/complete`, and embeddings through core's
+  `/embeddings`. `classify_rule_topic` (`llm.py:474-548`) calls `_core_client.complete(...)`; the
+  `import litellm` at `llm.py:33` is vestigial, and `llm.py:432-440` documents its own
+  `model`/`api_base`/`profile` parameters as accepted-but-not-forwarded.
+
+  Consequences: decision 7 is already satisfied rather than aspirational; deleting
+  `modules/pathfinder/app/resolve_model.py` is dead-parameter removal, not a rewrite, and needs no
+  new model-facts endpoint on core. The design question this bullet raised — designing structured
+  output into `POST /provider/complete` — is genuinely still open, but it is not blocking Pathfinder,
+  because Pathfinder does not use structured output on that path.
 - `LiteLLMProvider.complete`'s docstring claims "the chat path uses 0.4" for temperature. No such
   value exists anywhere in the codebase — the chat path pins no temperature. The docstring is
   corrected to match reality; whether to pin one is a product decision, not a defect.
