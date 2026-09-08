@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Literal, Mapping, Sequence
 
 from app.clients.litellm_provider import get_model_capabilities_from_lmstudio
@@ -31,6 +32,7 @@ import litellm
 
 if TYPE_CHECKING:
     from app.config import Settings
+    from app.model import ActiveModel
 
 logger = logging.getLogger(__name__)
 
@@ -475,124 +477,93 @@ async def probe_classifier_model_ready(
     *,
     model_name: str,
     model_preferred: str | None = None,
+    active_model: "ActiveModel | None" = None,
 ) -> bool:
-    """Return True iff a genuinely-loaded model SCORES for the 'structured' task kind.
+    """Return True iff the model the structured path would use CAN do structured work.
 
-    This probe mirrors the EXACT model-selection path that ``classify_note`` (and every
-    ``six_rs/*`` structured-completion stage) uses via
-    ``model_resolution.resolve_structured_model``:
-    - It discovers loaded models from the same ``/v1/models`` endpoint.
-    - It builds the same ``preferences`` dict (``{"structured": model_preferred or model_name}``).
-    - It fetches the SAME live LM Studio capability data via ``_fetch_live_capabilities``
-      (``resolve_structured_model`` fetches this too — fix-score-local-model-capabilities
-      round 2) and threads it into ``select_model`` as ``live_capabilities``, so both paths
-      score every candidate model identically instead of ``_score`` unconditionally
-      returning 0 for local model ids via litellm's static cloud registry.
-    - It calls ``select_model("structured", loaded, preferences=..., default=None,
-      live_capabilities=...)`` with ``default=None`` so that rule 3 (``default in loaded``)
-      and rule 5 (bare default even when nothing is loaded) CANNOT fire — a defaulted
-      fallback selection is treated as NOT ready (fail-closed).
+    This gates whether a DESTRUCTIVE vault sweep may run
+    (``routes/note.py`` re-evaluates it immediately before each destructive
+    move, not once per run), so every failure mode here answers "not ready".
 
-    ONE deliberate, documented divergence remains: ``resolve_structured_model`` calls
-    ``select_model`` with ``default=settings.model_name or None`` (not ``None``) — see
-    "WHY a defaulted/non-scored selection is treated as NOT ready" below. This means the
-    real classify/six_rs path can still resolve a model via rules 3/4/5 in a case this
-    probe reports as NOT ready — that is BY DESIGN (the probe is intentionally stricter
-    than the real resolver: it never treats a defaulted/non-scored selection as "ready"),
-    not an accidental drift. Everything upstream of that one rule (loaded models,
-    preferences, and — as of this fix — live_capabilities) is now identical between the
-    two paths.
+    ADR-0007 rewired it onto the Active model seam. The question it asks is now
+    "does the profile ``ActiveModel`` would hand the structured path actually
+    carry the ``tool_use`` capability?" — read straight off the backend rather
+    than inferred by ``_score`` from litellm's static cloud registry, which has
+    no entry for local model ids. That is both stronger and simpler, and it
+    removes the deliberate divergence this probe used to document: the probe
+    and the real resolver now ask the SAME object the SAME question, so a model
+    the resolver would pick and a model this probe blesses cannot drift apart.
 
-    WHY a defaulted/non-scored selection is treated as NOT ready:
-    ``select_model`` can still return a model via rule 4 (the SOLE entry in ``loaded``
-    when ``len(loaded) == 1`` — post-exo-model-notfound-502, this is the only remaining
-    unconditional fallback) even when no model genuinely scores for the ``"structured"``
-    task kind (i.e. ``_score("structured", id) == 0``). ``classify_note`` would still run
-    on such a model and emit degraded classifications. This probe gates destructive sweeps
-    on the ACTUAL classifier readiness — not on whether a model string can be resolved. A
-    degraded classifier must never drive vault mutations. (Round-2 review concern 4.)
+    What has NOT changed is that resolvable is not the same as ready. A model
+    can be selectable — the sole candidate, or an explicit operator pin — while
+    being incapable of structured output, and ``classify_note`` running on such
+    a model emits degraded classifications. That is why the answer is the
+    resolved profile's CAPABILITY, not the mere fact that a model string came
+    back. A degraded classifier must never drive vault mutations.
 
-    Fail-closed contract:
-    - Empty ``loaded`` → False (rule-5 default is NOT ready).
-    - ``loaded`` but no model scores for ``"structured"`` → False (rule-4 sole-candidate
-      fallback is NOT ready).
-    - Any HTTP, JSON, or unexpected exception → False (never raises).
+    Fail-closed contract — every one of these returns False, and this function
+    never raises:
 
-    260502: placed next to ``probe_embedding_model_loaded`` so both readiness probes
-    live in one module.
+    - Nothing loaded, or nothing the backend reports at all.
+    - Models present but none carrying ``tool_use``.
+    - An operator pin that wins the ladder despite lacking ``tool_use``.
+    - **A resolution that RAISES.** Under ADR decision 4 as amended, a live
+      backend whose candidates cannot be disambiguated raises rather than
+      returning a config-named phantom. The probe absorbs that: an uncaught
+      raise would surface in ``routes/note.py``'s sweep gate as a 500 instead
+      of a refusal, and a 500 is not a refusal.
+    - Any HTTP, JSON, or schema failure.
+
+    ``active_model``: an already-composed seam to ask. When omitted, a fresh
+    one is built over ``http_client`` — deliberately per call, so this probe
+    reads live state rather than a TTL-cached verdict, exactly as it previously
+    bypassed the module-level discovery cache.
+
+    260502: placed next to ``probe_embedding_model_loaded`` so both readiness
+    probes live in one module.
     """
     try:
-        # Discover loaded models via /v1/models (same endpoint _resolve_model_for_classification uses)
-        # Use the provided http_client directly (like probe_embedding_model_loaded does) so
-        # that test fakes and production clients are honored, and avoid the module-level cache.
-        api_base_v1 = lmstudio_base_url.rstrip("/")
-        if not api_base_v1.endswith("/v1"):
-            api_base_v1 = f"{api_base_v1}/v1"
-        url = f"{api_base_v1}/models"
-
-        try:
-            resp = await http_client.get(url, timeout=5.0)
-            resp.raise_for_status()
-            data = resp.json()
-            loaded: list[str] = [
-                entry.get("id")
-                for entry in data.get("data", [])
-                if isinstance(entry, dict) and isinstance(entry.get("id"), str) and entry.get("id")
-            ]
-        except Exception as exc:
-            logger.debug("Classifier probe model discovery failed (%s): %s", url, exc)
-            loaded = []
-
-        if not loaded:
-            # No models loaded — rule-5 defaulted selection is NOT ready (fail-closed)
-            return False
-
-        # Fetch live per-model capability data from LM Studio's own
-        # /api/v0/models/{id} endpoint (fix-score-local-model-capabilities).
-        # litellm.get_model_info()/supports_function_calling() have no entry
-        # for local model ids, so without this every local model scores 0 for
-        # "structured" — permanently reporting "not ready" and silently
-        # disabling destructive vault sweeps on any local-LLM deployment.
-        # A model_id absent from this mapping (fetch failed / not loaded /
-        # unreachable) is NOT given any permissive default — _score falls
-        # through to the (also fail-closed) litellm path for it.
-        live_capabilities = await _fetch_live_capabilities(
-            http_client, lmstudio_base_url, loaded
-        )
-
-        # Build preferences exactly as _resolve_model_for_classification does
-        preferences: dict[str, str] = {}
-        preferred = model_preferred or model_name
-        if preferred:
-            preferences["structured"] = preferred
-
-        # Call select_model with default=None so rules 3/5 (defaulted fallbacks) CANNOT fire.
-        # If nothing scores via rules 1/2 and there's no default, ModelSelectorError is raised.
-        try:
-            selected_id = select_model(
-                "structured",
-                loaded,
-                preferences=preferences,
-                default=None,
-                live_capabilities=live_capabilities,
+        if active_model is None:
+            # Imported here rather than at module scope: app.model imports the
+            # shared model_profiles library, and this module is imported by the
+            # composition root before that graph exists.
+            from app.model import (  # noqa: PLC0415
+                CAPABILITY_TOOL_USE,
+                ActiveModel,
+                LMStudioModelSource,
             )
-        except ModelSelectorError:
-            # Nothing loaded and no default → not ready
-            return False
 
-        # Guard against rule-4 sole-candidate fallback: the returned model is only
-        # "ready" if it genuinely scores for the structured kind. A model returned via
-        # rule 4 (the sole entry in loaded, when len(loaded) == 1) may have
-        # _score("structured", id) == 0 — that means no function calling support, and
-        # classify_note would emit degraded output.
-        if _score("structured", selected_id, live_capabilities) <= 0:
-            return False
+            probe_settings = SimpleNamespace(
+                model_name=model_name,
+                model_preferred=model_preferred,
+                # The probe is not the place to honour a per-task pin the caller
+                # did not pass; it mirrors exactly the two values it is given.
+                model_task_chat=None,
+                model_task_structured=None,
+                model_task_fast=None,
+                model_context_cap=None,
+                model_ttl_seconds=None,
+            )
+            active_model = ActiveModel(
+                [LMStudioModelSource(http_client, lmstudio_base_url)],
+                probe_settings,
+            )
+        else:
+            from app.model import CAPABILITY_TOOL_USE  # noqa: PLC0415
 
-        return True
-
-    except Exception:
-        # Fail closed — a readiness probe must never crash the caller
+        profile = await active_model.for_task("structured")
+    except Exception as exc:
+        logger.debug("Classifier readiness probe failed closed: %s", exc)
         return False
+
+    ready = CAPABILITY_TOOL_USE in profile.capabilities
+    if not ready:
+        logger.debug(
+            "Classifier not ready: resolved model %r does not report %r",
+            profile.model_id,
+            CAPABILITY_TOOL_USE,
+        )
+    return ready
 
 
 async def probe_embedding_model_loaded(

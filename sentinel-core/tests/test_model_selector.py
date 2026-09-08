@@ -1,18 +1,32 @@
-"""Tests for probe_classifier_model_ready (40-04 Task 2).
+"""Tests for probe_classifier_model_ready — the destructive-sweep gate.
 
-Tests the fail-closed classifier readiness probe that mirrors the structured
-select_model path used by classify_note. The probe returns True ONLY when a
-genuinely-loaded model scores for the 'structured' task kind — a defaulted or
-last-resort (rule 4/5) selection is never reported as ready.
+This probe decides whether a live (non-dry-run) vault sweep may mutate the
+vault: ``routes/note.py`` re-evaluates it immediately before EACH destructive
+move. Everything here is a fail-closed assertion, and a case that starts
+reporting "ready" where it previously reported "not ready" is a regression even
+if the suite is green.
+
+ADR-0007 rewired the probe onto the Active model seam. The mechanism changed —
+it used to discover from ``/v1/models``, fan out one ``/api/v0/models/{id}``
+capability fetch per loaded model, and judge the result with ``_score``; it now
+asks ``ActiveModel.for_task("structured")`` and reads ``tool_use`` straight off
+the resolved profile. Every behavioural case below is the one it guarded
+before, re-expressed against the real backend payloads instead of a patched
+scoring function. Four cases are new: an absent-capabilities entry, an operator
+pin that wins the ladder without being capable, a resolution that RAISES, and
+probe/resolver parity.
 """
 from __future__ import annotations
-
-from unittest.mock import patch
 
 import httpx
 import pytest
 
-from app.services.model_selector import _reset_cache_for_tests
+from app.services.model_selector import (
+    _reset_cache_for_tests,
+    probe_classifier_model_ready,
+)
+
+BASE_URL = "http://lmstudio.test/v1"
 
 
 @pytest.fixture(autouse=True)
@@ -23,181 +37,119 @@ def reset_model_cache():
     _reset_cache_for_tests()
 
 
-# --- Helper: a handler that returns loaded models from /v1/models ---
+# --- Helpers ---------------------------------------------------------------
 
 
-def _v1_models_handler(models: list[dict]):
-    """Return a MockTransport handler that serves /v1/models with the given model list."""
+def v0_entry(model_id: str, *, tool_use: bool = True, loaded: bool = True, **overrides) -> dict:
+    """An /api/v0/models entry in LM Studio's real shape."""
+    entry = {
+        "id": model_id,
+        "type": "llm",
+        "arch": "qwen3_5",
+        "state": "loaded" if loaded else "not-loaded",
+        "max_context_length": 32768,
+        "loaded_context_length": 8192,
+        "capabilities": ["tool_use"] if tool_use else [],
+    }
+    entry.update(overrides)
+    return entry
 
-    def handler(request):
-        if "/models" in request.url.path:
-            return httpx.Response(200, json={"data": models})
+
+def lmstudio_handler(entries: list[dict] | None, *, v0_error: Exception | None = None,
+                     v1_error: Exception | None = None, bad_json: bool = False):
+    """A fake LM Studio with no v1 model API (404), serving ``entries`` on v0."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/api/v1/models"):
+            if v1_error is not None:
+                raise v1_error
+            return httpx.Response(404, json={"error": "unknown endpoint"})
+        if path.endswith("/api/v0/models"):
+            if v0_error is not None:
+                raise v0_error
+            if bad_json:
+                return httpx.Response(200, content=b"not-json-at-all{{{{")
+            return httpx.Response(200, json={"data": entries or []})
         return httpx.Response(404, json={"error": "unmocked"})
 
     return handler
 
 
-# Model stubs
-_FC_MODEL = {"id": "function-calling-model"}  # will be patched to score > 0
-_NO_FC_MODEL = {"id": "no-function-calling-model"}  # will NOT score for structured
+async def probe(handler, *, model_name: str = "default-model",
+                model_preferred: str | None = None, **kwargs) -> bool:
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        return await probe_classifier_model_ready(
+            client,
+            BASE_URL,
+            model_name=model_name,
+            model_preferred=model_preferred,
+            **kwargs,
+        )
 
 
-async def _probe(
-    client,
-    models: list[dict],
-    *,
-    model_name: str = "default-model",
-    model_preferred: str | None = None,
-    patch_score_for: str | None = None,
-):
-    """Run probe_classifier_model_ready with a fake HTTP client serving ``models``."""
-    from app.services.model_selector import probe_classifier_model_ready
-
-    transport = httpx.MockTransport(_v1_models_handler(models))
-    async with httpx.AsyncClient(transport=transport) as http_client:
-        if patch_score_for:
-            # Make the named model score > 0 for 'structured'
-            original_score = __import__(
-                "app.services.model_selector", fromlist=["_score"]
-            )._score
-
-            def _patched_score(task_kind, model_id, live_capabilities=None):
-                if task_kind == "structured" and model_id == patch_score_for:
-                    return 10000
-                return 0
-
-            with patch(
-                "app.services.model_selector._score", side_effect=_patched_score
-            ):
-                return await probe_classifier_model_ready(
-                    http_client,
-                    "http://lmstudio.test/v1",
-                    model_name=model_name,
-                    model_preferred=model_preferred,
-                )
-        else:
-            return await probe_classifier_model_ready(
-                http_client,
-                "http://lmstudio.test/v1",
-                model_name=model_name,
-                model_preferred=model_preferred,
-            )
-
-
-# --- Tests ---
+# --- Tests -----------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_probe_classifier_ready_true_when_genuinely_loaded_and_scoring():
-    """A loaded model that scores > 0 for 'structured' → probe returns True."""
-    from app.services.model_selector import probe_classifier_model_ready
+    """A loaded model that can do structured work → probe returns True."""
+    result = await probe(
+        lmstudio_handler([v0_entry("my-fc-model")]), model_name="my-fc-model"
+    )
 
-    models = [{"id": "my-fc-model"}]
-
-    def handler(request):
-        if "/models" in request.url.path:
-            return httpx.Response(200, json={"data": models})
-        return httpx.Response(404, json={})
-
-    def _patched_score(task_kind, model_id, live_capabilities=None):
-        if task_kind == "structured" and model_id == "my-fc-model":
-            return 10000
-        return 0
-
-    with patch("app.services.model_selector._score", side_effect=_patched_score):
-        transport = httpx.MockTransport(handler)
-        async with httpx.AsyncClient(transport=transport) as client:
-            result = await probe_classifier_model_ready(
-                client,
-                "http://lmstudio.test/v1",
-                model_name="my-fc-model",
-            )
-
-    assert result is True, "probe must return True for a loaded, structured-capable model"
+    assert result is True, (
+        "probe must return True for a loaded, structured-capable model"
+    )
 
 
 @pytest.mark.asyncio
 async def test_probe_classifier_ready_false_when_no_models_loaded():
     """Empty loaded list → probe returns False.
 
-    This is the fail-closed case: select_model with a default would still return
-    the default (rule 5), but the probe must NOT treat a defaulted selection as ready.
-    This is the decisive round-2 case: a degraded classifier can never be reported ready.
+    This is the fail-closed case: configuration names a model, but the backend
+    reports nothing, and a model the backend never said it had must never be
+    treated as ready.
     """
-    from app.services.model_selector import probe_classifier_model_ready
-
-    def handler(request):
-        if "/models" in request.url.path:
-            return httpx.Response(200, json={"data": []})
-        return httpx.Response(404, json={})
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
-        result = await probe_classifier_model_ready(
-            client,
-            "http://lmstudio.test/v1",
-            model_name="some-default-model",
-        )
+    result = await probe(lmstudio_handler([]), model_name="some-default-model")
 
     assert result is False, (
-        "probe must return False when no models loaded — a rule-5 defaulted "
-        "selection is not 'ready' (fail-closed)"
+        "probe must return False when no models loaded — a selection resting on "
+        "configuration alone is not 'ready' (fail-closed)"
     )
 
 
 @pytest.mark.asyncio
 async def test_probe_classifier_ready_false_when_loaded_model_scores_zero():
-    """Loaded model that scores 0 for 'structured' (rule-4 last-resort) → probe returns False.
+    """The sole loaded model cannot do structured work → probe returns False.
 
-    This is the DECISIVE round-2 case: select_model returns the model via rule 4
-    (loaded[0] fallback) even though no model genuinely scores for the structured
-    task kind. The probe must fail closed in this case — a non-scored selection
-    is NOT reported ready.
+    The DECISIVE case: resolution still returns this model (it is the only
+    candidate, and with exactly one there is nothing to guess between), but
+    resolvable is not ready. classify_note would run on it and emit degraded
+    classifications, so the probe must fail closed.
     """
-    from app.services.model_selector import probe_classifier_model_ready
-
-    # One model loaded, but it scores 0 for 'structured' (no function calling)
-    models = [{"id": "no-fc-model"}]
-
-    def handler(request):
-        if "/models" in request.url.path:
-            return httpx.Response(200, json={"data": models})
-        return httpx.Response(404, json={})
-
-    def _zero_score(task_kind, model_id, live_capabilities=None):
-        # No model scores for structured
-        return 0
-
-    with patch("app.services.model_selector._score", side_effect=_zero_score):
-        transport = httpx.MockTransport(handler)
-        async with httpx.AsyncClient(transport=transport) as client:
-            result = await probe_classifier_model_ready(
-                client,
-                "http://lmstudio.test/v1",
-                model_name="no-fc-model",
-            )
+    result = await probe(
+        lmstudio_handler([v0_entry("no-fc-model", tool_use=False)]),
+        model_name="no-fc-model",
+    )
 
     assert result is False, (
-        "probe must return False when the only loaded model scores 0 for 'structured' "
-        "(rule-4 last-resort) — a non-scored selection is not ready"
+        "probe must return False when the only loaded model cannot do structured "
+        "work — a non-capable selection is not ready"
     )
 
 
 @pytest.mark.asyncio
 async def test_probe_classifier_ready_false_on_http_error():
-    """httpx / network failure → False (graceful degrade — never raises)."""
-    from app.services.model_selector import probe_classifier_model_ready
+    """httpx / network failure → False (graceful degrade — never raises).
 
-    def raise_connect(request):
-        raise httpx.ConnectError("connection refused")
-
-    transport = httpx.MockTransport(raise_connect)
-    async with httpx.AsyncClient(transport=transport) as client:
-        result = await probe_classifier_model_ready(
-            client,
-            "http://lmstudio.test/v1",
-            model_name="test-model",
-        )
+    The failure lands on the PREFERRED generation, which must not be mistaken
+    for the 404 that selects the v0 fallback.
+    """
+    result = await probe(
+        lmstudio_handler(None, v1_error=httpx.ConnectError("connection refused"))
+    )
 
     assert result is False, "probe must return False on HTTP error, never raise"
 
@@ -205,197 +157,220 @@ async def test_probe_classifier_ready_false_on_http_error():
 @pytest.mark.asyncio
 async def test_probe_classifier_ready_false_on_json_error():
     """JSON-decode failure → False (graceful degrade)."""
-    from app.services.model_selector import probe_classifier_model_ready
-
-    def bad_json_handler(request):
-        return httpx.Response(200, content=b"not-json-at-all{{{{")
-
-    transport = httpx.MockTransport(bad_json_handler)
-    async with httpx.AsyncClient(transport=transport) as client:
-        result = await probe_classifier_model_ready(
-            client,
-            "http://lmstudio.test/v1",
-            model_name="test-model",
-        )
+    result = await probe(lmstudio_handler(None, bad_json=True))
 
     assert result is False, "probe must return False on JSON parse error, never raise"
 
 
 @pytest.mark.asyncio
 async def test_probe_classifier_ready_true_when_preference_honored():
-    """model_preferred names a loaded, structured-capable model → probe returns True
-    via the preference rule (rule 1).
+    """MODEL_PREFERRED names a loaded, structured-capable model → True.
 
-    This mirrors what classify_note would actually select when a preferred model is
-    configured and that model is both loaded and function-calling capable.
+    This mirrors what the structured path would actually select when a
+    preferred model is configured and that model is both loaded and capable.
     """
-    from app.services.model_selector import probe_classifier_model_ready
-
-    models = [{"id": "preferred-fc-model"}, {"id": "other-model"}]
-
-    def handler(request):
-        if "/models" in request.url.path:
-            return httpx.Response(200, json={"data": models})
-        return httpx.Response(404, json={})
-
-    def _patched_score(task_kind, model_id, live_capabilities=None):
-        if task_kind == "structured" and model_id == "preferred-fc-model":
-            return 10000
-        return 0
-
-    with patch("app.services.model_selector._score", side_effect=_patched_score):
-        transport = httpx.MockTransport(handler)
-        async with httpx.AsyncClient(transport=transport) as client:
-            result = await probe_classifier_model_ready(
-                client,
-                "http://lmstudio.test/v1",
-                model_name="default-model",
-                model_preferred="preferred-fc-model",
-            )
-
-    assert result is True, (
-        "probe must return True when model_preferred names a loaded, "
-        "structured-capable model (rule-1 preference honored)"
+    result = await probe(
+        lmstudio_handler(
+            [
+                v0_entry("preferred-fc-model"),
+                v0_entry("other-model", tool_use=False),
+            ]
+        ),
+        model_name="default-model",
+        model_preferred="preferred-fc-model",
     )
 
-
-# ---------------------------------------------------------------------------
-# fix-score-local-model-capabilities Task 1: live LM Studio capability scoring
-#
-# litellm.get_model_info()/supports_function_calling() only know about a
-# static CLOUD registry — they have no entry for LM Studio-style local model
-# ids (e.g. "google/gemma-4-31b"), so `_score` unconditionally returned 0 for
-# every local model, which made `probe_classifier_model_ready` permanently
-# report "not ready" and silently disabled destructive vault sweeps on any
-# local-LLM deployment (measured live: dry_run=false sweep moved 0/26 files).
-#
-# These tests exercise the REAL `_score`/`select_model` path (no patching of
-# `_score`) against a fake LM Studio serving both /v1/models (loaded list)
-# and /api/v0/models/{id} (live capability data), matching the confirmed
-# production response shape.
-# ---------------------------------------------------------------------------
-
-
-def _lmstudio_v1_and_v0_handler(model_id: str, v0_response: dict | None, *, v0_status: int = 200):
-    """Return a MockTransport handler serving both /v1/models and
-    /api/v0/models/{model_id} distinctly, mirroring real LM Studio's two
-    endpoints (probe_classifier_model_ready discovers via /v1/models;
-    get_model_capabilities_from_lmstudio fetches capability data via
-    /api/v0/models/{id})."""
-
-    def handler(request):
-        path = request.url.path
-        if path.endswith("/v1/models"):
-            return httpx.Response(200, json={"data": [{"id": model_id}]})
-        if f"/api/v0/models/{model_id}" in path:
-            if v0_response is None:
-                return httpx.Response(v0_status, json={"error": "not found"})
-            return httpx.Response(v0_status, json=v0_response)
-        return httpx.Response(404, json={"error": "unmocked"})
-
-    return handler
+    assert result is True, (
+        "probe must return True when MODEL_PREFERRED names a loaded, "
+        "structured-capable model"
+    )
 
 
 @pytest.mark.asyncio
 async def test_probe_classifier_ready_true_for_local_model_advertising_tool_use():
-    """A local (LM Studio) model id that LM Studio reports as loaded with
-    capabilities=["tool_use"] must score > 0 for 'structured' and the probe
-    must report ready — the exact bug this fix addresses."""
-    from app.services.model_selector import probe_classifier_model_ready
+    """A local model LM Studio reports as loaded with capabilities ["tool_use"].
 
+    litellm's static cloud registry has no entry for local model ids, so under
+    the old ``_score`` path every local model scored 0 for 'structured' —
+    permanently reporting "not ready" and silently disabling destructive vault
+    sweeps on any local-LLM deployment. Capabilities now come straight off the
+    backend, which is what makes this answerable at all.
+    """
     model_id = "google/gemma-4-31b"
-    handler = _lmstudio_v1_and_v0_handler(
-        model_id,
-        {
-            "id": model_id,
-            "type": "vlm",
-            "arch": "gemma4",
-            "state": "loaded",
-            "max_context_length": 262144,
-            "loaded_context_length": 71936,
-            "capabilities": ["tool_use"],
-        },
+    result = await probe(
+        lmstudio_handler(
+            [
+                v0_entry(
+                    model_id,
+                    type="vlm",
+                    arch="gemma4",
+                    max_context_length=262144,
+                    loaded_context_length=71936,
+                )
+            ]
+        ),
+        model_name=model_id,
     )
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
-        result = await probe_classifier_model_ready(
-            client,
-            "http://lmstudio.test/v1",
-            model_name=model_id,
-        )
 
     assert result is True, (
-        "a loaded local model advertising tool_use must score > 0 for "
-        "'structured' via live LM Studio capability data, not litellm's "
-        "static cloud registry"
+        "a loaded local model advertising tool_use must be reported ready, via "
+        "live LM Studio capability data rather than litellm's static registry"
     )
 
 
 @pytest.mark.asyncio
 async def test_probe_classifier_ready_false_for_local_model_without_tool_use():
-    """A local model LM Studio reports as loaded but WITHOUT tool_use in its
-    capabilities must still score 0 for 'structured' — fail-closed preserved.
-    The fix must not become permissive for genuinely incapable models."""
-    from app.services.model_selector import probe_classifier_model_ready
+    """A loaded local model WITHOUT tool_use is still not ready.
 
+    Reading capabilities from the backend must not become permissive for
+    genuinely incapable models.
+    """
     model_id = "some-community/non-function-calling-model"
-    handler = _lmstudio_v1_and_v0_handler(
-        model_id,
-        {
-            "id": model_id,
-            "type": "llm",
-            "arch": "llama3",
-            "state": "loaded",
-            "max_context_length": 8192,
-            "loaded_context_length": 8192,
-            "capabilities": [],  # no tool_use
-        },
+    result = await probe(
+        lmstudio_handler(
+            [v0_entry(model_id, tool_use=False, type="llm", arch="llama3")]
+        ),
+        model_name=model_id,
     )
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
-        result = await probe_classifier_model_ready(
-            client,
-            "http://lmstudio.test/v1",
-            model_name=model_id,
-        )
 
     assert result is False, (
-        "a loaded local model without tool_use must still score 0 for "
-        "'structured' — the live-capability fix must not weaken fail-closed "
-        "behavior for genuinely incapable models"
+        "a loaded local model without tool_use must not be reported ready — "
+        "reading live capabilities must not weaken fail-closed behaviour"
     )
 
 
 @pytest.mark.asyncio
 async def test_probe_classifier_ready_false_when_capability_endpoint_unreachable():
-    """/v1/models lists a model as loaded, but LM Studio's /api/v0/models/{id}
-    capability endpoint is unreachable (or the model is absent from it) →
-    no live capability data → falls through to litellm's static registry,
-    which has no entry for the local id either → probe still reports False
-    (fail-closed preserved end-to-end, not just when /v1/models itself fails)."""
-    from app.services.model_selector import probe_classifier_model_ready
+    """The model-list endpoint is unreachable → still fail closed.
 
-    model_id = "mlx-community/some-local-model-8bit"
-
-    def handler(request):
-        path = request.url.path
-        if path.endswith("/v1/models"):
-            return httpx.Response(200, json={"data": [{"id": model_id}]})
-        if f"/api/v0/models/{model_id}" in path:
-            raise httpx.ConnectError("connection refused")
-        return httpx.Response(404, json={"error": "unmocked"})
-
-    transport = httpx.MockTransport(handler)
-    async with httpx.AsyncClient(transport=transport) as client:
-        result = await probe_classifier_model_ready(
-            client,
-            "http://lmstudio.test/v1",
-            model_name=model_id,
-        )
+    Fail-closed end to end, not merely when the preferred generation fails: the
+    v1 probe answers 404 (an older backend) and the v0 fallback is then
+    unreachable.
+    """
+    result = await probe(
+        lmstudio_handler(None, v0_error=httpx.ConnectError("connection refused")),
+        model_name="mlx-community/some-local-model-8bit",
+    )
 
     assert result is False, (
-        "an unreachable/absent capability endpoint must never grant a "
-        "permissive default — the probe must still fail closed"
+        "an unreachable model-list endpoint must never grant a permissive "
+        "default — the probe must still fail closed"
+    )
+
+
+@pytest.mark.asyncio
+async def test_probe_classifier_ready_false_when_capabilities_are_absent():
+    """An entry carrying NO capability data at all is not ready.
+
+    Absent data is not permission. This is the shape an older backend can
+    return for a model it has not loaded, and it must never be read as capable.
+    """
+    entry = v0_entry("mlx-community/some-local-model-8bit")
+    del entry["capabilities"]
+
+    result = await probe(lmstudio_handler([entry]), model_name=entry["id"])
+
+    assert result is False, (
+        "absent capability data must never grant a permissive default"
+    )
+
+
+@pytest.mark.asyncio
+async def test_probe_classifier_ready_false_when_an_operator_pin_lacks_tool_use():
+    """An operator pin wins the ladder absolutely — and still is not ready.
+
+    ADR-0007 makes MODEL_PREFERRED absolute over the capability filter, so
+    resolution RETURNS the pinned model even though it cannot do structured
+    work. The probe must answer on the resolved profile's capability, not on
+    the fact that a model came back, or an explicit pin would become a way to
+    unlock destructive sweeps with a degraded classifier.
+    """
+    result = await probe(
+        lmstudio_handler(
+            [v0_entry("capable/model"), v0_entry("pinned/model", tool_use=False)]
+        ),
+        model_name="default-model",
+        model_preferred="pinned/model",
+    )
+
+    assert result is False, (
+        "a pinned-but-incapable model must be reported not ready even though "
+        "the ladder honours the pin"
+    )
+
+
+@pytest.mark.asyncio
+async def test_probe_classifier_ready_false_when_resolution_raises():
+    """A live backend whose candidates cannot be disambiguated → not ready.
+
+    NEW mechanism, same verdict. Under ADR decision 4 as amended, that case
+    makes ``for_task("structured")`` RAISE rather than return a config-named
+    phantom; the probe previously received a model string there and had to
+    judge it. Fail-closed is the right answer either way, but an uncaught raise
+    would reach the destructive-sweep gate as a 500 instead of a refusal — and
+    a 500 is not a refusal.
+
+    Two capable candidates, a cold cache and no configuration that names either.
+    """
+    result = await probe(
+        lmstudio_handler([v0_entry("first/capable"), v0_entry("second/capable")]),
+        model_name="",
+        model_preferred=None,
+    )
+
+    assert result is False, (
+        "an undisambiguatable live backend must be answered not-ready, and the "
+        "raise must never propagate to the sweep gate"
+    )
+
+
+@pytest.mark.asyncio
+async def test_probe_and_structured_resolution_agree_on_the_same_model():
+    """Probe/resolver parity, against the seam.
+
+    This replaces the parity guarantee held by test_model_resolution.py, which
+    Plan 03 deletes; landing the replacement here means Plan 03 never has an
+    unguarded window. Both now ask the same object the same question, so the
+    documented deliberate divergence is gone rather than merely narrowed.
+    """
+    from types import SimpleNamespace
+
+    from app.model import ActiveModel, LMStudioModelSource
+
+    handler = lmstudio_handler(
+        [
+            v0_entry(
+                "qwen/qwen3.8-27b",
+                type="vlm",
+                max_context_length=262144,
+                loaded_context_length=119552,
+            ),
+            {
+                "id": "text-embedding-nomic-embed-text-v1.5",
+                "type": "embeddings",
+                "state": "loaded",
+                "max_context_length": 2048,
+            },
+        ]
+    )
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        seam = ActiveModel(
+            [LMStudioModelSource(client, BASE_URL)],
+            SimpleNamespace(model_name="google/gemma-4-31b"),
+        )
+        resolved = await seam.for_task("structured")
+        ready = await probe_classifier_model_ready(
+            client,
+            BASE_URL,
+            model_name="google/gemma-4-31b",
+            active_model=seam,
+        )
+
+    assert ready is True
+    assert resolved.model_id == "qwen/qwen3.8-27b"
+    assert seam.cached_profile("structured").model_id == resolved.model_id, (
+        "the probe and the structured resolution path must name the same model"
     )
 
 
