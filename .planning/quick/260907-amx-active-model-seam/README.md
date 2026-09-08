@@ -135,7 +135,27 @@ inline in each plan under a `## Flagged calls` heading. They are summarised here
 9. **Ladder shape** (Plan 01, amended 2026-09-07) — the capability filter runs FIRST
    and narrows the candidate set; preference applies within it. Order: filter →
    `model_task_{kind}` → `model_preferred` → **last-known-good** → `model_name` →
-   sole candidate → refuse. Three deliberate calls inside that: an operator pin
+   sole candidate → **refuse by RAISING**. Every config-consulting rung (2, 3, 5) may
+   only select a model that is IN the loaded candidate set; a configured value naming
+   a non-loaded model is discarded, logged, and the ladder continues. Rung 7 raises —
+   it never returns an unconfirmed `MODEL_NAME`, because a model the backend never
+   said it had is the bug this ADR exists to remove, not a fallback (ADR decision 4
+   as amended 2026-09-08). `MODEL_NAME`'s only surviving role is `StaticModelSource`'s
+   data, for when there is no live backend at all. Candidates come in two tiers:
+   LOADED first and strictly preferred, then merely DOWNLOADED (`state:
+   "not-loaded"`) when nothing is loaded — without which a stock JIT-enabled LM
+   Studio, where nothing loads until the first request, would resolve nothing and
+   raise. Selecting a not-loaded model logs an INFO line and budgets against
+   `max_context_length` until the next TTL refresh sees the real
+   `loaded_context_length`. The adapter reads `GET /api/v1/models` by preference and
+   falls back to `/api/v0/models` on a 404: v1 scopes `capabilities` to the MODEL
+   rather than to a loaded instance, which is what makes JIT + structured work at
+   all, and its `loaded_instances` makes the two-tier split fall out of the data.
+   Mind the spelling — v1 `type: embedding`, v0 `type: embeddings`, both excluded.
+   The requirement this protects is
+   testable and tested: with all five model settings unset and one chat model loaded,
+   resolution returns it — swapping the loaded model needs no config and no code
+   change. Three further deliberate calls inside that: an operator pin
    naming a loaded-but-incapable model still wins but MUST log a WARNING;
    last-known-good is a normal-ladder tiebreaker as well as the failed-refresh path;
    and last-known-good outranks `model_name`, because `MODEL_NAME` is a tracked
@@ -151,7 +171,8 @@ inline in each plan under a `## Flagged calls` heading. They are summarised here
    decision 2 amended 2026-09-07) — the ladder is `loaded_context_length` →
    `max_context_length` → declared 4096. The family rung would have consumed
    `FamilyProfile.context_window`, the field Plan 04 deletes; it is unreachable
-   because `/api/v0/models` always returns `max_context_length`; and the constants
+   because both `/api/v1/models` and `/api/v0/models` always return
+   `max_context_length`; and the constants
    lie (qwen2 says 32768 against a real 262144/119552). `FAMILY_PROFILES` is still
    read for stop sequences only.
 11. **The 19 deleted pathfinder tests are REPLACED, not dropped** (Plan 03, ruled

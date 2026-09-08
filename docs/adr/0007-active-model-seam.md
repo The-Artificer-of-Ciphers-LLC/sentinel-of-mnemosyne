@@ -87,12 +87,30 @@ capabilities — everything a call needs. Providers take it as one argument:
    for local chat models. The exclusion form stays correct when LM Studio adds a type we have not
    seen.
 
-4. **Refuse to guess survives; `select_model._score` does not.** With several capable models loaded
-   and nothing disambiguating, resolution falls to configuration rather than picking one. Scoring
-   always produces a winner, so keeping it would mean the refusal rung never fires. Task-capability
-   *filtering* replaces scoring: `for_task("structured")` narrows to profiles whose capabilities
-   support it, then the ladder runs. `_score` existed to compensate for `litellm.get_model_info`
-   knowing nothing about local model ids; `/api/v0/models` supplies `capabilities` directly.
+4. **Refuse to guess survives; `select_model._score` does not.** Scoring always produces a winner, so
+   keeping it would mean the refusal rung never fires. Task-capability *filtering* replaces scoring:
+   `for_task("structured")` narrows to profiles whose capabilities support it, then the ladder runs.
+   `_score` existed to compensate for `litellm.get_model_info` knowing nothing about local model ids;
+   `/api/v0/models` supplies `capabilities` directly.
+
+   *Amended 2026-09-08.* This decision originally read "resolution falls to configuration rather than
+   picking one" — and the plans implemented a final rung that **returned the configured `MODEL_NAME`
+   unconfirmed**, i.e. a model the backend never said it had. That is the very symptom this ADR
+   exists to remove: on 2026-09-08 the live container was resolving `google/gemma-4-31b` because
+   configuration named it, while LM Studio served only `qwen/qwen3.8-27b`. A rung that invents a
+   model from config is the bug wearing the fallback's clothes.
+
+   Corrected: **when the backend is live, the loaded set is the sole source of truth.** Configuration
+   may only *disambiguate among loaded candidates*; it may never name one that is not loaded. A live
+   backend whose candidates cannot be disambiguated raises — loudly — rather than returning a
+   phantom. `MODEL_NAME`'s only remaining role is as `StaticModelSource`'s data, used when there is
+   no live backend at all.
+
+   The requirement this protects, stated as a testable property: **with `MODEL_NAME`,
+   `MODEL_PREFERRED` and every `MODEL_TASK_*` unset, and exactly one chat model loaded, resolution
+   must succeed and return that model.** Swapping the loaded model must require no configuration
+   change and no code change. That is what "model-agnostic" means here, and it is an acceptance
+   criterion, not an aspiration.
 
 5. **The embedding model is observed, never re-pointed.** ADR-0004's exact-string `embedding_model`
    match and dimension checks stand unchanged, and embedding calls continue to use

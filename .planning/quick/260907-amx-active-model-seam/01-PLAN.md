@@ -28,13 +28,17 @@ verification:
   core: "cd /Users/trekkie/projects/sentinel-of-mnemosyne/.claude/worktrees/active-model-seam/sentinel-core && /Users/trekkie/projects/sentinel-of-mnemosyne/sentinel-core/.venv/bin/python -m pytest tests/ -q"
   pathfinder: "not required — this plan touches no file under modules/pathfinder/"
   baseline_in: "sentinel-core 717 passed, 12 skipped (729 collected)"
-  expected_out: "sentinel-core 717 + N01 passed, 12 skipped, 0 failed — where N01 is the count of NEW tests added by this plan (>= 20, in tests/test_model.py plus the Defect B and probe-parity regressions; the floor rose from 12 to 16 with the ladder-order, absolute-pin-warning and last-known-good-tiebreaker cases added 2026-09-07, then to 18 when last-known-good moved above model_name and the seven-rung ordering test plus the explicit rung-4-beats-rung-5 case were added, then to 20 with the rung-4 divergence-log pair (fires on divergence, silent on agreement)). ZERO existing tests are deleted by this plan; any pre-existing test that now fails is a regression, not an expected churn. Record the exact number in 01-SUMMARY.md as N01 — Plans 02, 03 and 04 all chain their arithmetic off it."
+  expected_out: "sentinel-core 717 + N01 passed, 12 skipped, 0 failed — where N01 is the count of NEW tests added by this plan (>= 37, in tests/test_model.py plus the Defect B and probe-parity regressions; the floor rose from 12 to 16 with the ladder-order, absolute-pin-warning and last-known-good-tiebreaker cases added 2026-09-07, then to 18 when last-known-good moved above model_name and the seven-rung ordering test plus the explicit rung-4-beats-rung-5 case were added, then to 20 with the rung-4 divergence-log pair (fires on divergence, silent on agreement), then to 24 on 2026-09-08 with the two model-agnostic acceptance tests from the amended ADR decision 4 and the two ignored-non-loaded-config-value log cases; the refuse-to-guess test converts from "returns config" to "raises" rather than being added; then to 30 on 2026-09-08 with the two-tier JIT cases — one-downloaded-resolves-plus-JIT-log, two-downloaded-raises, one-loaded-beats-three-downloaded, pin-disambiguates-within-the-reported-tier, last-known-good-valid-in-the-reported-tier, and not-loaded-context-window-comes-from-max_context_length; then to 37 with the v1/v0 dual-generation cases — v1-parsed-correctly, v1-not-loaded-entry-keeps-capabilities, v1-404-falls-back-to-v0, v1/v0-produce-equivalent-profiles, both-embedding-spellings-excluded, duplicate-keys-collapse-loaded-wins, and answered-generation-is-cached). ZERO existing tests are deleted by this plan; any pre-existing test that now fails is a regression, not an expected churn. Record the exact number in 01-SUMMARY.md as N01 — Plans 02, 03 and 04 all chain their arithmetic off it."
 must_haves:
   truths:
     - "A model swapped in the LM Studio UI is picked up by a running container within one TTL window, with no restart (ADR decision 1)."
     - "The context window a request is budgeted against comes from loaded_context_length when the backend reports one, not max_context_length (ADR decision 2)."
     - "A loaded model reporting type 'vlm' is a valid chat candidate; a model reporting type 'embeddings' never is (ADR decision 3)."
-    - "With two or more capable models loaded and no operator pin, resolution prefers the previously-resolved model whenever it is still loaded — ahead of the configured MODEL_NAME, because MODEL_NAME is a tracked default that may name a model nobody has loaded — and otherwise falls to configuration, never to an arbitrary candidate (ADR decision 4, refuse-to-guess preserved)."
+    - "One adapter works against BOTH LM Studio API generations: /api/v1/models is preferred and /api/v0/models is the fallback when v1 is absent, and the same model resolves to an equivalent ModelProfile either way. Upgrading or downgrading LM Studio does not change what this system resolves."
+    - "A JIT-enabled LM Studio with nothing currently loaded still resolves: GET /api/v0/models lists downloaded models as state 'not-loaded' until a request arrives, and a backend reporting exactly one non-embedding model resolves to it and JIT-loads it on demand. A stock shipped configuration is never unusable."
+    - "Swapping the model loaded in LM Studio requires NO configuration change and NO code change: with MODEL_NAME, MODEL_PREFERRED and every MODEL_TASK_* unset and one chat model loaded, resolution returns that model, whatever it is (ADR decision 4 as amended 2026-09-08 — model-agnostic is an acceptance criterion, not an aspiration)."
+    - "When the backend is live, the loaded candidate set is the sole source of truth. Configuration may only disambiguate among loaded candidates; it may never name one that is not loaded, and a live backend whose candidates cannot be disambiguated raises rather than returning a phantom (ADR decision 4 as amended)."
+    - "With two or more capable models loaded and no operator pin, resolution prefers the previously-resolved model whenever it is still loaded — ahead of the configured MODEL_NAME, because MODEL_NAME is a tracked default that may name a model nobody has loaded — and otherwise raises, never returning an arbitrary candidate and never returning an unconfirmed configured one."
     - "The task-capability filter narrows the candidate set BEFORE any preference rung is consulted; an operator pin naming a loaded-but-incapable model still wins, but never silently — it logs a WARNING naming the model, the task kind and the missing capability."
     - "A failed refresh serves last-known-good rather than failing the request (ADR decision 1)."
     - "When the model in use and the configured MODEL_NAME disagree, the log says so — silence means they agree, never that nobody checked."
@@ -87,6 +91,65 @@ Live LM Studio on `:1234` currently serves:
   `state: "loaded"`, `max_context_length: 262144`, `loaded_context_length: 119552`,
   `capabilities: ["tool_use"]`
 - `text-embedding-nomic-embed-text-v1.5` — `type: "embeddings"`, 2048
+
+**`GET /api/v1/models` EXISTS on the live backend (HTTP 200) and is the preferred
+source.** Probed 2026-09-08. Verbatim shape:
+
+```
+key: qwen/qwen3.8-27b     type: llm     max_context_length: 262144
+capabilities: {vision: true, trained_for_tool_use: true,
+               reasoning: {allowed_options: [off, low, medium, xhigh, on], default: xhigh}}
+loaded_instances: [ {id, config: {context_length: ...}} ]
+
+key: text-embedding-nomic-embed-text-v1.5   type: embedding   capabilities: null
+loaded_instances: []      <-- a genuinely not-loaded entry
+```
+
+Full key set on the live non-embedding entry:
+
+```
+['architecture', 'capabilities', 'description', 'display_name', 'format', 'key',
+ 'loaded_instances', 'max_context_length', 'params_string', 'publisher',
+ 'quantization', 'selected_variant', 'size_bytes', 'type', 'variants']
+
+architecture: 'qwen3_5'          format: 'mlx'
+display_name: 'Qwen3.8 27B'      params_string: '27B'
+max_context_length: 262144       selected_variant: 'qwen/qwen3.8-27b@4bit'
+loaded_instances[0].config: {'context_length': 119552, 'parallel': 4,
+                             'reasoning_budget_message': ''}
+```
+
+**The family identifier was renamed, not dropped:** v0's `arch` is v1's
+`architecture`, same value `qwen3_5`. Stop sequences therefore resolve identically on
+both generations, and `config.context_length` (119552) matches v0's
+`loaded_context_length` exactly.
+
+The decisive property: **`capabilities` is a property of the MODEL, not of a loaded
+instance.** It is present whether or not the model is loaded. Three things follow.
+The JIT/structured hazard raised in Flagged call 12 does not arise on v1 — tier-two
+candidates carry their capabilities, so `for_task("structured")` can filter them
+correctly without the capability filter being widened. `loaded_instances` replaces
+`state`, so A20's two-tier split falls out of the data rather than being imposed on
+it. And `config.context_length` on the instance is the real loaded window, a better
+source than v0's `loaded_context_length`.
+
+Note also that v1 reports this model as `type: llm` with `capabilities.vision: true`,
+where v0 called it `type: vlm`. Modality moved out of `type` between generations —
+which is an independent proof that ADR decision 3's exclusion form was always right
+and the `type == "llm"` inclusion form was always wrong. And note the spelling
+change: v1 says `type: embedding`, v0 says `type: embeddings`. Both must be excluded.
+
+The live v1 response returned the nomic model TWICE, once with zero instances and
+once with one. Dedupe by `key`.
+
+**Both v0 entries below report `state: "loaded"` because JIT auto-evict and TTL are
+switched off on this box.** That is a deliberate local setting, not the default. A
+stock JIT-enabled LM Studio lists the same DOWNLOADED models with
+`state: "not-loaded"` until the first request arrives — LM Studio's own documented
+example response shows exactly that. Adapter and ladder fixtures must therefore
+cover BOTH shapes; building only from the payload below bakes this box's
+configuration into the test suite and would ship the JIT defect green. See Flagged
+calls 12.
 
 That single live entry is the fixture every adapter test should be built from: it
 is simultaneously the proof that `type == "llm"` filtering is wrong (it reports
@@ -141,6 +204,58 @@ Existing shapes worth reading before writing anything:
     - Candidate filtering keeps the `vlm` entry and drops the `embeddings` entry.
       A hypothetical future `type: "omni"` entry is also kept (ADR decision 3 —
       exclusion form, not inclusion form).
+    - **Both API generations, one adapter.** `/api/v1/models` is preferred and
+       `/api/v0/models` is the fallback when v1 404s.
+        - v1 available → parsed correctly: `key` as identity,
+          `len(loaded_instances) > 0` as loadedness,
+          `loaded_instances[0].config.context_length` as the window,
+          `capabilities.trained_for_tool_use` as the structured capability,
+          `capabilities.reasoning` observed onto the profile.
+        - v1 available, an entry with `loaded_instances: []` → it is a tier-two
+          candidate under the A20 rule AND its capabilities are intact, so
+          `for_task("structured")` can filter it correctly. This is the case that
+          answers Flagged call 12 — assert the capabilities survive, not just that
+          the entry appears.
+        - v1 returns 404 → the adapter falls back to v0 and everything still works,
+          including v0's `vlm` type and `embeddings` spelling.
+        - **Equivalence:** the same model described by a v1 payload and by a v0
+          payload produces equivalent `ModelProfile`s. Assert field by field, not by
+          object equality, since `reasoning` is legitimately unset on v0. Two of
+          those assertions are verified against the live box and must be named
+          explicitly rather than folded into a loop:
+          **context window is 119552 either way** (`loaded_instances[0].config
+          .context_length` on v1 equals `loaded_context_length` on v0 — confirmed
+          identical), and **stop sequences are identical either way** (v1
+          `architecture` and v0 `arch` both read `qwen3_5`, which aliases to the
+          qwen2 ChatML profile).
+        - `type: "embedding"` (v1) and `type: "embeddings"` (v0) are BOTH excluded,
+          asserted on both paths.
+        - Duplicate entries for one `key` collapse to one candidate, and a duplicate
+          pair where one copy has instances and one does not resolves as LOADED.
+          (The live v1 response really did return the nomic model twice.)
+        - The generation that answered is cached: a second refresh does not re-probe
+          v1 after a 404, asserted by counting fake-client calls.
+    - **JIT backends resolve (two-tier candidates).** `GET /api/v0/models` lists
+      DOWNLOADED models and most report `state: "not-loaded"` — that is what LM
+      Studio's own documented example response shows. With JIT model loading enabled,
+      nothing is loaded until the first request arrives, so a strict
+      `state == "loaded"` filter yields zero candidates and, after A19, raises. A
+      stock JIT-enabled LM Studio must not be unusable. Cases:
+        - Zero loaded, exactly ONE downloaded non-embedding model → resolves to it,
+          and logs the JIT INFO line naming it.
+        - Zero loaded, TWO downloaded chat models, no config → raises.
+        - ONE loaded, THREE downloaded → the loaded one wins. Loaded is strictly
+          preferred; tier two only engages when the loaded set is empty.
+        - Zero loaded, two downloaded, `model_task_chat` naming one of the two →
+          that one wins. Pins disambiguate within tier two exactly as within tier
+          one, and must still name a model the backend actually reported.
+        - Zero downloaded non-embedding models at all → raises.
+        - Last-known-good in tier two: a remembered model that is still DOWNLOADED
+          but no longer loaded is a valid rung-4 hit when nothing is loaded, and is
+          still discarded when something else IS loaded. JIT eviction must not cost
+          continuity, and must not beat a live model either.
+    - A not-loaded candidate has no `loaded_context_length`, so its context window
+      resolves at the second rung, `max_context_length`. Assert that explicitly.
     - Context window resolves to 119552, not 262144, and the resolution rung is
       logged. With `loaded_context_length` absent it resolves to `max_context_length`;
       with both absent, to a declared 4096. Three cases, three rungs, each logged.
@@ -150,21 +265,31 @@ Existing shapes worth reading before writing anything:
     - `for_task("structured")` includes a candidate whose capabilities contain
       `tool_use` and excludes one whose capabilities do not. `for_task("chat")` and
       `for_task("fast")` apply no capability requirement.
+    - **Model-agnostic by default (ADR decision 4 as amended 2026-09-08 — this is an
+      acceptance criterion, not an aspiration).** With `MODEL_NAME`,
+      `MODEL_PREFERRED` and all three `MODEL_TASK_*` unset, and exactly one chat
+      model loaded, `for_task("chat")` succeeds and returns that model. Then a second
+      test: change the fixture's loaded model id to something the family table has
+      never seen — a llama, a mistral, any unfamiliar id — with all five settings
+      still unset, and resolution returns that one too. No code change, no config
+      change, no new table entry. If either test needs configuration to pass, the
+      ladder is not model-agnostic and the implementation is wrong.
     - Refuse to guess: with two `tool_use`-capable candidates loaded, no
       `model_task_structured`, no `model_preferred`, NO last-known-good, and a
-      configured `MODEL_NAME` that is not among them, resolution returns the
-      configured model rather than picking a candidate. With no configured model
-      either, it raises rather than returning an arbitrary entry.
-      The no-last-known-good clause is still load-bearing under the corrected order,
-      for a different reason than before: last-known-good now sits ABOVE `model_name`,
-      so a warm last-known-good would satisfy the request at rung 4 and this test
-      would never reach the `model_name` rung it exists to exercise. Start the
-      `ActiveModel` cold.
+      configured `MODEL_NAME` that is not among them, resolution **raises**. It does
+      NOT return the configured model. Assert the raise, and assert that the
+      configured id appears nowhere in the returned profile — there is no returned
+      profile. With no configured model either, it also raises, by the same rung and
+      for the same reason.
+      The no-last-known-good clause is still load-bearing: last-known-good sits at
+      rung 4, so a warm one would satisfy the request before the ladder ever reaches
+      the refusal rung this test exists to exercise. Start the `ActiveModel` cold.
     - Ladder order — the capability filter runs FIRST and narrows the candidate set;
       preference then applies WITHIN the filtered set, and verified-loaded evidence
       outranks the unverified configured default:
       capability filter → `model_task_{kind}` → `model_preferred` → **last-known-good**
-      → `model_name` → sole surviving candidate → refuse. Assert the order with a
+      → `model_name` (only if loaded) → sole surviving candidate → refuse-by-RAISING.
+      Assert the order with a
       case where each rung in turn is the one that decides — seven cases, and the
       rung-4-beats-rung-5 case (warm last-known-good present AND `MODEL_NAME` naming
       a different loaded candidate → last-known-good wins) is the one that would have
@@ -174,8 +299,18 @@ Existing shapes worth reading before writing anything:
       IS loaded but does NOT pass the capability filter still wins — and MUST emit a
       WARNING naming the pinned model, the task kind, and the missing capability.
       Assert that the warning fires (caplog), not merely that the pin won.
-    - A pin naming a model that is not loaded at all is ignored and the ladder
-      continues — the absolute-pin exception covers loaded-but-incapable only.
+    - **The loaded-candidate guard is a property of EVERY config-consulting rung, not
+      a per-rung accident.** Rungs 2 (`model_task_{kind}`), 3 (`model_preferred`) and
+      5 (`model_name`) may only ever select a model that is in the loaded candidate
+      set. A configured value naming a model that is not loaded is discarded and the
+      ladder continues — for all three, tested for all three, with the same wording.
+      The absolute-pin exception of the previous bullet covers loaded-but-incapable
+      only; it never resurrects a model that is not loaded at all.
+    - A discarded configured value logs one INFO line naming the setting, the value,
+      and that it was ignored because the model is not loaded. Otherwise the operator
+      gets a raise at rung 7 with no indication that the config they set was thrown
+      away. Assert it fires for a non-loaded `model_task_{kind}` and stays silent when
+      the configured value is loaded and used.
     - Last-known-good tiebreaker: two candidates loaded, both surviving the filter,
       no `model_task_{kind}`, no `model_preferred`, and one of the two previously
       resolved for this task kind → the previously-resolved one wins. Assert this
@@ -211,7 +346,9 @@ Existing shapes worth reading before writing anything:
 
     First, a frozen dataclass `ModelProfile` carrying everything a call needs:
     the bare model id, the litellm-prefixed id, the api base, the resolved context
-    window, the stop sequences, a frozenset of capabilities, the family/arch key,
+    window, the stop sequences, a frozenset of capabilities, an observed `reasoning`
+    field (the v1 `capabilities.reasoning` object; unset on v0 and on
+    `StaticModelSource`), the family/arch key,
     the task kind it was resolved for, and a field naming which rung produced the
     context window. Include the task kind — Plan 02 needs it to re-resolve the same
     kind after an invalidate.
@@ -220,25 +357,85 @@ Existing shapes worth reading before writing anything:
     candidate profiles the backend currently offers.
 
     Third, `LMStudioModelSource`, reading `GET /api/v0/models` once per refresh and
-    building one candidate per entry. Filter candidates by `state == "loaded"` AND
-    `type != "embeddings"` — per ADR decision 3 the exclusion form is required and
-    the inclusion form is a defect, because the live chat model reports `vlm`.
-    Resolve each candidate's context window in the order `loaded_context_length`,
-    then `max_context_length`, then a declared 4096 — logging which rung fired, per
-    ADR decision 2 *as amended 2026-09-07*. There is deliberately no family-constant
-    rung. Three reasons, all in the amended ADR: it would consume
-    `FamilyProfile.context_window`, the field ADR Consequences / Plan 04 delete —
-    a ladder that reads a field the same design removes; `/api/v0/models` always
-    returns `max_context_length`, so the family rung is only reachable when the
+    reading the model list once per refresh and building one candidate per entry.
+
+    **Prefer `GET /api/v1/models`; fall back to `GET /api/v0/models` on a 404** (an
+    older LM Studio that has no v1). One attempt each, no retry loop — a 404 from v1
+    is a version signal, not a transient failure. Cache which generation answered so
+    the fallback probe is not repeated every refresh.
+
+    Field mapping, per generation:
+
+    | Fact | v1 (preferred) | v0 (fallback) |
+    |---|---|---|
+    | identity | `key` | `id` |
+    | loaded? | `len(loaded_instances) > 0` | `state == "loaded"` |
+    | context window | `loaded_instances[0].config.context_length` → `max_context_length` → declared 4096 | `loaded_context_length` → `max_context_length` → declared 4096 |
+    | structured capability | `capabilities.trained_for_tool_use` | `tool_use` in the `capabilities` list |
+    | family key (→ stop sequences) | `architecture` | `arch` — same values, e.g. `qwen3_5` |
+    | reasoning model? | `capabilities.reasoning` (object, or absent) | not reported — leave unset |
+    | embedding exclusion | `type != "embedding"` | `type != "embeddings"` |
+    | runtime/quant format | `format` (`mlx`) | `compatibility_type` (`mlx`) — consumed by NEITHER; listed only so a future reader does not go hunting for where it went |
+
+    **Exclude BOTH spellings on both paths.** v1 says `embedding`, v0 says
+    `embeddings`; a filter written against one generation silently admits embedding
+    models on the other, and an embedding model selected as a chat candidate is a
+    hard failure at request time. Per ADR decision 3 the exclusion form is required
+    and the inclusion form is a defect — v0 called the live chat model `vlm`, and v1
+    calls the same model `type: llm` with `capabilities.vision: true`, so modality
+    moved out of `type` between generations. Any `type == "llm"` filter would have
+    been wrong on v0 and would become right only by accident on v1.
+
+    **Dedupe by identity.** The live v1 response returned the nomic model twice, once
+    with zero `loaded_instances` and once with one. Dedupe on `key` (v1) / `id` (v0),
+    and when duplicates disagree about loadedness prefer the loaded one — otherwise
+    a loaded model can be demoted into tier two by its own stale duplicate.
+
+    `loaded_instances[0]` is deliberate: with more than one instance of a model, take
+    the first and do not try to reconcile differing `context_length` values across
+    instances. Record the rung on the profile as usual so the choice is visible.
+
+    Put `capabilities.reasoning` on the `ModelProfile` as an OBSERVED field — present
+    on v1, unset on v0 and on `StaticModelSource`. Nothing in this plan branches on
+    it. It is captured because it is the real signal behind the
+    `content or reasoning_content` fallback that Plan 02 consolidates, and recording
+    it now costs one field. See Flagged calls 13.
+
+    Return the survivors as TWO tiers rather than one filtered list: the LOADED tier
+    (`len(loaded_instances) > 0` on v1, `state == "loaded"` on v0) and the REPORTED
+    tier (every non-embedding entry the backend listed, whatever its state). On v1
+    the split falls out of the data rather than being imposed on it — an entry either
+    has instances or it does not. Do not collapse them, and do not drop the
+    not-loaded entries at the adapter — `ActiveModel` needs both tiers to implement
+    the JIT rule below, and an adapter that filters them away makes that rule
+    impossible to write without a second HTTP call.
+    Resolve each candidate's context window in three rungs — per-generation sources
+    in the table above, then `max_context_length`, then a declared 4096 — logging
+    which rung fired, per ADR decision 2 *as amended 2026-09-07*. There is
+    deliberately no family-constant rung. Three reasons, all in the amended ADR: it
+    would consume `FamilyProfile.context_window`, the field ADR Consequences / Plan
+    04 delete — a ladder that reads a field the same design removes; both generations
+    always return `max_context_length`, so the family rung is only reachable when the
     backend answers with neither field, which does not happen (an unreachable
     backend resolves through `StaticModelSource` instead); and the family constants
     are wrong exactly where it would matter — the qwen2 entry declares 32768 against
     a real 262144/119552 — so falling back to a lying constant is worse than falling
-    back to a declared, logged 4096. Read
-    `capabilities` straight off the entry; this is what replaces `_score`'s
-    `litellm.get_model_info` guessing, per ADR decision 4. Read stop sequences by
-    mapping the entry's `arch` through the existing FAMILY_PROFILES table. This
-    adapter reuses the `/api/v0/models` seam that
+    back to a declared, logged 4096. Read capabilities straight off the entry per the
+    mapping table; this is what replaces `_score`'s `litellm.get_model_info`
+    guessing, per ADR decision 4.
+
+    **Stop sequences resolve identically on both generations — verified, no fallback
+    involved.** The family identifier was renamed, not dropped: v0's `arch` is v1's
+    `architecture`, carrying the identical value (`qwen3_5` on the live box). Feed
+    whichever field the answering generation supplies into the same
+    `FAMILY_PROFILES` lookup. `qwen3_5` is already an alias to the qwen2 ChatML
+    profile, so the same model yields the same stop sequences either way. There is no
+    precision loss on the preferred path and `get_profile`'s substring rung is not
+    reached for this model on either generation — it remains only the genuine
+    unknown-family fallback it always was. Assert the equality directly: same model,
+    two payload shapes, one set of stop sequences.
+
+    This adapter reuses the LM Studio HTTP seam that
     `litellm_provider.get_model_capabilities_from_lmstudio` already uses — it must
     not construct its own long-lived httpx client, and the single list fetch
     replaces the previous one-request-per-model fan-out.
@@ -265,8 +462,8 @@ Existing shapes worth reading before writing anything:
        operates on the surviving set.
     2. **`model_task_{kind}`** — `model_task_chat` / `model_task_structured` /
        `model_task_fast`. These settings already exist and this is their first
-       consumer.
-    3. **`model_preferred`.**
+       consumer. Only selects if the named model is IN the loaded candidate set.
+    3. **`model_preferred`** — same guard: only if the named model is loaded.
     4. **Last-known-good**, when it is STILL among the filtered candidates. A
        last-known-good that has since been unloaded is discarded, not resurrected.
        When this rung decides and the model it names differs from the configured
@@ -276,8 +473,62 @@ Existing shapes worth reading before writing anything:
        changing anything about this line or this rung's position.
     5. **`model_name`**, if it is among the filtered candidates.
     6. **Sole surviving candidate**, when exactly one does.
-    7. **Refuse to guess** — return the configured `model_name` unconfirmed, and
-       raise if there is no configured model. Never return an arbitrary candidate.
+    7. **Refuse to guess — RAISE.** Not "return the configured `model_name`
+       unconfirmed". Never an arbitrary candidate, and never a phantom either.
+
+    **When the backend is live, the loaded set is the SOLE source of truth** (ADR
+    decision 4 as amended 2026-09-08). Configuration may only *disambiguate among
+    loaded candidates*; it may never name one that is not loaded. That is why rungs
+    2, 3 and 5 all carry the same in-the-candidate-set guard, and why rung 7 raises.
+
+    An earlier draft had rung 7 return the configured `model_name` unconfirmed — a
+    model the backend never said it had. That is not a fallback, it is the bug this
+    ADR exists to remove, wearing the fallback's clothes: on 2026-09-08 the deployed
+    container was resolving `google/gemma-4-31b` because configuration named it,
+    while LM Studio served only `qwen/qwen3.8-27b` and answered by silently
+    substituting the model it actually had. A live backend whose candidates cannot be
+    disambiguated is a loud failure, not a quiet substitution.
+
+    **The loaded set is preferred, but "downloaded" is still the backend talking.**
+    Run the whole ladder against the LOADED tier. If — and only if — that tier is
+    empty, run the same ladder again against the REPORTED tier, then raise if that
+    also fails to produce a winner. This is inside the A19 rule, not an exception to
+    it: a model the backend itself listed is not a model invented from configuration,
+    and using it is the same principle A19 established. What A19 forbids is returning
+    an id no source ever reported.
+
+    Why this rung exists: `GET /api/v0/models` lists DOWNLOADED models, and on a
+    JIT-enabled backend most report `state: "not-loaded"` until a request arrives.
+    Without the second tier, a stock JIT-enabled LM Studio resolves nothing and
+    raises — the system would be unusable on a normal, shipped configuration. This
+    box only avoids the problem because JIT auto-evict and TTL were deliberately
+    switched off on it; that is a local accident, not a property of the product. The
+    requirement is that most modern classes of local AI work without rebuilding the
+    environment, and a config that ships enabled by default has to be one of them.
+
+    Ordering is strict: any loaded candidate beats any not-loaded one, because tier
+    two is only consulted when tier one is empty. Pins are not exempt — a
+    `model_task_{kind}` naming a downloaded-but-not-loaded model does NOT beat a
+    different model that is actually loaded; it wins only when nothing is loaded.
+
+    When resolution selects from the reported tier, log at INFO: the model id, and
+    that it is not currently loaded and is expected to be JIT-loaded on first use. An
+    operator must be able to see that this happened rather than infer it from
+    latency.
+
+    A not-loaded entry carries no `loaded_context_length`, so its context window
+    resolves at the second rung, `max_context_length`. That is correct — do not
+    "fix" it. Once JIT actually loads the model, the next TTL refresh picks up the
+    real `loaded_context_length`, which may be smaller. Budgeting against `max` for
+    at most one TTL window is the accepted cost of the first request; the alternative
+    is refusing to serve that request at all.
+
+    **`MODEL_NAME`'s only remaining role is `StaticModelSource`'s data** — used when
+    there is NO live backend at all. Nothing on a path where `LMStudioModelSource`
+    answered successfully may read `settings.model_name` except rung 5, and rung 5
+    may only return it when it is among the loaded candidates. Grep the finished
+    `app/model.py` for `settings.model_name` and check every hit against that rule
+    before calling this task done.
 
     **Last-known-good sits ABOVE `model_name`, deliberately.** `MODEL_NAME` is
     documented in `config.py` as a tracked *default*, not an authoritative pin: it
@@ -363,6 +614,36 @@ Existing shapes worth reading before writing anything:
     - Rung 4 logs an INFO divergence line naming the winner, the reason
       (last-known-good) and the `model_name` it beat — and logs nothing when the two
       agree. Both directions asserted via caplog.
+    - **Model-agnostic acceptance (ADR decision 4, amended 2026-09-08):** with all
+      five model settings unset and one chat model loaded, resolution succeeds and
+      returns it; and with the loaded id changed to an unfamiliar model, resolution
+      returns that one, with no code or config change. Both asserted.
+    - Rung 7 raises. No test anywhere asserts that an unconfirmed `model_name` is
+      returned, and `grep settings.model_name app/model.py` yields only rung 5 and
+      `StaticModelSource`.
+    - Rungs 2, 3 and 5 each ignore a configured value naming a model the backend did
+      not report at all, each log one INFO line when they do, and each is tested for
+      it. ("Not reported", not "not loaded" — under the two-tier rule a
+      downloaded-but-not-loaded model IS a legitimate candidate when nothing is
+      loaded.)
+    - The adapter prefers `/api/v1/models`, falls back to `/api/v0/models` on 404,
+      caches which generation answered, and produces equivalent `ModelProfile`s from
+      both — asserted field by field.
+    - Both `type: "embedding"` (v1) and `type: "embeddings"` (v0) are excluded, and
+      duplicate entries for one identity collapse with the loaded copy winning.
+    - A v1 entry with `loaded_instances: []` keeps its `capabilities`, so structured
+      filtering works on tier two. This is Flagged call 12 answered by data.
+    - `ModelProfile` carries the observed `reasoning` field on v1 and leaves it unset
+      on v0 and `StaticModelSource`; no ladder rung branches on it.
+    - v1 `architecture` and v0 `arch` feed the same `FAMILY_PROFILES` lookup, and the
+      equivalence test names two assertions explicitly: context window 119552 from
+      both payloads, and identical stop sequences from both.
+    - **A JIT-enabled backend with nothing loaded resolves.** Zero loaded plus one
+      downloaded chat model returns that model and logs the JIT INFO line; zero
+      loaded plus two downloaded and no config raises; one loaded plus three
+      downloaded returns the loaded one. All three asserted.
+    - A not-loaded candidate's context window comes from `max_context_length`,
+      asserted, with the ladder rung recorded on the profile.
     - The context-window ladder has exactly three rungs and no family-constant rung;
       no code in `app/model.py` reads `context_window` off a family profile.
     - The LM Studio adapter issues exactly one `/api/v0/models` request per refresh,
@@ -512,7 +793,17 @@ Existing shapes worth reading before writing anything:
     - Empty loaded set returns not-ready.
     - Loaded models present but none supporting the structured task returns
       not-ready — the sole-candidate rung must NOT be treated as ready.
+    - **A live backend whose candidates cannot be disambiguated returns not-ready.**
+      Under the amended ADR decision 4 that case makes `for_task("structured")`
+      RAISE rather than return a config-named phantom, so the probe must catch the
+      exception and answer not-ready. This is new: the probe previously received a
+      model string in that case and had to judge it. Fail-closed is the correct
+      answer either way, but the mechanism changed from evaluate-a-string to
+      catch-an-exception, and an uncaught raise here would propagate into
+      `routes/note.py`'s destructive-sweep gate as a 500 instead of a refusal.
+      Test it explicitly with two capable candidates, cold cache and no config.
     - Any HTTP, JSON or schema failure returns not-ready; the probe never raises.
+      That contract now includes the `for_task` raise — the probe absorbs it.
     - A genuinely loaded `tool_use`-capable model returns ready.
     - New: the probe and the structured resolution path agree on the same model id
       for the live payload. This replaces the parity guarantee currently held by
@@ -559,7 +850,9 @@ Existing shapes worth reading before writing anything:
     - The probe resolves through `ActiveModel` and no longer calls `_score`.
     - `routes/note.py` still gates the destructive sweep on the probe.
     - Probe test count after >= probe test count before, both recorded in the SUMMARY.
-    - All four fail-closed cases still return not-ready.
+    - All fail-closed cases still return not-ready, including the new one: a
+      `for_task("structured")` raise is caught by the probe and answered not-ready,
+      never propagated to `routes/note.py`.
     - The probe/resolver parity case is covered against the seam.
     - Suite green.
   </acceptance_criteria>
@@ -654,6 +947,109 @@ Existing shapes worth reading before writing anything:
    the container spent two days naming `google/gemma-4-31b` while LM Studio served
    `qwen/qwen3.8-27b`. The line is logged only when the two differ, so the common
    case stays quiet and the divergence is the thing that stands out.
+11. **Rung 7 raises; it does not return an unconfirmed `model_name`.** ADR decision 4
+   was amended 2026-09-08 and this plan follows the amendment. The original decision
+   read "resolution falls to configuration rather than picking one", and every
+   earlier draft of this plan implemented that as a final rung returning
+   `settings.model_name` unconfirmed — a model the backend never said it had. That
+   is not a conservative fallback; it is the exact live symptom the ADR was written
+   to remove. The deployed container was resolving `google/gemma-4-31b` from config
+   while LM Studio served only `qwen/qwen3.8-27b` and quietly answered with what it
+   had. Corrected: when the backend is live the loaded set is the sole source of
+   truth, configuration may only disambiguate among loaded candidates, and an
+   undisambiguatable live backend raises. `MODEL_NAME` survives only as
+   `StaticModelSource`'s data for the no-live-backend case.
+
+   Two consequences a reader should not have to rediscover. First, the guard that
+   makes this work is on every config-consulting rung (2, 3 and 5), not just rung 5
+   where it was originally written — a pin is as capable of naming a phantom as a
+   default is. Second, callers that previously received a phantom now receive an
+   exception: `probe_classifier_model_ready` must catch it and return not-ready
+   (Task 3), and the request paths in Plan 02 must surface it as a clean error rather
+   than an unhandled 500.
+12. **Two candidate tiers: loaded, then merely downloaded.** ADR decision 3 defines
+   the filter as `state == "loaded"` AND `type != "embeddings"`. Taken alone that
+   makes a stock JIT-enabled LM Studio unusable: `GET /api/v0/models` lists
+   DOWNLOADED models and most report `state: "not-loaded"` (LM Studio's own
+   documented example response shows this), and under JIT nothing loads until the
+   first request arrives — so the filter yields zero candidates and A19's rung 7
+   raises. This box only avoids the problem because JIT auto-evict and TTL were
+   deliberately switched off on it, which is a local accident rather than a property
+   of the product.
+
+   Resolved: the loaded tier is tried first and strictly preferred; the reported
+   tier is consulted only when the loaded tier is empty, and the same ladder runs
+   over it. This stays INSIDE A19's rule rather than carving an exception — the
+   backend reported the model, so it is not a phantom from configuration. Selection
+   from the reported tier logs an INFO line saying the model will be JIT-loaded.
+
+   **ANSWERED EMPIRICALLY 2026-09-08 — by changing the source, not the filter.** The
+   open question here was whether a not-loaded entry carries `capabilities`; if not,
+   `for_task("structured")` would filter the reported tier to empty and structured
+   resolution would raise under JIT even though chat resolved. The live probe found
+   `GET /api/v1/models` present (HTTP 200), where **`capabilities` is a property of
+   the MODEL rather than of a loaded instance** and is therefore populated whether or
+   not the model is loaded. The concern does not arise on v1. The capability filter
+   is NOT widened. See Flagged calls 13.
+
+   It DOES still arise on the v0 fallback path — see 13 for what that costs and why
+   it is accepted rather than solved.
+13. **`/api/v1/models` is the preferred source; v0 is a fallback.** Probed live
+   2026-09-08 and strictly better for everything this seam needs: `capabilities` is
+   model-scoped (answering 12), `loaded_instances` makes A20's two-tier split fall
+   out of the data instead of being imposed on it, and
+   `loaded_instances[0].config.context_length` is the real loaded window. Two naming
+   traps the mapping table pins down: v1 says `type: embedding` and v0 says
+   `type: embeddings`, so a filter written against one generation admits embedding
+   models on the other; and v1 reports the live chat model as `type: llm` with
+   `capabilities.vision: true` where v0 said `type: vlm`, which is independent proof
+   that ADR decision 3's exclusion form was right and the inclusion form was always
+   wrong.
+
+   **Two things only work on one generation, both accepted, neither hidden:**
+
+   *`capabilities.reasoning` is v1-only.* Left unset on v0 and `StaticModelSource`.
+   It is captured as an observed field and nothing branches on it — see the note
+   added to Plan 02, where the extraction helper stays shape-based precisely because
+   v0 backends and non-LM-Studio backends report nothing here.
+
+   *The Flagged-call-12 JIT/structured hazard survives on the v0 fallback path.* If
+   an old LM Studio runs JIT and does not populate `capabilities` for not-loaded
+   entries, `for_task("structured")` on that backend still filters tier two to empty
+   and raises, while chat resolves. This is not fixed here: fixing it would mean
+   widening the capability filter, which would let a model without `tool_use` be
+   selected for structured work on EVERY backend to accommodate one old generation.
+   The correct trade is to leave v0 degraded and loud. Record it in the SUMMARY as a
+   known limitation of the fallback path, and if it is ever hit in practice the
+   answer is to upgrade LM Studio, not to loosen the filter.
+
+   *Resolved 2026-09-08 — the family identifier is present on v1.* An earlier draft
+   flagged that the probed v1 shape showed no `arch` and that stop sequences are
+   keyed on it, and required a stop-and-verify step. The full key dump settled it:
+   v1 renames the field to `architecture` and carries the identical value
+   (`qwen3_5`). Stop sequences resolve identically on both generations, the
+   substring rung is not reached, and the stop-and-verify step is removed. Nothing
+   commit `93df616` fixed is weakened on the preferred path.
+
+   **Deliberately NOT consumed, recorded so nobody has to rediscover why:**
+
+   *`loaded_instances[0].config.parallel` (4) and `reasoning_budget_message`.* These
+   are instance-runtime facts, not model capability. `ModelProfile` answers "which
+   model and what can it do"; how many parallel slots the backend allocated is the
+   backend's business, and putting it on the profile would make a value that changes
+   without the model changing part of the identity of the model. Left off.
+
+   *`variants` / `selected_variant` (`qwen/qwen3.8-27b@4bit`).* v1 exposes
+   quantization variants. Out of scope: **the seam resolves a model key and lets LM
+   Studio pick the variant.** Resolving a variant would mean this system deciding
+   quantization on the operator's behalf — a hardware and quality trade-off that
+   belongs to whoever runs the box, and one the backend already makes with more
+   information than we have. If variant pinning is ever wanted it is a new operator
+   setting, not a change to resolution.
+
+   *`display_name`, `params_string`, `publisher`, `quantization`, `size_bytes`,
+   `description`.* Descriptive metadata with no consumer in this design. Not on the
+   profile.
 
 <output>
 Create `.planning/quick/260907-amx-active-model-seam/01-SUMMARY.md` when done,

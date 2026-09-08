@@ -29,7 +29,25 @@ verification:
   core: "cd /Users/trekkie/projects/sentinel-of-mnemosyne/.claude/worktrees/active-model-seam/sentinel-core && /Users/trekkie/projects/sentinel-of-mnemosyne/sentinel-core/.venv/bin/python -m pytest tests/ -q"
   pathfinder: "cd /Users/trekkie/projects/sentinel-of-mnemosyne/.claude/worktrees/active-model-seam/modules/pathfinder && /Users/trekkie/projects/sentinel-of-mnemosyne/modules/pathfinder/.venv/bin/python -m pytest tests/ -q"
   baseline_in: "whatever 03-SUMMARY.md recorded"
-  expected_out: "sentinel-core: baseline + N04 passed, 12 skipped, 0 failed. Pathfinder: unchanged from 03-SUMMARY.md — this plan touches shared/sentinel_shared/model_profiles.py, which pathfinder imported at modules/pathfinder/app/llm.py:37, so the pathfinder suite MUST be run and MUST be unchanged. This plan deletes NO tests; it renames a symbol and removes a field, so tests referencing either are updated in place. Record exact numbers in 04-SUMMARY.md."
+  expected_out: |
+    sentinel-core = (03-SUMMARY.md total) + N04, 12 skipped, 0 failed.
+    N04 = 7 expected, floor 5, itemised: Task 1 adds 1 (FamilyProfile has no
+    context-window field). Task 2 adds 3 (known encoding used and reported; unknown
+    encoding degrades to cl100k_base with a warning and does not raise; no encoding
+    named yields cl100k_base silently) — the two models-seed.json test updates in
+    test_model_registry.py are UPDATES, not additions, and contribute 0. Task 3 adds
+    3 (per-model breakdown across two models; missing/malformed model line lands in
+    the unknown bucket without crashing; aggregate figures byte-identical to before
+    for a single-model fixture).
+    This is the least certain link in the N01 -> N02 -> N03 -> N04 chain, because
+    Task 3's breakdown may naturally want more cases; treat 7 as the expectation and
+    5 as the floor, and record what actually landed.
+    Pathfinder: UNCHANGED from 03-SUMMARY.md. This plan touches
+    shared/sentinel_shared/model_profiles.py, which pathfinder imports at
+    modules/pathfinder/app/llm.py:37, so the pathfinder suite MUST be run and MUST
+    come back at exactly the 03-SUMMARY.md number.
+    This plan deletes NO tests; it renames a symbol and removes a field, so tests
+    referencing either are updated in place. Record exact numbers in 04-SUMMARY.md.
 must_haves:
   truths:
     - "The family-keyed constants table is named for what it is, and no longer carries a context_window field that disagrees with the registry and that nothing consumes."
@@ -101,7 +119,7 @@ Both are removed upstream, by different mechanisms:
 
 | Consumer | Removed by | Mechanism |
 |---|---|---|
-| `sentinel-core/app/model.py` — the context-window ladder's family rung | Plan 01, amendment A1 | ADR decision 2 was amended 2026-09-07 to drop the family rung entirely; the ladder is now `loaded_context_length → max_context_length → declared 4096`. **This is what makes the field removal safe at all** — without A1 the seam itself would be reading the field this plan deletes. |
+| `sentinel-core/app/model.py` — the context-window ladder's family rung | Plan 01, amendment A1 | ADR decision 2 was amended 2026-09-07 to drop the family rung entirely; the ladder is now THREE rungs — the answering API generation's loaded-window field (`loaded_instances[0].config.context_length` on v1, `loaded_context_length` on v0) → `max_context_length` → declared 4096. **This is what makes the field removal safe at all** — without A1 the seam itself would be reading the field this plan deletes. |
 | `sentinel-core/app/services/model_registry.py:88-104` — `_fetch_lmstudio`'s family-aware fallback | Plan 03 Task 1 | the registry's LM Studio live path is subsumed by `LMStudioModelSource`; the registry keeps only its seed role. |
 
 Task 1's precondition is therefore a VERIFICATION that no consumer remains anywhere,
@@ -180,7 +198,9 @@ the chat path pins temperature 0.4. ADR-0007's third Known Limitation is satisfi
     Check all three of these and record each result in the SUMMARY:
 
     1. `sentinel-core/app/model.py` — the context-window ladder must have three rungs
-       (`loaded_context_length → max_context_length → declared 4096`) and must not
+       (the answering generation's loaded-window field → `max_context_length` →
+       declared 4096 — three rungs, whichever of `/api/v1/models` or
+       `/api/v0/models` answered) and must not
        read `.context_window` off a family profile. Plan 01 amendment A1 is what
        removed this consumer, and it is what makes this whole task safe: before A1
        the seam itself consumed the field this task deletes, so the deletion would
@@ -211,8 +231,10 @@ the chat path pins temperature 0.4. ADR-0007's third Known Limitation is satisfi
 
     Remove the `context_window` field from the dataclass and from all seven profiles
     and `SAFE_DEFAULT`. Context windows come from the backend now, resolved by
-    `LMStudioModelSource` in the order `loaded_context_length` →
-    `max_context_length` → a declared, logged 4096. **There is no family-constant
+    `LMStudioModelSource` in three rungs — the answering generation's loaded-window
+    field (`loaded_instances[0].config.context_length` on `/api/v1/models`,
+    `loaded_context_length` on `/api/v0/models`) → `max_context_length` → a
+    declared, logged 4096. **There is no family-constant
     rung** — ADR decision 2 was amended 2026-09-07 to remove it precisely so this
     field could be deleted without the ladder consuming it. Leaving a second,
     disagreeing source of the same number is how the 8192-declared / 262144-served
