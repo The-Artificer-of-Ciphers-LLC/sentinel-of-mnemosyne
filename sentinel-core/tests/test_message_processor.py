@@ -393,6 +393,95 @@ async def test_anomaly_detector_raising_does_not_break_message_processing(monkey
     assert result.content == "Perfectly normal reply."
 
 
+# ---------------------------------------------------------------------------
+# ADR-0007 Defect B — end to end
+#
+# The recorded model name used to be settings.MODEL_NAME, so Session summary
+# frontmatter and the response-anomaly log recorded CONFIGURATION rather than
+# the model that answered. This is the same failure as the ADR's opening
+# observation: the container named google/gemma-4-31b for two days while LM
+# Studio served qwen/qwen3.8-27b, and the summaries agreed with the container.
+#
+# These go through the real build_message_request rather than make_request, so
+# the assertion covers the whole path from the seam to the written frontmatter.
+# ---------------------------------------------------------------------------
+
+
+def _ctx_with_resolved_model(resolved_id: str, configured_id: str):
+    from types import SimpleNamespace
+
+    from app.model import ActiveModel, ModelProfile, StaticModelSource
+
+    source = StaticModelSource(
+        [
+            ModelProfile(
+                model_id=resolved_id,
+                litellm_model=f"openai/{resolved_id}",
+                api_base="http://lmstudio.test/v1",
+                context_window=8192,
+            )
+        ]
+    )
+    seam = ActiveModel([source], SimpleNamespace())
+    return seam, SimpleNamespace(
+        settings=SimpleNamespace(model_name=configured_id),
+        context_window=8192,
+        lmstudio_stop_sequences=[],
+        active_model=seam,
+    )
+
+
+async def test_session_summary_frontmatter_records_the_model_that_answered():
+    from app.models import MessageEnvelope
+    from app.services.message_request_factory import build_message_request
+
+    seam, ctx = _ctx_with_resolved_model("qwen/qwen3.8-27b", "google/gemma-4-31b")
+    await seam.for_task("chat")
+
+    req = build_message_request(
+        ctx, MessageEnvelope(content="hello", user_id="trekkie")
+    )
+    proc, _, _ = make_processor(ai_response="Noted.")
+
+    result = await proc.process(req)
+
+    assert result.model == "qwen/qwen3.8-27b"
+    assert "model: qwen/qwen3.8-27b" in result.summary_content
+    assert "google/gemma-4-31b" not in result.summary_content, (
+        "the frontmatter must record the model that answered, not MODEL_NAME"
+    )
+
+
+async def test_response_anomaly_warning_records_the_model_that_answered(caplog):
+    from app.models import MessageEnvelope
+    from app.services.message_request_factory import build_message_request
+
+    seam, ctx = _ctx_with_resolved_model("qwen/qwen3.8-27b", "google/gemma-4-31b")
+    await seam.for_task("chat")
+
+    req = build_message_request(
+        ctx,
+        MessageEnvelope(content="what is in my second brain?", user_id="trekkie"),
+    )
+    degenerate = (
+        "This covers la-system methodology, la-system principles, and "
+        "la-system markers for managing active requests."
+    )
+    proc, _, _ = make_processor(ai_response=degenerate)
+
+    with caplog.at_level(logging.WARNING, logger="app.services.message_processing"):
+        await proc.process(req)
+
+    anomalies = [
+        r.getMessage()
+        for r in caplog.records
+        if r.getMessage().startswith("response-anomaly:")
+    ]
+    assert len(anomalies) == 1
+    assert "model=qwen/qwen3.8-27b" in anomalies[0]
+    assert "gemma" not in anomalies[0]
+
+
 # Mark all tests in this module as async — pytest-asyncio is in auto mode per
 # pyproject.toml (asyncio_mode="auto"), but make the dependency explicit.
 pytestmark = pytest.mark.asyncio

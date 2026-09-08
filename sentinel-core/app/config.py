@@ -85,6 +85,21 @@ class Settings(BaseSettings):
     model_task_structured: str | None = None
     model_task_fast: str | None = None
 
+    # Active model seam (ADR-0007).
+    #
+    # MODEL_CONTEXT_CAP is an operator ceiling applied ON TOP of the resolved
+    # context window; it never raises a lower resolved value. It exists because
+    # "what the server accepts" and "what produces usable output" are different
+    # numbers — a 71936-token context on the 24 GB host drove the model into
+    # repetition loops and 200s timeouts. That ceiling is host- and
+    # model-specific, so it belongs here rather than in code. Unset = no cap.
+    model_context_cap: int | None = None
+    # How long a resolved candidate list is trusted before ActiveModel refetches.
+    # 60s is ADR decision 1's window: long enough that a 6 Rs pipeline run costs
+    # at most one metadata request, short enough that swapping the model in the
+    # LM Studio UI is picked up without a restart.
+    model_ttl_seconds: float = 60.0
+
     # Alpaca trading keys (optional — trading module only)
     alpaca_paper_api_key: str = ""
     alpaca_paper_secret_key: str = ""

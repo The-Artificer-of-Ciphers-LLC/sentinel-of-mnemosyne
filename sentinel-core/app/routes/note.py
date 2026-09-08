@@ -145,10 +145,14 @@ async def vault_sweep_start(req: SweepStartRequest, request: Request):
     # Build the fail-closed runtime safety probe for the live (non-dry-run) path.
     # The probe is a closure that returns True ONLY when BOTH:
     #   (i)  probe_embedding_model_loaded reports the embedding model is loaded, AND
-    #   (ii) probe_classifier_model_ready reports a genuinely-loaded model SCORES
-    #        for the structured task kind that classify_note uses.
-    # A defaulted/last-resort select_model result is NOT reported ready (round-2 item B,
-    # T-40-24). This closure is passed into start_sweep and forwarded to run_sweep where
+    #   (ii) probe_classifier_model_ready reports that the model the structured
+    #        path would use genuinely CARRIES the tool_use capability that
+    #        classify_note needs (ADR-0007: read off the backend, not scored).
+    # Resolvable is not ready: a model can be selectable — the sole candidate, or an
+    # explicit operator pin — while being incapable, and a degraded classifier must
+    # never drive vault mutations (round-2 item B, T-40-24). A resolution that RAISES
+    # is absorbed by the probe and answered not-ready, never surfaced here as a 500.
+    # This closure is passed into start_sweep and forwarded to run_sweep where
     # it is re-evaluated IMMEDIATELY BEFORE EACH destructive move — not once per run.
     #
     # The admin endpoint CANNOT bypass the guard:

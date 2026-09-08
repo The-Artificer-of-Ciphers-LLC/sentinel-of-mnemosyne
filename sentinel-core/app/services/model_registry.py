@@ -153,7 +153,11 @@ async def _fetch_claude(settings: Settings) -> dict[str, "ModelInfo"]:
 
 
 async def build_model_registry(
-    settings: Settings, http_client: httpx.AsyncClient
+    settings: Settings,
+    http_client: httpx.AsyncClient,
+    *,
+    lmstudio_model: str | None = None,
+    lmstudio_context_window: int | None = None,
 ) -> dict[str, ModelInfo]:
     """
     Build the model registry at startup.
@@ -161,19 +165,39 @@ async def build_model_registry(
     2. Fetch live data from active provider (best-effort, non-fatal)
     3. Merge: live data takes precedence over seed for overlapping model ids
     Returns dict[model_id, ModelInfo] stored in app.state.model_registry.
+
+    ``lmstudio_model`` / ``lmstudio_context_window``: when the caller has ALREADY
+    resolved LM Studio's model through the Active model seam (ADR-0007), it
+    passes both here and this function performs no LM Studio HTTP of its own.
+    Without them the registry would repeat the discovery call and the
+    per-model ``/api/v0/models/{id}`` context fetch that the seam has just done
+    — the fan-out ADR-0007 step 2 exists to collapse. Both must be supplied
+    together; either alone leaves the original fetch path in place, which is
+    what every caller that has not adopted the seam still gets.
     """
     registry = _load_seed()
 
     if settings.ai_provider == "lmstudio":
-        # Discover active model name (non-fatal; falls back to settings.model_name).
-        # discover_active_model returns a litellm-prefixed string such as
-        # "openai/qwen/qwen2.5-coder-14b". Strip ONLY the provider tag — NOT
-        # any HuggingFace-style namespace within the model id, which LM Studio's
-        # /api/v0/models/{id} endpoint requires verbatim to avoid a 400.
-        model_str = await discover_active_model(settings, http_client)
-        discovered_lmstudio_name = strip_litellm_prefix(model_str, prefixes=_ORIGINAL_PREFIXES)
-        live = await _fetch_lmstudio(settings, http_client, discovered_lmstudio_name)
-        registry.update(live)
+        if lmstudio_model and lmstudio_context_window:
+            registry[lmstudio_model] = ModelInfo(
+                id=lmstudio_model,
+                provider="lmstudio",
+                context_window=lmstudio_context_window,
+                capabilities={"chat": True},
+                notes="Resolved by the Active model seam (ADR-0007)",
+            )
+        else:
+            # Discover active model name (non-fatal; falls back to settings.model_name).
+            # discover_active_model returns a litellm-prefixed string such as
+            # "openai/qwen/qwen2.5-coder-14b". Strip ONLY the provider tag — NOT
+            # any HuggingFace-style namespace within the model id, which LM Studio's
+            # /api/v0/models/{id} endpoint requires verbatim to avoid a 400.
+            model_str = await discover_active_model(settings, http_client)
+            discovered_lmstudio_name = strip_litellm_prefix(
+                model_str, prefixes=_ORIGINAL_PREFIXES
+            )
+            live = await _fetch_lmstudio(settings, http_client, discovered_lmstudio_name)
+            registry.update(live)
     elif settings.ai_provider == "claude":
         live = await _fetch_claude(settings)
         registry.update(live)

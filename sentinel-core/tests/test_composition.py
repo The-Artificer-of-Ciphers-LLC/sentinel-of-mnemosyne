@@ -639,6 +639,120 @@ async def test_startup_profile_check_does_not_raise_when_vault_errors(caplog):
     assert any("Self-profile incomplete" in r.getMessage() for r in warnings)
 
 
+# ---------------------------------------------------------------------------
+# ADR-0007 step 2 — build_provider_router composes the Active model seam
+#
+# It used to make three independent HTTP fetches for three facts: a /v1/models
+# discovery call for the model id, a registry lookup backed by
+# /api/v0/models/{id} for the context window, and a second /api/v0/models/{id}
+# fetch for the stop-sequence profile. They are now one refresh.
+# ---------------------------------------------------------------------------
+
+
+LIVE_V0_PAYLOAD = [
+    {
+        "id": "qwen/qwen3.8-27b",
+        "type": "vlm",
+        "arch": "qwen3_5",
+        "state": "loaded",
+        "max_context_length": 262144,
+        "loaded_context_length": 119552,
+        "capabilities": ["tool_use"],
+    },
+    {
+        "id": "text-embedding-nomic-embed-text-v1.5",
+        "type": "embeddings",
+        "state": "loaded",
+        "max_context_length": 2048,
+    },
+]
+
+
+def _live_lmstudio_handler(calls: list[str]):
+    """A fake LM Studio with no v1 API, serving the live v0 payload."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        calls.append(path)
+        if path.endswith("/api/v1/models"):
+            return httpx.Response(404, json={"error": "unknown endpoint"})
+        if path.endswith("/api/v0/models"):
+            return httpx.Response(200, json={"data": LIVE_V0_PAYLOAD})
+        if path.endswith("/v1/models"):
+            return httpx.Response(
+                200, json={"data": [{"id": e["id"]} for e in LIVE_V0_PAYLOAD]}
+            )
+        return httpx.Response(404, json={"error": "unmocked"})
+
+    return handler
+
+
+async def test_build_provider_router_names_the_discovered_model_and_loaded_window():
+    """The router names what LM Studio is actually serving, and budgets against
+    the LOADED window (119552), not the maximum (262144)."""
+    calls: list[str] = []
+    client = httpx.AsyncClient(transport=httpx.MockTransport(_live_lmstudio_handler(calls)))
+    settings = _settings(model_auto_discover=True, model_name="google/gemma-4-31b")
+
+    bundle = await build_provider_router(settings, client)
+
+    assert bundle.context_window == 119552
+    assert bundle.lmstudio_stop_sequences == ["<|im_end|>", "<|endoftext|>"]
+    resolved = bundle.active_model.cached_profile("chat")
+    assert resolved.model_id == "qwen/qwen3.8-27b"
+    assert resolved.model_id != settings.model_name
+
+
+async def test_build_provider_router_makes_one_model_metadata_refresh():
+    """One list fetch answers the model id, the context window AND the stop
+    sequences. The old per-model /api/v0/models/{id} fan-out is gone."""
+    calls: list[str] = []
+    client = httpx.AsyncClient(transport=httpx.MockTransport(_live_lmstudio_handler(calls)))
+
+    await build_provider_router(_settings(model_auto_discover=True), client)
+
+    list_fetches = [p for p in calls if p.endswith("/api/v0/models")]
+    per_model_fetches = [
+        p for p in calls if "/api/v0/models/" in p and not p.endswith("/api/v0/models")
+    ]
+    assert len(list_fetches) == 1, f"expected one list fetch, got {calls}"
+    assert per_model_fetches == [], (
+        f"the per-model capability/profile fan-out must be gone, got {per_model_fetches}"
+    )
+
+
+async def test_build_provider_router_never_raises_on_unreachable_backend():
+    """Its documented contract: startup must not fail because a backend is down."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    bundle = await build_provider_router(
+        _settings(model_auto_discover=True, model_name="fallback-model"), client
+    )
+
+    assert isinstance(bundle.router, ProviderRouter)
+    assert bundle.active_model is not None
+
+
+async def test_route_context_exposes_the_active_model(http_client):
+    """Plan 02 reads this to resolve a profile per request; Plan 03 reads it
+    when the bundle's three scalars go away."""
+    graph = await build_application(_settings(), http_client, vault=_FakeVault())
+
+    app = SimpleNamespace(state=SimpleNamespace())
+    app.state.route_ctx = None
+
+    assert graph.active_model is not None
+
+    from app.state import RouteContext
+
+    ctx = RouteContext(vault=graph.vault, active_model=graph.active_model)
+    assert ctx.active_model is graph.active_model
+
+
 async def test_initialize_startup_runs_both_rebuilds_without_starving_links_index(
     monkeypatch,
 ):
