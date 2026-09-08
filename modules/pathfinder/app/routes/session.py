@@ -28,7 +28,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.config import settings
 from app.llm import generate_session_recap, generate_story_so_far
-from app.resolve_model import resolve
 from app.session import (
     KNOWN_EVENT_TYPES,
     apply_npc_links,
@@ -437,11 +436,6 @@ async def _handle_show(req: SessionRequest, path: str) -> dict:
     event_lines, events_section_text = _extract_events_log_section(note)
     events_log = "\n".join(event_lines) if event_lines else "_No events logged yet._"
 
-    # ADR-0007 step 3: generate_story_so_far names the chat tier on the wire and
-    # core resolves. This call survives only because `resolve` is step 4's to
-    # delete.
-    r_chat = await resolve("chat")  # noqa: F841 - deleted in ADR-0007 step 4
-
     narrative = await generate_story_so_far(events_log)
 
     # Patch Story So Far section (D-19).
@@ -505,10 +499,6 @@ async def _handle_end(req: SessionRequest, path: str) -> dict:
     # Build NPC context block for LLM.
     npc_frontmatter_block = await _build_npc_frontmatter_block(candidate_npc_slugs, obsidian)
 
-    # ADR-0007 step 3: generate_session_recap names the chat tier on the wire and
-    # core resolves. This call survives only because `resolve` is step 4's to
-    # delete.
-    r_chat = await resolve("chat")  # noqa: F841 - deleted in ADR-0007 step 4
     ended_at = utc_now_iso()
 
     try:

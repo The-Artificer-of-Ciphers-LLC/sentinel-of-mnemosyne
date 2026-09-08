@@ -1128,6 +1128,130 @@ async def test_a_live_backend_reporting_no_tool_use_still_vetoes_structured():
         await model.for_task("structured")
 
 
+# ===========================================================================
+# Replacements for pathfinder's deleted model_selector / resolve_model tests
+# (ADR-0007 step 4, Task 2 disposition table rows 4, 14, 15 and 16).
+#
+# The other fifteen rows already had successors above. These four did not exist
+# anywhere: pathfinder's copy guarded malformed-entry filtering and three
+# prefix-normalisation cases, and the guarantees are real even though the module
+# that held them was an independently drifted duplicate. They land here because
+# this is where the behaviour lives now.
+# ===========================================================================
+
+
+async def test_malformed_entries_are_filtered_on_both_api_generations():
+    """Row 4. A junk entry must be skipped, not raise and not become a candidate.
+
+    Written for BOTH generations deliberately. v1 keys identity on ``key`` and
+    v0 on ``id``, so a guard written against one generation protects only that
+    one — and since v1 is PREFERRED, a v0-only guard would leave the path the
+    live box actually takes unprotected.
+
+    Four shapes, each seen or plausible in a real payload: an entry with no
+    identity field at all, one whose identity is ``null``, a non-dict entry, and
+    one with an empty-string identity.
+    """
+    junk_v1 = [
+        {"type": "llm", "max_context_length": 4096},  # no identity field
+        {"key": None, "type": "llm"},  # null identity
+        "not-a-dict-at-all",
+        {"key": "", "type": "llm"},  # empty identity
+        v1_chat(),
+    ]
+    junk_v0 = [
+        {"type": "llm", "max_context_length": 4096},
+        {"id": None, "type": "llm"},
+        "not-a-dict-at-all",
+        {"id": "", "type": "llm"},
+        v0_chat(),
+    ]
+
+    from_v1 = await FakeLMStudio(v1=junk_v1).source().candidates()
+    from_v0 = await FakeLMStudio(v0=junk_v0).source().candidates()
+
+    assert [p.model_id for p in from_v1.reported] == [QWEN_ID], (
+        "v1 must yield only the valid candidate"
+    )
+    assert [p.model_id for p in from_v0.reported] == [QWEN_ID], (
+        "v0 must yield only the valid candidate"
+    )
+
+
+async def test_a_prefixed_preference_matches_a_bare_candidate_id():
+    """Row 14. MODEL_PREFERRED may carry the litellm tag; candidates do not.
+
+    ``strip_litellm_prefix`` / ``ensure_litellm_prefix`` survived the teardown
+    and ``ModelProfile`` carries both spellings, but nothing tested that the
+    seam normalises before COMPARING — which is the only place it matters.
+    """
+    fake = FakeLMStudio(v0=[v0_model("mlx-community/foo"), v0_model("other/model")])
+    model = active(fake, settings(model_preferred="openai/mlx-community/foo"))
+
+    resolved = await model.for_task("chat")
+
+    assert resolved.model_id == "mlx-community/foo"
+    assert resolved.litellm_model == "openai/mlx-community/foo", (
+        "ensure_litellm_prefix must not double-prefix (row 18's guarantee)"
+    )
+
+
+async def test_a_prefixed_default_matches_a_bare_loaded_candidate():
+    """Row 15. The same normalisation on rung 5 (MODEL_NAME).
+
+    Run against a COLD ``ActiveModel``: rung 4 (last-known-good) sits above
+    rung 5, so a warm seam would decide before MODEL_NAME was ever consulted
+    and the test would pass without exercising the rung it names.
+
+    The prefixed default must be LOADED. Prefix normalisation decides whether a
+    configured id MATCHES a candidate — never whether a non-loaded id may be
+    returned.
+    """
+    fake = FakeLMStudio(v0=[v0_model("mlx-community/foo"), v0_model("other/model")])
+    model = active(fake, settings(model_name="openai/mlx-community/foo"))
+
+    resolved = await model.for_task("chat")
+
+    assert resolved.model_id == "mlx-community/foo"
+    assert model.cached_profile("chat") is not None, "premise: this was a cold resolve"
+
+
+async def test_a_prefixed_default_that_is_loaded_wins_and_one_that_is_not_raises():
+    """Row 16, the highest-value of the three — a live regression guard.
+
+    The original (``..._previously_fell_through_to_arbitrary_first_loaded``)
+    pinned the case where a prefix mismatch made the configured default look
+    absent and pathfinder's copy silently returned ``loaded[0]``. Under the new
+    ladder the fall-through target is the REFUSAL rung rather than an arbitrary
+    candidate, so both halves are asserted:
+
+    - a prefixed MODEL_NAME that IS among three loaded candidates is honoured
+      and does not fall through to any of the other two;
+    - the same prefixed MODEL_NAME when it is NOT loaded RAISES. Prefix
+      normalisation must not become a back door for a phantom.
+    """
+    loaded = [
+        v0_model("mlx-community/MiniMax-M2.7-4bit"),  # would be loaded[0]
+        v0_model("mlx-community/Some-Other-Model-4bit"),
+        v0_model("mlx-community/Qwen3.5-27B-8bit"),
+    ]
+    cfg = settings(model_name="openai/mlx-community/Qwen3.5-27B-8bit")
+
+    honoured = await active(FakeLMStudio(v0=loaded), cfg).for_task("chat")
+
+    assert honoured.model_id == "mlx-community/Qwen3.5-27B-8bit"
+    assert honoured.model_id != loaded[0]["id"], (
+        "must never fall through to an arbitrary candidate"
+    )
+
+    absent = active(
+        FakeLMStudio(v0=loaded),
+        settings(model_name="openai/mlx-community/Not-Loaded-At-All"),
+    )
+    with pytest.raises(ModelSelectorError):
+        await absent.for_task("chat")
+
+
 async def test_static_model_source_does_no_io():
     """It is the test substitute, so it must be constructible from a plain list."""
     source = StaticModelSource([profile("a/model"), profile("b/model")])

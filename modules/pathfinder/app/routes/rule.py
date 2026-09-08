@@ -29,7 +29,6 @@ from app.llm import (
     generate_ruling_fallback,
     generate_ruling_from_passages,
 )
-from app.resolve_model import resolve
 from app.rule_cache_catalog import RuleCacheCatalog
 from app.rule_query import (
     RuleQueryCompositionError,
@@ -170,7 +169,6 @@ async def rule_query(req: RuleQueryRequest) -> JSONResponse:
                 rules_index=rules_index,  # type: ignore[arg-type]
                 aon_url_map=aon_url_map,  # type: ignore[arg-type]
                 settings=settings,
-                resolve_model=resolve,
                 keyword_classify_topic=keyword_classify_topic,
                 classify_rule_topic=classify_rule_topic,
                 embed_texts=embed_texts,

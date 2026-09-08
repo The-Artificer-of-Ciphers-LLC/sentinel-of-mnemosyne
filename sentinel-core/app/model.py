@@ -116,6 +116,21 @@ def _prefixed(model_id: str, provider_prefix: str) -> str:
     return f"{provider_prefix}{model_id}"
 
 
+def _unprefixed(model_id: str) -> str:
+    """Strip a leading litellm provider tag, preserving HF-style namespaces.
+
+    The inverse of :func:`_prefixed`, and the reason configuration can be
+    written either way: an operator who sets ``MODEL_NAME=openai/qwen/qwen3.8-27b``
+    (copying what the logs print) means the same model LM Studio lists bare as
+    ``qwen/qwen3.8-27b``. A naive ``split("/", 1)[-1]`` would mangle the
+    HuggingFace namespace into ``qwen3.8-27b``, which matches nothing.
+    """
+    for prefix in _LITELLM_PROVIDER_PREFIXES:
+        if model_id.startswith(prefix):
+            return model_id[len(prefix):]
+    return model_id
+
+
 def _positive_int(value: Any) -> int | None:
     """Return ``value`` as a positive int, or None. Booleans are not ints here."""
     if isinstance(value, bool) or not isinstance(value, int):
@@ -646,6 +661,14 @@ class ActiveModel:
     that model; the cost is paid with a WARNING naming the model, the task kind
     and the missing capability. A pin naming a model the backend never reported
     is ignored and the ladder continues.
+
+    **Every configured id is matched with the litellm provider tag normalised
+    away** (rungs 2, 3 and 5). LM Studio lists ``qwen/qwen3.8-27b`` while the
+    logs and every call string say ``openai/qwen/qwen3.8-27b``, so an operator
+    who copies one form into configuration must not silently get the refusal
+    rung. Normalisation decides only whether a configured id MATCHES a reported
+    candidate; it never widens WHICH candidates exist, so a prefixed id that is
+    not loaded still fails to match and still reaches rung 7.
     """
 
     def __init__(
@@ -772,7 +795,9 @@ class ActiveModel:
                 "(ADR-0007 decision 4)."
             )
 
-        reported_ids = {profile.model_id for profile in candidates.reported}
+        reported_ids = {
+            _unprefixed(profile.model_id) for profile in candidates.reported
+        }
 
         if candidates.loaded:
             winner = self._run_ladder(kind, candidates.loaded, reported_ids)
@@ -828,7 +853,22 @@ class ActiveModel:
                         ", ".join(sorted(required - profile.capabilities)) or "unknown",
                     )
         filtered_ids = {profile.model_id for profile in filtered}
-        by_id = {profile.model_id: profile for profile in tier}
+
+        # Configuration and the backend need not agree on the litellm provider
+        # tag. LM Studio lists ``qwen/qwen3.8-27b``; the logs, the registry and
+        # every litellm call string say ``openai/qwen/qwen3.8-27b``, and an
+        # operator copying either into MODEL_NAME / MODEL_PREFERRED means the
+        # same model. Both spellings resolve to the same candidate.
+        #
+        # This normalisation decides whether a configured id MATCHES a reported
+        # candidate. It is emphatically NOT a way for a non-loaded id to be
+        # returned: every rung still looks the result up in this map, which
+        # contains only candidates the backend reported.
+        by_id: dict[str, ModelProfile] = {}
+        for profile in tier:
+            by_id.setdefault(profile.model_id, profile)
+            by_id.setdefault(_unprefixed(profile.model_id), profile)
+            by_id.setdefault(profile.litellm_model, profile)
 
         # Rungs 2 and 3 — operator pins, in order. Both are absolute over the
         # capability filter and both are still bound by the candidate set.
@@ -863,7 +903,7 @@ class ActiveModel:
         if remembered is not None and remembered.model_id in filtered_ids:
             winner = by_id[remembered.model_id]
             configured = self._setting("model_name")
-            if configured and configured != winner.model_id:
+            if configured and _unprefixed(configured) != _unprefixed(winner.model_id):
                 logger.info(
                     "Model %r selected for task %r as last-known-good, preferred over "
                     "MODEL_NAME=%r — configuration and the running system name "
@@ -908,7 +948,7 @@ class ActiveModel:
         a model the backend DID report but that is not in the tier currently
         being searched — that is the ordinary JIT case, not a misconfiguration.
         """
-        if value in reported_ids:
+        if _unprefixed(value) in reported_ids:
             return
         logger.info(
             "%s=%r ignored — the backend does not report that model, so it cannot be "
