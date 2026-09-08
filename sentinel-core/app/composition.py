@@ -102,6 +102,9 @@ class AppGraph:
     # pinned at startup. Defaulted so test fakes constructed before this field
     # existed keep working.
     active_model: "ActiveModel | None" = None
+    # See ProviderRouterBundle.primary_model — the seam the chat path may resolve
+    # through, which is ``active_model`` only when LM Studio is the primary.
+    primary_model: "ActiveModel | None" = None
 
 
 @dataclass(frozen=True)
@@ -122,6 +125,12 @@ class ProviderRouterBundle:
     # The seam the three scalars above are on their way to being replaced by
     # (ADR-0007 step 4). Present from step 2 so the request path can reach it.
     active_model: "ActiveModel | None" = None
+    # The subset of ``active_model`` that describes the PRIMARY provider: the same
+    # object when AI_PROVIDER is lmstudio, and None otherwise. ``active_model`` is
+    # LM Studio's seam whatever AI_PROVIDER says (SC-3), so the chat path must not
+    # resolve through it for a different backend — it would budget against, and
+    # name, models from the wrong catalogue.
+    primary_model: "ActiveModel | None" = None
 
 
 async def build_active_model(
@@ -336,7 +345,35 @@ async def build_provider_router(
                 settings.ai_fallback_provider,
             )
 
-    router = ProviderRouter(primary, fallback_provider=fallback)
+    # ADR-0007 step 3. `active_model` is LM STUDIO's seam unconditionally (SC-3:
+    # provider_map["lmstudio"] must name a model LM Studio serves whatever
+    # AI_PROVIDER says). It is therefore handed to the router ONLY when LM Studio
+    # is also the primary — giving an ollama primary a seam that answers with LM
+    # Studio's catalogue would make the not-served retry re-resolve into a model
+    # that backend has never heard of, which is a worse failure than the 404 it
+    # is trying to recover from.
+    primary_model = active_model if settings.ai_provider == "lmstudio" else None
+
+    # The fallback's OWN seam (ADR decision 8 / Flagged call 12). Config-derived
+    # and I/O-free: `StaticModelSource` is the whole source list, so resolving it
+    # costs nothing and cannot hand Anthropic LM Studio's base URL.
+    fallback_model = None
+    if fallback is not None:
+        fallback_model = ActiveModel(
+            [
+                await static_model_source(
+                    settings, provider=settings.ai_fallback_provider
+                )
+            ],
+            settings,
+        )
+
+    router = ProviderRouter(
+        primary,
+        fallback_provider=fallback,
+        active_model=primary_model,
+        fallback_model=fallback_model,
+    )
     logger.info(
         f"AI provider: {settings.ai_provider} "
         f"(fallback: {settings.ai_fallback_provider})"
@@ -349,6 +386,7 @@ async def build_provider_router(
         lmstudio_stop_sequences=lmstudio_stop_sequences,
         ai_provider_name=settings.ai_provider,
         active_model=active_model,
+        primary_model=primary_model,
     )
 
 
@@ -396,6 +434,7 @@ async def build_application(
         lmstudio_stop_sequences = provider_bundle.lmstudio_stop_sequences
         ai_provider_name = provider_bundle.ai_provider_name
         active_model = provider_bundle.active_model
+        primary_model = provider_bundle.primary_model
     else:
         # Caller supplied an ai_provider directly (test fake) — derive
         # registry/context/stop_sequences from the supplied bundle if any,
@@ -407,12 +446,14 @@ async def build_application(
             lmstudio_stop_sequences = provider_bundle.lmstudio_stop_sequences
             ai_provider_name = provider_bundle.ai_provider_name
             active_model = provider_bundle.active_model
+            primary_model = provider_bundle.primary_model
         else:
             model_registry = {}
             context_window = 4096
             lmstudio_stop_sequences = []
             ai_provider_name = settings.ai_provider
             active_model = None
+            primary_model = None
 
     if vault is None:
         vault = ObsidianVault(
@@ -463,6 +504,7 @@ async def build_application(
             injection_filter=injection_filter,
             output_scanner=output_scanner,
             recall=recall,
+            active_model=primary_model,
         )
 
     if module_registry is None:
@@ -508,6 +550,7 @@ async def build_application(
         embeddings=embeddings,
         note_classifier_fn=note_classifier_fn,
         active_model=active_model,
+        primary_model=primary_model,
     )
 
 

@@ -62,7 +62,12 @@ async def test_build_message_request_records_the_resolved_model_not_model_name()
 
 
 async def test_build_message_request_falls_back_to_model_name_without_a_seam():
-    """The three _LazyRouteCtx fixtures (replaced in Plan 02) have no seam."""
+    """A context with no seam still records a name.
+
+    Reachable in production whenever AI_PROVIDER is not lmstudio: the seam is LM
+    Studio's unconditionally (SC-3), so composition deliberately does not wire it
+    to a chat path talking to a different backend.
+    """
     ctx = SimpleNamespace(
         settings=SimpleNamespace(model_name="configured-model"),
         context_window=8192,

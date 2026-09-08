@@ -5,6 +5,11 @@ from httpx import AsyncClient, ASGITransport
 os.environ.setdefault("SENTINEL_API_KEY", "test-key-for-pytest")
 
 from app.main import app
+from tests.conftest import (
+    LazyStateProxy,
+    build_test_active_model,
+    build_test_route_context,
+)
 
 # Sentinel value used by teardown to distinguish "attribute was absent" from
 # "attribute was set to None".
@@ -82,35 +87,26 @@ async def test_auth_accepts_valid_key():
         # now reads app.state.message_processor directly (no factory).
         from app.services.message_processing import MessageProcessor
 
+        # ADR-0007 step 3: a real ActiveModel over a real StaticModelSource, from
+        # the shared conftest builder, replaces this module's hand-rolled
+        # route-context fake.
+        active_model = build_test_active_model(
+            context_window_provider=lambda: app.state.context_window
+        )
         app.state.message_processor = MessageProcessor(
             vault=app.state.vault,
             ai_provider=app.state.ai_provider,
             injection_filter=app.state.injection_filter,
             output_scanner=app.state.output_scanner,
+            active_model=active_model,
         )
 
-        class _LazyRouteCtx:
-            @property
-            def vault(self):
-                return app.state.vault
-
-            @property
-            def processor(self):
-                return app.state.message_processor
-
-            @property
-            def settings(self):
-                return app.state.settings
-
-            @property
-            def context_window(self):
-                return app.state.context_window
-
-            @property
-            def lmstudio_stop_sequences(self):
-                return getattr(app.state, "lmstudio_stop_sequences", [])
-
-        app.state.route_ctx = _LazyRouteCtx()
+        app.state.route_ctx = build_test_route_context(
+            vault=LazyStateProxy(lambda: app.state.vault),
+            processor=LazyStateProxy(lambda: app.state.message_processor),
+            settings=app.state.settings,
+            active_model=active_model,
+        )
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(

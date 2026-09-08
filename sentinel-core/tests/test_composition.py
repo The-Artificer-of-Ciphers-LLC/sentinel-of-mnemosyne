@@ -164,7 +164,7 @@ async def test_lmstudio_provider_construction_args_pinned_after_openai_compatibl
             self.api_key = api_key
             captured[model_string] = self
 
-        async def complete(self, messages, stop=None, temperature=None):
+        async def complete(self, messages, profile=None, stop=None, temperature=None):
             return f"model={self.model_string}|api_base={self.api_base}|api_key={self.api_key}"
 
     monkeypatch.setattr("app.composition.LiteLLMProvider", _CapturingProvider)

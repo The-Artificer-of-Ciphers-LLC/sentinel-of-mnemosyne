@@ -12,6 +12,11 @@ from app.config import settings
 from app.services.message_processing import MessageProcessor
 from app.services.provider_router import ProviderUnavailableError
 from app.services.recall import Recall
+from tests.conftest import (
+    LazyStateProxy,
+    build_test_active_model,
+    build_test_route_context,
+)
 
 # Auth header required by APIKeyMiddleware for all POST /message requests
 AUTH_HEADER = {"X-Sentinel-Key": "test-key-for-pytest"}
@@ -74,6 +79,15 @@ def default_app_state(mock_ai_provider):
     # state is set once during lifespan. Tests that need to assert against
     # the singleton itself can overwrite app.state.message_processor with a
     # concrete instance/stub (this proxy will be replaced).
+    # ADR-0007 step 3: a REAL ActiveModel over a REAL StaticModelSource replaces
+    # the hand-rolled route-context fake this module used to carry. The window is
+    # read from app.state on every refresh so the long-standing
+    # `app.state.context_window = N` idiom below still steers the budget — but it
+    # now steers it THROUGH the seam, which is the path production uses.
+    app.state.active_model = build_test_active_model(
+        context_window_provider=lambda: app.state.context_window
+    )
+
     class _LazyTestProcessor:
         async def process(self, req):
             current = MessageProcessor(
@@ -82,41 +96,25 @@ def default_app_state(mock_ai_provider):
                 injection_filter=app.state.injection_filter,
                 output_scanner=app.state.output_scanner,
                 recall=Recall(vault=app.state.vault),
+                active_model=app.state.active_model,
             )
             return await current.process(req)
 
     app.state.message_processor = _LazyTestProcessor()
 
-    class _LazyRouteCtx:
-        @property
-        def vault(self):
-            return app.state.vault
+    lazy_vault = LazyStateProxy(lambda: app.state.vault)
 
-        @property
-        def processor(self):
-            return app.state.message_processor
+    async def _lazy_classify(*args, **kwargs):
+        return await app.state.classify(*args, **kwargs)
 
-        @property
-        def settings(self):
-            return app.state.settings
-
-        @property
-        def context_window(self):
-            return app.state.context_window
-
-        @property
-        def lmstudio_stop_sequences(self):
-            return getattr(app.state, "lmstudio_stop_sequences", [])
-
-        @property
-        def classify(self):
-            return getattr(app.state, "classify", None)
-
-        @property
-        def recall(self):
-            return Recall(vault=app.state.vault)
-
-    app.state.route_ctx = _LazyRouteCtx()
+    app.state.route_ctx = build_test_route_context(
+        vault=lazy_vault,
+        processor=LazyStateProxy(lambda: app.state.message_processor),
+        settings=app.state.settings,
+        classify=_lazy_classify,
+        recall=Recall(vault=lazy_vault),
+        active_model=app.state.active_model,
+    )
 
     return mock_obsidian
 

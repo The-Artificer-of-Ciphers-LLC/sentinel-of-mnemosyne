@@ -20,6 +20,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 from app.main import app
 from app.services.recall import RetentionPolicy, SessionSummary
+from tests.conftest import (
+    LazyStateProxy,
+    build_test_active_model,
+    build_test_route_context,
+)
 
 AUTH_HEADERS = {"X-Sentinel-Key": "test-key-for-pytest"}
 
@@ -91,11 +96,20 @@ def setup_app_state():
     # the route reads app.state.message_processor directly (no factory).
     from app.services.message_processing import MessageProcessor
 
+    # ADR-0007 step 3: a real ActiveModel over a real StaticModelSource, from the
+    # shared conftest builder, replaces this module's hand-rolled route-context
+    # fake. The chat path resolves its profile through it.
+    active_model = build_test_active_model(
+        context_window_provider=lambda: app.state.context_window
+    )
+    app.state.active_model = active_model
+
     app.state.message_processor = MessageProcessor(
         vault=mock_obsidian,
         ai_provider=mock_ai_provider,
         injection_filter=mock_filter,
         output_scanner=mock_scanner,
+        active_model=active_model,
     )
 
     async def _noop_classify(text, user_topic=None):
@@ -104,32 +118,16 @@ def setup_app_state():
 
     app.state.classify = _noop_classify
 
-    class _LazyRouteCtx:
-        @property
-        def vault(self):
-            return app.state.vault
+    async def _lazy_classify(*args, **kwargs):
+        return await app.state.classify(*args, **kwargs)
 
-        @property
-        def processor(self):
-            return app.state.message_processor
-
-        @property
-        def settings(self):
-            return app.state.settings
-
-        @property
-        def context_window(self):
-            return app.state.context_window
-
-        @property
-        def lmstudio_stop_sequences(self):
-            return getattr(app.state, "lmstudio_stop_sequences", [])
-
-        @property
-        def classify(self):
-            return getattr(app.state, "classify", None)
-
-    app.state.route_ctx = _LazyRouteCtx()
+    app.state.route_ctx = build_test_route_context(
+        vault=LazyStateProxy(lambda: app.state.vault),
+        processor=LazyStateProxy(lambda: app.state.message_processor),
+        settings=app.state.settings,
+        classify=_lazy_classify,
+        active_model=active_model,
+    )
 
 
 async def test_obsidian_context_injected_into_llm_prompt():
