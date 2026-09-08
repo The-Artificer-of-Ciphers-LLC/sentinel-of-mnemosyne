@@ -153,7 +153,9 @@ class MessageProcessor:
             raise MessageProcessingError("context_overflow", str(exc)) from exc
 
         try:
-            content = await self._ai_provider.complete(messages)
+            # req.stop_sequences was previously resolved by the factory and then
+            # dropped here because the Protocol didn't declare a stop parameter.
+            content = await self._ai_provider.complete(messages, stop=req.stop_sequences)
         except ProviderUnavailableError as exc:
             raise MessageProcessingError("provider_unavailable", str(exc)) from exc
         except ContextLengthError as exc:

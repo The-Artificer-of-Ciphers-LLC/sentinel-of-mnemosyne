@@ -93,10 +93,9 @@ class LiteLLMProvider:
               Passed through to litellm.acompletion when non-empty so the LLM halts
               at the correct end-of-turn token for the loaded model architecture.
 
-        temperature: optional sampling temperature. Pinned by callers (e.g. the
-              chat path uses 0.4) to bound message-to-message reply-style variance
-              when the underlying model has multiple attractor states (lecture-mode
-              vs friend-mode). Pass None to use litellm's default.
+        temperature: optional sampling temperature. Forwarded to litellm.acompletion
+              when not None. No caller currently pins a temperature for the chat
+              path. Pass None to use litellm's default.
         """
         kwargs: dict = {
             "model": self._model_string,

@@ -68,9 +68,9 @@ class ProviderRouter:
               Fallback provider intentionally does NOT receive stop sequences — cloud
               models (Claude) manage termination via their own chat templates.
 
-        temperature: optional sampling temperature forwarded to the primary provider.
-              Pinned by the chat path to bound reply-style variance. Fallback provider
-              also receives it so cloud-model behavior matches local behavior.
+        temperature: optional sampling temperature forwarded to the primary provider
+              when not None. No caller currently pins a chat temperature. Fallback
+              provider also receives it so cloud-model behavior matches local behavior.
         """
         try:
             return await self._primary.complete(

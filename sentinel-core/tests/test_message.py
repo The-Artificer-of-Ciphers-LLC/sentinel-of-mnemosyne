@@ -285,7 +285,7 @@ async def test_context_injected_when_file_exists(obsidian_with_context, mock_ai_
     """When Obsidian returns user context, ai_provider receives a 3-message messages array."""
     captured_messages = []
 
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Hello from AI"
 
@@ -309,7 +309,7 @@ async def test_context_injected_messages_shape(obsidian_with_context, mock_ai_pr
     """When Obsidian returns user context, ai_provider gets 4-message array (system + context pair + user)."""
     captured_messages = []
 
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Hello from AI"
 
@@ -343,7 +343,7 @@ async def test_no_injection_when_user_file_missing(obsidian_no_context, mock_ai_
     """
     captured_messages = []
 
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Hello from AI"
 
@@ -569,7 +569,7 @@ async def test_injection_filter_applied_to_user_input(mock_ai_provider, mock_inj
     """POST /message strips injection phrases before reaching AI provider."""
     captured_messages = []
 
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Clean response"
 
@@ -598,7 +598,7 @@ async def test_injection_filter_clean_input_unchanged(mock_ai_provider, mock_inj
     """POST /message passes clean content through unchanged to AI provider."""
     captured_messages = []
 
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Clean response"
 
@@ -751,7 +751,7 @@ async def test_warm_tier_called_on_every_message(mock_ai_provider):
 async def test_warm_tier_injected_when_results_present(obsidian_with_search_results, mock_ai_provider):
     """When find() returns results, a 2nd user/assistant pair is injected (D-04)."""
     captured_messages = []
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Hello from AI"
     mock_ai_provider.complete.side_effect = capturing_complete
@@ -782,7 +782,7 @@ async def test_warm_tier_skipped_when_empty(mock_ai_provider):
     """
     # default_app_state already sets find.return_value = []
     captured_messages = []
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Hello from AI"
     mock_ai_provider.complete.side_effect = capturing_complete
@@ -822,7 +822,7 @@ async def test_warm_tier_truncated_independently(mock_ai_provider):
 async def test_warm_tier_both_tiers_five_messages(obsidian_with_context_and_search, mock_ai_provider):
     """When both hot and warm tiers have content, messages array has 6 entries (system + hot pair + vault pair + user)."""
     captured_messages = []
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Hello from AI"
     mock_ai_provider.complete.side_effect = capturing_complete
@@ -875,7 +875,7 @@ async def test_warm_tier_skipped_when_all_results_below_threshold(mock_ai_provid
     ]
     captured_messages = []
 
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Got it"
 
@@ -936,7 +936,7 @@ async def test_warm_tier_injected_when_score_meets_threshold(mock_ai_provider):
     mixed_score_obsidian.read_note.side_effect = _read_note
     captured_messages = []
 
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Great, noted!"
 
@@ -979,7 +979,7 @@ async def test_warm_tier_result_missing_score_defaults_to_negative_infinity(mock
     ]
     captured_messages = []
 
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "OK"
 
@@ -1046,7 +1046,7 @@ async def test_warm_tier_excludes_ops_session_and_sweep_paths(mock_ai_provider):
 
     captured_messages = []
 
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Got it"
 
@@ -1113,7 +1113,7 @@ async def test_warm_tier_injects_full_note_content_not_snippet(mock_ai_provider)
 
     captured_messages = []
 
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Here are the lyrics..."
 
