@@ -229,13 +229,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
 
         async def _rule_embed_fn(texts: list[str]) -> list[list[float]]:
-            # Closure captures settings at definition time so env overrides of
-            # rules_embedding_model are honoured on every call.
-            return await embed_texts(
-                texts,
-                api_base=settings.litellm_api_base or None,
-                model=settings.rules_embedding_model,
-            )
+            # ADR-0007 step 3: the model/api_base arguments this closure used to
+            # pass were never forwarded — core has owned the embedding model since
+            # Phase 43-03, and ADR decision 5 keeps it OBSERVED rather than
+            # re-pointed. The closure is now a pure pass-through.
+            return await embed_texts(texts)
 
         # L-10 (revised, T-lmstudio-provider-switch): build_rules_index awaits
         # _rule_embed_fn -> embed_texts, which raises if the configured backend is

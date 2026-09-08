@@ -437,14 +437,12 @@ async def _handle_show(req: SessionRequest, path: str) -> dict:
     event_lines, events_section_text = _extract_events_log_section(note)
     events_log = "\n".join(event_lines) if event_lines else "_No events logged yet._"
 
-    r_chat = await resolve("chat")
-    model = r_chat.model
-    profile_chat = r_chat.profile
-    api_base = settings.litellm_api_base or None
+    # ADR-0007 step 3: generate_story_so_far names the chat tier on the wire and
+    # core resolves. This call survives only because `resolve` is step 4's to
+    # delete.
+    r_chat = await resolve("chat")  # noqa: F841 - deleted in ADR-0007 step 4
 
-    narrative = await generate_story_so_far(
-        events_log, model=model, api_base=api_base, profile=profile_chat
-    )
+    narrative = await generate_story_so_far(events_log)
 
     # Patch Story So Far section (D-19).
     try:
@@ -507,19 +505,16 @@ async def _handle_end(req: SessionRequest, path: str) -> dict:
     # Build NPC context block for LLM.
     npc_frontmatter_block = await _build_npc_frontmatter_block(candidate_npc_slugs, obsidian)
 
-    r_chat = await resolve("chat")
-    model = r_chat.model
-    profile_chat = r_chat.profile
-    api_base = settings.litellm_api_base or None
+    # ADR-0007 step 3: generate_session_recap names the chat tier on the wire and
+    # core resolves. This call survives only because `resolve` is step 4's to
+    # delete.
+    r_chat = await resolve("chat")  # noqa: F841 - deleted in ADR-0007 step 4
     ended_at = utc_now_iso()
 
     try:
         recap_data = await generate_session_recap(
             events_log=events_log,
             npc_frontmatter_block=npc_frontmatter_block,
-            model=model,
-            api_base=api_base,
-            profile=profile_chat,
         )
     except Exception as exc:
         # D-31: LLM failure → write skeleton note; hint --retry-recap.

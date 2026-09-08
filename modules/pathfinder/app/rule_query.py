@@ -117,22 +117,17 @@ async def execute_rule_query(
 
     q_norm = normalize_query(query)
     q_hash = query_hash(query)
-    r_chat = await deps.resolve_model("chat")
-    r_structured = await deps.resolve_model("structured")
-    model_chat = r_chat.model
-    model_structured = r_structured.model
-    api_base = deps.settings.litellm_api_base or None
-    profile_chat = r_chat.profile
-    profile_structured = r_structured.profile
+    # ADR-0007 step 3: nothing below consumes these any more — the llm.py
+    # helpers name a task tier and sentinel-core resolves the model (decision 7).
+    # The two calls survive this step ONLY because `resolve_model` and the
+    # `RuleQueryDependencies.resolve_model` field are step 4's to delete; keeping
+    # them here is what makes that step a pure deletion rather than a rewrite.
+    r_chat = await deps.resolve_model("chat")  # noqa: F841 - deleted in ADR-0007 step 4
+    r_structured = await deps.resolve_model("structured")  # noqa: F841 - ditto
 
     topic = deps.keyword_classify_topic(query)
     if topic is None:
-        topic = await deps.classify_rule_topic(
-            query,
-            model=model_structured,
-            api_base=api_base,
-            profile=profile_structured,
-        )
+        topic = await deps.classify_rule_topic(query)
     topic = coerce_topic(topic)
 
     cache_path = f"{RULING_CACHE_PATH_PREFIX}/{topic}/{q_hash}.md"
@@ -163,11 +158,7 @@ async def execute_rule_query(
         logger.warning("rule_query: cache malformed at %s; re-composing", cache_path)
 
     try:
-        query_vecs = await deps.embed_texts(
-            [q_norm],
-            api_base=api_base,
-            model=deps.settings.rules_embedding_model,
-        )
+        query_vecs = await deps.embed_texts([q_norm])
     except Exception as exc:
         logger.error("rule_query: embed failed: %s", exc)
         raise RuleQueryEmbeddingError(str(exc)) from exc
@@ -254,17 +245,11 @@ async def execute_rule_query(
                 query=query,
                 passages=enriched,
                 topic=topic,
-                model=model_chat,
-                api_base=api_base,
-                profile=profile_chat,
             )
         else:
             result = await deps.generate_ruling_fallback(
                 query=query,
                 topic=topic,
-                model=model_chat,
-                api_base=api_base,
-                profile=profile_chat,
             )
     except Exception as exc:
         logger.error(

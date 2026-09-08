@@ -23,7 +23,6 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
-from app.config import settings
 from app.dialogue import (
     apply_mood_delta,
     build_system_prompt,
@@ -362,13 +361,10 @@ async def create_npc(req: NPCCreateRequest) -> JSONResponse:
     # LLM field extraction — D-06, D-07
     # Task kind "structured" — requires function-calling-capable model for reliable JSON
     try:
-        r = await resolve("structured")
+        r = await resolve("structured")  # noqa: F841 - deleted in ADR-0007 step 4
         fields = await extract_npc_fields(
             name=req.name,
             description=req.description,
-            model=r.model,
-            api_base=settings.litellm_api_base or None,
-            profile=r.profile,
         )
     except Exception as exc:
         logger.error("LLM extraction failed for NPC %s: %s", req.name, exc)
@@ -416,13 +412,10 @@ async def update_npc(req: NPCUpdateRequest) -> JSONResponse:
     # LLM extracts changed fields from correction string (D-10)
     # Task kind "structured" — same JSON-extraction profile as /create
     try:
-        r = await resolve("structured")
+        r = await resolve("structured")  # noqa: F841 - deleted in ADR-0007 step 4
         changed = await update_npc_fields(
             current_note=note_text,
             correction=req.correction,
-            model=r.model,
-            api_base=settings.litellm_api_base or None,
-            profile=r.profile,
         )
     except Exception as exc:
         logger.error("LLM update extraction failed for NPC %s: %s", req.name, exc)
@@ -706,17 +699,11 @@ async def token_prompt(req: NPCOutputRequest) -> JSONResponse:
     if note_text is None:
         raise HTTPException(status_code=404, detail={"error": "NPC not found", "slug": slug})
     fields = _parse_frontmatter(note_text)
-    # Task kind "fast" scores loaded models toward the smallest one with >=4K
-    # context (app/model_selector.py); no max_tokens cap is applied. The
-    # resolved model/profile below are vestigial and discarded — sentinel-core's
-    # /provider/complete resolves the actual model itself (D-09, SC-6).
-    r = await resolve("fast")
-    description = await generate_mj_description(
-        fields=fields,
-        model=r.model,
-        api_base=settings.litellm_api_base or None,
-        profile=r.profile,
-    )
+    # ADR-0007 step 3: the "fast" tier is now named by generate_mj_description
+    # itself on the wire, not resolved here. This call survives only because
+    # `resolve` is step 4's to delete.
+    r = await resolve("fast")  # noqa: F841 - deleted in ADR-0007 step 4
+    description = await generate_mj_description(fields=fields)
     prompt = build_mj_prompt(fields, description)
     return JSONResponse({"prompt": prompt, "slug": slug})
 
@@ -909,11 +896,10 @@ async def say_npc(req: NPCSayRequest) -> JSONResponse:
         scene_id, scene_roster, len(req.party_line), len(capped_history),
     )
 
-    # Step 4: Resolve chat-tier model and profile (D-27). Single call up front; same model used per turn.
-    r_chat = await resolve("chat")
-    model = r_chat.model
-    profile_chat = r_chat.profile
-    api_base = settings.litellm_api_base or None
+    # Step 4: ADR-0007 step 3 — generate_npc_reply names the chat tier on the
+    # wire and core resolves. This call survives only because `resolve` is
+    # step 4's to delete.
+    r_chat = await resolve("chat")  # noqa: F841 - deleted in ADR-0007 step 4
 
     # Step 5: Serial round-robin (D-19) — each NPC sees prior NPCs' replies in this turn.
     this_turn_replies: list[dict] = []
@@ -938,9 +924,6 @@ async def say_npc(req: NPCSayRequest) -> JSONResponse:
         llm_result = await generate_npc_reply(
             system_prompt=sys_prompt,
             user_prompt=usr_prompt,
-            model=model,
-            api_base=api_base,
-            profile=profile_chat,
         )
 
         # Mood math (D-07): zero or clamped no-op skips the vault write.

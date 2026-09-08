@@ -111,3 +111,136 @@ async def test_provider_complete_422_on_content_too_long():
         resp = await client.post("/provider/complete", json=too_long, headers=AUTH_HEADERS)
 
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# ADR-0007 step 3 — a task name crosses the wire, and core resolves
+# ---------------------------------------------------------------------------
+
+
+def _seam(*profiles):
+    """A real ActiveModel over a real StaticModelSource."""
+    from types import SimpleNamespace
+
+    from app.model import ActiveModel, StaticModelSource
+
+    return ActiveModel([StaticModelSource(list(profiles))], SimpleNamespace())
+
+
+def _profile(model_id: str, *, capabilities=frozenset({"tool_use"})):
+    from app.model import ModelProfile
+
+    return ModelProfile(
+        model_id=model_id,
+        litellm_model=f"openai/{model_id}",
+        api_base="http://lmstudio.test/v1",
+        context_window=119552,
+        capabilities=capabilities,
+    )
+
+
+async def test_task_defaults_to_chat_and_resolves_core_side(mock_ai_provider):
+    """No task field behaves exactly as before for the caller: core resolves the
+    chat profile and answers. pf2e sends nothing about models."""
+    app.state.route_ctx = RouteContext(
+        vault=AsyncMock(),
+        ai_provider=mock_ai_provider,
+        ai_provider_name="lmstudio",
+        active_model=_seam(_profile("qwen/qwen3.8-27b")),
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/provider/complete", json=_VALID_BODY, headers=AUTH_HEADERS)
+
+    assert resp.status_code == 200, resp.text
+    resolved = mock_ai_provider.complete.await_args.args[1]
+    assert resolved.model_id == "qwen/qwen3.8-27b"
+    assert resolved.task_kind == "chat"
+
+
+async def test_task_structured_resolves_the_structured_profile(mock_ai_provider):
+    """`task: "structured"` narrows to a tool-use-capable model.
+
+    Two models are loaded; only one reports tool_use, so the capability filter —
+    not a guess — decides. A chat request would be ambiguous between them.
+    """
+    app.state.route_ctx = RouteContext(
+        vault=AsyncMock(),
+        ai_provider=mock_ai_provider,
+        ai_provider_name="lmstudio",
+        active_model=_seam(
+            _profile("qwen/qwen3.8-27b"),
+            _profile("some/vision-only", capabilities=frozenset()),
+        ),
+    )
+    body = dict(_VALID_BODY, task="structured")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/provider/complete", json=body, headers=AUTH_HEADERS)
+
+    assert resp.status_code == 200, resp.text
+    resolved = mock_ai_provider.complete.await_args.args[1]
+    assert resolved.model_id == "qwen/qwen3.8-27b"
+    assert resolved.task_kind == "structured"
+
+
+async def test_unrecognised_task_is_422_before_any_llm_call(mock_ai_provider):
+    """Fail before cost, like the message-count and content-length guards.
+
+    Silently falling back to chat would answer a structured request with a chat
+    model and let the caller parse prose as JSON.
+    """
+    body = dict(_VALID_BODY, task="creative")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/provider/complete", json=body, headers=AUTH_HEADERS)
+
+    assert resp.status_code == 422
+    mock_ai_provider.complete.assert_not_called()
+
+
+async def test_response_model_field_is_the_resolved_model_not_the_provider_name(
+    mock_ai_provider,
+):
+    """Defect B on the HTTP path.
+
+    The configured provider name and the model id are deliberately different
+    here: a caller asking core what answered used to get back `lmstudio`.
+    """
+    app.state.route_ctx = RouteContext(
+        vault=AsyncMock(),
+        ai_provider=mock_ai_provider,
+        ai_provider_name="lmstudio",
+        active_model=_seam(_profile("qwen/qwen3.8-27b")),
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/provider/complete", json=_VALID_BODY, headers=AUTH_HEADERS)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["model"] == "qwen/qwen3.8-27b"
+    assert resp.json()["model"] != "lmstudio"
+
+
+async def test_resolution_failure_is_a_503_that_leaks_nothing(mock_ai_provider):
+    """An undisambiguatable backend is a 503 with a generic detail — not an
+    unhandled 500, not a phantom model, and not an inventory listing.
+
+    Two equally-plausible chat models are loaded and nothing disambiguates them,
+    so resolution refuses (ADR decision 4 as amended). The response must not name
+    either of them or the api_base, however tempting it is to "help" by saying
+    what WAS loaded.
+    """
+    app.state.route_ctx = RouteContext(
+        vault=AsyncMock(),
+        ai_provider=mock_ai_provider,
+        ai_provider_name="lmstudio",
+        active_model=_seam(
+            _profile("qwen/qwen3.8-27b"), _profile("google/gemma-4-31b")
+        ),
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/provider/complete", json=_VALID_BODY, headers=AUTH_HEADERS)
+
+    assert resp.status_code == 503
+    body_text = resp.text
+    assert "qwen" not in body_text
+    assert "gemma" not in body_text
+    assert "lmstudio.test" not in body_text
+    mock_ai_provider.complete.assert_not_called()

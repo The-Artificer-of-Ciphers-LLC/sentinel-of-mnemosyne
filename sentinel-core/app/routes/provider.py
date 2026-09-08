@@ -12,8 +12,15 @@ in the operator's Discord memory here would be architecturally wrong.
 
 Authentication: APIKeyMiddleware (global, app/main.py) already covers every
 non-/health route, including this one — no new auth code is added here.
+
+ADR-0007 step 3: what crosses the wire is a TASK NAME, not a profile. The ADR
+says this endpoint "gains the profile argument", but decision 7 says core is the
+only process that asks the backend which model is loaded — a pathfinder that
+constructed a profile would be a second discoverer with its own cache, free to
+disagree with core's. Sending the task and resolving core-side satisfies both.
 """
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -43,6 +50,12 @@ class ProviderCompleteRequest(BaseModel):
     messages: list[ProviderMessage] = Field(min_length=1, max_length=_MAX_MESSAGES)
     stop: list[str] | None = None
     temperature: float | None = None
+    # A CLOSED set, validated by Pydantic — an unrecognised value is a 422 before
+    # any LLM call, the same fail-before-cost posture the message-count and
+    # content-length guards already use. Falling back to "chat" on an unknown
+    # value would silently answer a structured request with a chat model, which
+    # is worse than refusing: the caller would parse the result as JSON.
+    task: Literal["chat", "structured", "fast"] = "chat"
 
 
 class ProviderCompleteResponse(BaseModel):
@@ -63,10 +76,29 @@ async def post_provider_complete(
     if ctx.ai_provider is None:
         raise HTTPException(status_code=500, detail="ai_provider not configured")
 
+    profile = None
+    if ctx.active_model is not None:
+        try:
+            profile = await ctx.active_model.for_task(body.task)
+        except Exception as exc:
+            # ADR decision 4 as amended: a live backend whose candidates cannot be
+            # disambiguated RAISES rather than returning a phantom. That reaches
+            # here, and it must land on the same 503 the provider-unavailable path
+            # uses — with the same leak rules. Listing which models WERE loaded
+            # would "help" the caller by handing an unauthenticated-adjacent
+            # surface the backend's inventory and its api_base (T-42-08).
+            logger.error(
+                "Model resolution failed for task=%r (%s: %s) — answering 503",
+                body.task,
+                type(exc).__name__,
+                exc,
+            )
+            raise HTTPException(status_code=503, detail="AI provider unavailable")
+
     messages = [m.model_dump() for m in body.messages]
     try:
         content = await ctx.ai_provider.complete(
-            messages, stop=body.stop, temperature=body.temperature
+            messages, profile, stop=body.stop, temperature=body.temperature
         )
     except ProviderUnavailableError:
         # Generic detail only (T-42-08) — never echo the underlying
@@ -74,4 +106,9 @@ async def post_provider_complete(
         # provider api_base/api_key.
         raise HTTPException(status_code=503, detail="AI provider unavailable")
 
-    return ProviderCompleteResponse(content=content, model=ctx.ai_provider_name or "")
+    # ADR-0007 Defect B on the HTTP path: a caller asking core what answered used
+    # to get back `lmstudio` — the BACKEND name, not the model. `ai_provider_name`
+    # stays on the route context because /status reads it, and "which backend" is
+    # a legitimately different question from "which model".
+    model = profile.model_id if profile is not None else (ctx.ai_provider_name or "")
+    return ProviderCompleteResponse(content=content, model=model)

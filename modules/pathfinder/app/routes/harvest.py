@@ -22,7 +22,6 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
-from app.config import settings
 from app.harvest import (
     HARVEST_CACHE_PATH_PREFIX,
     MAX_BATCH_NAMES,
@@ -183,10 +182,10 @@ async def harvest(req: HarvestRequest) -> JSONResponse:
         )
 
     per_monster_results: list[dict] = []
-    r_chat = await resolve("chat")
-    model_chat = r_chat.model
-    profile_chat = r_chat.profile
-    api_base = settings.litellm_api_base or None
+    # ADR-0007 step 3: generate_harvest_fallback names the chat tier on the wire
+    # and core resolves. This call survives only because `resolve` is step 4's to
+    # delete.
+    r_chat = await resolve("chat")  # noqa: F841 - deleted in ADR-0007 step 4
 
     for name in req.names:
         slug = slugify(name)
@@ -228,12 +227,7 @@ async def harvest(req: HarvestRequest) -> JSONResponse:
             # LLM-fallback continues to cache under the query slug (there is no
             # canonical entity to canonicalise against).
             try:
-                result = await generate_harvest_fallback(
-                    monster_name=name,
-                    model=model_chat,
-                    api_base=api_base,
-                    profile=profile_chat,
-                )
+                result = await generate_harvest_fallback(monster_name=name)
             except Exception as exc:
                 logger.error("LLM harvest fallback failed for %s: %s", name, exc)
                 raise HTTPException(

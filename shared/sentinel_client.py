@@ -77,6 +77,7 @@ class SentinelCoreClient:
         client: httpx.AsyncClient,
         stop: list[str] | None = None,
         temperature: float | None = None,
+        task: str = "chat",
     ) -> dict:
         """POST /provider/complete — thin chat/completion passthrough to core.
 
@@ -89,18 +90,36 @@ class SentinelCoreClient:
             client: Caller-owned httpx.AsyncClient (same pattern as send_message).
             stop: optional stop sequences forwarded to core.
             temperature: optional sampling temperature forwarded to core.
+            task: which model TIER to answer with — "chat", "structured" or
+                "fast". This is deliberately a task NAME and not a model or a
+                profile: ADR-0007 decision 7 makes core the only process that
+                asks the backend which model is loaded, so a module that named a
+                model would be a second discoverer with its own cache. Naming a
+                tier is how a module expresses what it needs without discovering
+                anything. Core rejects an unrecognised value with 422.
 
         Returns:
             Parsed JSON response dict: {"content": str, "model": str}.
+            ``model`` is the RESOLVED model id — the model that actually
+            answered — not the backend/provider name it used to carry.
 
         Raises:
             httpx.HTTPStatusError: On 4xx/5xx responses.
             httpx.ConnectError: If sentinel-core is unreachable.
             httpx.TimeoutException: If request exceeds self._timeout.
+
+        Deploy note: core and the pf2e module ship from one compose stack and
+        restart together, so this field is added without an
+        optional-for-one-release shim. Both images MUST ship in the same deploy.
         """
         resp = await client.post(
             f"{self._base_url}/provider/complete",
-            json={"messages": messages, "stop": stop, "temperature": temperature},
+            json={
+                "messages": messages,
+                "stop": stop,
+                "temperature": temperature,
+                "task": task,
+            },
             headers={"X-Sentinel-Key": self._api_key},
             timeout=self._timeout,
         )

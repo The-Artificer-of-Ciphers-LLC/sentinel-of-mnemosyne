@@ -206,8 +206,6 @@ async def test_generate_ruling_fallback_garbled_prose_raises():
             await generate_ruling_fallback(
                 query="when does off guard apply",
                 topic="off-guard",
-                model="openai/x",
-                api_base=None,
             )
 
 
@@ -235,8 +233,6 @@ async def test_generate_ruling_from_passages_garbled_prose_raises():
                 query="when does off guard apply",
                 passages=passages,
                 topic="off-guard",
-                model="openai/x",
-                api_base=None,
             )
 
 
@@ -256,8 +252,6 @@ async def test_generate_ruling_fallback_valid_salvage_passes():
         result = await generate_ruling_fallback(
             query="when does off guard apply",
             topic="off-guard",
-            model="openai/x",
-            api_base=None,
         )
     assert result["answer"] == valid_prose[:2000]
     assert result["marker"] == "generated"

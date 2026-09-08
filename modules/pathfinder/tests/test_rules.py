@@ -379,7 +379,7 @@ async def test_classify_rule_topic_returns_known_slug():
         from app.llm import classify_rule_topic
 
         result = await classify_rule_topic(
-            "How does flanking work?", model="x", api_base="y"
+            "How does flanking work?"
         )
     assert result == "flanking"
 
@@ -391,7 +391,7 @@ async def test_classify_rule_topic_unknown_slug_coerced_to_misc():
         from app.llm import classify_rule_topic
 
         result = await classify_rule_topic(
-            "some query", model="x", api_base="y"
+            "some query"
         )
     assert result == "misc"
 
@@ -403,7 +403,7 @@ async def test_classify_rule_topic_malformed_json_returns_misc():
         from app.llm import classify_rule_topic
 
         result = await classify_rule_topic(
-            "some query", model="x", api_base="y"
+            "some query"
         )
     assert result == "misc"
 
