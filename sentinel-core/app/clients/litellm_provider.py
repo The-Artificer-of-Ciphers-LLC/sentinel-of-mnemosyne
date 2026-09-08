@@ -22,6 +22,7 @@ from tenacity import (
 
 from app.clients.retry_config import RETRY_STOP, RETRY_WAIT
 from app.services.provider_router import ContextLengthError
+from sentinel_shared.llm_call import extract_completion_text
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from app.model import ModelProfile
@@ -164,21 +165,12 @@ class LiteLLMProvider:
                     "Try a shorter message."
                 ) from exc
             raise
-        # Reasoning models (e.g. google/gemma-4-31b) can return `content`
-        # empty/None with the actual text in `reasoning_content` — mirrors
-        # the LM Studio + Qwen3 thinking-mode fallback used in
-        # app/services/six_rs/reduce.py::_extract_completion_content and
-        # pipeline_orchestrator.py::_extract_completion_content (bug #1773).
-        # POST /provider/complete's response model declares `content: str`,
-        # so this must never return None — "" is the floor.
-        msg = response.choices[0].message
-        if isinstance(msg, dict):
-            return msg.get("content") or msg.get("reasoning_content") or ""
-        return (
-            getattr(msg, "content", None)
-            or getattr(msg, "reasoning_content", None)
-            or ""
-        )
+        # ADR-0007 step 3: the empty-content / reasoning_content fallback used to
+        # be hand-written here and in five other modules. It now lives in exactly
+        # one place, beside the wrapper that produces the raw response the other
+        # five parse. This module already depends on `shared/`, so importing it
+        # adds no layering exception.
+        return extract_completion_text(response)
 
 
 async def get_context_window_from_lmstudio(

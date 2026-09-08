@@ -66,7 +66,10 @@ from app.services.task_runner import AsyncioTaskRunner, TaskRunner
 from app.services.vault_sweeper import _embedding_model_id
 from app.time_utils import _iso_utc
 from sentinel_shared.embedding_codec import decode_embedding
-from sentinel_shared.llm_call import acompletion_with_profile
+from sentinel_shared.llm_call import (
+    acompletion_with_profile,
+    extract_completion_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -240,20 +243,9 @@ Respond ONLY with a JSON object of this exact shape (no prose, no code fences):
 """
 
 
-def _extract_completion_content(response: Any) -> str:
-    """Mirrors six_rs/reduce.py's extraction (LM Studio + Qwen3 fallback, bug #1773)."""
-    try:
-        if isinstance(response, dict):
-            msg = response["choices"][0]["message"]
-            return msg.get("content") or msg.get("reasoning_content") or ""
-        msg = response.choices[0].message  # type: ignore[attr-defined]
-        return (
-            getattr(msg, "content", None)
-            or getattr(msg, "reasoning_content", None)
-            or ""
-        )
-    except Exception:
-        return ""
+# ADR-0007 step 3: this module's own copy of the `content or reasoning_content`
+# fallback is gone. One implementation, in `sentinel_shared.llm_call`, beside the
+# `acompletion_with_profile` that produced the raw response.
 
 
 async def _draft_reweave_addition(member_slug: str, claim_title: str, excerpt: str) -> str:
@@ -281,7 +273,7 @@ async def _draft_reweave_addition(member_slug: str, claim_title: str, excerpt: s
             response_format={"type": "json_schema", "json_schema": _REWEAVE_DRAFT_SCHEMA},
             temperature=0.0,
         )
-        raw = _extract_completion_content(response)
+        raw = extract_completion_text(response)
         parsed = json.loads(raw) if raw else {}
         text = parsed.get("addition_text") if isinstance(parsed, dict) else None
         if isinstance(text, str) and text.strip():

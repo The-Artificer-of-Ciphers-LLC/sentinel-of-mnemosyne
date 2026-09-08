@@ -175,8 +175,11 @@ class ModelProfile:
     ``reasoning`` is OBSERVED, never branched on. It is the ``capabilities
     .reasoning`` descriptor that ``/api/v1/models`` reports (absent on v0 and on
     :class:`StaticModelSource`) and it is the real signal behind the
-    ``content or reasoning_content`` fallback duplicated six times across the
-    codebase. Recording it costs one field.
+    ``content or reasoning_content`` fallback that ADR-0007 step 3 consolidated
+    from six copies into ``sentinel_shared.llm_call.extract_completion_text``.
+    Recording it costs one field — and that extractor deliberately does NOT
+    branch on it, because it is unset on exactly the backends with the thinnest
+    metadata, where extraction still has to work.
 
     ``context_window_source`` names which rung of the context ladder produced
     ``context_window``, so an operator can tell a real loaded window from a

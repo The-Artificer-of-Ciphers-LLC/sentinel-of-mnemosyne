@@ -27,7 +27,10 @@ from pydantic import BaseModel, Field
 
 from app.services.model_resolution import resolve_structured_model
 from app.services.model_selector import get_loaded_models, select_model
-from sentinel_shared.llm_call import acompletion_with_profile
+from sentinel_shared.llm_call import (
+    acompletion_with_profile,
+    extract_completion_text,
+)
 from sentinel_shared.model_profiles import get_profile
 
 logger = logging.getLogger(__name__)
@@ -296,34 +299,12 @@ async def classify_note(
             reasoning="classifier LLM call failed",
         )
 
-    # Extract content (litellm response shape: choices[0].message.content)
-    #
-    # Qwen3 thinking-mode + LM Studio bug #1773: when response_format is
-    # json_schema, the schema constraint is applied to `reasoning_content`
-    # (the <think> block) instead of the assistant `content` stream. The
-    # actual JSON is in reasoning_content; content is empty. Defensively
-    # fall back to reasoning_content when content is empty.
-    # Verified 2026-04-27 in LM Studio server log:
-    #   Accumulated 31 tokens in reasoning content { "topic": "learning", ...
-    raw_content: str = ""
-    try:
-        if isinstance(response, dict):
-            msg = response["choices"][0]["message"]
-            raw_content = (
-                msg.get("content")
-                or msg.get("reasoning_content")
-                or ""
-            )
-        else:
-            msg = response.choices[0].message  # type: ignore[attr-defined]
-            raw_content = (
-                getattr(msg, "content", None)
-                or getattr(msg, "reasoning_content", None)
-                or ""
-            )
-    except Exception as exc:
-        logger.warning("note_classifier: response shape unexpected: %s", exc)
-        raw_content = ""
+    # ADR-0007 step 3: one shared extractor, beside the
+    # `acompletion_with_profile` above that produced this raw response. It keeps
+    # the bug #1773 behaviour this call site depends on — with a json_schema
+    # response format, LM Studio plus a Qwen3 thinking-mode model puts the JSON
+    # in reasoning_content and leaves content empty.
+    raw_content: str = extract_completion_text(response)
 
     try:
         parsed = json.loads(raw_content) if raw_content else {}

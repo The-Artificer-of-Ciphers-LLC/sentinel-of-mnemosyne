@@ -19,7 +19,10 @@ import logging
 from typing import Any
 
 from app.services.model_resolution import resolve_structured_model
-from sentinel_shared.llm_call import acompletion_with_profile
+from sentinel_shared.llm_call import (
+    acompletion_with_profile,
+    extract_completion_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,27 +71,9 @@ _RETHINK_SCHEMA: dict = {
 }
 
 
-def _extract_completion_content(response: Any) -> str:
-    """Extract assistant text from a litellm-shaped completion response.
-
-    Mirrors ``reduce.py``/``note_classifier.classify_note``'s extraction
-    exactly, including the LM Studio + Qwen3 thinking-mode fallback to
-    ``reasoning_content`` when ``content`` is empty (bug #1773). Never
-    raises.
-    """
-    try:
-        if isinstance(response, dict):
-            msg = response["choices"][0]["message"]
-            return msg.get("content") or msg.get("reasoning_content") or ""
-        msg = response.choices[0].message  # type: ignore[attr-defined]
-        return (
-            getattr(msg, "content", None)
-            or getattr(msg, "reasoning_content", None)
-            or ""
-        )
-    except Exception as exc:  # pragma: no cover — defensive
-        logger.warning("rethink: response shape unexpected: %s", exc)
-        return ""
+# ADR-0007 step 3: this module's own copy of the `content or reasoning_content`
+# fallback is gone. One implementation, in `sentinel_shared.llm_call`, beside the
+# `acompletion_with_profile` that produced the raw response.
 
 
 async def _list_items(vault: Any, dir_path: str) -> list[str]:
@@ -124,7 +109,7 @@ async def _triage_one(item_path: str, item_text: str) -> dict:
             response_format={"type": "json_schema", "json_schema": _RETHINK_SCHEMA},
             temperature=0.0,
         )
-        raw_content = _extract_completion_content(response)
+        raw_content = extract_completion_text(response)
         parsed = json.loads(raw_content) if raw_content else {}
         candidate = parsed.get("disposition") if isinstance(parsed, dict) else None
         if candidate in _DISPOSITIONS:
