@@ -18,6 +18,19 @@ hardcoded fallback when the Vault is unreachable. Distinct from the user's ident
 Sentinel reads from the **Self namespace**.
 _Avoid_: system prompt (use only when describing the LLM mechanism), personality, character.
 
+**Active model**:
+The model currently answering for the Sentinel, and what that model can do. The code module lives at
+`sentinel-core/app/model.py` — a single seam returning a `ModelProfile` value (model id, api base,
+context window, stop sequences, capabilities) for a given task kind (`chat`, `structured`, `fast`).
+Resolved from the backend at request time behind a short TTL and never pinned at startup, so an
+operator can swap the model in LM Studio without restarting the container — the same posture the
+**Sentinel persona** has (ADR-0001) and for the same reason. Backends answer through the
+`ModelSource` seam: `LMStudioModelSource` discovers live from `GET /api/v0/models`;
+`StaticModelSource` serves config-derived profiles for cloud and undiscoverable backends, and is
+what tests substitute. Parallel to the **Sentinel persona**: the persona is who the Sentinel is,
+the Active model is what it thinks with.
+_Avoid_: LLM, the model, provider (that names the transport, not the model), model selector.
+
 **Vault**:
 The Obsidian vault that serves as the Sentinel's persistent memory. Both a domain concept
 and a code module (`app/vault.py`) — the `Vault` Protocol is the single seam through which
@@ -185,7 +198,10 @@ _Avoid_: assuming one global version implies all module versions.
 - A **Vault** contains the **Self namespace**, the **Sentinel namespace**, the **Ops namespace**,
   and the **Trash namespace**.
 - A **Session** writes one **Session summary** into `ops/sessions/`.
+- A **Session** is answered by one **Active model**, recorded in its **Session summary**.
 - The **Sentinel persona** is read from the **Sentinel namespace** at the start of every **Session**.
+- The **Active model** is resolved at the start of every **Session**, like the **Sentinel persona** —
+  neither is pinned at startup.
 - The **Hot tier** combines the **Sentinel persona**, the **Self namespace**, and recent
   **Session summaries**. The **Warm tier** is sourced from **Vault** search.
 - The **vault sweeper** never deletes — it relocates source files into the **Trash namespace**.
