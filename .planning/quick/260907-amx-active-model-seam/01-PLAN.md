@@ -28,13 +28,15 @@ verification:
   core: "cd /Users/trekkie/projects/sentinel-of-mnemosyne/.claude/worktrees/active-model-seam/sentinel-core && /Users/trekkie/projects/sentinel-of-mnemosyne/sentinel-core/.venv/bin/python -m pytest tests/ -q"
   pathfinder: "not required — this plan touches no file under modules/pathfinder/"
   baseline_in: "sentinel-core 717 passed, 12 skipped (729 collected)"
-  expected_out: "sentinel-core 717 + N01 passed, 12 skipped, 0 failed — where N01 is the count of NEW tests added by this plan (>= 20, in tests/test_model.py plus the Defect B and probe-parity regressions; the floor rose from 12 to 16 with the ladder-order, absolute-pin-warning and last-known-good-tiebreaker cases added 2026-09-07, then to 18 when last-known-good moved above model_name and the seven-rung ordering test plus the explicit rung-4-beats-rung-5 case were added, then to 20 with the rung-4 divergence-log pair (fires on divergence, silent on agreement)). ZERO existing tests are deleted by this plan; any pre-existing test that now fails is a regression, not an expected churn. Record the exact number in 01-SUMMARY.md as N01 — Plans 02, 03 and 04 all chain their arithmetic off it."
+  expected_out: "sentinel-core 717 + N01 passed, 12 skipped, 0 failed — where N01 is the count of NEW tests added by this plan (>= 24, in tests/test_model.py plus the Defect B and probe-parity regressions; the floor rose from 12 to 16 with the ladder-order, absolute-pin-warning and last-known-good-tiebreaker cases added 2026-09-07, then to 18 when last-known-good moved above model_name and the seven-rung ordering test plus the explicit rung-4-beats-rung-5 case were added, then to 20 with the rung-4 divergence-log pair (fires on divergence, silent on agreement), then to 24 on 2026-09-08 with the two model-agnostic acceptance tests from the amended ADR decision 4 and the two ignored-non-loaded-config-value log cases; the refuse-to-guess test converts from "returns config" to "raises" rather than being added). ZERO existing tests are deleted by this plan; any pre-existing test that now fails is a regression, not an expected churn. Record the exact number in 01-SUMMARY.md as N01 — Plans 02, 03 and 04 all chain their arithmetic off it."
 must_haves:
   truths:
     - "A model swapped in the LM Studio UI is picked up by a running container within one TTL window, with no restart (ADR decision 1)."
     - "The context window a request is budgeted against comes from loaded_context_length when the backend reports one, not max_context_length (ADR decision 2)."
     - "A loaded model reporting type 'vlm' is a valid chat candidate; a model reporting type 'embeddings' never is (ADR decision 3)."
-    - "With two or more capable models loaded and no operator pin, resolution prefers the previously-resolved model whenever it is still loaded — ahead of the configured MODEL_NAME, because MODEL_NAME is a tracked default that may name a model nobody has loaded — and otherwise falls to configuration, never to an arbitrary candidate (ADR decision 4, refuse-to-guess preserved)."
+    - "Swapping the model loaded in LM Studio requires NO configuration change and NO code change: with MODEL_NAME, MODEL_PREFERRED and every MODEL_TASK_* unset and one chat model loaded, resolution returns that model, whatever it is (ADR decision 4 as amended 2026-09-08 — model-agnostic is an acceptance criterion, not an aspiration)."
+    - "When the backend is live, the loaded candidate set is the sole source of truth. Configuration may only disambiguate among loaded candidates; it may never name one that is not loaded, and a live backend whose candidates cannot be disambiguated raises rather than returning a phantom (ADR decision 4 as amended)."
+    - "With two or more capable models loaded and no operator pin, resolution prefers the previously-resolved model whenever it is still loaded — ahead of the configured MODEL_NAME, because MODEL_NAME is a tracked default that may name a model nobody has loaded — and otherwise raises, never returning an arbitrary candidate and never returning an unconfirmed configured one."
     - "The task-capability filter narrows the candidate set BEFORE any preference rung is consulted; an operator pin naming a loaded-but-incapable model still wins, but never silently — it logs a WARNING naming the model, the task kind and the missing capability."
     - "A failed refresh serves last-known-good rather than failing the request (ADR decision 1)."
     - "When the model in use and the configured MODEL_NAME disagree, the log says so — silence means they agree, never that nobody checked."
@@ -150,21 +152,31 @@ Existing shapes worth reading before writing anything:
     - `for_task("structured")` includes a candidate whose capabilities contain
       `tool_use` and excludes one whose capabilities do not. `for_task("chat")` and
       `for_task("fast")` apply no capability requirement.
+    - **Model-agnostic by default (ADR decision 4 as amended 2026-09-08 — this is an
+      acceptance criterion, not an aspiration).** With `MODEL_NAME`,
+      `MODEL_PREFERRED` and all three `MODEL_TASK_*` unset, and exactly one chat
+      model loaded, `for_task("chat")` succeeds and returns that model. Then a second
+      test: change the fixture's loaded model id to something the family table has
+      never seen — a llama, a mistral, any unfamiliar id — with all five settings
+      still unset, and resolution returns that one too. No code change, no config
+      change, no new table entry. If either test needs configuration to pass, the
+      ladder is not model-agnostic and the implementation is wrong.
     - Refuse to guess: with two `tool_use`-capable candidates loaded, no
       `model_task_structured`, no `model_preferred`, NO last-known-good, and a
-      configured `MODEL_NAME` that is not among them, resolution returns the
-      configured model rather than picking a candidate. With no configured model
-      either, it raises rather than returning an arbitrary entry.
-      The no-last-known-good clause is still load-bearing under the corrected order,
-      for a different reason than before: last-known-good now sits ABOVE `model_name`,
-      so a warm last-known-good would satisfy the request at rung 4 and this test
-      would never reach the `model_name` rung it exists to exercise. Start the
-      `ActiveModel` cold.
+      configured `MODEL_NAME` that is not among them, resolution **raises**. It does
+      NOT return the configured model. Assert the raise, and assert that the
+      configured id appears nowhere in the returned profile — there is no returned
+      profile. With no configured model either, it also raises, by the same rung and
+      for the same reason.
+      The no-last-known-good clause is still load-bearing: last-known-good sits at
+      rung 4, so a warm one would satisfy the request before the ladder ever reaches
+      the refusal rung this test exists to exercise. Start the `ActiveModel` cold.
     - Ladder order — the capability filter runs FIRST and narrows the candidate set;
       preference then applies WITHIN the filtered set, and verified-loaded evidence
       outranks the unverified configured default:
       capability filter → `model_task_{kind}` → `model_preferred` → **last-known-good**
-      → `model_name` → sole surviving candidate → refuse. Assert the order with a
+      → `model_name` (only if loaded) → sole surviving candidate → refuse-by-RAISING.
+      Assert the order with a
       case where each rung in turn is the one that decides — seven cases, and the
       rung-4-beats-rung-5 case (warm last-known-good present AND `MODEL_NAME` naming
       a different loaded candidate → last-known-good wins) is the one that would have
@@ -174,8 +186,18 @@ Existing shapes worth reading before writing anything:
       IS loaded but does NOT pass the capability filter still wins — and MUST emit a
       WARNING naming the pinned model, the task kind, and the missing capability.
       Assert that the warning fires (caplog), not merely that the pin won.
-    - A pin naming a model that is not loaded at all is ignored and the ladder
-      continues — the absolute-pin exception covers loaded-but-incapable only.
+    - **The loaded-candidate guard is a property of EVERY config-consulting rung, not
+      a per-rung accident.** Rungs 2 (`model_task_{kind}`), 3 (`model_preferred`) and
+      5 (`model_name`) may only ever select a model that is in the loaded candidate
+      set. A configured value naming a model that is not loaded is discarded and the
+      ladder continues — for all three, tested for all three, with the same wording.
+      The absolute-pin exception of the previous bullet covers loaded-but-incapable
+      only; it never resurrects a model that is not loaded at all.
+    - A discarded configured value logs one INFO line naming the setting, the value,
+      and that it was ignored because the model is not loaded. Otherwise the operator
+      gets a raise at rung 7 with no indication that the config they set was thrown
+      away. Assert it fires for a non-loaded `model_task_{kind}` and stays silent when
+      the configured value is loaded and used.
     - Last-known-good tiebreaker: two candidates loaded, both surviving the filter,
       no `model_task_{kind}`, no `model_preferred`, and one of the two previously
       resolved for this task kind → the previously-resolved one wins. Assert this
@@ -265,8 +287,8 @@ Existing shapes worth reading before writing anything:
        operates on the surviving set.
     2. **`model_task_{kind}`** — `model_task_chat` / `model_task_structured` /
        `model_task_fast`. These settings already exist and this is their first
-       consumer.
-    3. **`model_preferred`.**
+       consumer. Only selects if the named model is IN the loaded candidate set.
+    3. **`model_preferred`** — same guard: only if the named model is loaded.
     4. **Last-known-good**, when it is STILL among the filtered candidates. A
        last-known-good that has since been unloaded is discarded, not resurrected.
        When this rung decides and the model it names differs from the configured
@@ -276,8 +298,28 @@ Existing shapes worth reading before writing anything:
        changing anything about this line or this rung's position.
     5. **`model_name`**, if it is among the filtered candidates.
     6. **Sole surviving candidate**, when exactly one does.
-    7. **Refuse to guess** — return the configured `model_name` unconfirmed, and
-       raise if there is no configured model. Never return an arbitrary candidate.
+    7. **Refuse to guess — RAISE.** Not "return the configured `model_name`
+       unconfirmed". Never an arbitrary candidate, and never a phantom either.
+
+    **When the backend is live, the loaded set is the SOLE source of truth** (ADR
+    decision 4 as amended 2026-09-08). Configuration may only *disambiguate among
+    loaded candidates*; it may never name one that is not loaded. That is why rungs
+    2, 3 and 5 all carry the same in-the-candidate-set guard, and why rung 7 raises.
+
+    An earlier draft had rung 7 return the configured `model_name` unconfirmed — a
+    model the backend never said it had. That is not a fallback, it is the bug this
+    ADR exists to remove, wearing the fallback's clothes: on 2026-09-08 the deployed
+    container was resolving `google/gemma-4-31b` because configuration named it,
+    while LM Studio served only `qwen/qwen3.8-27b` and answered by silently
+    substituting the model it actually had. A live backend whose candidates cannot be
+    disambiguated is a loud failure, not a quiet substitution.
+
+    **`MODEL_NAME`'s only remaining role is `StaticModelSource`'s data** — used when
+    there is NO live backend at all. Nothing on a path where `LMStudioModelSource`
+    answered successfully may read `settings.model_name` except rung 5, and rung 5
+    may only return it when it is among the loaded candidates. Grep the finished
+    `app/model.py` for `settings.model_name` and check every hit against that rule
+    before calling this task done.
 
     **Last-known-good sits ABOVE `model_name`, deliberately.** `MODEL_NAME` is
     documented in `config.py` as a tracked *default*, not an authoritative pin: it
@@ -363,6 +405,15 @@ Existing shapes worth reading before writing anything:
     - Rung 4 logs an INFO divergence line naming the winner, the reason
       (last-known-good) and the `model_name` it beat — and logs nothing when the two
       agree. Both directions asserted via caplog.
+    - **Model-agnostic acceptance (ADR decision 4, amended 2026-09-08):** with all
+      five model settings unset and one chat model loaded, resolution succeeds and
+      returns it; and with the loaded id changed to an unfamiliar model, resolution
+      returns that one, with no code or config change. Both asserted.
+    - Rung 7 raises. No test anywhere asserts that an unconfirmed `model_name` is
+      returned, and `grep settings.model_name app/model.py` yields only rung 5 and
+      `StaticModelSource`.
+    - Rungs 2, 3 and 5 each ignore a configured value naming a non-loaded model, each
+      log one INFO line when they do, and each is tested for it.
     - The context-window ladder has exactly three rungs and no family-constant rung;
       no code in `app/model.py` reads `context_window` off a family profile.
     - The LM Studio adapter issues exactly one `/api/v0/models` request per refresh,
@@ -512,7 +563,17 @@ Existing shapes worth reading before writing anything:
     - Empty loaded set returns not-ready.
     - Loaded models present but none supporting the structured task returns
       not-ready — the sole-candidate rung must NOT be treated as ready.
+    - **A live backend whose candidates cannot be disambiguated returns not-ready.**
+      Under the amended ADR decision 4 that case makes `for_task("structured")`
+      RAISE rather than return a config-named phantom, so the probe must catch the
+      exception and answer not-ready. This is new: the probe previously received a
+      model string in that case and had to judge it. Fail-closed is the correct
+      answer either way, but the mechanism changed from evaluate-a-string to
+      catch-an-exception, and an uncaught raise here would propagate into
+      `routes/note.py`'s destructive-sweep gate as a 500 instead of a refusal.
+      Test it explicitly with two capable candidates, cold cache and no config.
     - Any HTTP, JSON or schema failure returns not-ready; the probe never raises.
+      That contract now includes the `for_task` raise — the probe absorbs it.
     - A genuinely loaded `tool_use`-capable model returns ready.
     - New: the probe and the structured resolution path agree on the same model id
       for the live payload. This replaces the parity guarantee currently held by
@@ -559,7 +620,9 @@ Existing shapes worth reading before writing anything:
     - The probe resolves through `ActiveModel` and no longer calls `_score`.
     - `routes/note.py` still gates the destructive sweep on the probe.
     - Probe test count after >= probe test count before, both recorded in the SUMMARY.
-    - All four fail-closed cases still return not-ready.
+    - All fail-closed cases still return not-ready, including the new one: a
+      `for_task("structured")` raise is caught by the probe and answered not-ready,
+      never propagated to `routes/note.py`.
     - The probe/resolver parity case is covered against the seam.
     - Suite green.
   </acceptance_criteria>
@@ -654,6 +717,26 @@ Existing shapes worth reading before writing anything:
    the container spent two days naming `google/gemma-4-31b` while LM Studio served
    `qwen/qwen3.8-27b`. The line is logged only when the two differ, so the common
    case stays quiet and the divergence is the thing that stands out.
+11. **Rung 7 raises; it does not return an unconfirmed `model_name`.** ADR decision 4
+   was amended 2026-09-08 and this plan follows the amendment. The original decision
+   read "resolution falls to configuration rather than picking one", and every
+   earlier draft of this plan implemented that as a final rung returning
+   `settings.model_name` unconfirmed — a model the backend never said it had. That
+   is not a conservative fallback; it is the exact live symptom the ADR was written
+   to remove. The deployed container was resolving `google/gemma-4-31b` from config
+   while LM Studio served only `qwen/qwen3.8-27b` and quietly answered with what it
+   had. Corrected: when the backend is live the loaded set is the sole source of
+   truth, configuration may only disambiguate among loaded candidates, and an
+   undisambiguatable live backend raises. `MODEL_NAME` survives only as
+   `StaticModelSource`'s data for the no-live-backend case.
+
+   Two consequences a reader should not have to rediscover. First, the guard that
+   makes this work is on every config-consulting rung (2, 3 and 5), not just rung 5
+   where it was originally written — a pin is as capable of naming a phantom as a
+   default is. Second, callers that previously received a phantom now receive an
+   exception: `probe_classifier_model_ready` must catch it and return not-ready
+   (Task 3), and the request paths in Plan 02 must surface it as a clean error rather
+   than an unhandled 500.
 
 <output>
 Create `.planning/quick/260907-amx-active-model-seam/01-SUMMARY.md` when done,

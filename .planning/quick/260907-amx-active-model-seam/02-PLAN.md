@@ -40,23 +40,25 @@ requirements: [ADR-0007-S3, ADR-0007-D1, ADR-0007-CONSEQ-SIGNATURE]
 verification:
   core: "cd /Users/trekkie/projects/sentinel-of-mnemosyne/.claude/worktrees/active-model-seam/sentinel-core && /Users/trekkie/projects/sentinel-of-mnemosyne/sentinel-core/.venv/bin/python -m pytest tests/ -q"
   pathfinder: "cd /Users/trekkie/projects/sentinel-of-mnemosyne/.claude/worktrees/active-model-seam/modules/pathfinder && /Users/trekkie/projects/sentinel-of-mnemosyne/modules/pathfinder/.venv/bin/python -m pytest tests/ -q"
-  baseline_in: "whatever 01-SUMMARY.md recorded (717 + N01 passed, 12 skipped; N01 >= 20); pathfinder 405 passed"
+  baseline_in: "whatever 01-SUMMARY.md recorded (717 + N01 passed, 12 skipped; N01 >= 24); pathfinder 405 passed"
   expected_out: |
-    Concrete arithmetic, not a placeholder. Taking N01 = 20 (Plan 01's floor):
+    Concrete arithmetic, not a placeholder. Taking N01 = 24 (Plan 01's floor):
 
-      sentinel-core = 717 + N01 + N02  = 737 + 12 = 749 passed, 12 skipped, 0 failed
+      sentinel-core = 717 + N01 + N02  = 741 + 15 = 756 passed, 12 skipped, 0 failed
       pathfinder    = 405 + N02pf      = 405 + 2  = 407 passed, 0 failed
 
-    N02 = 12 expected, floor 10, itemised: Task 1 adds 4 (404-with-ActiveModel
+    N02 = 15 expected, floor 13, itemised: Task 1 adds 6 (404-with-ActiveModel
     retries exactly once then falls back; 404-without-ActiveModel goes straight to
     fallback; ConnectError does not re-resolve; the cloud fallback receives its OWN
-    StaticModelSource profile and never the local one). Task 2 adds 3
-    (task="structured" resolves the structured profile; an unrecognised task is 422
+    StaticModelSource profile and never the local one; a resolution raise surfaces on
+    the chat path; a resolution raise never reaches the cloud provider). Task 2 adds
+    4 (task="structured" resolves the structured profile; an unrecognised task is 422
     before any LLM call; the response `model` field is the resolved id and differs
-    from the provider name). Task 3 adds 5 (the extraction helper's five shapes).
+    from the provider name; a resolution raise becomes a 503 that leaks no model ids
+    or api_base). Task 3 adds 5 (the extraction helper's five shapes).
     N02pf = 2 expected: the `task` keyword reaches the wire, and no model/api_base/
     profile value appears in the request body.
-    If N01 differs from 20, substitute it — the formula, not the literal, is the
+    If N01 differs from 24, substitute it — the formula, not the literal, is the
     contract. ZERO tests are deleted by this plan; the three _LazyRouteCtx fakes are
     REPLACED in place, not removed, so they contribute 0 to the delta. Record exact
     numbers in 02-SUMMARY.md as N02 and N02pf — Plan 03 chains off both.
@@ -204,6 +206,16 @@ Pathfinder facts (verified by exhaustive search of `modules/pathfinder/app/`):
       not trigger fallback.
     - The chat path budgets against `profile.context_window`, which for the live
       backend is 119552 rather than 262144.
+    - **An unresolvable model surfaces as a clean error, not an unhandled 500.**
+      Under ADR decision 4 as amended 2026-09-08, `for_task(kind)` RAISES when a live
+      backend's candidates cannot be disambiguated, where an earlier draft would have
+      returned a config-named phantom. `MessageProcessor.process` must therefore
+      handle a raise from resolution. It is NOT added to `_FALLBACK_TRIGGERS`: a
+      resolution failure is a local misconfiguration or an ambiguous backend, not a
+      backend outage, and silently diverting it to the paid cloud provider would
+      convert an operator error into a bill and hide the very condition the raise
+      exists to announce. Surface it; do not fall back on it. Assert both halves —
+      the error surfaces, and the cloud provider is never called.
   </behavior>
 
   <action>
@@ -337,6 +349,12 @@ Pathfinder facts (verified by exhaustive search of `modules/pathfinder/app/`):
     - A `ProviderUnavailableError` still produces a 503 with generic detail only —
       the provider api_base and api key must never appear in the response body
       (T-42-08).
+    - A resolution raise from `ActiveModel.for_task(task)` — the amended ADR
+      decision 4 case, a live backend whose candidates cannot be disambiguated —
+      produces a 503 with generic detail, not an unhandled 500 and not a phantom
+      model. Same leak rules as T-42-08: the loaded model ids and the api_base must
+      not appear in the response body, however tempting it is to "help" the caller
+      by listing what WAS loaded. Log the detail server-side instead.
     - `SentinelCoreClient.complete()` still raises on 4xx/5xx rather than swallowing
       to a string, matching `post_to_module` and not `send_message`.
     - Pathfinder call sites compile and pass with no model, api_base or profile
@@ -413,7 +431,8 @@ Pathfinder facts (verified by exhaustive search of `modules/pathfinder/app/`):
       unrecognised values with 422 before any LLM call.
     - The response `model` field carries the resolved model id; a test asserts it
       differs from the provider name.
-    - The 503 path still leaks no provider configuration.
+    - The 503 path still leaks no provider configuration, and a resolution raise
+      lands on it rather than escaping as a 500 or being converted into a cloud call.
     - No model, api_base or profile value originates in pathfinder.
     - Both suites green; pathfinder delta is from added tests only.
   </acceptance_criteria>
@@ -569,7 +588,16 @@ Pathfinder facts (verified by exhaustive search of `modules/pathfinder/app/`):
    model id at precisely the moment the primary is already failing. Ruled: the
    fallback resolves from `StaticModelSource`, and a test asserts the local profile
    never reaches it.
-8. **`rule_query.py` is a call site of the vestigial parameters, not just a holder of
+8. **A resolution failure is NOT a fallback trigger.** ADR decision 4 as amended
+   2026-09-08 makes `for_task` raise instead of returning an unconfirmed
+   `model_name`, which gives `ProviderRouter` a new failure mode it did not have
+   before. Ruled: it does not join `_FALLBACK_TRIGGERS`. Those exist for a backend
+   that is down; this is an ambiguous or misconfigured local backend, and routing it
+   to the paid cloud provider would turn an operator error into a bill while hiding
+   the condition the raise exists to announce. It surfaces as a 503 on the HTTP path
+   and as an exception on the chat path. N02 rises by 3 for these cases (chat-path
+   surface, cloud-never-called, route 503).
+9. **`rule_query.py` is a call site of the vestigial parameters, not just a holder of
    `resolve_model`.** Verified at `rule_query.py:120-135,166-170`. It is edited in
    this plan for the kwargs and again in Plan 03 for the `RuleQueryDependencies`
    field; the two edits do not overlap.

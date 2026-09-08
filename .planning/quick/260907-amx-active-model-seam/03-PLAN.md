@@ -80,7 +80,7 @@ must_haves:
   truths:
     - "There is exactly one implementation of 'which model is loaded and what can it do' in the repository."
     - "Pathfinder holds no model-discovery code and no model-selection code (ADR decision 7)."
-    - "The refuse-to-guess behaviour survives the removal of scoring — with several capable models loaded and nothing disambiguating, resolution still falls to configuration (ADR decision 4)."
+    - "The refuse-to-guess behaviour survives the removal of scoring — with several capable models loaded and nothing disambiguating, resolution RAISES rather than returning a configured model the backend never said it had (ADR decision 4 as amended 2026-09-08)."
     - "probe_classifier_model_ready still gates the destructive vault sweep and still fails closed, with coverage no lower than before this plan."
     - "No test was deleted without a named successor holding its guarantee."
   artifacts:
@@ -261,7 +261,14 @@ outside `composition.py` and the ADR itself.
       call-counting fake across a simulated multi-stage run — this is the ADR's
       stated latency consequence and the only place it is directly observable.
     - Refuse to guess still holds with `_score` gone: two `tool_use`-capable models
-      loaded, nothing disambiguating, resolution returns the configured model.
+      loaded, nothing disambiguating, resolution RAISES (ADR decision 4 as amended
+      2026-09-08 — never a configured model the backend did not offer).
+    - Keep the two failure modes distinct at every one of the five call sites. An
+      UNREACHABLE backend still degrades gracefully through `StaticModelSource` and
+      must not raise — `note_classifier` in particular still coerces to its safe
+      default. An AMBIGUOUS LIVE backend raises. Same call, opposite handling, and
+      conflating them would either resurrect the phantom or make an offline dev box
+      unusable. Test both per call site, not just the graceful one.
   </behavior>
 
   <action>
@@ -414,14 +421,14 @@ outside `composition.py` and the ADR itself.
     | 6 | `::test_select_structured_requires_function_calling` | **Replaced** — `test_model.py` `for_task("structured")` includes a `tool_use` candidate and excludes one without. Plan 01. The one scoring behaviour that survives, as a filter. |
     | 7 | `::test_select_fast_prefers_smaller_context_above_minimum` | **Behaviour deleted with the module** — the fast-tier 4K floor was a scoring heuristic. `fast` now imposes no capability requirement (Plan 01 Flagged calls 2) and the operator expresses a fast tier with `model_task_fast`. |
     | 8 | `::test_preference_overrides_scoring` | **Replaced** — `test_model.py` absolute-pin case: a `model_task_{kind}` naming a loaded-but-incapable model still wins and logs a WARNING. Plan 01 (amended). |
-    | 9 | `::test_falls_back_to_default_when_in_loaded_and_no_match` | **Replaced** — `test_model.py` rung 5 (`model_name` among the filtered candidates). Plan 01. Note the successor must run against a COLD `ActiveModel`: last-known-good is rung 4 and would otherwise decide first. |
-    | 10 | `::test_falls_back_to_first_loaded_when_default_not_in_loaded` | **Replaced by its inverse, deliberately** — `test_model.py` refuse-to-guess case asserts the OPPOSITE: resolution returns the configured model, never `loaded[0]`. This is the drift the ADR names; sentinel-core removed the blind fallback as unsound after `exo-model-notfound-502`. Record the inversion explicitly in the SUMMARY. |
-    | 11 | `::test_uses_default_when_loaded_is_empty` | **Replaced** — `test_model.py` `StaticModelSource`-alone case plus the refusal rung. Plan 01. |
+    | 9 | `::test_falls_back_to_default_when_in_loaded_and_no_match` | **Replaced** — `test_model.py` rung 5 (`model_name` among the filtered candidates). Plan 01. Two constraints on the successor: run it against a COLD `ActiveModel`, or rung 4 decides first; and keep the original's `in_loaded` premise, which is now load-bearing rather than incidental — under the amended decision 4 rung 5 fires ONLY when `model_name` is among the loaded candidates, so a successor that drops that premise is testing a rung that no longer exists. |
+    | 10 | `::test_falls_back_to_first_loaded_when_default_not_in_loaded` | **Replaced by its inverse, deliberately** — `test_model.py` refuse-to-guess case asserts the OPPOSITE: resolution RAISES. It returns neither `loaded[0]` nor the configured model. Under ADR decision 4 as amended 2026-09-08 a non-loaded `MODEL_NAME` is discarded like any other non-loaded config value, so there is nothing left to return. Record in the SUMMARY that this is now a DOUBLE inversion against the original: not `loaded[0]`, and not the default either. |
+    | 11 | `::test_uses_default_when_loaded_is_empty` | **Replaced, and split in two** — the original conflated two cases the amended decision 4 separates. NO live backend (adapter unreachable) → `StaticModelSource` serves `MODEL_NAME` as its data, which is that setting's only surviving role: Plan 01's `StaticModelSource`-alone case. LIVE backend returning zero candidates → raises, not a default. Assert both; asserting only the first would let a live-but-empty backend quietly resurrect the phantom. |
     | 12 | `::test_raises_when_no_loaded_and_no_default` | **Replaced** — `test_model.py` "with no configured model either, it raises". Plan 01. |
     | 13 | `::test_preference_skipped_when_not_in_loaded` | **Replaced** — `test_model.py` "a pin naming a model that is not loaded at all is ignored and the ladder continues". Plan 01 (amended). |
     | 14 | `::test_preference_matches_when_prefixed_but_loaded_is_bare` | **Replaced — WRITE IT HERE.** Add to `test_model.py`: `model_preferred="openai/mlx-community/foo"` matches a bare candidate id `mlx-community/foo`. `strip_litellm_prefix` / `ensure_litellm_prefix` survive in `model_selector.py` and `ModelProfile` carries both ids — but nothing currently tests that `ActiveModel` normalises before comparing. |
-    | 15 | `::test_default_matches_when_prefixed_but_loaded_is_bare` | **Replaced — WRITE IT HERE.** Same as 14 for the `model_name` rung (rung 5); start the `ActiveModel` cold so rung 4 does not pre-empt it. |
-    | 16 | `::test_default_prefix_mismatch_previously_fell_through_to_arbitrary_first_loaded` | **Replaced — WRITE IT HERE, highest value of the three.** This is a live regression guard: a prefixed `MODEL_NAME` that IS loaded must be honoured and must not fall through to an arbitrary candidate. Under the new ladder the fall-through target is the refusal rung rather than `loaded[0]`, so assert the pinned model is returned with three candidates loaded — again from a cold `ActiveModel`, since `MODEL_NAME` is rung 5 and last-known-good is rung 4. |
+    | 15 | `::test_default_matches_when_prefixed_but_loaded_is_bare` | **Replaced — WRITE IT HERE.** Same as 14 for the `model_name` rung (rung 5); start the `ActiveModel` cold so rung 4 does not pre-empt it. The prefixed default must be LOADED — prefix normalisation decides whether a configured id *matches* a candidate, never whether a non-loaded id may be returned. |
+    | 16 | `::test_default_prefix_mismatch_previously_fell_through_to_arbitrary_first_loaded` | **Replaced — WRITE IT HERE, highest value of the three.** This is a live regression guard: a prefixed `MODEL_NAME` that IS loaded must be honoured and must not fall through to an arbitrary candidate. Under the new ladder the fall-through target is the refusal rung rather than `loaded[0]`, so assert the pinned model is returned with three candidates loaded — again from a cold `ActiveModel`, since `MODEL_NAME` is rung 5 and last-known-good is rung 4. Add the mirror case the amended decision 4 makes newly important: the same prefixed `MODEL_NAME` when it is NOT among the three loaded candidates must RAISE, not return the phantom. Prefix normalisation must not become a back door for a non-loaded id. |
     | 17 | `test_resolve_model.py::test_resolve_model_adds_openai_prefix_to_bare_name` | **Replaced** — covered by 14/15 plus `ModelProfile`'s litellm-prefixed id field, asserted in Plan 01's end-to-end `for_task("chat")` case. |
     | 18 | `::test_resolve_model_preserves_existing_prefix` | **Replaced** — same; `ensure_litellm_prefix` must not double-prefix. Assert it in the 14/15 test. |
     | 19 | `::test_resolve_model_falls_back_to_placeholder_when_discovery_empty` | **Behaviour deleted with the module** — the inert `openai/unused-core-resolves-model` placeholder existed only so pathfinder could name *something*. After Plan 02 pathfinder names a task, not a model. Successor: Plan 02's acceptance criterion "no model, api_base or profile value originates in pathfinder". |
