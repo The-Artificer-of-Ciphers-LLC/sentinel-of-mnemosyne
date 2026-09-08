@@ -697,8 +697,12 @@ class ActiveModel:
         last-known-good does resolution fall through to the next source
         (``StaticModelSource``).
 
-        A source that ANSWERS but reports nothing is not a failure; the next
-        source is tried, and when none is left the ladder raises.
+        A source that ANSWERS is the end of the search, even when it reports
+        nothing. When the backend is live the loaded set is the sole source of
+        truth, so a reachable backend that reports no usable model must reach
+        the refusal rung — falling through to ``StaticModelSource`` there would
+        answer a live "I have nothing" with a model from configuration, which is
+        exactly the phantom ADR decision 4 forbids.
         """
         errors: list[Exception] = []
         for source in self._sources:
@@ -726,8 +730,7 @@ class ActiveModel:
                     kind,
                 )
                 continue
-            if candidates.reported:
-                return candidates, None
+            return candidates, None
 
         if errors:
             raise ModelSelectorError(

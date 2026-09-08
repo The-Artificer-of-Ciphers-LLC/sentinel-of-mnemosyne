@@ -853,6 +853,21 @@ async def test_cold_refresh_failure_falls_through_to_static_model_source():
     assert resolved.model_id == "static/model"
 
 
+async def test_a_live_backend_reporting_nothing_does_not_fall_through_to_config():
+    """A reachable backend that reports no usable model reaches the refusal rung.
+
+    Falling through to StaticModelSource here would answer a live "I have
+    nothing" with a model from configuration — the phantom ADR decision 4
+    forbids. Only a source that RAISES hands over to the next one.
+    """
+    fake = FakeLMStudio(v1=None, v0=[])
+    fallback = StaticModelSource([profile("configured/model")])
+    model = ActiveModel([fake.source(), fallback], settings())
+
+    with pytest.raises(ModelSelectorError):
+        await model.for_task("chat")
+
+
 async def test_cold_refresh_failure_with_no_fallback_source_raises():
     fake = FakeLMStudio(v1_error=httpx.ConnectError("refused"))
 

@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     import httpx
 
     from app.config import Settings
+    from app.model import ActiveModel
     from app.services.message_processing import MessageProcessor
     from app.services.provider_router import ProviderRouter
     from app.services.recall import Recall
@@ -67,6 +68,11 @@ class RouteContext:
     # to narrow completion routes (e.g. the pf2e chat-handoff endpoint, D-09
     # prerequisite). Pinned in initialize_startup() from graph.ai_provider.
     ai_provider: "ProviderRouter | None" = None
+    # The Active model seam (ADR-0007). This is what replaces context_window and
+    # lmstudio_stop_sequences above once step 4 removes them: instead of three
+    # scalars pinned at startup, the request path asks this object which model
+    # is loaded right now. None only in test fixtures that never resolve a model.
+    active_model: "ActiveModel | None" = None
 
 
 def get_route_context(request: Request) -> RouteContext:
