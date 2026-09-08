@@ -62,7 +62,7 @@ capabilities — everything a call needs. Providers take it as one argument:
    that never received it.
 
 2. **`loaded_context_length`, not `max_context_length`.** Resolution order is
-   `loaded_context_length` → `max_context_length` → family constant → 4096, each logged, with an
+   `loaded_context_length` → `max_context_length` → a declared `4096`, each logged, with an
    operator cap on top. `max` is what the model could do if reloaded at that size; `loaded` is what
    the running instance will honour. Taking `max` (today's behaviour, 262144 against a loaded
    119552) permits prompts more than twice what the backend accepts — an overrun caught only as a
@@ -70,6 +70,16 @@ capabilities — everything a call needs. Providers take it as one argument:
    produces usable output" are different numbers: a 71936-token context on the 24 GB host drove the
    model into repetition loops and 200s timeouts. That ceiling is host- and model-specific and
    belongs in configuration, not code.
+
+   *Amended 2026-09-07, during plan review.* The ladder originally read
+   `loaded → max → family constant → 4096`, which contradicted decision 12's removal of
+   `FamilyProfile.context_window` — the ladder consumed a field the same design deletes. Resolved by
+   dropping the family rung rather than keeping the field. Two reasons: `/api/v0/models` always
+   returns `max_context_length`, so the family rung is only reachable when the backend answers with
+   neither field, which does not occur (an unreachable backend resolves through `StaticModelSource`
+   instead); and the family constants are wrong where it matters — the qwen2 entry says 32768 against
+   a real 262144/119552 — so falling back to a lying constant is worse than falling back to a
+   declared, logged 4096. Decisions 2 and 12 are now consistent.
 
 3. **Candidate filtering excludes embeddings rather than including LLMs.** The filter is
    `state == "loaded"` and `type != "embeddings"`. The intuitive `type == "llm"` form is wrong:
