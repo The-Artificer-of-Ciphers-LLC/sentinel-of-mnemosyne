@@ -12,13 +12,28 @@ from app.errors import (
     MessageProcessingError,
     ProviderUnavailableError,
 )
+from app.model import ModelProfile
 from app.services.response_anomaly import EXCERPT_MAX_CHARS, detect_anomalies
 from app.services.token_budget import TokenBudget, TokenLimitError
 
 if TYPE_CHECKING:
+    from app.model import ActiveModel
     from app.services.recall import Recall, RecalledContext, SearchResult
 
 logger = logging.getLogger(__name__)
+
+#: The error code a resolution failure surfaces under. Deliberately distinct
+#: from ``provider_unavailable``: the backend is not down, it is ambiguous or
+#: misconfigured, and conflating the two would tell an operator to check the
+#: wrong thing. ``map_message_exception`` maps unrecognised codes to 502.
+MODEL_UNRESOLVED_CODE = "model_unresolved"
+
+#: What the caller is told when resolution fails. Deliberately free of model ids
+#: and api_base values — the same leak rule POST /provider/complete follows
+#: (T-42-08). The detail is logged server-side instead.
+_MODEL_UNRESOLVED_DETAIL = (
+    "Could not determine which model to use. See the server log for detail."
+)
 
 
 @dataclass(frozen=True)
@@ -64,11 +79,17 @@ class MessageProcessor:
         output_scanner,
         *,
         recall: "Recall | None" = None,
+        active_model: "ActiveModel | None" = None,
     ) -> None:
         self._vault = vault
         self._ai_provider = ai_provider
         self._injection_filter = injection_filter
         self._output_scanner = output_scanner
+        # The Active model seam for the PRIMARY provider (ADR-0007). Wired only
+        # when the seam describes the backend this processor's provider talks to;
+        # composition leaves it None for a non-LM-Studio AI_PROVIDER, where the
+        # request then falls back to the request's own scalars exactly as before.
+        self._active_model = active_model
         self._budget = TokenBudget()
         if recall is not None:
             self._recall = recall
@@ -78,13 +99,64 @@ class MessageProcessor:
             from app.services.recall import Recall  # noqa: PLC0415
             self._recall = Recall(vault=vault)
 
+    def _profile_from_request(self, req: MessageRequest) -> ModelProfile:
+        """The transitional bridge for callers with no seam wired.
+
+        ``MessageRequest``'s three scalars survive this change (ADR-0007 step 4
+        removes them, together with ``ProviderRouterBundle``). Until then, a
+        processor built without an ``ActiveModel`` reads them and presents them as
+        a profile, so every path below this line deals in ONE value regardless of
+        where the facts came from.
+        """
+        return ModelProfile(
+            model_id=req.model_name,
+            litellm_model=req.model_name,
+            context_window=req.context_window,
+            stop_sequences=tuple(req.stop_sequences or ()),
+            task_kind="chat",
+        )
+
+    async def _resolve_profile(self, req: MessageRequest) -> ModelProfile:
+        """Ask the seam which model will answer, or bridge from the request.
+
+        A resolution failure surfaces as a clean ``MessageProcessingError`` rather
+        than an unhandled 500 — and it deliberately does NOT fall back to the
+        cloud provider. ``_FALLBACK_TRIGGERS`` exists for a backend that is DOWN;
+        an undisambiguatable or misconfigured local backend is neither, and
+        diverting it to the paid provider would convert an operator error into a
+        bill while hiding the very condition ADR decision 4's raise exists to
+        announce (ADR-0007 decision 4 as amended 2026-09-08).
+        """
+        if self._active_model is None:
+            return self._profile_from_request(req)
+        try:
+            return await self._active_model.for_task("chat")
+        except Exception as exc:
+            logger.error(
+                "Active model resolution failed on the chat path (%s: %s) — "
+                "refusing the request rather than falling back to the cloud "
+                "provider with an unconfirmed model",
+                type(exc).__name__,
+                exc,
+            )
+            raise MessageProcessingError(
+                MODEL_UNRESOLVED_CODE, _MODEL_UNRESOLVED_DETAIL
+            ) from exc
+
     async def process(self, req: MessageRequest) -> MessageResult:
+        # ADR-0007: one resolution per request, before any budgeting, so every
+        # token count below is against the window the backend will actually
+        # honour (the live box: 119552 loaded, not 262144 maximum).
+        profile = await self._resolve_profile(req)
+        context_window = profile.context_window
+        model_name = profile.model_id or req.model_name
+
         # Delegate hot+warm assembly to Recall (MEM-01).
-        recalled = await self._recall.assemble(req, req.context_window)
+        recalled = await self._recall.assemble(req, context_window)
 
         # Per-tier budgets — sourced from Recall's allocator so the ratio
         # constants live only in RecallConfig (MEM-02).
-        budgets = self._recall.allocate(req.context_window)
+        budgets = self._recall.allocate(context_window)
         sessions_budget = budgets.sessions_budget
         search_budget = budgets.search_budget
 
@@ -148,14 +220,20 @@ class MessageProcessor:
         messages.append({"role": "user", "content": safe_input})
 
         try:
-            self._budget.check(messages, req.context_window)
+            self._budget.check(messages, context_window)
         except TokenLimitError as exc:
             raise MessageProcessingError("context_overflow", str(exc)) from exc
 
         try:
-            # req.stop_sequences was previously resolved by the factory and then
-            # dropped here because the Protocol didn't declare a stop parameter.
-            content = await self._ai_provider.complete(messages, stop=req.stop_sequences)
+            # The profile carries the stop sequences now. `stop=` is still passed
+            # explicitly so the 93df616 defect cannot come back by omission: that
+            # bug was the chat path silently DROPPING stop sequences because the
+            # Protocol did not declare the parameter, and a call site that names
+            # the argument cannot drop it again.
+            stop_sequences = list(profile.stop_sequences) or None
+            content = await self._ai_provider.complete(
+                messages, profile=profile, stop=stop_sequences
+            )
         except ProviderUnavailableError as exc:
             raise MessageProcessingError("provider_unavailable", str(exc)) from exc
         except ContextLengthError as exc:
@@ -182,7 +260,7 @@ class MessageProcessor:
                 logger.warning(
                     "response-anomaly: signals=%s model=%s content_len=%d excerpt=%r",
                     anomaly.signals,
-                    req.model_name,
+                    model_name,
                     len(content),
                     excerpt,
                 )
@@ -195,15 +273,20 @@ class MessageProcessor:
                 "security_blocked", "Response blocked by security scanner"
             )
 
+        # ADR-0007 Defect B, second half: the recorded model is the one this
+        # request actually resolved, not the one configuration names. The
+        # message-request factory reads the seam's CACHED profile for the same
+        # reason; this reads the freshly resolved one, which is strictly closer
+        # to "what answered".
         summary_path, summary_content = self._build_session_summary(
             req.user_id,
             req.content,
             content,
-            req.model_name,
+            model_name,
         )
         return MessageResult(
             content=content,
-            model=req.model_name,
+            model=model_name,
             summary_path=summary_path,
             summary_content=summary_content,
         )

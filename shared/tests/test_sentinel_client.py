@@ -206,7 +206,12 @@ async def test_complete_success(client):
     mock_http.post.assert_called_once()
     assert mock_http.post.call_args.args == ("http://sentinel-core:8000/provider/complete",)
     assert mock_http.post.call_args.kwargs == {
-        "json": {"messages": messages, "stop": None, "temperature": None},
+        "json": {
+            "messages": messages,
+            "stop": None,
+            "temperature": None,
+            "task": "chat",
+        },
         "headers": {"X-Sentinel-Key": "test-secret-key"},
         "timeout": 10.0,
     }
@@ -227,7 +232,32 @@ async def test_complete_forwards_stop_and_temperature(client):
         "messages": messages,
         "stop": ["\n"],
         "temperature": 0.2,
+        "task": "chat",
     }
+
+
+async def test_complete_forwards_the_task_tier(client):
+    """A module names a TIER, never a model (ADR-0007 decision 7).
+
+    This is the whole of what pf2e is allowed to say about model selection: core
+    resolves, pf2e asks.
+    """
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"content": "ok", "model": "qwen/qwen3.8-27b"}
+    mock_resp.raise_for_status = MagicMock()
+
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(return_value=mock_resp)
+
+    messages = [{"role": "user", "content": "hello"}]
+    await client.complete(messages, mock_http, task="structured")
+
+    body = mock_http.post.call_args.kwargs["json"]
+    assert body["task"] == "structured"
+    # And nothing that would make pf2e a second discoverer crossed the wire.
+    assert "model" not in body
+    assert "api_base" not in body
+    assert "profile" not in body
 
 
 async def test_complete_raises_http_status_error(client):

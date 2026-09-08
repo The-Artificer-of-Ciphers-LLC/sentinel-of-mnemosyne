@@ -93,6 +93,102 @@ async def test_complete_returns_empty_string_when_both_content_and_reasoning_emp
     assert result == ""
 
 
+# ---------------------------------------------------------------------------
+# ADR-0007 step 3 — the profile is the argument
+# ---------------------------------------------------------------------------
+
+
+def _ok_response(text: str = "ok"):
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = text
+    return mock_response
+
+
+async def test_profile_supplies_model_api_base_and_stop_sequences(lmstudio_provider):
+    """The profile is authoritative for all three model facts.
+
+    The fixture provider was constructed naming `openai/test-model` at
+    `http://test-lmstudio/v1`; a call carrying a profile must use the PROFILE's
+    model and base instead. That is the whole point of ADR-0007: a model string
+    pinned at construction time is the staleness this design removes.
+    """
+    from app.model import ModelProfile
+
+    profile = ModelProfile(
+        model_id="qwen/qwen3.8-27b",
+        litellm_model="openai/qwen/qwen3.8-27b",
+        api_base="http://swapped-lmstudio/v1",
+        context_window=119552,
+        stop_sequences=("<|im_end|>",),
+    )
+    with patch(
+        "litellm.acompletion", new_callable=AsyncMock, return_value=_ok_response()
+    ) as mock_call:
+        await lmstudio_provider.complete([{"role": "user", "content": "hi"}], profile)
+
+    kwargs = mock_call.await_args.kwargs
+    assert kwargs["model"] == "openai/qwen/qwen3.8-27b"
+    assert kwargs["api_base"] == "http://swapped-lmstudio/v1"
+    assert kwargs["stop"] == ["<|im_end|>"]
+    # The credential is construction-time state, not a model fact — it survives.
+    assert kwargs["api_key"] == "lmstudio"
+
+
+async def test_profile_without_stop_sequences_sends_no_stop_kwarg(lmstudio_provider):
+    """No stop sequences means no `stop` kwarg at all — not an empty list.
+
+    litellm treats an explicit empty `stop` differently from an absent one on
+    some backends, and a cloud model receiving `stop: []` is not the same request
+    as one receiving none.
+    """
+    from app.model import ModelProfile
+
+    profile = ModelProfile(
+        model_id="claude-haiku-4-5", litellm_model="claude-haiku-4-5"
+    )
+    with patch(
+        "litellm.acompletion", new_callable=AsyncMock, return_value=_ok_response()
+    ) as mock_call:
+        await lmstudio_provider.complete([{"role": "user", "content": "hi"}], profile)
+
+    assert "stop" not in mock_call.await_args.kwargs
+
+
+async def test_explicit_stop_overrides_the_profile(lmstudio_provider):
+    """POST /provider/complete carries a `stop` field a module may set for its
+    own prompt shape; when present it wins over the profile's."""
+    from app.model import ModelProfile
+
+    profile = ModelProfile(
+        model_id="qwen/qwen3.8-27b",
+        litellm_model="openai/qwen/qwen3.8-27b",
+        stop_sequences=("<|im_end|>",),
+    )
+    with patch(
+        "litellm.acompletion", new_callable=AsyncMock, return_value=_ok_response()
+    ) as mock_call:
+        await lmstudio_provider.complete(
+            [{"role": "user", "content": "hi"}], profile, stop=["###"]
+        )
+
+    assert mock_call.await_args.kwargs["stop"] == ["###"]
+
+
+async def test_no_profile_falls_back_to_construction_time_configuration(
+    lmstudio_provider,
+):
+    """The static cloud case, and the pre-ADR-0007 posture, both still work."""
+    with patch(
+        "litellm.acompletion", new_callable=AsyncMock, return_value=_ok_response()
+    ) as mock_call:
+        await lmstudio_provider.complete([{"role": "user", "content": "hi"}])
+
+    kwargs = mock_call.await_args.kwargs
+    assert kwargs["model"] == "openai/test-model"
+    assert kwargs["api_base"] == "http://test-lmstudio/v1"
+
+
 async def test_get_context_window_from_lmstudio_returns_value():
     import httpx
     def handler(request):

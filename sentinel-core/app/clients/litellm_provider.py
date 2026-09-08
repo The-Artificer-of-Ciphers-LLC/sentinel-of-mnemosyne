@@ -10,6 +10,7 @@ Hard timeout: 120 seconds per litellm.acompletion() call (PROV-03 — raised fro
 Supply chain note: litellm>=1.83.0 required — versions 1.82.7-1.82.8 were malicious (March 2026).
 """
 import logging
+from typing import TYPE_CHECKING
 
 import httpx
 import litellm
@@ -21,6 +22,10 @@ from tenacity import (
 
 from app.clients.retry_config import RETRY_STOP, RETRY_WAIT
 from app.services.provider_router import ContextLengthError
+from sentinel_shared.llm_call import extract_completion_text
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from app.model import ModelProfile
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +65,20 @@ class LiteLLMProvider:
     Claude:     model_string="claude-haiku-4-5" (or sonnet), api_key=anthropic_api_key
     Ollama:     model_string="ollama/<model_name>", api_base="http://<host>:11434"
     llama.cpp:  model_string="openai/<model_name>", api_base="http://<host>:8080/v1"
+
+    ADR-0007 step 3: the constructor arguments survive, but their JOB narrowed.
+    ``api_key`` is still construction-time state (it is a credential, not a model
+    fact) and ``model_string`` / ``api_base`` are now only the STATIC fallback —
+    what to use when a call supplies no ``ModelProfile``, i.e. the cloud provider
+    whose model never changes underneath us. When a profile IS supplied it is
+    authoritative for the model id, the api base and the stop sequences.
+
+    This adapter deliberately holds NO ``ActiveModel`` reference. ADR-0007
+    rejected the "adapter resolves the model internally" option because it
+    inverts ADR-0002's layering: a single-purpose HTTP adapter under
+    ``app/clients/`` would depend on a service module, and the three scalars on
+    ``MessageRequest`` would survive because nothing above would need to carry
+    them. ``ProviderRouter`` — a service — holds the seam instead.
     """
 
     def __init__(
@@ -81,37 +100,60 @@ class LiteLLMProvider:
     async def complete(
         self,
         messages: list[dict],
+        profile: "ModelProfile | None" = None,
         stop: list[str] | None = None,
         temperature: float | None = None,
     ) -> str:
         """
         Submit messages to the configured provider via LiteLLM.
         Retries 3x on transient errors. Raises immediately on 401/422/404.
-        Hard 30-second timeout per call enforces PROV-03 ceiling.
+        Hard 120-second timeout per call enforces PROV-03 ceiling.
 
-        stop: optional list of stop sequences for the model family (from ModelProfile).
-              Passed through to litellm.acompletion when non-empty so the LLM halts
-              at the correct end-of-turn token for the loaded model architecture.
+        profile: the model facts as ONE value (ADR-0007). When supplied it is
+              authoritative and fully determines the call: ``litellm_model`` is
+              the model string, ``api_base`` is the base URL, and
+              ``stop_sequences`` are the stop sequences. It is deliberately NOT
+              merged with the constructor's ``model_string``/``api_base`` — a
+              half-profile call that inherited the constructor's base URL is
+              exactly how a Claude profile would end up pointed at LM Studio.
+              ``None`` restores the pre-ADR-0007 behaviour (construction-time
+              model and base), which is what the static cloud provider uses.
+
+        stop: an explicit override of ``profile.stop_sequences``, present because
+              ``POST /provider/complete`` carries a ``stop`` field. When it is
+              empty/None the profile answers. With neither, no ``stop`` kwarg is
+              sent at all.
 
         temperature: optional sampling temperature. Forwarded to litellm.acompletion
               when not None. No caller currently pins a temperature for the chat
               path. Pass None to use litellm's default.
         """
+        if profile is not None:
+            model_string = profile.litellm_model
+            api_base = profile.api_base
+            profile_stop = list(profile.stop_sequences)
+        else:
+            model_string = self._model_string
+            api_base = self._api_base
+            profile_stop = []
+
+        stop_sequences = list(stop) if stop else profile_stop
+
         kwargs: dict = {
-            "model": self._model_string,
+            "model": model_string,
             "messages": messages,
             "timeout": 120.0,  # hard per-call ceiling (PROV-03 — raised from 30s for local 14B MLX)
         }
-        if self._api_base:
-            kwargs["api_base"] = self._api_base
+        if api_base:
+            kwargs["api_base"] = api_base
         if self._api_key:
             kwargs["api_key"] = self._api_key
-        if stop:
-            kwargs["stop"] = stop
+        if stop_sequences:
+            kwargs["stop"] = stop_sequences
         if temperature is not None:
             kwargs["temperature"] = temperature
 
-        logger.debug(f"LiteLLMProvider.complete: model={self._model_string}")
+        logger.debug(f"LiteLLMProvider.complete: model={model_string}")
         try:
             response = await litellm.acompletion(**kwargs)
         except BadRequestError as exc:
@@ -123,21 +165,12 @@ class LiteLLMProvider:
                     "Try a shorter message."
                 ) from exc
             raise
-        # Reasoning models (e.g. google/gemma-4-31b) can return `content`
-        # empty/None with the actual text in `reasoning_content` — mirrors
-        # the LM Studio + Qwen3 thinking-mode fallback used in
-        # app/services/six_rs/reduce.py::_extract_completion_content and
-        # pipeline_orchestrator.py::_extract_completion_content (bug #1773).
-        # POST /provider/complete's response model declares `content: str`,
-        # so this must never return None — "" is the floor.
-        msg = response.choices[0].message
-        if isinstance(msg, dict):
-            return msg.get("content") or msg.get("reasoning_content") or ""
-        return (
-            getattr(msg, "content", None)
-            or getattr(msg, "reasoning_content", None)
-            or ""
-        )
+        # ADR-0007 step 3: the empty-content / reasoning_content fallback used to
+        # be hand-written here and in five other modules. It now lives in exactly
+        # one place, beside the wrapper that produces the raw response the other
+        # five parse. This module already depends on `shared/`, so importing it
+        # adds no layering exception.
+        return extract_completion_text(response)
 
 
 async def get_context_window_from_lmstudio(

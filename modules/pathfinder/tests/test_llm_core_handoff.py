@@ -73,8 +73,6 @@ async def test_generate_npc_reply_consumes_core_client_content():
         result = await generate_npc_reply(
             system_prompt="You are Varek.",
             user_prompt="Hello!",
-            model="unused-because-core-resolves-it",
-            api_base="unused-because-core-resolves-it",
         )
 
     assert result == {"reply": "Hello there.", "mood_delta": 1}
@@ -94,7 +92,7 @@ async def test_generate_npc_reply_json_parse_failure_still_salvages():
         new=AsyncMock(return_value=_core_result("this is plain prose, no JSON at all")),
     ):
         result = await generate_npc_reply(
-            system_prompt="sys", user_prompt="user", model="m",
+            system_prompt="sys", user_prompt="user",
         )
     assert result["reply"] == "this is plain prose, no JSON at all"
     assert result["mood_delta"] == 0
@@ -109,7 +107,7 @@ async def test_generate_npc_reply_core_raise_propagates_unswallowed():
         new=AsyncMock(side_effect=httpx.ConnectError("core unreachable")),
     ):
         with pytest.raises(httpx.ConnectError):
-            await generate_npc_reply(system_prompt="sys", user_prompt="user", model="m")
+            await generate_npc_reply(system_prompt="sys", user_prompt="user")
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +131,6 @@ async def test_generate_ruling_from_passages_uses_core_client_and_preserves_cita
             query="does off-guard apply",
             passages=passages,
             topic="off-guard",
-            model="m",
         )
 
     assert result["marker"] == "source"
@@ -157,7 +154,7 @@ async def test_generate_ruling_fallback_uses_core_client_generated_marker():
             json.dumps({"question": "q", "answer": "a", "why": "w"})
         )),
     ) as mock_complete:
-        result = await generate_ruling_fallback(query="q", topic="misc", model="m")
+        result = await generate_ruling_fallback(query="q", topic="misc")
 
     assert result["marker"] == "generated"
     assert result["source"] is None
@@ -182,7 +179,7 @@ async def test_generate_session_recap_uses_core_client_and_parses_required_keys(
         new=AsyncMock(return_value=_core_result(json.dumps(payload))),
     ) as mock_complete:
         result = await generate_session_recap(
-            events_log="stuff happened", npc_frontmatter_block="", model="m",
+            events_log="stuff happened", npc_frontmatter_block="",
         )
 
     assert result == payload
@@ -204,7 +201,6 @@ async def test_generate_mj_description_uses_core_client_returns_plain_string():
                 "ancestry": "Gnome", "class": "Rogue", "traits": [],
                 "personality": "p", "backstory": "b",
             },
-            model="m",
         )
 
     assert result == "nervous eyes, disheveled clothing"
@@ -225,7 +221,7 @@ async def test_extract_npc_fields_uses_core_client_and_parses_field_dict():
         "app.llm._core_client.complete",
         new=AsyncMock(return_value=_core_result(json.dumps(payload))),
     ) as mock_complete:
-        result = await extract_npc_fields(name="Fenn", description="a scout", model="m")
+        result = await extract_npc_fields(name="Fenn", description="a scout")
 
     assert result == payload
     mock_complete.assert_awaited_once()
@@ -247,7 +243,6 @@ async def test_update_npc_fields_uses_core_client_and_parses_changed_fields():
         result = await update_npc_fields(
             current_note="---\nname: Varek\nlevel: 1\n---\n",
             correction="Varek is now level 7",
-            model="m",
         )
 
     assert result == {"level": 7}
@@ -275,7 +270,7 @@ async def test_generate_harvest_fallback_uses_core_client_and_parses_shape():
         "app.llm._core_client.complete",
         new=AsyncMock(return_value=_core_result(json.dumps(payload))),
     ) as mock_complete:
-        result = await generate_harvest_fallback(monster_name="Bogeyman", model="m")
+        result = await generate_harvest_fallback(monster_name="Bogeyman")
 
     assert result["source"] == "llm-generated"
     assert result["verified"] is False
@@ -293,7 +288,7 @@ async def test_classify_rule_topic_uses_core_client_returns_known_slug():
         "app.llm._core_client.complete",
         new=AsyncMock(return_value=_core_result(json.dumps({"topic": "flanking"}))),
     ) as mock_complete:
-        result = await classify_rule_topic("How does flanking work?", model="m")
+        result = await classify_rule_topic("How does flanking work?")
 
     assert result == "flanking"
     mock_complete.assert_awaited_once()
@@ -312,7 +307,7 @@ async def test_generate_story_so_far_uses_core_client_returns_plain_string():
         "app.llm._core_client.complete",
         new=AsyncMock(return_value=_core_result("The party arrived in Westcrown.")),
     ) as mock_complete:
-        result = await generate_story_so_far(events_log="stuff happened", model="m")
+        result = await generate_story_so_far(events_log="stuff happened")
 
     assert result == "The party arrived in Westcrown."
     mock_complete.assert_awaited_once()
@@ -325,7 +320,7 @@ async def test_generate_story_so_far_core_raise_degrades_gracefully():
         "app.llm._core_client.complete",
         new=AsyncMock(side_effect=httpx.ConnectError("core unreachable")),
     ):
-        result = await generate_story_so_far(events_log="stuff happened", model="m")
+        result = await generate_story_so_far(events_log="stuff happened")
 
     assert result == "_Story so far generation failed — events are in the Events Log below._"
 
@@ -348,7 +343,7 @@ async def test_embed_texts_delegates_to_core_client_and_returns_vectors():
         "app.llm._core_client.embed",
         new=AsyncMock(return_value=_core_embed_result(vectors)),
     ) as mock_embed:
-        result = await embed_texts(["a", "b"], model="text-embedding-nomic-embed-text-v1.5")
+        result = await embed_texts(["a", "b"])
 
     assert result == vectors
     mock_embed.assert_awaited_once()
@@ -364,17 +359,17 @@ async def test_embed_texts_delegates_to_core_client_and_returns_vectors():
 
 async def test_embed_texts_raises_valueerror_on_empty_list():
     with pytest.raises(ValueError):
-        await embed_texts([], model="m")
+        await embed_texts([])
 
 
 async def test_embed_texts_raises_valueerror_on_non_list():
     with pytest.raises(ValueError):
-        await embed_texts("not-a-list", model="m")  # type: ignore[arg-type]
+        await embed_texts("not-a-list")  # type: ignore[arg-type]
 
 
 async def test_embed_texts_raises_valueerror_on_non_string_item():
     with pytest.raises(ValueError):
-        await embed_texts(["ok", 123], model="m")  # type: ignore[list-item]
+        await embed_texts(["ok", 123])  # type: ignore[list-item]
 
 
 async def test_embed_texts_raises_valueerror_on_count_mismatch():
@@ -383,7 +378,7 @@ async def test_embed_texts_raises_valueerror_on_count_mismatch():
         new=AsyncMock(return_value=_core_embed_result([[0.1, 0.2]])),
     ):
         with pytest.raises(ValueError):
-            await embed_texts(["a", "b"], model="m")
+            await embed_texts(["a", "b"])
 
 
 async def test_embed_texts_core_raise_propagates_unswallowed():
@@ -395,7 +390,66 @@ async def test_embed_texts_core_raise_propagates_unswallowed():
         new=AsyncMock(side_effect=httpx.ConnectError("core unreachable")),
     ):
         with pytest.raises(httpx.ConnectError):
-            await embed_texts(["a"], model="m")
+            await embed_texts(["a"])
+
+
+# ---------------------------------------------------------------------------
+# ADR-0007 step 3 — a TASK TIER is the only thing pf2e says about model choice
+# ---------------------------------------------------------------------------
+
+
+async def test_task_tier_reaches_the_wire():
+    """Each helper names the tier its own job needs.
+
+    Before ADR-0007 the tier was resolved in the ROUTE and then thrown away —
+    pf2e looked like it was choosing a model while core silently used its own.
+    The tier is now the one thing that actually crosses.
+    """
+    cases = [
+        ("structured", lambda: extract_npc_fields(name="Fenn", description="a scout")),
+        (
+            "structured",
+            lambda: update_npc_fields(current_note="---\nlevel: 1\n---\n", correction="c"),
+        ),
+        ("structured", lambda: classify_rule_topic("How does flanking work?")),
+        ("chat", lambda: generate_npc_reply(system_prompt="s", user_prompt="u")),
+        ("chat", lambda: generate_story_so_far(events_log="e")),
+        (
+            "fast",
+            lambda: generate_mj_description(
+                fields={"ancestry": "Gnome", "class": "Rogue", "traits": []}
+            ),
+        ),
+    ]
+    payload = json.dumps(
+        {"topic": "flanking", "reply": "hi", "mood_delta": 0, "level": 7,
+         "name": "Fenn", "ancestry": "Human", "class": "Scout", "traits": [],
+         "personality": "p", "backstory": "b", "mood": "neutral"}
+    )
+    for expected_task, call in cases:
+        with patch(
+            "app.llm._core_client.complete",
+            new=AsyncMock(return_value=_core_result(payload)),
+        ) as mock_complete:
+            await call()
+        assert mock_complete.await_args.kwargs["task"] == expected_task, expected_task
+
+
+async def test_no_model_api_base_or_profile_value_originates_in_pathfinder():
+    """ADR decision 7: core is the only process that asks the backend which model
+    is loaded. A profile or model id constructed here would make pf2e a second
+    discoverer with its own cache, free to disagree with core's."""
+    with patch(
+        "app.llm._core_client.complete",
+        new=AsyncMock(return_value=_core_result('{"reply": "hi", "mood_delta": 0}')),
+    ) as mock_complete:
+        await generate_npc_reply(system_prompt="s", user_prompt="u")
+
+    kwargs = mock_complete.await_args.kwargs
+    assert "model" not in kwargs
+    assert "api_base" not in kwargs
+    assert "profile" not in kwargs
+    assert set(kwargs) == {"messages", "client", "task"}
 
 
 def test_llm_module_has_no_direct_vendor_embedding_call():

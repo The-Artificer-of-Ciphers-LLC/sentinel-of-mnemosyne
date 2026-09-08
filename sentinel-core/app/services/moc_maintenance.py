@@ -32,6 +32,7 @@ from app.services.embedding_sidecar_index import EligibleEmbeddingEntry, eligibl
 from app.services.graph_analysis import NOTES_ROOT
 from app.services.note_schema import split_schema_block
 from app.services.recall import RecallConfig
+from sentinel_shared.llm_call import extract_completion_text
 from sentinel_shared.similarity import cosine_similarity
 
 logger = logging.getLogger(__name__)
@@ -317,25 +318,10 @@ def _slugify(text: str) -> str:
     return s
 
 
-def _extract_completion_content(response: Any) -> str:
-    """Extract assistant text from a litellm-shaped completion response.
-
-    Mirrors ``note_classifier.classify_note``'s extraction exactly,
-    including the LM Studio + Qwen3 thinking-mode fallback to
-    ``reasoning_content`` when ``content`` is empty. Never raises.
-    """
-    try:
-        if isinstance(response, dict):
-            msg = response["choices"][0]["message"]
-            return msg.get("content") or msg.get("reasoning_content") or ""
-        msg = response.choices[0].message  # type: ignore[attr-defined]
-        return (
-            getattr(msg, "content", None)
-            or getattr(msg, "reasoning_content", None)
-            or ""
-        )
-    except Exception:
-        return ""
+# ADR-0007 step 3: this module's own copy of the `content or reasoning_content`
+# fallback is gone. The single implementation lives in
+# `sentinel_shared.llm_call`, beside the `acompletion_with_profile` that produces
+# the raw response being read — see `_propose_hub_slug`'s call site below.
 
 
 async def propose_hub_slug(*, member_texts: list[str], completion_fn: CompletionFn) -> str:
@@ -367,7 +353,7 @@ async def propose_hub_slug(*, member_texts: list[str], completion_fn: Completion
         logger.warning("propose_hub_slug: completion_fn failed: %s", exc)
         return "untitled-concept"
 
-    raw_content = _extract_completion_content(response)
+    raw_content = extract_completion_text(response)
     try:
         parsed = json.loads(raw_content) if raw_content else {}
     except Exception:

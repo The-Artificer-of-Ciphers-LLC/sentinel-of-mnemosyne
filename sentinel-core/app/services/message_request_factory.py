@@ -21,8 +21,10 @@ def recorded_model_name(ctx) -> str:
     this factory is on the transport path and the seam's own TTL owns when a
     refresh happens.
 
-    Falls back to ``settings.model_name`` when no seam is present, which keeps
-    the ``_LazyRouteCtx`` test fixtures (replaced in Plan 02) working.
+    Falls back to ``settings.model_name`` when no seam is present. That is not a
+    test-only path: the seam is LM STUDIO's unconditionally (SC-3), so
+    composition leaves it unwired on the chat path whenever ``AI_PROVIDER`` names
+    a different backend, and this is what that deployment records.
     """
     active_model = getattr(ctx, "active_model", None)
     if active_model is not None:

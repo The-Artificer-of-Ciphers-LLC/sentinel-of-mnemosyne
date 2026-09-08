@@ -9,10 +9,18 @@ chat.
 Phase 43-03 (EMB-01, D-06/D-07): embed_texts() now reaches vectors through
 sentinel-core's POST /embeddings via `SentinelCoreClient.embed()`, the
 embeddings mirror of the Phase 42 chat handoff. pf2e no longer calls a
-vendor embedding SDK directly for either chat or embeddings; `model`/
-`api_base` remain accepted-but-vestigial parameters on embed_texts() so its
-two call sites (main.py's _rule_embed_fn closure and rule_query.py's
-injected embed_texts) need zero changes (D-04, Pattern 3).
+vendor embedding SDK directly for either chat or embeddings.
+
+ADR-0007 step 3: every function here used to accept `model` / `api_base` /
+`profile` and forward NONE of them — parameters kept alive so migrating call
+sites needed no edits, which then made pf2e LOOK like it selected models. It
+never did. They are gone. What a function says about model selection now is one
+thing: the TASK TIER it names on `SentinelCoreClient.complete(task=...)`. The
+tier is fixed per function because each function's own job fixes it — JSON
+extraction needs a tool-use-capable model, dialogue does not — so no caller has
+to know, and none has ever varied it. Core resolves the actual model, which
+ADR-0007 decision 7 makes core's exclusive job: a second discoverer here would
+mean two caches free to disagree about which model is loaded.
 
 Phase 33 (Wave 2) adds four rules-engine helpers:
   - embed_texts           — POST /embeddings via SentinelCoreClient.embed() (D-02 step 3 retrieval)
@@ -34,7 +42,6 @@ import litellm
 
 from app.config import settings
 from sentinel_client import SentinelCoreClient
-from sentinel_shared.model_profiles import ModelProfile
 
 logger = logging.getLogger(__name__)
 
@@ -77,13 +84,7 @@ def _strip_code_fences(text: str) -> str:
     return text.strip()
 
 
-async def extract_npc_fields(
-    name: str,
-    description: str,
-    model: str,
-    api_base: str | None = None,
-    profile: ModelProfile | None = None,
-) -> dict:
+async def extract_npc_fields(name: str, description: str) -> dict:
     """Call LLM to extract NPC frontmatter fields from a freeform description.
 
     Returns a dict with keys: name, level (int), ancestry, class, traits (list),
@@ -112,18 +113,13 @@ async def extract_npc_fields(
                 {"role": "user", "content": f"Name: {name}\nDescription: {description}"},
             ],
             client=client,
+            task="structured",  # returns JSON — needs a tool-use-capable model
         )
     content = result["content"]
     return json.loads(_strip_code_fences(content))
 
 
-async def generate_npc_reply(
-    system_prompt: str,
-    user_prompt: str,
-    model: str,
-    api_base: str | None = None,
-    profile: ModelProfile | None = None,
-) -> dict:
+async def generate_npc_reply(system_prompt: str, user_prompt: str) -> dict:
     """LLM dialogue call — returns {reply: str, mood_delta: int} for one NPC turn (DLG-01, DLG-02).
 
     Single chat call extracts both the in-character reply and the mood shift signal.
@@ -131,7 +127,7 @@ async def generate_npc_reply(
     - Returns {reply: <salvaged prose>, mood_delta: 0}; does NOT raise.
     - Logs WARNING with raw[:200] for diagnosis.
 
-    Caller is responsible for selecting the model (D-27 — chat tier from resolve_model("chat")).
+    Names the chat tier; core picks the model (ADR-0007 decision 7).
     """
     async with httpx.AsyncClient() as client:
         result = await _core_client.complete(
@@ -140,6 +136,7 @@ async def generate_npc_reply(
                 {"role": "user", "content": user_prompt},
             ],
             client=client,
+            task="chat",
         )
     raw = result["content"] or ""
     stripped = _strip_code_fences(raw).strip()
@@ -160,12 +157,7 @@ async def generate_npc_reply(
         return {"reply": salvaged, "mood_delta": 0}
 
 
-async def generate_mj_description(
-    fields: dict,
-    model: str,
-    api_base: str | None = None,
-    profile: ModelProfile | None = None,
-) -> str:
+async def generate_mj_description(fields: dict) -> str:
     """Generate a comma-separated visual description for a Midjourney token prompt (OUT-02).
 
     Constrained LLM call: output length is steered by the system prompt
@@ -202,6 +194,7 @@ async def generate_mj_description(
                 },
             ],
             client=client,
+            task="fast",  # a 15-30 token visual phrase list — the cheapest tier
         )
     return result["content"].strip()
 
@@ -221,13 +214,7 @@ def build_mj_prompt(fields: dict, description: str) -> str:
     )
 
 
-async def update_npc_fields(
-    current_note: str,
-    correction: str,
-    model: str,
-    api_base: str | None = None,
-    profile: ModelProfile | None = None,
-) -> dict:
+async def update_npc_fields(current_note: str, correction: str) -> dict:
     """Call LLM to extract changed fields from a freeform correction string.
 
     Returns a dict of ONLY the fields that changed (e.g., {"level": 7}).
@@ -252,17 +239,13 @@ async def update_npc_fields(
                 {"role": "user", "content": f"Current note:\n{current_note}\n\nCorrection: {correction}"},
             ],
             client=client,
+            task="structured",  # returns JSON — same tier as /create
         )
     content = result["content"]
     return json.loads(_strip_code_fences(content))
 
 
-async def generate_harvest_fallback(
-    monster_name: str,
-    model: str,
-    api_base: str | None = None,
-    profile: ModelProfile | None = None,
-) -> dict:
+async def generate_harvest_fallback(monster_name: str) -> dict:
     """Generate a harvest table for an unseeded monster (D-02 LLM fallback).
 
     Grounds the LLM in the canonical DC-by-level table (GM Core pg. 52, levels 0-25)
@@ -328,6 +311,10 @@ async def generate_harvest_fallback(
                 {"role": "user", "content": f"Monster: `{safe_name}`"},
             ],
             client=client,
+            # Chat, matching the tier the harvest route resolved before
+            # ADR-0007: the DC clamp below is the guard against a weaker
+            # model's arithmetic, not the model tier.
+            task="chat",
         )
     content = result["content"]
     parsed = json.loads(_strip_code_fences(content))
@@ -416,11 +403,7 @@ async def generate_harvest_fallback(
 # ---------------------------------------------------------------------------
 
 
-async def embed_texts(
-    texts: list[str],
-    model: str,
-    api_base: str | None = None,
-) -> list[list[float]]:
+async def embed_texts(texts: list[str]) -> list[list[float]]:
     """Return a list of embedding vectors (one per input) via sentinel-core's
     POST /embeddings gateway (Phase 43-03, EMB-01, D-06/D-07).
 
@@ -432,11 +415,12 @@ async def embed_texts(
     Arguments:
       texts: list of raw strings — caller is responsible for HTML stripping
              (strip_rule_html in app.rules) and normalization.
-      model: vestigial — retained only so both existing call sites
-             (main.py's _rule_embed_fn closure and rule_query.py's
-             deps.embed_texts) compile unchanged this phase; core owns
-             backend/model selection (D-04) and this value is NOT forwarded.
-      api_base: vestigial for the same reason as `model` — NOT forwarded.
+
+    There is no model or api_base parameter. ADR decision 5 keeps the embedding
+    model OBSERVED rather than re-pointed — re-pointing embedding calls at
+    whatever is loaded would invalidate every entry in the embedding index and
+    turn a loud model swap into quiet memory loss — so core owns the embedding
+    model absolutely and there is nothing here for a caller to say about it.
 
     Returns: list[list[float]] — one vector per input text, preserved in order.
 
@@ -471,12 +455,7 @@ async def embed_texts(
     return [[float(x) for x in vec] for vec in vectors]
 
 
-async def classify_rule_topic(
-    query: str,
-    model: str,
-    api_base: str | None = None,
-    profile: ModelProfile | None = None,
-) -> str:
+async def classify_rule_topic(query: str) -> str:
     """Classify a rule query into one of the closed-vocabulary topic slugs.
 
     Single LLM call returning JSON {"topic": "<slug>"}. The model is prompted
@@ -521,6 +500,7 @@ async def classify_rule_topic(
                     {"role": "user", "content": f"Query: `{safe_query}`"},
                 ],
                 client=client,
+                task="structured",  # returns {"topic": "<slug>"} JSON
             )
         content = result["content"] or ""
         parsed = json.loads(_strip_code_fences(content))
@@ -591,9 +571,6 @@ async def generate_ruling_from_passages(
     query: str,
     passages: list,
     topic: str,
-    model: str,
-    api_base: str | None = None,
-    profile: ModelProfile | None = None,
 ) -> dict:
     """Compose a ruling from corpus-retrieved passages (D-02 step 4).
 
@@ -608,8 +585,6 @@ async def generate_ruling_from_passages(
                 by app.rules.retrieve(...). Must be non-empty; the route
                 layer decides corpus-hit vs corpus-miss branch.
       topic: classified topic slug (already coerced to RULE_TOPIC_SLUGS).
-      model: LiteLLM chat model identifier.
-      api_base: LM Studio base URL.
 
     Returns a dict conforming to D-08 shape with marker='source':
       {
@@ -689,6 +664,11 @@ async def generate_ruling_from_passages(
                 {"role": "user", "content": user_prompt},
             ],
             client=client,
+            # Chat, matching the tier the rule flow resolved before ADR-0007.
+            # The salvage path below exists precisely because this tier does not
+            # guarantee JSON; raising it to "structured" would be a behaviour
+            # change this plan is not making.
+            task="chat",
         )
     raw = result["content"] or ""
     stripped = _strip_code_fences(raw).strip()
@@ -773,9 +753,6 @@ SESSION_STORY_SO_FAR_SYSTEM_PROMPT = (
 async def generate_session_recap(
     events_log: str,
     npc_frontmatter_block: str,
-    model: str,
-    api_base: str | None = None,
-    profile: ModelProfile | None = None,
 ) -> dict:
     """Generate structured session recap from events log and NPC context.
 
@@ -787,7 +764,7 @@ async def generate_session_recap(
 
     Security: system prompt includes "opaque data" anchor (T-34-01 mitigation).
     """
-    logger.info("generate_session_recap: calling LLM model=%s", model)
+    logger.info("generate_session_recap: calling LLM (chat tier)")
     user_content = (
         f"Events log:\n{events_log}\n\n"
         f"NPC context:\n{npc_frontmatter_block}"
@@ -799,6 +776,7 @@ async def generate_session_recap(
                 {"role": "user", "content": user_content},
             ],
             client=client,
+            task="chat",
         )
     content = result["content"]
     stripped = _strip_code_fences(content)
@@ -832,12 +810,7 @@ async def generate_session_recap(
     return parsed
 
 
-async def generate_story_so_far(
-    events_log: str,
-    model: str,
-    api_base: str | None = None,
-    profile: ModelProfile | None = None,
-) -> str:
+async def generate_story_so_far(events_log: str) -> str:
     """Generate a brief mid-session narrative summary from the events log.
 
     Returns a plain narrative string (not JSON-parsed).
@@ -846,7 +819,7 @@ async def generate_story_so_far(
 
     Security: system prompt includes "opaque data" anchor (T-34-01 mitigation).
     """
-    logger.info("generate_story_so_far: calling LLM model=%s", model)
+    logger.info("generate_story_so_far: calling LLM (chat tier)")
     try:
         async with httpx.AsyncClient() as client:
             result = await _core_client.complete(
@@ -855,6 +828,7 @@ async def generate_story_so_far(
                     {"role": "user", "content": f"Events so far this session:\n{events_log}"},
                 ],
                 client=client,
+                task="chat",
             )
         content = result["content"] or ""
         return content.strip() or "_Story so far generation failed — events are in the Events Log below._"
@@ -863,13 +837,7 @@ async def generate_story_so_far(
         return "_Story so far generation failed — events are in the Events Log below._"
 
 
-async def generate_ruling_fallback(
-    query: str,
-    topic: str,
-    model: str,
-    api_base: str | None = None,
-    profile: ModelProfile | None = None,
-) -> dict:
+async def generate_ruling_fallback(query: str, topic: str) -> dict:
     """Compose a ruling from LLM training data when corpus retrieval missed (RUL-02).
 
     Called when RAG retrieval returned zero passages above
@@ -923,6 +891,7 @@ async def generate_ruling_fallback(
                 {"role": "user", "content": f"Query: `{safe_query}`"},
             ],
             client=client,
+            task="chat",  # same tier as the corpus-hit branch above
         )
     raw = result["content"] or ""
     stripped = _strip_code_fences(raw).strip()

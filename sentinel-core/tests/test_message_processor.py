@@ -54,16 +54,19 @@ class FakeAIProvider:
         self._response = response
         self._raise = raise_exc
         self.received_messages: list[list[dict]] = []
+        self.received_profile = None
         self.received_stop: list[str] | None = None
         self.received_temperature: float | None = None
 
     async def complete(
         self,
         messages: list[dict],
+        profile=None,
         stop: list[str] | None = None,
         temperature: float | None = None,
     ) -> str:
         self.received_messages.append(list(messages))
+        self.received_profile = profile
         self.received_stop = stop
         self.received_temperature = temperature
         if self._raise is not None:
@@ -104,6 +107,7 @@ def make_processor(
     ai_response: str = "AI says hi.",
     ai_raises: BaseException | None = None,
     output_safe: bool = True,
+    active_model=None,
 ) -> tuple[MessageProcessor, FakeObsidian, FakeAIProvider]:
     obsidian = FakeObsidian(persona=persona, self_files=self_files)
     ai = FakeAIProvider(response=ai_response, raise_exc=ai_raises)
@@ -112,6 +116,7 @@ def make_processor(
         ai_provider=ai,
         injection_filter=FakeInjectionFilter(),
         output_scanner=FakeOutputScanner(safe=output_safe),
+        active_model=active_model,
     )
     return proc, obsidian, ai
 
@@ -480,6 +485,88 @@ async def test_response_anomaly_warning_records_the_model_that_answered(caplog):
     assert len(anomalies) == 1
     assert "model=qwen/qwen3.8-27b" in anomalies[0]
     assert "gemma" not in anomalies[0]
+
+
+# ---------------------------------------------------------------------------
+# ADR-0007 decision 4 (as amended 2026-09-08) — an unresolvable model is a
+# refusal, not a fallback.
+#
+# `for_task` RAISES when a live backend's candidates cannot be disambiguated,
+# where an earlier draft returned a config-named phantom. That gives the chat
+# path a failure mode it did not have before, and the rule is: surface it, do
+# not route it to the paid cloud provider. Routing it there would convert an
+# operator error into a bill AND hide the condition the raise exists to announce.
+# ---------------------------------------------------------------------------
+
+
+class _RaisingModelSource:
+    """A real ModelSource whose backend answers with nothing usable.
+
+    Not a stub that raises: it returns an EMPTY candidate set, which is what a
+    reachable-but-undisambiguatable backend actually produces, and lets
+    ActiveModel's own refusal rung do the raising.
+    """
+
+    async def candidates(self):
+        from app.model import ModelCandidates
+
+        return ModelCandidates()
+
+
+async def test_unresolvable_model_surfaces_as_a_clean_error():
+    """A resolution failure is a MessageProcessingError, not an unhandled 500."""
+    from app.model import ActiveModel
+
+    proc, _, _ = make_processor(active_model=ActiveModel([_RaisingModelSource()]))
+
+    with pytest.raises(MessageProcessingError) as excinfo:
+        await proc.process(make_request())
+
+    assert excinfo.value.code == "model_unresolved"
+    # The detail must not name what WAS loaded, however tempting it is to help:
+    # same leak rule the HTTP path follows (T-42-08).
+    assert "lmstudio" not in str(excinfo.value).lower()
+
+
+async def test_unresolvable_model_never_reaches_the_provider():
+    """The other half: the provider — and therefore the paid cloud fallback
+    behind it — is never called at all."""
+    from app.model import ActiveModel
+
+    proc, _, ai = make_processor(active_model=ActiveModel([_RaisingModelSource()]))
+
+    with pytest.raises(MessageProcessingError):
+        await proc.process(make_request())
+
+    assert ai.received_messages == [], "no completion may be attempted"
+
+
+async def test_resolved_profile_is_passed_to_the_provider():
+    """The profile is the argument: what the seam resolved is what the provider
+    receives, and the chat path budgets against ITS context window rather than
+    the request's."""
+    from types import SimpleNamespace
+
+    from app.model import ActiveModel, ModelProfile, StaticModelSource
+
+    resolved = ModelProfile(
+        model_id="qwen/qwen3.8-27b",
+        litellm_model="openai/qwen/qwen3.8-27b",
+        api_base="http://lmstudio.test/v1",
+        context_window=119552,
+        stop_sequences=("<|im_end|>",),
+    )
+    seam = ActiveModel([StaticModelSource([resolved])], SimpleNamespace())
+    proc, _, ai = make_processor(active_model=seam)
+
+    # The request's own scalars name a DIFFERENT model with a different window —
+    # the seam must win over both.
+    await proc.process(make_request(context_window=262144))
+
+    assert ai.received_profile is not None
+    assert ai.received_profile.model_id == "qwen/qwen3.8-27b"
+    assert ai.received_profile.context_window == 119552
+    assert ai.received_stop == ["<|im_end|>"]
 
 
 # Mark all tests in this module as async — pytest-asyncio is in auto mode per
