@@ -136,7 +136,7 @@ async def test_obsidian_context_injected_into_llm_prompt():
     """D-GD-01/D-GD-02: Obsidian self-context appears in the messages sent to ai_provider.complete()."""
     captured_messages = []
 
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Test response referencing vault context."
 
@@ -170,7 +170,7 @@ async def test_recent_sessions_injected_into_llm_prompt():
     """D-GD-02: Recent session history from Obsidian appears in the messages sent to ai_provider."""
     captured_messages = []
 
-    async def capturing_complete(messages):
+    async def capturing_complete(messages, **kwargs):
         captured_messages.extend(messages)
         return "Test response."
 

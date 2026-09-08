@@ -54,9 +54,18 @@ class FakeAIProvider:
         self._response = response
         self._raise = raise_exc
         self.received_messages: list[list[dict]] = []
+        self.received_stop: list[str] | None = None
+        self.received_temperature: float | None = None
 
-    async def complete(self, messages: list[dict]) -> str:
+    async def complete(
+        self,
+        messages: list[dict],
+        stop: list[str] | None = None,
+        temperature: float | None = None,
+    ) -> str:
         self.received_messages.append(list(messages))
+        self.received_stop = stop
+        self.received_temperature = temperature
         if self._raise is not None:
             raise self._raise
         return self._response
@@ -107,13 +116,17 @@ def make_processor(
     return proc, obsidian, ai
 
 
-def make_request(content: str = "hello", context_window: int = 8192) -> MessageRequest:
+def make_request(
+    content: str = "hello",
+    context_window: int = 8192,
+    stop_sequences: list[str] | None = None,
+) -> MessageRequest:
     return MessageRequest(
         content=content,
         user_id="trekkie",
         model_name="test-model",
         context_window=context_window,
-        stop_sequences=None,
+        stop_sequences=stop_sequences,
     )
 
 
@@ -219,6 +232,28 @@ async def test_persona_fallback_when_vault_returns_empty(caplog):
         "persona" in rec.getMessage().lower() and "fallback" in rec.getMessage().lower()
         for rec in caplog.records
     ), f"Expected persona-fallback WARN log; got: {[r.getMessage() for r in caplog.records]}"
+
+
+async def test_stop_sequences_reach_the_provider():
+    """req.stop_sequences must be forwarded to ai_provider.complete() as stop=,
+    not silently dropped."""
+    proc, _, ai = make_processor()
+    req = make_request(stop_sequences=["<end_of_turn>"])
+
+    await proc.process(req)
+
+    assert ai.received_stop == ["<end_of_turn>"]
+
+
+async def test_no_stop_sequences_passes_none():
+    """When the request carries no stop_sequences, the provider receives
+    stop=None rather than a missing/omitted argument."""
+    proc, _, ai = make_processor()
+    req = make_request()
+
+    await proc.process(req)
+
+    assert ai.received_stop is None
 
 
 async def test_litellm_context_length_string_mapped_to_context_overflow():
